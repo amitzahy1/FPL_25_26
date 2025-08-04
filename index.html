@@ -434,32 +434,79 @@
             const dataToRender = showCount === 'all' ? displayedData : displayedData.slice(0, parseInt(showCount));
             tbody.innerHTML = '';
             
+            // --- Conditional Formatting Setup ---
+            const formattingConfig = {
+                'draft_score': { reverse: false },
+                'now_cost': { reverse: true }, // Lower price is better value
+                'total_points': { reverse: false },
+                'points_per_game': { reverse: false },
+                'selected_by_percent': { reverse: false },
+                'g_a': { reverse: false },
+                'expected_goal_involvements': { reverse: false },
+                'minutes': { reverse: false },
+                'xDiff': { reverse: false },
+                'ict_index': { reverse: false },
+                'bonus': { reverse: false },
+                'clean_sheets': { reverse: false },
+            };
+            const columnStats = {};
+
+            Object.keys(formattingConfig).forEach(col => {
+                columnStats[col] = { min: Infinity, max: -Infinity };
+            });
+
+            dataToRender.forEach(p => {
+                p.g_a = (p.goals_scored || 0) + (p.assists || 0); // Temp property for G+A
+                for (const col in formattingConfig) {
+                    const value = parseFloat(p[col]);
+                    if (!isNaN(value)) {
+                        if (value < columnStats[col].min) columnStats[col].min = value;
+                        if (value > columnStats[col].max) columnStats[col].max = value;
+                    }
+                }
+            });
+            // --- End of Setup ---
+
             dataToRender.forEach((p, index) => {
                 const row = tbody.insertRow();
                 row.className = `position-${p.position_name.toLowerCase()}`;
                 
                 const xDiffClass = p.xDiff > 0 ? 'xdiff-positive' : p.xDiff < 0 ? 'xdiff-negative' : '';
-                
                 const isInjured = p.news && (p.news.toLowerCase().includes('injury') || p.news.toLowerCase().includes('doubt') || p.news.toLowerCase().includes('out'));
                 const injuredClass = isInjured ? 'player-injured' : '';
+
+                // --- Get Color Classes ---
+                const ds_class = getColorClass(p.draft_score, columnStats.draft_score.min, columnStats.draft_score.max, formattingConfig.draft_score.reverse);
+                const cost_class = getColorClass(p.now_cost, columnStats.now_cost.min, columnStats.now_cost.max, formattingConfig.now_cost.reverse);
+                const pts_class = getColorClass(p.total_points, columnStats.total_points.min, columnStats.total_points.max, formattingConfig.total_points.reverse);
+                const ppg_class = getColorClass(p.points_per_game, columnStats.points_per_game.min, columnStats.points_per_game.max, formattingConfig.points_per_game.reverse);
+                const sel_class = getColorClass(p.selected_by_percent, columnStats.selected_by_percent.min, columnStats.selected_by_percent.max, formattingConfig.selected_by_percent.reverse);
+                const ga_class = getColorClass(p.g_a, columnStats.g_a.min, columnStats.g_a.max, formattingConfig.g_a.reverse);
+                const xgi_class = getColorClass(p.expected_goal_involvements, columnStats.expected_goal_involvements.min, columnStats.expected_goal_involvements.max, formattingConfig.expected_goal_involvements.reverse);
+                const min_class = getColorClass(p.minutes, columnStats.minutes.min, columnStats.minutes.max, formattingConfig.minutes.reverse);
+                const xdiff_class_bg = getColorClass(p.xDiff, columnStats.xDiff.min, columnStats.xDiff.max, formattingConfig.xDiff.reverse);
+                const ict_class = getColorClass(p.ict_index, columnStats.ict_index.min, columnStats.ict_index.max, formattingConfig.ict_index.reverse);
+                const bonus_class = getColorClass(p.bonus, columnStats.bonus.min, columnStats.bonus.max, formattingConfig.bonus.reverse);
+                const cs_class = getColorClass(p.clean_sheets, columnStats.clean_sheets.min, columnStats.clean_sheets.max, formattingConfig.clean_sheets.reverse);
+                // --- End Get Color Classes ---
 
                 row.innerHTML = `
                     <td>${index + 1}</td>
                     <td class="name-cell ${injuredClass}">${generatePlayerIcons(p)}${p.web_name}</td>
-                    <td class="bold-cell">${p.draft_score.toFixed(1)}</td>
+                    <td class="bold-cell ${ds_class}">${p.draft_score.toFixed(1)}</td>
                     <td>${p.team_name}</td>
                     <td>${p.position_name}</td>
-                    <td>£${p.now_cost.toFixed(1)}</td>
-                    <td class="bold-cell">${p.total_points}</td>
-                    <td>${p.points_per_game}</td>
-                    <td>${p.selected_by_percent}%</td>
-                    <td>${(p.goals_scored || 0) + (p.assists || 0)}</td>
-                    <td>${p.expected_goal_involvements}</td>
-                    <td>${p.minutes}</td>
-                    <td class="${xDiffClass}">${p.xDiff.toFixed(2)}</td>
-                    <td>${p.ict_index}</td>
-                    <td>${p.bonus}</td>
-                    <td>${p.clean_sheets}</td>
+                    <td class="${cost_class}">£${p.now_cost.toFixed(1)}</td>
+                    <td class="bold-cell ${pts_class}">${p.total_points}</td>
+                    <td class="${ppg_class}">${p.points_per_game}</td>
+                    <td class="${sel_class}">${p.selected_by_percent}%</td>
+                    <td class="${ga_class}">${p.g_a}</td>
+                    <td class="${xgi_class}">${p.expected_goal_involvements}</td>
+                    <td class="${min_class}">${p.minutes}</td>
+                    <td class="${xDiffClass} ${xdiff_class_bg}">${p.xDiff.toFixed(2)}</td>
+                    <td class="${ict_class}">${p.ict_index}</td>
+                    <td class="${bonus_class}">${p.bonus}</td>
+                    <td class="${cs_class}">${p.clean_sheets}</td>
                     <td><span class="${p.takes_penalties ? 'set-piece-yes' : 'set-piece-no'}">${p.takes_penalties ? '✔' : '❌'}</span></td>
                     <td><span class="${p.takes_corners ? 'set-piece-yes' : 'set-piece-no'}">${p.takes_corners ? '✔' : '❌'}</span></td>
                     <td><span class="${p.takes_free_kicks ? 'set-piece-yes' : 'set-piece-no'}">${p.takes_free_kicks ? '✔' : '❌'}</span></td>
