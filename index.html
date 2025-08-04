@@ -131,10 +131,10 @@
         <button class="control-button" id="compareBtn" onclick="compareSelectedPlayers()">השווה שחקנים נבחרים</button>
         <button class="control-button" data-filter-name="set_pieces" onclick="quickFilter(this, 'set_pieces')" title="מציג שחקנים שלוקחים פנדלים, קרנות או בעיטות חופשיות, על בסיס הנתונים שזוהו. ממוין לפי ציון דראפט.">🎯 בועטי מצבים נייחים</button>
         <button class="control-button" data-filter-name="attacking_defenders" onclick="quickFilter(this, 'attacking_defenders')" title="מציג שחקני הגנה עם נתוני xGI/90 גבוהים, ששיחקו מעל 300 דקות. המיון הוא לפי ציון דראפט.">🛡️ מגנים תוקפים</button>
-        <button class="control-button" data-filter-name="high_ownership" onclick="quickFilter(this, 'high_ownership')" title="מציג שחקנים עם אחוז החזקה מעל 15%. ממוין לפי ציון דראפט.">📈 שחקנים פופולריים</button>
+        <button class="control-button" data-filter-name="high_ownership" onclick="quickFilter(this, 'high_ownership')" title="מציג שחקנים עם אחוז החזקה מעל 10%. ממוין לפי אחוז החזקה.">📈 שחקנים פופולריים</button>
         <button class="control-button" data-filter-name="overperformers" onclick="quickFilter(this, 'overperformers')" title="מציג שחקנים ששיחקו מעל 300 דקות וה-xDiff שלהם גבוה מ-2.5. המיון הוא לפי ציון דראפט.">📈 ביצועי יתר</button>
         <button class="control-button" data-filter-name="differentials" onclick="quickFilter(this, 'differentials')" title="מציג שחקנים עם אחוז החזקה נמוך מ-5%. המיון הוא לפי ציון דראפט.">💎 מציאות (עד 5%)</button>
-        <button class="control-button" data-filter-name="newcomers" onclick="quickFilter(this, 'newcomers')" title="מציג שחקנים ללא דקות משחק בעונה שעברה. המיון הוא לפי ציון 'הייפ' המבוסס על מחיר ואחוז החזקה.">🌟 תגליות העונה</button>
+        <button class="control-button" data-filter-name="newcomers" onclick="quickFilter(this, 'newcomers')" title="מציג שחקנים ללא דקות משחק בעונה שעברה. המיון הוא לפי ציון 'הייפ' המבוסס על מחיר ואחוז החזקה.">🌟 שחקנים חדשים</button>
         <button class="control-button" onclick="exportToCsv()">📁 יצוא CSV</button>
     </div>
 
@@ -534,7 +534,7 @@
                 case 'attacking_defenders':
                     return data.filter(p => p.position_name === 'DEF' && p.minutes > 300);
                 case 'high_ownership':
-                    return data.filter(p => parseFloat(p.selected_by_percent) > 15);
+                    return data.filter(p => parseFloat(p.selected_by_percent) >= 10);
                 case 'overperformers':
                     return data.filter(p => p.minutes > 300 && p.xDiff > 2.5);
                 case 'differentials':
@@ -549,6 +549,7 @@
         function sortAndDisplay(data) {
             const fields = ['rank', 'web_name', 'draft_score', 'team_name', 'position_name', 'now_cost', 'total_points', 'points_per_game', 'selected_by_percent', 'goals_scored', 'expected_goal_involvements', 'minutes', 'xDiff', 'ict_index', 'bonus', 'clean_sheets', 'takes_penalties', 'takes_corners', 'takes_free_kicks', 'verbal_insights', 'news'];
             const sortField = fields[sortColumn];
+            const numericFields = ['draft_score', 'now_cost', 'total_points', 'points_per_game', 'selected_by_percent', 'minutes', 'xDiff', 'ict_index', 'bonus', 'clean_sheets'];
 
             data.sort((a, b) => {
                 let valA = a[sortField];
@@ -560,6 +561,12 @@
                 } else if (sortField === 'goals_scored') { // Special handling for G+A
                     valA = (a.goals_scored || 0) + (a.assists || 0);
                     valB = (b.goals_scored || 0) + (b.assists || 0);
+                }
+                
+                if (numericFields.includes(sortField)) {
+                    valA = parseFloat(valA) || 0;
+                    valB = parseFloat(valB) || 0;
+                    return sortDirection === 'asc' ? valA - valB : valB - valA;
                 }
 
                 if (typeof valA === 'string') {
@@ -629,8 +636,12 @@
                 setActiveButton(btn);
             }
             
-            // Always default sort by draft score
-            sortTable(2, 'desc');
+            // Special sort for high ownership, default for all others
+            if (filterName === 'high_ownership') {
+                sortTable(8, 'desc'); // Sort by selected_by_percent
+            } else {
+                sortTable(2, 'desc'); // Default to draft score
+            }
             
             processChange();
         }
