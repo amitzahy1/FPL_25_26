@@ -408,13 +408,13 @@
                     switch(p.position_name) {
                         case 'FWD':
                             position_score = (parseFloat(p.points_per_game) * 10) +
-                                           (p.xGI_per90 * 15) +
+                                           (p.xGI_per90 * 18) + // Increased from 15
                                            (p.ict_per_90 * 3);
                             if (p.takes_penalties) position_score += 10;
                             break;
                         case 'MID':
                             position_score = (parseFloat(p.points_per_game) * 12) +
-                                           (p.xGI_per90 * 14) +
+                                           (p.xGI_per90 * 17) + // Increased from 14
                                            (p.ict_per_90 * 5);
                             if (p.takes_penalties) position_score += 10;
                             if (p.takes_corners) position_score += 4;
@@ -423,7 +423,7 @@
                         case 'DEF':
                             position_score = (parseFloat(p.points_per_game) * 15) +
                                            (p.clean_sheets_per90 * 8) +
-                                           (p.xGI_per90 * 10) +
+                                           (p.xGI_per90 * 12) + // Increased from 10
                                            (p.ict_per_90 * 4) -
                                            (p.xGC_per90 * 3);
                             break;
@@ -437,7 +437,7 @@
                     }
                      // Add final universal boosts for total points and price
                     const totalPointsBoost = p.total_points / 15; // e.g., 200 points = +13.3 score
-                    const priceBoost = p.now_cost * 2.5; // e.g., 10.0 price = +25 score
+                    const priceBoost = p.now_cost * 3.5; // Increased from 2.5
                     
                     draft_score = position_score + totalPointsBoost + priceBoost + (parseFloat(p.selected_by_percent) / 2);
                 }
