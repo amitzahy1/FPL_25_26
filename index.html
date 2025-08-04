@@ -194,8 +194,52 @@
                     acc[team.id] = team.name;
                     return acc;
                 }, {});
+                const teamNameToId = {};
+                data.teams.forEach(team => { teamNameToId[team.name] = team.id; });
 
-                allPlayersData = preprocessPlayerData(data.elements, setPieceTakers);
+                const existingPlayerNames = new Set(data.elements.map(p => p.web_name.toLowerCase()));
+                const newPlayers = [];
+
+                const teamNameMapping = {
+                    "Leeds": "Leeds United", "Man City": "Manchester City", "Man Utd": "Manchester United",
+                    "Newcastle": "Newcastle United", "Nott'm Forest": "Nottingham Forest", "Spurs": "Tottenham Hotspur",
+                    "West Ham": "West Ham United", "Wolves": "Wolverhampton Wanderers"
+                };
+
+                for (const teamName in setPieceTakers) {
+                    const fplTeamName = teamNameMapping[teamName] || teamName;
+                    const teamId = teamNameToId[fplTeamName];
+                    if (!teamId) {
+                        console.warn(`Could not find a team ID for: ${teamName}`);
+                        continue;
+                    }
+
+                    const takers = setPieceTakers[teamName];
+                    const allTakersInTeam = [...new Set([...takers.penalties, ...takers.corners, ...takers.freekicks])];
+
+                    for (const takerName of allTakersInTeam) {
+                        if (!takerName || existingPlayerNames.has(takerName.toLowerCase())) {
+                            continue;
+                        }
+
+                        const rawNewPlayer = {
+                            id: 9000 + newPlayers.length, web_name: takerName, first_name: takerName.split(' ')[0],
+                            second_name: takerName.split(' ').slice(1).join(' ') || takerName.split(' ')[0],
+                            team: teamId, element_type: 3, now_cost: 75, total_points: 0, points_per_game: '0.0',
+                            form: '0.0', minutes: 0, goals_scored: 0, assists: 0, clean_sheets: 0, goals_conceded: 0,
+                            own_goals: 0, penalties_saved: 0, penalties_missed: 0, yellow_cards: 0, red_cards: 0,
+                            saves: 0, bonus: 0, bps: 0, influence: '0.0', creativity: '0.0', threat: '0.0',
+                            ict_index: '0.0', starts: 0, expected_goals: '0.00', expected_assists: '0.00',
+                            expected_goal_involvements: '0.00', expected_goals_conceded: '0.00',
+                            selected_by_percent: '1.0', news: 'שחקן חדש (סימולציה)', chance_of_playing_next_round: 100
+                        };
+                        newPlayers.push(rawNewPlayer);
+                        existingPlayerNames.add(takerName.toLowerCase());
+                    }
+                }
+
+                const combinedPlayers = [...data.elements, ...newPlayers];
+                allPlayersData = preprocessPlayerData(combinedPlayers, setPieceTakers);
                 
                 populateTeamFilter();
                 processChange(); // Initial render with default sort
@@ -280,13 +324,31 @@
                 p.team_name = teamsData[p.team];
                 p.position_name = getPositionName(p.element_type);
                 
-                // Set piece data from CSV
-                const teamName = p.team_name.replace(' United', '').replace(' Wanderers', ''); // Normalize team name for matching
-                const playerSetPieces = setPieceTakers[teamName] || { penalties: [], freekicks: [], corners: [] };
+                // --- NEW LOGIC ---
+                // Ignores player's team from JSON and searches their name across all teams in the set piece list.
+                // This correctly handles future transfers listed in the CSV.
+                p.takes_penalties = false;
+                p.takes_corners = false;
+                p.takes_free_kicks = false;
 
-                p.takes_penalties = playerSetPieces.penalties.some(name => p.web_name.toLowerCase() === name.toLowerCase());
-                p.takes_corners = playerSetPieces.corners.some(name => p.web_name.toLowerCase() === name.toLowerCase());
-                p.takes_free_kicks = playerSetPieces.freekicks.some(name => p.web_name.toLowerCase() === name.toLowerCase());
+                const normalizedPlayerName = p.web_name.toLowerCase();
+
+                for (const teamName in setPieceTakers) {
+                    const takers = setPieceTakers[teamName];
+                    
+                    // Penalty: only the first taker for that team is considered the main one.
+                    if (takers.penalties.length > 0 && normalizedPlayerName === takers.penalties[0].toLowerCase()) {
+                        p.takes_penalties = true;
+                    }
+                    
+                    // Corners & Free Kicks: check if player is in the top 2 for any team.
+                    if (takers.corners.some(name => normalizedPlayerName === name.toLowerCase())) {
+                        p.takes_corners = true;
+                    }
+                    if (takers.freekicks.some(name => normalizedPlayerName === name.toLowerCase())) {
+                        p.takes_free_kicks = true;
+                    }
+                }
                 
                 const tiers = priceTiers[p.element_type];
                 if (p.now_cost >= tiers.p95) p.price_tier = 'Elite';
