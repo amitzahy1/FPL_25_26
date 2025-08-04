@@ -180,17 +180,11 @@
 
         async function fetchAndProcessData() {
             try {
-                const [jsonResponse, csvResponse] = await Promise.all([
-                    fetch('FPL_Bootstrap_static.json'),
-                    fetch('Lineups and More Data/SetPieceTakerSS.csv')
-                ]);
-
-                if (!jsonResponse.ok) throw new Error(`Failed to fetch JSON: ${jsonResponse.statusText}`);
-                if (!csvResponse.ok) throw new Error(`Failed to fetch CSV: ${csvResponse.statusText}`);
+                const response = await fetch('FPL_Bootstrap_static.json');
+                if (!response.ok) throw new Error(`Failed to fetch JSON: ${response.statusText}`);
                 
-                const data = await jsonResponse.json();
-                const csvText = await csvResponse.text();
-                const setPieceTakers = parseSetPieceCSV(csvText);
+                const data = await response.json();
+                const setPieceTakers = getHardcodedSetPieceTakers();
                 
                 teamsData = data.teams.reduce((acc, team) => {
                     acc[team.id] = team.name;
@@ -207,47 +201,29 @@
             }
         }
         
-        function parseSetPieceCSV(csvText) {
-            const takersByTeam = {};
-            const lines = csvText.split(/\r?\n/).slice(1); // Split by newline, skip header
-            let currentTeam = '';
-
-            // Initialize all teams first to have the arrays
-            lines.forEach(line => {
-                const teamName = line.split(',')[0].trim();
-                if (teamName && !takersByTeam[teamName]) {
-                    takersByTeam[teamName] = { penalties: [], freekicks: [], corners: [] };
-                }
-            });
-
-            // Now populate them
-            lines.forEach(line => {
-                const columns = line.split(',').map(s => s.trim());
-                const teamName = columns[0];
-
-                if (teamName) {
-                    currentTeam = teamName;
-                }
-
-                if (!currentTeam || !takersByTeam[currentTeam]) return;
-
-                const penaltyTaker = columns[1];
-                const freekickTaker = columns[2];
-                const cornerTaker = columns[3];
-
-                if (penaltyTaker) takersByTeam[currentTeam].penalties.push(penaltyTaker);
-                if (freekickTaker) takersByTeam[currentTeam].freekicks.push(freekickTaker);
-                if (cornerTaker) takersByTeam[currentTeam].corners.push(cornerTaker);
-            });
-            
-            // Now, slice to get top 2 and normalize names
-            for (const team in takersByTeam) {
-                takersByTeam[team].penalties = takersByTeam[team].penalties.slice(0, 2).map(name => name.replace(/O/g, ''));
-                takersByTeam[team].freekicks = takersByTeam[team].freekicks.slice(0, 2).map(name => name.replace(/O/g, ''));
-                takersByTeam[team].corners = takersByTeam[team].corners.slice(0, 2).map(name => name.replace(/O/g, ''));
-            }
-
-            return takersByTeam;
+        function getHardcodedSetPieceTakers() {
+            return {
+                "Arsenal": { "penalties": ["Saka", "Odegaard"], "freekicks": ["Odegaard", "Rice"], "corners": ["Rice", "Saka"] },
+                "Aston Villa": { "penalties": ["Watkins", "Tielemans"], "freekicks": ["Digne", "Bailey"], "corners": ["Tielemans", "McGinn"] },
+                "Bournemouth": { "penalties": ["Kluivert", "Evanilson"], "freekicks": ["Tavernier", "Kluivert"], "corners": ["Tavernier", "Kluivert"] },
+                "Brentford": { "penalties": ["Mbeumo", "Wissa"], "freekicks": ["Mbeumo", "Damsgaard"], "corners": ["Mbeumo", "Damsgaard"] },
+                "Brighton": { "penalties": ["Welbeck", "O'Riley"], "freekicks": ["Welbeck", "Estupinan"], "corners": ["O'Riley", "Estupinan"] },
+                "Burnley": { "penalties": ["Flemming", "Amdouni"], "freekicks": ["Anthony", "Flemming"], "corners": ["Anthony", "Lucas"] },
+                "Chelsea": { "penalties": ["Palmer", "Nkunku"], "freekicks": ["Palmer", "James"], "corners": ["Enzo", "Palmer"] },
+                "Crystal Palace": { "penalties": ["Eze", "Mateta"], "freekicks": ["Eze", "Hughes"], "corners": ["Eze", "Hughes"] },
+                "Everton": { "penalties": ["Ndiaye", "Beto"], "freekicks": ["Alcaraz", "Garner"], "corners": ["Garner", "McNeil"] },
+                "Fulham": { "penalties": ["Jimenez", "Andreas"], "freekicks": ["Wilson", "Pereira"], "corners": ["Pereira", "Wilson"] },
+                "Leeds United": { "penalties": ["Strujik", "Piroe"], "freekicks": ["Gruev", "Aaronson"], "corners": ["Gruev", "James"] },
+                "Liverpool": { "penalties": ["Salah", "Gakpo"], "freekicks": ["Szoboszlai", "Mac Allister"], "corners": ["Mac Allister", "Szoboszlai"] },
+                "Manchester City": { "penalties": ["Haaland", "Marmoush"], "freekicks": ["Marmoush", "Foden"], "corners": ["Marmoush", "Foden"] },
+                "Manchester Utd": { "penalties": ["Fernandes", "Mbeumo"], "freekicks": ["Fernandes", "Mbeumo"], "corners": ["Fernandes", "Amad"] },
+                "Newcastle": { "penalties": ["Wilson", "Isak"], "freekicks": ["Trippier", "Schr"], "corners": ["Trippier", "Hall"] },
+                "Nottingham Forest": { "penalties": ["Wood", "Gibbs-White"], "freekicks": ["Gibbs-White", "Murillo"], "corners": ["Elanga", "Anderson"] },
+                "Sunderland": { "penalties": ["Roberts", "Wilson"], "freekicks": ["Le Fee", "Roberts"], "corners": ["Le Fee", "Roberts"] },
+                "Tottenham Hotspur": { "penalties": ["Son", "Richarlison"], "freekicks": ["Porro", "Maddison"], "corners": ["Maddison", "Porro"] },
+                "West Ham United": { "penalties": ["Paqueta", "Bowen"], "freekicks": ["Ward-Prowse", "Paqueta"], "corners": ["Paqueta", "Ward-Prowse"] },
+                "Wolverhampton Wanderers": { "penalties": ["Hwang", "Bellagarde"], "freekicks": ["Bellagarde", ""], "corners": ["Bellagarde", ""] }
+            };
         }
 
         function getPositionName(elementTypeId) {
