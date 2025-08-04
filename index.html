@@ -51,6 +51,8 @@
         .xdiff-negative { color: #e74c3c; font-weight: 600; }
         .sort-indicator { display: inline-block; margin-left: 3px; }
         .bold-cell { font-weight: 700; } /* Class for bolding specific cells */
+        .set-piece-yes { color: #27ae60; font-weight: 700; font-size: 1.2em; }
+        .set-piece-no { color: #e74c3c; font-weight: 700; font-size: 1.1em; }
         .modal {
             display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%;
             overflow: auto; background-color: rgba(0,0,0,0.4);
@@ -146,7 +148,8 @@
                     <th onclick="sortTable(16)">פנדלים<span class="sort-indicator"></span></th>
                     <th onclick="sortTable(17)">קרנות<span class="sort-indicator"></span></th>
                     <th onclick="sortTable(18)">חופשיות<span class="sort-indicator"></span></th>
-                    <th onclick="sortTable(19)">תובנות<span class="sort-indicator"></span></th>
+                    <th onclick="sortTable(19)">חדשות<span class="sort-indicator"></span></th>
+                    <th onclick="sortTable(20)">תובנות<span class="sort-indicator"></span></th>
                     <th>בחר</th>
                 </tr>
             </thead>
@@ -204,27 +207,29 @@
         
         function getHardcodedSetPieceTakers() {
             // Data parsed from the latest SetPieceTakerSS.csv
+            // NOTE: Only first penalty taker is used. First 2 for others.
+            // Names are normalized (e.g. Odegaard instead of Ødegaard)
             return {
-                "Arsenal": { "penalties": ["Saka"], "freekicks": ["Rice", "Odegaard"], "corners": ["Rice", "Saka"] },
+                "Arsenal": { "penalties": ["Saka"], "freekicks": ["Odegaard", "Rice"], "corners": ["Rice", "Saka"] },
                 "Aston Villa": { "penalties": ["Watkins"], "freekicks": ["Digne", "Bailey"], "corners": ["Tielemans", "Digne"] },
                 "Bournemouth": { "penalties": ["Kluivert"], "freekicks": ["Tavernier", "Kluivert"], "corners": ["Tavernier", "Kluivert"] },
                 "Brentford": { "penalties": ["Wissa"], "freekicks": ["Damsgaard", "Lewis-Potter"], "corners": ["Damsgaard", "Jensen"] },
                 "Brighton": { "penalties": ["Welbeck"], "freekicks": ["Welbeck", "O'Riley"], "corners": ["Ayari", "O'Riley"] },
                 "Burnley": { "penalties": ["Flemming"], "freekicks": ["Anthony", "Flemming"], "corners": ["Anthony", "Lucas"] },
                 "Chelsea": { "penalties": ["Palmer"], "freekicks": ["Palmer", "James"], "corners": ["Enzo", "Neto"] },
-                "Crystal Palace": { "penalties": ["Eze"], "freekicks": ["Eze"], "corners": ["Eze", "Hughes"] },
+                "Crystal Palace": { "penalties": ["Eze"], "freekicks": ["Eze", "Olise"], "corners": ["Eze", "Hughes"] },
                 "Everton": { "penalties": ["Ndiaye"], "freekicks": ["Alcaraz", "Garner"], "corners": ["McNeil", "Garner"] },
                 "Fulham": { "penalties": ["Jimenez"], "freekicks": ["Pereira", "Jimenez"], "corners": ["Pereira", "Lukic"] },
-                "Leeds United": { "penalties": ["Strujik"], "freekicks": ["Gruev", "Aaronson"], "corners": ["James", "Gruev"] },
+                "Leeds": { "penalties": ["Struijk"], "freekicks": ["Gruev", "Aaronson"], "corners": ["James", "Gruev"] },
                 "Liverpool": { "penalties": ["Salah"], "freekicks": ["Szoboszlai", "Mac Allister"], "corners": ["Mac Allister", "Wirtz"] },
-                "Manchester City": { "penalties": ["Haaland"], "freekicks": ["Marmoush", "Foden"], "corners": ["Foden", "Bernardo"] },
-                "Manchester Utd": { "penalties": ["Fernandes"], "freekicks": ["Fernandes", "Cunha"], "corners": ["Fernandes", "Mbeumo"] },
-                "Newcastle": { "penalties": ["Isak"], "freekicks": ["Trippier", "Schar"], "corners": ["Trippier", "Elanga"] }, // Normalized Schär
-                "Nottingham Forest": { "penalties": ["Wood"], "freekicks": ["Gibbs-White", "Murillo"], "corners": ["Anderson", "Gibbs-White"] },
+                "Man City": { "penalties": ["Haaland"], "freekicks": ["Marmoush", "Foden"], "corners": ["Foden", "Bernardo"] },
+                "Man Utd": { "penalties": ["Fernandes"], "freekicks": ["Fernandes", "Cunha"], "corners": ["Fernandes", "Mbeumo"] },
+                "Newcastle": { "penalties": ["Isak"], "freekicks": ["Trippier", "Schar"], "corners": ["Trippier", "Elanga"] }, 
+                "Nott'm Forest": { "penalties": ["Wood"], "freekicks": ["Gibbs-White", "Murillo"], "corners": ["Anderson", "Gibbs-White"] },
                 "Sunderland": { "penalties": ["Isidor"], "freekicks": ["Le Fee", "Roberts"], "corners": ["Le Fee", "Roberts"] },
-                "Tottenham Hotspur": { "penalties": ["Solanke"], "freekicks": ["Porro", "Maddison"], "corners": ["Kulusevski", "Porro"] },
-                "West Ham United": { "penalties": ["Paqueta"], "freekicks": ["Ward-Prowse", "Paqueta"], "corners": ["Bowen", "Ward-Prowse"] },
-                "Wolverhampton Wanderers": { "penalties": ["Larsen"], "freekicks": ["Arias", "Bellagarde"], "corners": ["Bellagarde", "Arias"] }
+                "Spurs": { "penalties": ["Solanke"], "freekicks": ["Porro", "Maddison"], "corners": ["Kulusevski", "Porro"] },
+                "West Ham": { "penalties": ["Paqueta"], "freekicks": ["Ward-Prowse", "Paqueta"], "corners": ["Bowen", "Ward-Prowse"] },
+                "Wolves": { "penalties": ["Larsen"], "freekicks": ["Arias", "Bellegarde"], "corners": ["Bellegarde", "Arias"] }
             };
         }
 
@@ -276,7 +281,9 @@
                 p.position_name = getPositionName(p.element_type);
                 
                 // Set piece data from CSV
-                const playerSetPieces = setPieceTakers[p.team_name] || { penalties: [], freekicks: [], corners: [] };
+                const teamName = p.team_name.replace(' United', '').replace(' Wanderers', ''); // Normalize team name for matching
+                const playerSetPieces = setPieceTakers[teamName] || { penalties: [], freekicks: [], corners: [] };
+
                 p.takes_penalties = playerSetPieces.penalties.some(name => p.web_name.toLowerCase() === name.toLowerCase());
                 p.takes_corners = playerSetPieces.corners.some(name => p.web_name.toLowerCase() === name.toLowerCase());
                 p.takes_free_kicks = playerSetPieces.freekicks.some(name => p.web_name.toLowerCase() === name.toLowerCase());
@@ -361,9 +368,10 @@
                     <td>${p.ict_index}</td>
                     <td>${p.bonus}</td>
                     <td>${p.clean_sheets}</td>
-                    <td>${p.takes_penalties ? '🎯' : '❌'}</td>
-                    <td>${p.takes_corners ? '⚽' : '❌'}</td>
-                    <td>${p.takes_free_kicks ? '👟' : '❌'}</td>
+                    <td><span class="${p.takes_penalties ? 'set-piece-yes' : 'set-piece-no'}">${p.takes_penalties ? '✔' : '❌'}</span></td>
+                    <td><span class="${p.takes_corners ? 'set-piece-yes' : 'set-piece-no'}">${p.takes_corners ? '✔' : '❌'}</span></td>
+                    <td><span class="${p.takes_free_kicks ? 'set-piece-yes' : 'set-piece-no'}">${p.takes_free_kicks ? '✔' : '❌'}</span></td>
+                    <td title="${p.news || ''}">${p.news ? p.news.substring(0, 15) + (p.news.length > 15 ? '...' : '') : ''}</td>
                     <td class="verbal-insights-cell">${generateVerbalInsights(p)}</td>
                     <td><input type="checkbox" class="compare-checkbox" data-player-id="${p.id}" onchange="toggleCompare(${p.id})"></td>
                 `;
@@ -451,7 +459,7 @@
         }
 
         function sortAndDisplay(data) {
-            const fields = ['rank', 'web_name', 'draft_score', 'team_name', 'position_name', 'now_cost', 'total_points', 'points_per_game', 'selected_by_percent', 'goals_scored', 'expected_goal_involvements', 'minutes', 'xDiff', 'ict_index', 'bonus', 'clean_sheets', 'takes_penalties', 'takes_corners', 'takes_free_kicks', 'verbal_insights'];
+            const fields = ['rank', 'web_name', 'draft_score', 'team_name', 'position_name', 'now_cost', 'total_points', 'points_per_game', 'selected_by_percent', 'goals_scored', 'expected_goal_involvements', 'minutes', 'xDiff', 'ict_index', 'bonus', 'clean_sheets', 'takes_penalties', 'takes_corners', 'takes_free_kicks', 'news', 'verbal_insights'];
             const sortField = fields[sortColumn];
 
             data.sort((a, b) => {
@@ -540,7 +548,7 @@
         }
 
         function exportToCsv() {
-            const headers = ['Rank','Player','Draft Score','Team','Position','Price','Points','PPG','Selected %','G+A','xG+xA','Minutes','xDiff','ICT','Bonus','Clean Sheets','Penalties','Corners','Free Kicks','Insights'];
+            const headers = ['Rank','Player','Draft Score','Team','Position','Price','Points','PPG','Selected %','G+A','xG+xA','Minutes','xDiff','ICT','Bonus','Clean Sheets','Penalties','Corners','Free Kicks','News','Insights'];
             let csvContent = headers.join(',') + '\n';
             displayedData.forEach((p, i) => {
                 const insightsText = generateVerbalInsights(p).replace(/<li>/g, '').replace(/<\/li>/g, ', ').replace(/<ul class="insights-list">/g, '').replace(/<\/ul>/g, '');
@@ -564,6 +572,7 @@
                     p.takes_penalties ? 'Yes' : 'No',
                     p.takes_corners ? 'Yes' : 'No',
                     p.takes_free_kicks ? 'Yes' : 'No',
+                    `"${p.news || ''}"`,
                     `"${insightsText}"`
                 ];
                 csvContent += row.join(',') + '\n';
@@ -599,7 +608,8 @@
                 {key: 'ict_per_90', label: 'ICT/90', type: 'number'},
                 {key: 'takes_penalties', label: 'בועט פנדלים', type: 'boolean'},
                 {key: 'takes_corners', label: 'מרים קרנות', type: 'boolean'},
-                {key: 'takes_free_kicks', label: 'בועט חופשיות', type: 'boolean'}
+                {key: 'takes_free_kicks', label: 'בועט חופשיות', type: 'boolean'},
+                {key: 'news', label: 'חדשות', type: 'string'}
             ];
 
             let bodyHtml = '<tbody>';
