@@ -46,7 +46,7 @@
         .position-gkp { background-color: #fff3cd !important; }
         .position-def { background-color: #d1ecf1 !important; }
         .position-mid { background-color: #d4edda !important; }
-        .position-fwd { background-color: #f8d7da !important; }
+        .position-fwd { background-color: #fed8b1 !important; } /* Changed from red to orange */
         .xdiff-positive { color: #27ae60; font-weight: 600; }
         .xdiff-negative { color: #e74c3c; font-weight: 600; }
         .sort-indicator { display: inline-block; margin-left: 3px; }
@@ -101,12 +101,12 @@
     <div class="controls">
         <button class="control-button active" onclick="showAllPlayers(this)">כל השחקנים</button>
         <button class="control-button" id="compareBtn" onclick="compareSelectedPlayers()">השווה שחקנים נבחרים</button>
-        <button class="control-button" data-filter-name="set_pieces" onclick="quickFilter(this, 'set_pieces')">🎯 בועטי פנדלים וקרנות</button>
-        <button class="control-button" data-filter-name="attacking_defenders" onclick="quickFilter(this, 'attacking_defenders')">🛡️ מגנים תוקפים</button>
-        <button class="control-button" data-filter-name="underperformers" onclick="quickFilter(this, 'underperformers')">📉 ביצועי חסר</button>
-        <button class="control-button" data-filter-name="overperformers" onclick="quickFilter(this, 'overperformers')">📈 ביצועי יתר</button>
-        <button class="control-button" data-filter-name="differentials" onclick="quickFilter(this, 'differentials')">💎 מציאות (עד 5%)</button>
-        <button class="control-button" data-filter-name="newcomers" onclick="quickFilter(this, 'newcomers')">🌟 תגליות העונה</button>
+        <button class="control-button" data-filter-name="set_pieces" onclick="quickFilter(this, 'set_pieces')" title="מציג שחקני קישור והתקפה עם סיכוי להיות בועטי פנדלים או קרנות. המיון הוא לפי ציון דראפט.">🎯 בועטי פנדלים וקרנות</button>
+        <button class="control-button" data-filter-name="attacking_defenders" onclick="quickFilter(this, 'attacking_defenders')" title="מציג שחקני הגנה עם נתוני xGI/90 גבוהים, ששיחקו מעל 300 דקות. המיון הוא לפי ציון דראפט.">🛡️ מגנים תוקפים</button>
+        <button class="control-button" data-filter-name="underperformers" onclick="quickFilter(this, 'underperformers')" title="מציג שחקנים ששיחקו מעל 300 דקות וה-xDiff שלהם נמוך מ-0.5-. המיון הוא לפי ציון דראפט.">📉 ביצועי חסר</button>
+        <button class="control-button" data-filter-name="overperformers" onclick="quickFilter(this, 'overperformers')" title="מציג שחקנים ששיחקו מעל 300 דקות וה-xDiff שלהם גבוה מ-0.5. המיון הוא לפי ציון דראפט.">📈 ביצועי יתר</button>
+        <button class="control-button" data-filter-name="differentials" onclick="quickFilter(this, 'differentials')" title="מציג שחקנים עם אחוז החזקה נמוך מ-5%. המיון הוא לפי ציון דראפט.">💎 מציאות (עד 5%)</button>
+        <button class="control-button" data-filter-name="newcomers" onclick="quickFilter(this, 'newcomers')" title="מציג שחקנים ללא דקות משחק בעונה שעברה. המיון הוא לפי ציון 'הייפ' המבוסס על מחיר ואחוז החזקה.">🌟 תגליות העונה</button>
         <button class="control-button" onclick="exportToCsv()">📁 יצוא CSV</button>
     </div>
 
@@ -226,6 +226,8 @@
                 };
             }
 
+            const knownPenaltyTakers = ['Salah', 'Haaland', 'Saka', 'Palmer', 'Fernandes', 'Wilson', 'Ward-Prowse', 'Toney'];
+
             return players.map(p => {
                 const minutes = p.minutes || 0;
                 const gi = (p.goals_scored || 0) + (p.assists || 0);
@@ -243,14 +245,19 @@
                 p.position_name = getPositionName(p.element_type);
                 
                 // Improved (but still MOCK) data for set pieces
-                p.takes_penalties = false;
+                p.takes_penalties = knownPenaltyTakers.includes(p.web_name);
                 p.takes_corners = false;
-                if (p.position_name === 'MID' || p.position_name === 'FWD') {
-                    p.takes_penalties = Math.random() < 0.1; // Higher chance for attackers
-                    p.takes_corners = Math.random() < 0.2;
-                }
-                if (p.position_name === 'DEF') {
-                     p.takes_corners = Math.random() < 0.1; // Defenders can take corners
+
+                if (!p.takes_penalties) { // Only assign random if not a known taker
+                    if (p.position_name === 'MID' || p.position_name === 'FWD') {
+                        p.takes_penalties = Math.random() < 0.02; // Lowered random chance
+                        p.takes_corners = Math.random() < 0.2;
+                    }
+                    if (p.position_name === 'DEF') {
+                        p.takes_corners = Math.random() < 0.1; 
+                    }
+                } else { // Known penalty takers often take other set pieces
+                    p.takes_corners = Math.random() < 0.3;
                 }
                 
                 const tiers = priceTiers[p.element_type];
@@ -261,8 +268,11 @@
 
                 let draft_score = 0;
                 if (minutes === 0) { // Newcomer - more conservative score
-                    draft_score = (p.now_cost * 5) + (parseFloat(p.selected_by_percent) * 2);
-                } else { // Existing player
+                    draft_score = (p.now_cost * 4) + (parseFloat(p.selected_by_percent) * 1.5); // Reduced impact of selection %
+                } else if (minutes < 90) { // Low minutes player - conservative score
+                    draft_score = p.total_points * 1.5;
+                }
+                else { // Existing player
                     draft_score = p.points_per_game * 10 + p.ict_per_90 * 2 + p.xGI_per90 * 20;
                     if (p.position_name === 'GKP' || p.position_name === 'DEF') {
                         draft_score -= p.xGC_per90 * 15;
@@ -501,19 +511,37 @@
                 setActiveButton(btn);
             }
             
-            // Special sort directions for certain filters
-            if (filterName === 'underperformers') sortTable(12, 'asc'); // xDiff asc
-            else if (filterName === 'overperformers') sortTable(12, 'desc'); // xDiff desc
-            else sortTable(2, 'desc'); // Default to draft score desc
+            // Always default sort by draft score
+            sortTable(2, 'desc');
             
             processChange();
         }
 
         function exportToCsv() {
-            const headers = ['Rank','Player','Draft Score','Team','Position','Price','Points','Selected %','xDiff','ICT','xGI','xGC','Insights'];
+            const headers = ['Rank','Player','Draft Score','Team','Position','Price','Points','PPG','Selected %','G+A','xG+xA','Minutes','xDiff','BPS','ICT','Bonus','Clean Sheets','Insights'];
             let csvContent = headers.join(',') + '\n';
             displayedData.forEach((p, i) => {
-                const row = [i + 1, p.web_name.replace(/,/g, ''), p.draft_score.toFixed(1), p.team_name, p.position_name, p.now_cost, p.total_points, p.selected_by_percent, p.xDiff.toFixed(2), p.ict_index, p.expected_goal_involvements, p.expected_goals_conceded, `"${generateVerbalInsights(p)}"`];
+                const insightsText = generateVerbalInsights(p).replace(/<li>/g, '').replace(/<\/li>/g, ', ').replace(/<ul class="insights-list">/g, '').replace(/<\/ul>/g, '');
+                const row = [
+                    i + 1,
+                    p.web_name.replace(/,/g, ''),
+                    p.draft_score.toFixed(1),
+                    p.team_name,
+                    p.position_name,
+                    p.now_cost,
+                    p.total_points,
+                    p.points_per_game,
+                    p.selected_by_percent,
+                    (p.goals_scored || 0) + (p.assists || 0),
+                    p.expected_goal_involvements,
+                    p.minutes,
+                    p.xDiff.toFixed(2),
+                    p.bps,
+                    p.ict_index,
+                    p.bonus,
+                    p.clean_sheets,
+                    `"${insightsText}"`
+                ];
                 csvContent += row.join(',') + '\n';
             });
             const blob = new Blob([`\uFEFF${csvContent}`], { type: 'text/csv;charset=utf-8;' });
