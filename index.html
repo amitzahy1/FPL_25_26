@@ -348,6 +348,10 @@
                 p.xGI_per90 = minutes > 0 ? (parseFloat(p.expected_goal_involvements) / minutes) * 90 : 0;
                 p.xGC_per90 = minutes > 0 ? (parseFloat(p.expected_goals_conceded) / minutes) * 90 : 0;
                 p.ict_per_90 = minutes > 0 ? (parseFloat(p.ict_index) / minutes) * 90 : 0;
+                p.clean_sheets_per_90 = minutes > 0 ? (p.clean_sheets / minutes) * 90 : 0;
+                p.saves_per_90 = minutes > 0 ? (p.saves / minutes) * 90 : 0;
+                p.bonus_per_90 = minutes > 0 ? (p.bonus / minutes) * 90 : 0;
+
 
                 p.xDiff = gi - xgi;
                 p.now_cost = p.now_cost / 10;
@@ -391,12 +395,40 @@
                 } else if (minutes > 0 && minutes < 900) { 
                     draft_score = p.total_points * 1.5;
 
-                // Established players (900+ minutes) - use the full, rebalanced formula
-                } else { 
-                    draft_score = (parseFloat(p.points_per_game) * 12) + 
-                                  (p.ict_per_90 * 4) + 
-                                  (p.xGI_per_90 * 12) +
-                                  (parseFloat(p.selected_by_percent) / 4);
+                // Established players (900+ minutes) - use the new detailed formulas
+                } else {
+                    let position_score = 0;
+                    switch(p.position_name) {
+                        case 'FWD':
+                            position_score = (parseFloat(p.points_per_game) * 10) +
+                                           (p.xGI_per_90 * 15) +
+                                           (p.ict_per_90 * 3);
+                            if (p.takes_penalties) position_score += 10;
+                            break;
+                        case 'MID':
+                            position_score = (parseFloat(p.points_per_game) * 12) +
+                                           (p.xGI_per_90 * 14) +
+                                           (p.ict_per_90 * 5);
+                            if (p.takes_penalties) position_score += 10;
+                            if (p.takes_corners) position_score += 4;
+                            if (p.takes_free_kicks) position_score += 2;
+                            break;
+                        case 'DEF':
+                            position_score = (parseFloat(p.points_per_game) * 15) +
+                                           (p.clean_sheets_per_90 * 8) +
+                                           (p.xGI_per_90 * 10) +
+                                           (p.ict_per_90 * 4) -
+                                           (p.xGC_per_90 * 3);
+                            break;
+                        case 'GKP':
+                            position_score = (parseFloat(p.points_per_game) * 10) +
+                                           (p.clean_sheets_per_90 * 12) +
+                                           (p.saves_per_90 * 6) +
+                                           (p.bonus_per_90 * 8) -
+                                           (p.xGC_per_90 * 4);
+                            break;
+                    }
+                    draft_score = position_score + (parseFloat(p.selected_by_percent) / 4);
                 }
                 p.draft_score = Math.max(0, draft_score); // Ensure no negative scores
 
