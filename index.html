@@ -69,6 +69,10 @@
         .value-mid { background-color: #fff2cc; }
         .value-bad { background-color: #f8d7da; }
         .value-worst { background-color: #f5c6cb; }
+        .emoji-legend { background: white; padding: 15px; margin-bottom: 15px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); }
+        .emoji-legend-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; text-align: right; font-size: 0.85em;}
+        .insights-list { list-style-type: none; padding-right: 0; margin-right: 0; text-align: right; }
+        .insights-list li { margin-bottom: 3px; }
     </style>
 </head>
 <body>
@@ -105,6 +109,20 @@
         <button class="control-button" data-filter-name="newcomers" onclick="quickFilter(this, 'newcomers')">🌟 תגליות העונה</button>
         <button class="control-button" onclick="exportToCsv()">📁 יצוא CSV</button>
     </div>
+
+    <div class="emoji-legend">
+        <strong>מקרא אייקונים:</strong>
+        <div class="emoji-legend-grid">
+            <div><span>🎯</span> - בועט פנדלים (משוער)</div>
+            <div><span>⚽</span> - לוקח קרנות (משוער)</div>
+            <div><span>💎</span> - דיפרנציאל (&lt;5% החזקה)</div>
+            <div><span>💰</span> - תמורה למחיר (Value)</div>
+            <div><span>🌟</span> - שחקן חדש/ללא דקות</div>
+            <div><span>📉</span> - ביצועי חסר (xDiff שלילי)</div>
+            <div><span>📈</span> - ביצועי יתר (xDiff חיובי)</div>
+        </div>
+    </div>
+    
     <div class="table-container">
         <table id="playersTable">
             <thead>
@@ -116,12 +134,17 @@
                     <th onclick="sortTable(4)">עמדה<span class="sort-indicator"></span></th>
                     <th onclick="sortTable(5)">מחיר<span class="sort-indicator"></span></th>
                     <th onclick="sortTable(6)">נקודות<span class="sort-indicator"></span></th>
-                    <th onclick="sortTable(7)">% בחירה<span class="sort-indicator"></span></th>
-                    <th onclick="sortTable(8)">xDiff<span class="sort-indicator"></span></th>
-                    <th onclick="sortTable(9)">ICT<span class="sort-indicator"></span></th>
-                    <th onclick="sortTable(10)">xGI<span class="sort-indicator"></span></th>
-                    <th onclick="sortTable(11)">xGC<span class="sort-indicator"></span></th>
-                    <th onclick="sortTable(12)">תובנות<span class="sort-indicator"></span></th>
+                    <th onclick="sortTable(7)">נק'/משחק<span class="sort-indicator"></span></th>
+                    <th onclick="sortTable(8)">% בחירה<span class="sort-indicator"></span></th>
+                    <th onclick="sortTable(9)">שער+בישול<span class="sort-indicator"></span></th>
+                    <th onclick="sortTable(10)">xG+xA<span class="sort-indicator"></span></th>
+                    <th onclick="sortTable(11)">דקות<span class="sort-indicator"></span></th>
+                    <th onclick="sortTable(12)">xDiff<span class="sort-indicator"></span></th>
+                    <th onclick="sortTable(13)">BPS<span class="sort-indicator"></span></th>
+                    <th onclick="sortTable(14)">ICT<span class="sort-indicator"></span></th>
+                    <th onclick="sortTable(15)">בונוס<span class="sort-indicator"></span></th>
+                    <th onclick="sortTable(16)">רשת נקייה<span class="sort-indicator"></span></th>
+                    <th onclick="sortTable(17)">תובנות<span class="sort-indicator"></span></th>
                     <th>בחר</th>
                 </tr>
             </thead>
@@ -167,11 +190,10 @@
                 allPlayersData = preprocessPlayerData(data.elements);
                 
                 populateTeamFilter();
-                processChange(); // Initial render
-                sortTable(2, 'desc'); // Initial sort by draft score
+                processChange(); // Initial render with default sort
             } catch (error) {
                 console.error('Error fetching or processing data:', error);
-                document.getElementById('playersTableBody').innerHTML = '<tr><td colspan="14">Error loading data. Please try again.</td></tr>';
+                document.getElementById('playersTableBody').innerHTML = '<tr><td colspan="19">Error loading data. Please try again.</td></tr>';
             }
         }
         
@@ -220,9 +242,16 @@
                 p.team_name = teamsData[p.team];
                 p.position_name = getPositionName(p.element_type);
                 
-                // MOCK DATA - Replace with actual data source if available
-                p.takes_penalties = Math.random() < 0.05; 
-                p.takes_corners = Math.random() < 0.15;
+                // Improved (but still MOCK) data for set pieces
+                p.takes_penalties = false;
+                p.takes_corners = false;
+                if (p.position_name === 'MID' || p.position_name === 'FWD') {
+                    p.takes_penalties = Math.random() < 0.1; // Higher chance for attackers
+                    p.takes_corners = Math.random() < 0.2;
+                }
+                if (p.position_name === 'DEF') {
+                     p.takes_corners = Math.random() < 0.1; // Defenders can take corners
+                }
                 
                 const tiers = priceTiers[p.element_type];
                 if (p.now_cost >= tiers.p95) p.price_tier = 'Elite';
@@ -231,17 +260,15 @@
                 else p.price_tier = 'Budget';
 
                 let draft_score = 0;
-                if (minutes === 0) {
-                    let hype_score = p.now_cost * 10 + parseFloat(p.selected_by_percent) * 5;
-                    if (p.price_tier === 'Elite' || p.price_tier === 'Premium') hype_score += 50;
-                    draft_score = hype_score;
-                } else {
+                if (minutes === 0) { // Newcomer - more conservative score
+                    draft_score = (p.now_cost * 5) + (parseFloat(p.selected_by_percent) * 2);
+                } else { // Existing player
                     draft_score = p.points_per_game * 10 + p.ict_per_90 * 2 + p.xGI_per90 * 20;
                     if (p.position_name === 'GKP' || p.position_name === 'DEF') {
                         draft_score -= p.xGC_per90 * 15;
                     }
                 }
-                p.draft_score = draft_score;
+                p.draft_score = Math.max(0, draft_score); // Cap score at 0
 
                 return p;
             });
@@ -295,11 +322,16 @@
                     <td>${p.position_name}</td>
                     <td>£${p.now_cost.toFixed(1)}</td>
                     <td class="bold-cell">${p.total_points}</td>
+                    <td>${p.points_per_game}</td>
                     <td>${p.selected_by_percent}%</td>
-                    <td class="${xDiffClass}">${p.xDiff.toFixed(2)}</td>
-                    <td>${p.ict_index}</td>
+                    <td>${(p.goals_scored || 0) + (p.assists || 0)}</td>
                     <td>${p.expected_goal_involvements}</td>
-                    <td>${p.expected_goals_conceded}</td>
+                    <td>${p.minutes}</td>
+                    <td class="${xDiffClass}">${p.xDiff.toFixed(2)}</td>
+                    <td>${p.bps}</td>
+                    <td>${p.ict_index}</td>
+                    <td>${p.bonus}</td>
+                    <td>${p.clean_sheets}</td>
                     <td class="verbal-insights-cell">${generateVerbalInsights(p)}</td>
                     <td><input type="checkbox" class="compare-checkbox" data-player-id="${p.id}" onchange="toggleCompare(${p.id})"></td>
                 `;
@@ -320,13 +352,18 @@
         
         function generateVerbalInsights(p) {
             const insights = [];
-            if (p.takes_penalties) insights.push("בועט פנדלים");
-            if (p.takes_corners) insights.push("לוקח קרנות");
-            if (parseFloat(p.selected_by_percent) < 5 && p.minutes > 0) insights.push("דיפרנציאל");
-            if (p.price_tier === 'Budget' && p.points_per_game > 3.5) insights.push("Value Pick");
-            if (p.minutes === 0) insights.push("שחקן חדש/חוזר");
-            if (p.xDiff < -0.5) insights.push("ביצועי חסר");
-            return insights.join(', ');
+            if (p.takes_penalties) insights.push("<li>בועט פנדלים (משוער)</li>");
+            if (p.takes_corners) insights.push("<li>לוקח קרנות (משוער)</li>");
+            if (parseFloat(p.selected_by_percent) < 5 && p.minutes > 0) insights.push(`<li>דיפרנציאל (${p.selected_by_percent}%)</li>`);
+            if (p.price_tier === 'Budget' && p.points_per_game > 3.5) insights.push("<li>תמורה למחיר (Value)</li>");
+            if (p.minutes === 0) insights.push("<li>שחקן חדש/ללא דקות</li>");
+            if (p.xDiff < -0.5) insights.push(`<li>ביצועי חסר (xDiff: ${p.xDiff.toFixed(2)})</li>`);
+            if (p.xDiff > 0.5) insights.push(`<li>ביצועי יתר (xDiff: ${p.xDiff.toFixed(2)})</li>`);
+            
+            if (insights.length > 0) {
+                return `<ul class="insights-list">${insights.join('')}</ul>`;
+            }
+            return '';
         }
         
         function processChange() {
@@ -382,7 +419,7 @@
         }
 
         function sortAndDisplay(data) {
-            const fields = ['rank', 'web_name', 'draft_score', 'team_name', 'position_name', 'now_cost', 'total_points', 'selected_by_percent', 'xDiff', 'ict_index', 'expected_goal_involvements', 'expected_goals_conceded', 'verbal_insights'];
+            const fields = ['rank', 'web_name', 'draft_score', 'team_name', 'position_name', 'now_cost', 'total_points', 'points_per_game', 'selected_by_percent', 'goals_scored', 'expected_goal_involvements', 'minutes', 'xDiff', 'bps', 'ict_index', 'bonus', 'clean_sheets', 'verbal_insights'];
             const sortField = fields[sortColumn];
 
             data.sort((a, b) => {
@@ -392,6 +429,9 @@
                 if (sortField === 'verbal_insights') {
                     valA = generateVerbalInsights(a);
                     valB = generateVerbalInsights(b);
+                } else if (sortField === 'goals_scored') { // Special handling for G+A
+                    valA = (a.goals_scored || 0) + (a.assists || 0);
+                    valB = (b.goals_scored || 0) + (b.assists || 0);
                 }
 
                 if (typeof valA === 'string') {
@@ -462,8 +502,8 @@
             }
             
             // Special sort directions for certain filters
-            if (filterName === 'underperformers') sortTable(8, 'asc'); // xDiff asc
-            else if (filterName === 'overperformers') sortTable(8, 'desc'); // xDiff desc
+            if (filterName === 'underperformers') sortTable(12, 'asc'); // xDiff asc
+            else if (filterName === 'overperformers') sortTable(12, 'desc'); // xDiff desc
             else sortTable(2, 'desc'); // Default to draft score desc
             
             processChange();
