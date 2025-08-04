@@ -46,7 +46,7 @@
         .position-gkp { background-color: #fff3cd !important; }
         .position-def { background-color: #d1ecf1 !important; }
         .position-mid { background-color: #d4edda !important; }
-        .position-fwd { background-color: #fed8b1 !important; } /* Changed from red to orange */
+        .position-fwd { background-color: #e9ecef !important; } /* Changed to light grey */
         .xdiff-positive { color: #27ae60; font-weight: 600; }
         .xdiff-negative { color: #e74c3c; font-weight: 600; }
         .sort-indicator { display: inline-block; margin-left: 3px; }
@@ -55,24 +55,49 @@
         .set-piece-no { color: #e74c3c; font-weight: 700; font-size: 1.1em; }
         .news-cell { font-size: 0.8em; } /* Smaller font for news */
         .insights-cell { font-size: 0.95em; line-height: 1.3; } /* Larger font for insights */
+        .player-injured { color: #e74c3c; font-weight: 600; }
         .modal {
             display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%;
-            overflow: auto; background-color: rgba(0,0,0,0.4);
+            overflow: auto; background-color: rgba(0,0,0,0.5); backdrop-filter: blur(4px);
         }
         .modal-content {
-            background-color: #fefefe; margin: 5% auto; padding: 20px; border: 1px solid #888;
-            width: 90%; max-width: 1200px; border-radius: 12px;
+            background-color: #f8f9fa; margin: 5% auto; padding: 25px; border: none;
+            width: 90%; max-width: 1200px; border-radius: 16px; box-shadow: 0 8px 30px rgba(0,0,0,0.15);
         }
-        .close { color: #aaa; float: right; font-size: 28px; font-weight: bold; cursor: pointer; }
-        #compareTable th { background: linear-gradient(135deg, #c2e9fb 0%, #a1c4fd 100%); font-size: 1.1em;}
-        #compareTable { width: auto; margin: 0 auto; border-collapse: separate; border-spacing: 0; }
-        #compareTable th, #compareTable td { border: 1px solid #ddd; padding: 8px; }
-        #compareTable td { font-size: 1.1em; }
-        .value-best { background-color: #d4edda; }
-        .value-good { background-color: #e2f0d9; }
-        .value-mid { background-color: #fff2cc; }
-        .value-bad { background-color: #f8d7da; }
-        .value-worst { background-color: #f5c6cb; }
+        .close { color: #aaa; float: right; font-size: 28px; font-weight: bold; cursor: pointer; transition: color 0.2s; }
+        .close:hover { color: #333; }
+        #compareModal h2 { text-align: center; margin-bottom: 20px; color: #343a40; }
+        #compareTable { 
+            width: 100%; 
+            border-collapse: separate; 
+            border-spacing: 0 8px;
+            margin-top: 15px;
+        }
+        #compareTable th { 
+            background: #e9ecef;
+            color: #495057;
+            padding: 12px 15px;
+            font-size: 1em;
+            text-align: center;
+            border: none;
+        }
+        #compareTable th:first-child { text-align: right; border-top-left-radius: 8px; border-bottom-left-radius: 8px;}
+        #compareTable th:last-child { border-top-right-radius: 8px; border-bottom-right-radius: 8px;}
+        #compareTable td {
+            background: #fff;
+            padding: 12px 15px;
+            text-align: center;
+            font-size: 1.1em;
+            border: none;
+            border-bottom: 1px solid #f1f3f5;
+        }
+        #compareTable tr td:first-child { font-weight: 600; color: #495057; text-align: right; border-top-left-radius: 8px; border-bottom-left-radius: 8px;}
+        #compareTable tr td:last-child { border-top-right-radius: 8px; border-bottom-right-radius: 8px;}
+        .value-best { background-color: #d1f7c4 !important; font-weight: 700; color: #1a5c0a; }
+        .value-good { background-color: #e8f9e4 !important; }
+        .value-mid { background-color: #fff9db !important; }
+        .value-bad { background-color: #ffe8e8 !important; }
+        .value-worst { background-color: #ffd6d6 !important; font-weight: normal; color: #8a2a2a;}
         .emoji-legend { background: white; padding: 15px; margin-bottom: 15px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); }
         .emoji-legend-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; text-align: right; font-size: 0.85em;}
         .insights-list { list-style-type: none; padding-right: 0; margin-right: 0; text-align: right; }
@@ -411,9 +436,12 @@
                 
                 const xDiffClass = p.xDiff > 0 ? 'xdiff-positive' : p.xDiff < 0 ? 'xdiff-negative' : '';
                 
+                const isInjured = p.news && (p.news.toLowerCase().includes('injury') || p.news.toLowerCase().includes('doubt') || p.news.toLowerCase().includes('out'));
+                const injuredClass = isInjured ? 'player-injured' : '';
+
                 row.innerHTML = `
                     <td>${index + 1}</td>
-                    <td class="name-cell">${generatePlayerIcons(p)}${p.web_name}</td>
+                    <td class="name-cell ${injuredClass}">${generatePlayerIcons(p)}${p.web_name}</td>
                     <td class="bold-cell">${p.draft_score.toFixed(1)}</td>
                     <td>${p.team_name}</td>
                     <td>${p.position_name}</td>
@@ -446,8 +474,6 @@
             if (parseFloat(p.selected_by_percent) < 5) icons.push(`<span class='player-name-icon'>💎</span>`);
             if (p.price_tier === 'Budget' && p.points_per_game > 3.5) icons.push(`<span class='player-name-icon'>💰</span>`);
             if (p.minutes === 0) icons.push(`<span class='player-name-icon'>🌟</span>`);
-            if (p.xDiff < -0.5) icons.push(`<span class='player-name-icon'>📉</span>`);
-            if (p.xDiff > 0.5) icons.push(`<span class='player-name-icon'>📈</span>`);
             return icons.join("");
         }
         
@@ -683,13 +709,21 @@
                     const value = p[metric.key];
                     let displayValue = value;
                     let colorClass = '';
-                    if (metric.type === 'string') displayValue = value;
+                    if (metric.type === 'string') {
+                        if (metric.key === 'news' && value) {
+                            displayValue = `<span title="${value}">${value.substring(0, 15)}...</span>`;
+                        } else {
+                            displayValue = value || '-';
+                        }
+                    }
                     else if (metric.type === 'boolean') {
-                        displayValue = value ? 'כן' : 'לא';
-                        colorClass = value ? 'value-best' : '';
+                        displayValue = value ? '✔' : '❌';
+                        colorClass = value ? 'value-good' : '';
                     } else if (typeof value === 'number') {
                         displayValue = value.toFixed(2);
                         colorClass = getColorClass(value, min, max, !!metric.reverse);
+                    } else {
+                        displayValue = value || '-';
                     }
                     bodyHtml += `<td class="${colorClass}">${displayValue}</td>`;
                 });
