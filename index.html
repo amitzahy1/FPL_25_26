@@ -53,6 +53,8 @@
         .bold-cell { font-weight: 700; } /* Class for bolding specific cells */
         .set-piece-yes { color: #27ae60; font-weight: 700; font-size: 1.2em; }
         .set-piece-no { color: #e74c3c; font-weight: 700; font-size: 1.1em; }
+        .news-cell { font-size: 0.8em; } /* Smaller font for news */
+        .insights-cell { font-size: 0.95em; line-height: 1.3; } /* Larger font for insights */
         .modal {
             display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%;
             overflow: auto; background-color: rgba(0,0,0,0.4);
@@ -148,8 +150,8 @@
                     <th onclick="sortTable(16)">פנדלים<span class="sort-indicator"></span></th>
                     <th onclick="sortTable(17)">קרנות<span class="sort-indicator"></span></th>
                     <th onclick="sortTable(18)">חופשיות<span class="sort-indicator"></span></th>
-                    <th onclick="sortTable(19)">חדשות<span class="sort-indicator"></span></th>
-                    <th onclick="sortTable(20)">תובנות<span class="sort-indicator"></span></th>
+                    <th onclick="sortTable(19)">תובנות<span class="sort-indicator"></span></th>
+                    <th onclick="sortTable(20)">חדשות<span class="sort-indicator"></span></th>
                     <th>בחר</th>
                 </tr>
             </thead>
@@ -290,6 +292,12 @@
         function preprocessPlayerData(players, setPieceTakers) {
             const positions = { 1: [], 2: [], 3: [], 4: [] };
             
+            // Create a flat list of main penalty takers for a direct and reliable check
+            const mainPenaltyTakers = Object.values(setPieceTakers)
+                .map(takers => takers.penalties[0]) // Get the first penalty taker from each team's list
+                .filter(name => name) // Filter out any undefined/empty names
+                .map(name => name.toLowerCase()); // Convert all to lower case for matching
+            
             players.forEach(p => {
                 if (p.element_type in positions) {
                     positions[p.element_type].push(p.now_cost / 10);
@@ -305,8 +313,6 @@
                     p50: getPercentile(prices, 50)
                 };
             }
-
-            const knownPenaltyTakers = ['Salah', 'Haaland', 'Saka', 'Palmer', 'Fernandes', 'Wilson', 'Ward-Prowse', 'Toney'];
 
             return players.map(p => {
                 const minutes = p.minutes || 0;
@@ -324,24 +330,17 @@
                 p.team_name = teamsData[p.team];
                 p.position_name = getPositionName(p.element_type);
                 
-                // --- NEW LOGIC ---
-                // Ignores player's team from JSON and searches their name across all teams in the set piece list.
-                // This correctly handles future transfers listed in the CSV.
-                p.takes_penalties = false;
-                p.takes_corners = false;
-                p.takes_free_kicks = false;
-
                 const normalizedPlayerName = p.web_name.toLowerCase();
 
+                // --- NEW, MORE RELIABLE LOGIC ---
+                // 1. Check against the simple, flat list of main penalty takers
+                p.takes_penalties = mainPenaltyTakers.includes(normalizedPlayerName);
+                
+                // 2. For corners and free kicks, check if the player is listed for ANY team (to handle transfers)
+                p.takes_corners = false;
+                p.takes_free_kicks = false;
                 for (const teamName in setPieceTakers) {
                     const takers = setPieceTakers[teamName];
-                    
-                    // Penalty: only the first taker for that team is considered the main one.
-                    if (takers.penalties.length > 0 && normalizedPlayerName === takers.penalties[0].toLowerCase()) {
-                        p.takes_penalties = true;
-                    }
-                    
-                    // Corners & Free Kicks: check if player is in the top 2 for any team.
                     if (takers.corners.some(name => normalizedPlayerName === name.toLowerCase())) {
                         p.takes_corners = true;
                     }
@@ -433,8 +432,8 @@
                     <td><span class="${p.takes_penalties ? 'set-piece-yes' : 'set-piece-no'}">${p.takes_penalties ? '✔' : '❌'}</span></td>
                     <td><span class="${p.takes_corners ? 'set-piece-yes' : 'set-piece-no'}">${p.takes_corners ? '✔' : '❌'}</span></td>
                     <td><span class="${p.takes_free_kicks ? 'set-piece-yes' : 'set-piece-no'}">${p.takes_free_kicks ? '✔' : '❌'}</span></td>
-                    <td title="${p.news || ''}">${p.news ? p.news.substring(0, 15) + (p.news.length > 15 ? '...' : '') : ''}</td>
-                    <td class="verbal-insights-cell">${generateVerbalInsights(p)}</td>
+                    <td class="insights-cell">${generateVerbalInsights(p)}</td>
+                    <td class="news-cell" title="${p.news || ''}">${p.news ? p.news.substring(0, 15) + (p.news.length > 15 ? '...' : '') : ''}</td>
                     <td><input type="checkbox" class="compare-checkbox" data-player-id="${p.id}" onchange="toggleCompare(${p.id})"></td>
                 `;
             });
@@ -521,7 +520,7 @@
         }
 
         function sortAndDisplay(data) {
-            const fields = ['rank', 'web_name', 'draft_score', 'team_name', 'position_name', 'now_cost', 'total_points', 'points_per_game', 'selected_by_percent', 'goals_scored', 'expected_goal_involvements', 'minutes', 'xDiff', 'ict_index', 'bonus', 'clean_sheets', 'takes_penalties', 'takes_corners', 'takes_free_kicks', 'news', 'verbal_insights'];
+            const fields = ['rank', 'web_name', 'draft_score', 'team_name', 'position_name', 'now_cost', 'total_points', 'points_per_game', 'selected_by_percent', 'goals_scored', 'expected_goal_involvements', 'minutes', 'xDiff', 'ict_index', 'bonus', 'clean_sheets', 'takes_penalties', 'takes_corners', 'takes_free_kicks', 'verbal_insights', 'news'];
             const sortField = fields[sortColumn];
 
             data.sort((a, b) => {
@@ -610,7 +609,7 @@
         }
 
         function exportToCsv() {
-            const headers = ['Rank','Player','Draft Score','Team','Position','Price','Points','PPG','Selected %','G+A','xG+xA','Minutes','xDiff','ICT','Bonus','Clean Sheets','Penalties','Corners','Free Kicks','News','Insights'];
+            const headers = ['Rank','Player','Draft Score','Team','Position','Price','Points','PPG','Selected %','G+A','xG+xA','Minutes','xDiff','ICT','Bonus','Clean Sheets','Penalties','Corners','Free Kicks','Insights','News'];
             let csvContent = headers.join(',') + '\n';
             displayedData.forEach((p, i) => {
                 const insightsText = generateVerbalInsights(p).replace(/<li>/g, '').replace(/<\/li>/g, ', ').replace(/<ul class="insights-list">/g, '').replace(/<\/ul>/g, '');
@@ -634,8 +633,8 @@
                     p.takes_penalties ? 'Yes' : 'No',
                     p.takes_corners ? 'Yes' : 'No',
                     p.takes_free_kicks ? 'Yes' : 'No',
-                    `"${p.news || ''}"`,
-                    `"${insightsText}"`
+                    `"${insightsText}"`,
+                    `"${p.news || ''}"`
                 ];
                 csvContent += row.join(',') + '\n';
             });
