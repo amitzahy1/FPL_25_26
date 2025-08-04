@@ -379,23 +379,21 @@
                 else if (p.now_cost >= tiers.p50) p.price_tier = 'Mid-range';
                 else p.price_tier = 'Budget';
 
-                // Points Per Game
-                p.points_per_game = p.minutes > 0 ? ((p.total_points / p.minutes) * 90).toFixed(2) : '0.00';
-
-                // DRAFT SCORE LOGIC
                 let draft_score = 0;
-                if (minutes === 0) { // Newcomer: Hype Score
-                    draft_score = (p.now_cost * 4) + (parseFloat(p.selected_by_percent) * 1.5);
-                } else if (minutes > 0 && minutes < 90) { // Low minutes player: Conservative score
+                if (minutes === 0) { // Newcomer - more conservative score
+                    draft_score = (p.now_cost * 4) + (parseFloat(p.selected_by_percent) * 1.5); // Reduced impact of selection %
+                } else if (minutes > 0 && minutes < 90) { // Low minutes player - conservative score
                     draft_score = p.total_points * 1.5;
-                } else { // Established players
-                    draft_score = (parseFloat(p.points_per_game) * 10) + 
-                                  (p.ict_per_90 * 2) + 
-                                  (p.xGI_per90 * 20);
-                    draft_score += (parseFloat(p.selected_by_percent) / 5); // Ownership boost
                 }
-                p.draft_score = Math.max(0, draft_score); // Ensure no negative scores
-
+                else { // Existing player
+                    draft_score = p.points_per_game * 10 + p.ict_per_90 * 2 + p.xGI_per90 * 20;
+                    if (p.position_name === 'GKP' || p.position_name === 'DEF') {
+                        draft_score -= p.xGC_per90 * 15;
+                    }
+                    // Add boost based on ownership percentage
+                    draft_score += (parseFloat(p.selected_by_percent) / 5);
+                }
+                p.draft_score = Math.max(0, draft_score); // Cap score at 0
 
                 return p;
             });
@@ -767,4 +765,4 @@
 
     </script>
 </body>
-</html>
+</html> 
