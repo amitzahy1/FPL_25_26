@@ -242,9 +242,9 @@
             
             // Now, slice to get top 2 and normalize names
             for (const team in takersByTeam) {
-                takersByTeam[team].penalties = takersByTeam[team].penalties.slice(0, 2).map(name => name.replace(//g, 'O'));
-                takersByTeam[team].freekicks = takersByTeam[team].freekicks.slice(0, 2).map(name => name.replace(//g, 'O'));
-                takersByTeam[team].corners = takersByTeam[team].corners.slice(0, 2).map(name => name.replace(//g, 'O'));
+                takersByTeam[team].penalties = takersByTeam[team].penalties.slice(0, 2).map(name => name.replace(/O/g, ''));
+                takersByTeam[team].freekicks = takersByTeam[team].freekicks.slice(0, 2).map(name => name.replace(/O/g, ''));
+                takersByTeam[team].corners = takersByTeam[team].corners.slice(0, 2).map(name => name.replace(/O/g, ''));
             }
 
             return takersByTeam;
