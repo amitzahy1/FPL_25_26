@@ -94,17 +94,16 @@
             <div class="filter-group"><label>🏟️ קבוצה:</label><select id="teamFilter" onchange="processChange()"><option value="">כל הקבוצות</option></select></div>
             <div class="filter-group"><label>💰 מחיר טווח:</label><input type="text" id="priceRange" onkeyup="processChange()" placeholder="4.0-15.0"></div>
             <div class="filter-group"><label>🏆 נקודות מינימום:</label><input type="number" id="minPoints" onkeyup="processChange()" placeholder="0"></div>
-            <div class="filter-group"><label>📊 % בחירה מינימלי:</label><input type="number" id="minSelected" step="0.0001" onkeyup="processChange()" placeholder="0.0001" value="0.0001"></div>
             <div class="filter-group"><label>🎯 טווח xDiff:</label><select id="xDiffFilter" onchange="processChange()"><option value="">כל הטווח</option><option value="positive">חיובי (ביצועי יתר)</option><option value="negative">שלילי (ביצועי חסר)</option></select></div>
             <div class="filter-group"><label>הצג:</label><select id="showEntries" onchange="processChange()"><option value="50">50</option><option value="100">100</option><option value="200">200</option><option value="all" selected>הכל</option></select></div>
         </div>
     <div class="controls">
         <button class="control-button active" onclick="showAllPlayers(this)">כל השחקנים</button>
         <button class="control-button" id="compareBtn" onclick="compareSelectedPlayers()">השווה שחקנים נבחרים</button>
-        <button class="control-button" data-filter-name="set_pieces" onclick="quickFilter(this, 'set_pieces')" title="מציג שחקני קישור והתקפה עם סיכוי להיות בועטי פנדלים או קרנות. המיון הוא לפי ציון דראפט.">🎯 בועטי פנדלים וקרנות</button>
+        <button class="control-button" data-filter-name="set_pieces" onclick="quickFilter(this, 'set_pieces')" title="מציג שחקנים שלוקחים פנדלים, קרנות או בעיטות חופשיות, על בסיס הנתונים שזוהו. ממוין לפי ציון דראפט.">🎯 בועטי מצבים נייחים</button>
         <button class="control-button" data-filter-name="attacking_defenders" onclick="quickFilter(this, 'attacking_defenders')" title="מציג שחקני הגנה עם נתוני xGI/90 גבוהים, ששיחקו מעל 300 דקות. המיון הוא לפי ציון דראפט.">🛡️ מגנים תוקפים</button>
-        <button class="control-button" data-filter-name="underperformers" onclick="quickFilter(this, 'underperformers')" title="מציג שחקנים ששיחקו מעל 300 דקות וה-xDiff שלהם נמוך מ-0.5-. המיון הוא לפי ציון דראפט.">📉 ביצועי חסר</button>
-        <button class="control-button" data-filter-name="overperformers" onclick="quickFilter(this, 'overperformers')" title="מציג שחקנים ששיחקו מעל 300 דקות וה-xDiff שלהם גבוה מ-0.5. המיון הוא לפי ציון דראפט.">📈 ביצועי יתר</button>
+        <button class="control-button" data-filter-name="underperformers" onclick="quickFilter(this, 'underperformers')" title="מציג שחקנים ששיחקו מעל 300 דקות וה-xDiff שלהם נמוך מ-1.5-. המיון הוא לפי ציון דראפט.">📉 ביצועי חסר</button>
+        <button class="control-button" data-filter-name="overperformers" onclick="quickFilter(this, 'overperformers')" title="מציג שחקנים ששיחקו מעל 300 דקות וה-xDiff שלהם גבוה מ-2.5. המיון הוא לפי ציון דראפט.">📈 ביצועי יתר</button>
         <button class="control-button" data-filter-name="differentials" onclick="quickFilter(this, 'differentials')" title="מציג שחקנים עם אחוז החזקה נמוך מ-5%. המיון הוא לפי ציון דראפט.">💎 מציאות (עד 5%)</button>
         <button class="control-button" data-filter-name="newcomers" onclick="quickFilter(this, 'newcomers')" title="מציג שחקנים ללא דקות משחק בעונה שעברה. המיון הוא לפי ציון 'הייפ' המבוסס על מחיר ואחוז החזקה.">🌟 תגליות העונה</button>
         <button class="control-button" onclick="exportToCsv()">📁 יצוא CSV</button>
@@ -113,8 +112,9 @@
     <div class="emoji-legend">
         <strong>מקרא אייקונים:</strong>
         <div class="emoji-legend-grid">
-            <div><span>🎯</span> - בועט פנדלים (משוער)</div>
-            <div><span>⚽</span> - לוקח קרנות (משוער)</div>
+            <div><span>🎯</span> - בועט פנדלים</div>
+            <div><span>⚽</span> - לוקח קרנות</div>
+            <div><span>👟</span> - בועט חופשיות</div>
             <div><span>💎</span> - דיפרנציאל (&lt;5% החזקה)</div>
             <div><span>💰</span> - תמורה למחיר (Value)</div>
             <div><span>🌟</span> - שחקן חדש/ללא דקות</div>
@@ -144,7 +144,8 @@
                     <th onclick="sortTable(14)">ICT<span class="sort-indicator"></span></th>
                     <th onclick="sortTable(15)">בונוס<span class="sort-indicator"></span></th>
                     <th onclick="sortTable(16)">רשת נקייה<span class="sort-indicator"></span></th>
-                    <th onclick="sortTable(17)">תובנות<span class="sort-indicator"></span></th>
+                    <th onclick="sortTable(17)">חופשיות<span class="sort-indicator"></span></th>
+                    <th onclick="sortTable(18)">תובנות<span class="sort-indicator"></span></th>
                     <th>בחר</th>
                 </tr>
             </thead>
@@ -179,24 +180,76 @@
 
         async function fetchAndProcessData() {
             try {
-                const response = await fetch('FPL_Bootstrap_static.json');
-                const data = await response.json();
+                const [jsonResponse, csvResponse] = await Promise.all([
+                    fetch('FPL_Bootstrap_static.json'),
+                    fetch('Lineups and More Data/SetPieceTakerSS.csv')
+                ]);
+
+                if (!jsonResponse.ok) throw new Error(`Failed to fetch JSON: ${jsonResponse.statusText}`);
+                if (!csvResponse.ok) throw new Error(`Failed to fetch CSV: ${csvResponse.statusText}`);
+                
+                const data = await jsonResponse.json();
+                const csvText = await csvResponse.text();
+                const setPieceTakers = parseSetPieceCSV(csvText);
                 
                 teamsData = data.teams.reduce((acc, team) => {
                     acc[team.id] = team.name;
                     return acc;
                 }, {});
 
-                allPlayersData = preprocessPlayerData(data.elements);
+                allPlayersData = preprocessPlayerData(data.elements, setPieceTakers);
                 
                 populateTeamFilter();
                 processChange(); // Initial render with default sort
             } catch (error) {
                 console.error('Error fetching or processing data:', error);
-                document.getElementById('playersTableBody').innerHTML = '<tr><td colspan="19">Error loading data. Please try again.</td></tr>';
+                document.getElementById('playersTableBody').innerHTML = '<tr><td colspan="20">Error loading data. Please try again.</td></tr>';
             }
         }
         
+        function parseSetPieceCSV(csvText) {
+            const takersByTeam = {};
+            const lines = csvText.split(/\r?\n/).slice(1); // Split by newline, skip header
+            let currentTeam = '';
+
+            // Initialize all teams first to have the arrays
+            lines.forEach(line => {
+                const teamName = line.split(',')[0].trim();
+                if (teamName && !takersByTeam[teamName]) {
+                    takersByTeam[teamName] = { penalties: [], freekicks: [], corners: [] };
+                }
+            });
+
+            // Now populate them
+            lines.forEach(line => {
+                const columns = line.split(',').map(s => s.trim());
+                const teamName = columns[0];
+
+                if (teamName) {
+                    currentTeam = teamName;
+                }
+
+                if (!currentTeam || !takersByTeam[currentTeam]) return;
+
+                const penaltyTaker = columns[1];
+                const freekickTaker = columns[2];
+                const cornerTaker = columns[3];
+
+                if (penaltyTaker) takersByTeam[currentTeam].penalties.push(penaltyTaker);
+                if (freekickTaker) takersByTeam[currentTeam].freekicks.push(freekickTaker);
+                if (cornerTaker) takersByTeam[currentTeam].corners.push(cornerTaker);
+            });
+            
+            // Now, slice to get top 2 and normalize names
+            for (const team in takersByTeam) {
+                takersByTeam[team].penalties = takersByTeam[team].penalties.slice(0, 2).map(name => name.replace(//g, 'O'));
+                takersByTeam[team].freekicks = takersByTeam[team].freekicks.slice(0, 2).map(name => name.replace(//g, 'O'));
+                takersByTeam[team].corners = takersByTeam[team].corners.slice(0, 2).map(name => name.replace(//g, 'O'));
+            }
+
+            return takersByTeam;
+        }
+
         function getPositionName(elementTypeId) {
             switch (elementTypeId) {
                 case 1: return 'GKP';
@@ -207,7 +260,7 @@
             }
         }
         
-        function preprocessPlayerData(players) {
+        function preprocessPlayerData(players, setPieceTakers) {
             const positions = { 1: [], 2: [], 3: [], 4: [] };
             
             players.forEach(p => {
@@ -244,21 +297,11 @@
                 p.team_name = teamsData[p.team];
                 p.position_name = getPositionName(p.element_type);
                 
-                // Improved (but still MOCK) data for set pieces
-                p.takes_penalties = knownPenaltyTakers.includes(p.web_name);
-                p.takes_corners = false;
-
-                if (!p.takes_penalties) { // Only assign random if not a known taker
-                    if (p.position_name === 'MID' || p.position_name === 'FWD') {
-                        p.takes_penalties = Math.random() < 0.02; // Lowered random chance
-                        p.takes_corners = Math.random() < 0.2;
-                    }
-                    if (p.position_name === 'DEF') {
-                        p.takes_corners = Math.random() < 0.1; 
-                    }
-                } else { // Known penalty takers often take other set pieces
-                    p.takes_corners = Math.random() < 0.3;
-                }
+                // Set piece data from CSV
+                const playerSetPieces = setPieceTakers[p.team_name] || { penalties: [], freekicks: [], corners: [] };
+                p.takes_penalties = playerSetPieces.penalties.some(name => p.web_name.toLowerCase() === name.toLowerCase());
+                p.takes_corners = playerSetPieces.corners.some(name => p.web_name.toLowerCase() === name.toLowerCase());
+                p.takes_free_kicks = playerSetPieces.freekicks.some(name => p.web_name.toLowerCase() === name.toLowerCase());
                 
                 const tiers = priceTiers[p.element_type];
                 if (p.now_cost >= tiers.p95) p.price_tier = 'Elite';
@@ -269,7 +312,7 @@
                 let draft_score = 0;
                 if (minutes === 0) { // Newcomer - more conservative score
                     draft_score = (p.now_cost * 4) + (parseFloat(p.selected_by_percent) * 1.5); // Reduced impact of selection %
-                } else if (minutes < 90) { // Low minutes player - conservative score
+                } else if (minutes > 0 && minutes < 90) { // Low minutes player - conservative score
                     draft_score = p.total_points * 1.5;
                 }
                 else { // Existing player
@@ -301,7 +344,6 @@
             document.getElementById('teamFilter').addEventListener('change', processChange);
             document.getElementById('priceRange').addEventListener('keyup', processChange);
             document.getElementById('minPoints').addEventListener('keyup', processChange);
-            document.getElementById('minSelected').addEventListener('keyup', processChange);
             document.getElementById('xDiffFilter').addEventListener('change', processChange);
             document.getElementById('showEntries').addEventListener('change', processChange);
         }
@@ -342,6 +384,7 @@
                     <td>${p.ict_index}</td>
                     <td>${p.bonus}</td>
                     <td>${p.clean_sheets}</td>
+                    <td>${p.takes_free_kicks ? '✔️' : '❌'}</td>
                     <td class="verbal-insights-cell">${generateVerbalInsights(p)}</td>
                     <td><input type="checkbox" class="compare-checkbox" data-player-id="${p.id}" onchange="toggleCompare(${p.id})"></td>
                 `;
@@ -352,6 +395,7 @@
             const icons = [];
             if (p.takes_penalties) icons.push(`<span class='player-name-icon'>🎯</span>`);
             if (p.takes_corners) icons.push(`<span class='player-name-icon'>⚽</span>`);
+            if (p.takes_free_kicks) icons.push(`<span class='player-name-icon'>👟</span>`);
             if (parseFloat(p.selected_by_percent) < 5) icons.push(`<span class='player-name-icon'>💎</span>`);
             if (p.price_tier === 'Budget' && p.points_per_game > 3.5) icons.push(`<span class='player-name-icon'>💰</span>`);
             if (p.minutes === 0) icons.push(`<span class='player-name-icon'>🌟</span>`);
@@ -362,8 +406,9 @@
         
         function generateVerbalInsights(p) {
             const insights = [];
-            if (p.takes_penalties) insights.push("<li>בועט פנדלים (משוער)</li>");
-            if (p.takes_corners) insights.push("<li>לוקח קרנות (משוער)</li>");
+            if (p.takes_penalties) insights.push("<li>בועט פנדלים</li>");
+            if (p.takes_corners) insights.push("<li>לוקח קרנות</li>");
+            if (p.takes_free_kicks) insights.push("<li>בועט חופשיות</li>");
             if (parseFloat(p.selected_by_percent) < 5 && p.minutes > 0) insights.push(`<li>דיפרנציאל (${p.selected_by_percent}%)</li>`);
             if (p.price_tier === 'Budget' && p.points_per_game > 3.5) insights.push("<li>תמורה למחיר (Value)</li>");
             if (p.minutes === 0) insights.push("<li>שחקן חדש/ללא דקות</li>");
@@ -382,7 +427,6 @@
             const team = document.getElementById('teamFilter').value;
             const priceRange = document.getElementById('priceRange').value;
             const minPoints = parseInt(document.getElementById('minPoints').value, 10) || 0;
-            const minSelected = parseFloat(document.getElementById('minSelected').value) || 0;
             const xDiffFilter = document.getElementById('xDiffFilter').value;
             
             let [minPrice, maxPrice] = [0, 99];
@@ -398,7 +442,6 @@
                        (!team || p.team_name === team) && 
                        p.now_cost >= (minPrice || 0) && p.now_cost <= (maxPrice || 99) && 
                        p.total_points >= minPoints && 
-                       parseFloat(p.selected_by_percent) >= minSelected && 
                        xDiffMatch;
             });
             
@@ -412,13 +455,13 @@
         function applyQuickFilter(data, filterName) {
             switch(filterName) {
                 case 'set_pieces':
-                    return data.filter(p => p.takes_penalties || p.takes_corners).sort((a,b) => ((b.takes_penalties?2:0)+(b.takes_corners?1:0)) - ((a.takes_penalties?2:0)+(a.takes_corners?1:0)));
+                    return data.filter(p => p.takes_penalties || p.takes_corners || p.takes_free_kicks);
                 case 'attacking_defenders':
-                    return data.filter(p => p.position_name === 'DEF' && p.minutes > 300).sort((a,b) => b.xGI_per90 - a.xGI_per90);
+                    return data.filter(p => p.position_name === 'DEF' && p.minutes > 300);
                 case 'underperformers':
-                    return data.filter(p => p.minutes > 300 && p.xDiff < -0.5);
+                    return data.filter(p => p.minutes > 300 && p.xDiff < -1.5);
                 case 'overperformers':
-                    return data.filter(p => p.minutes > 300 && p.xDiff > 0.5);
+                    return data.filter(p => p.minutes > 300 && p.xDiff > 2.5);
                 case 'differentials':
                     return data.filter(p => parseFloat(p.selected_by_percent) < 5);
                 case 'newcomers':
@@ -429,7 +472,7 @@
         }
 
         function sortAndDisplay(data) {
-            const fields = ['rank', 'web_name', 'draft_score', 'team_name', 'position_name', 'now_cost', 'total_points', 'points_per_game', 'selected_by_percent', 'goals_scored', 'expected_goal_involvements', 'minutes', 'xDiff', 'bps', 'ict_index', 'bonus', 'clean_sheets', 'verbal_insights'];
+            const fields = ['rank', 'web_name', 'draft_score', 'team_name', 'position_name', 'now_cost', 'total_points', 'points_per_game', 'selected_by_percent', 'goals_scored', 'expected_goal_involvements', 'minutes', 'xDiff', 'bps', 'ict_index', 'bonus', 'clean_sheets', 'takes_free_kicks', 'verbal_insights'];
             const sortField = fields[sortColumn];
 
             data.sort((a, b) => {
@@ -494,9 +537,9 @@
             setActiveButton(btn);
             activeQuickFilterName = null;
             document.querySelectorAll('.filters input, .filters select').forEach(el => {
-                if (el.id !== 'showEntries' && el.id !== 'minSelected') el.value = '';
+                if (el.id !== 'showEntries' && el.id !== 'minPoints') el.value = '';
             });
-            document.getElementById('minSelected').value = '0.0001';
+            document.getElementById('minPoints').value = '0';
             processChange();
         }
         
@@ -518,7 +561,7 @@
         }
 
         function exportToCsv() {
-            const headers = ['Rank','Player','Draft Score','Team','Position','Price','Points','PPG','Selected %','G+A','xG+xA','Minutes','xDiff','BPS','ICT','Bonus','Clean Sheets','Insights'];
+            const headers = ['Rank','Player','Draft Score','Team','Position','Price','Points','PPG','Selected %','G+A','xG+xA','Minutes','xDiff','BPS','ICT','Bonus','Clean Sheets','Free Kicks','Insights'];
             let csvContent = headers.join(',') + '\n';
             displayedData.forEach((p, i) => {
                 const insightsText = generateVerbalInsights(p).replace(/<li>/g, '').replace(/<\/li>/g, ', ').replace(/<ul class="insights-list">/g, '').replace(/<\/ul>/g, '');
@@ -540,6 +583,7 @@
                     p.ict_index,
                     p.bonus,
                     p.clean_sheets,
+                    p.takes_free_kicks ? 'Yes' : 'No',
                     `"${insightsText}"`
                 ];
                 csvContent += row.join(',') + '\n';
@@ -574,7 +618,8 @@
                 {key: 'xDiff', label: 'xDiff', type: 'number'},
                 {key: 'ict_per_90', label: 'ICT/90', type: 'number'},
                 {key: 'takes_penalties', label: 'בועט פנדלים', type: 'boolean'},
-                {key: 'takes_corners', label: 'מרים קרנות', type: 'boolean'}
+                {key: 'takes_corners', label: 'מרים קרנות', type: 'boolean'},
+                {key: 'takes_free_kicks', label: 'בועט חופשיות', type: 'boolean'}
             ];
 
             let bodyHtml = '<tbody>';
