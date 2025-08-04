@@ -131,7 +131,7 @@
         <button class="control-button" id="compareBtn" onclick="compareSelectedPlayers()">השווה שחקנים נבחרים</button>
         <button class="control-button" data-filter-name="set_pieces" onclick="quickFilter(this, 'set_pieces')" title="מציג שחקנים שלוקחים פנדלים, קרנות או בעיטות חופשיות, על בסיס הנתונים שזוהו. ממוין לפי ציון דראפט.">🎯 בועטי מצבים נייחים</button>
         <button class="control-button" data-filter-name="attacking_defenders" onclick="quickFilter(this, 'attacking_defenders')" title="מציג שחקני הגנה עם נתוני xGI/90 גבוהים, ששיחקו מעל 300 דקות. המיון הוא לפי ציון דראפט.">🛡️ מגנים תוקפים</button>
-        <button class="control-button" data-filter-name="underperformers" onclick="quickFilter(this, 'underperformers')" title="מציג שחקנים ששיחקו מעל 300 דקות וה-xDiff שלהם נמוך מ-1.5-. המיון הוא לפי ציון דראפט.">📉 ביצועי חסר</button>
+        <button class="control-button" data-filter-name="high_ownership" onclick="quickFilter(this, 'high_ownership')" title="מציג שחקנים עם אחוז החזקה מעל 15%. ממוין לפי ציון דראפט.">📈 שחקנים פופולריים</button>
         <button class="control-button" data-filter-name="overperformers" onclick="quickFilter(this, 'overperformers')" title="מציג שחקנים ששיחקו מעל 300 דקות וה-xDiff שלהם גבוה מ-2.5. המיון הוא לפי ציון דראפט.">📈 ביצועי יתר</button>
         <button class="control-button" data-filter-name="differentials" onclick="quickFilter(this, 'differentials')" title="מציג שחקנים עם אחוז החזקה נמוך מ-5%. המיון הוא לפי ציון דראפט.">💎 מציאות (עד 5%)</button>
         <button class="control-button" data-filter-name="newcomers" onclick="quickFilter(this, 'newcomers')" title="מציג שחקנים ללא דקות משחק בעונה שעברה. המיון הוא לפי ציון 'הייפ' המבוסס על מחיר ואחוז החזקה.">🌟 תגליות העונה</button>
@@ -390,6 +390,8 @@
                     if (p.position_name === 'GKP' || p.position_name === 'DEF') {
                         draft_score -= p.xGC_per90 * 15;
                     }
+                    // Add boost based on ownership percentage
+                    draft_score += (parseFloat(p.selected_by_percent) / 5);
                 }
                 p.draft_score = Math.max(0, draft_score); // Cap score at 0
 
@@ -531,8 +533,8 @@
                     return data.filter(p => p.takes_penalties || p.takes_corners || p.takes_free_kicks);
                 case 'attacking_defenders':
                     return data.filter(p => p.position_name === 'DEF' && p.minutes > 300);
-                case 'underperformers':
-                    return data.filter(p => p.minutes > 300 && p.xDiff < -1.5);
+                case 'high_ownership':
+                    return data.filter(p => parseFloat(p.selected_by_percent) > 15);
                 case 'overperformers':
                     return data.filter(p => p.minutes > 300 && p.xDiff > 2.5);
                 case 'differentials':
