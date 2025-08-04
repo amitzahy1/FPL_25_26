@@ -224,7 +224,9 @@
                 const teamNameToId = {};
                 data.teams.forEach(team => { teamNameToId[team.name] = team.id; });
 
-                const existingPlayerNames = new Set(data.elements.map(p => p.web_name.toLowerCase()));
+                const availablePlayers = data.elements.filter(p => p.status !== 'u');
+
+                const existingPlayerNames = new Set(availablePlayers.map(p => p.web_name.toLowerCase()));
                 const newPlayers = [];
 
                 const teamNameMapping = {
@@ -265,7 +267,7 @@
                     }
                 }
 
-                const combinedPlayers = [...data.elements, ...newPlayers];
+                const combinedPlayers = [...availablePlayers, ...newPlayers];
                 allPlayersData = preprocessPlayerData(combinedPlayers, setPieceTakers);
                 
                 populateTeamFilter();
@@ -434,10 +436,10 @@
                             break;
                     }
                      // Add final universal boosts for total points and price
-                    const totalPointsBoost = p.total_points / 20; // e.g., 200 points = +10 score
-                    const priceBoost = p.now_cost * 1.5; // e.g., 10.0 price = +15 score
+                    const totalPointsBoost = p.total_points / 15; // e.g., 200 points = +13.3 score
+                    const priceBoost = p.now_cost * 2.5; // e.g., 10.0 price = +25 score
                     
-                    draft_score = position_score + totalPointsBoost + priceBoost + (parseFloat(p.selected_by_percent) / 4);
+                    draft_score = position_score + totalPointsBoost + priceBoost + (parseFloat(p.selected_by_percent) / 2);
                 }
                 p.draft_score = Math.max(0, draft_score); // Ensure no negative scores
 
