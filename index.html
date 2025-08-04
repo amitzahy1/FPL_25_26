@@ -9,7 +9,7 @@
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
-            min-height: 100vh; padding: 15px; line-height: 1.4; max-width: 1400px; margin: 0 auto;
+            min-height: 100vh; padding: 15px; line-height: 1.4; max-width: 1600px; margin: 0 auto; /* Increased max-width */
         }
         .header { text-align: center; margin-bottom: 20px; background: white; padding: 15px; border-radius: 12px; box-shadow: 0 6px 20px rgba(0,0,0,0.1); }
         h1 { color: #2c3e50; font-size: 1.8em; margin-bottom: 8px; font-weight: 700; }
@@ -140,12 +140,13 @@
                     <th onclick="sortTable(10)">xG+xA<span class="sort-indicator"></span></th>
                     <th onclick="sortTable(11)">דקות<span class="sort-indicator"></span></th>
                     <th onclick="sortTable(12)">xDiff<span class="sort-indicator"></span></th>
-                    <th onclick="sortTable(13)">BPS<span class="sort-indicator"></span></th>
-                    <th onclick="sortTable(14)">ICT<span class="sort-indicator"></span></th>
-                    <th onclick="sortTable(15)">בונוס<span class="sort-indicator"></span></th>
-                    <th onclick="sortTable(16)">רשת נקייה<span class="sort-indicator"></span></th>
-                    <th onclick="sortTable(17)">חופשיות<span class="sort-indicator"></span></th>
-                    <th onclick="sortTable(18)">תובנות<span class="sort-indicator"></span></th>
+                    <th onclick="sortTable(13)">ICT<span class="sort-indicator"></span></th>
+                    <th onclick="sortTable(14)">בונוס<span class="sort-indicator"></span></th>
+                    <th onclick="sortTable(15)">רשת נקייה<span class="sort-indicator"></span></th>
+                    <th onclick="sortTable(16)">פנדלים<span class="sort-indicator"></span></th>
+                    <th onclick="sortTable(17)">קרנות<span class="sort-indicator"></span></th>
+                    <th onclick="sortTable(18)">חופשיות<span class="sort-indicator"></span></th>
+                    <th onclick="sortTable(19)">תובנות<span class="sort-indicator"></span></th>
                     <th>בחר</th>
                 </tr>
             </thead>
@@ -202,27 +203,28 @@
         }
         
         function getHardcodedSetPieceTakers() {
+            // Data parsed from the latest SetPieceTakerSS.csv
             return {
-                "Arsenal": { "penalties": ["Saka", "Odegaard"], "freekicks": ["Odegaard", "Rice"], "corners": ["Rice", "Saka"] },
-                "Aston Villa": { "penalties": ["Watkins", "Tielemans"], "freekicks": ["Digne", "Bailey"], "corners": ["Tielemans", "McGinn"] },
-                "Bournemouth": { "penalties": ["Kluivert", "Evanilson"], "freekicks": ["Tavernier", "Kluivert"], "corners": ["Tavernier", "Kluivert"] },
-                "Brentford": { "penalties": ["Mbeumo", "Wissa"], "freekicks": ["Mbeumo", "Damsgaard"], "corners": ["Mbeumo", "Damsgaard"] },
-                "Brighton": { "penalties": ["Welbeck", "O'Riley"], "freekicks": ["Welbeck", "Estupinan"], "corners": ["O'Riley", "Estupinan"] },
-                "Burnley": { "penalties": ["Flemming", "Amdouni"], "freekicks": ["Anthony", "Flemming"], "corners": ["Anthony", "Lucas"] },
-                "Chelsea": { "penalties": ["Palmer", "Nkunku"], "freekicks": ["Palmer", "James"], "corners": ["Enzo", "Palmer"] },
-                "Crystal Palace": { "penalties": ["Eze", "Mateta"], "freekicks": ["Eze", "Hughes"], "corners": ["Eze", "Hughes"] },
-                "Everton": { "penalties": ["Ndiaye", "Beto"], "freekicks": ["Alcaraz", "Garner"], "corners": ["Garner", "McNeil"] },
-                "Fulham": { "penalties": ["Jimenez", "Andreas"], "freekicks": ["Wilson", "Pereira"], "corners": ["Pereira", "Wilson"] },
-                "Leeds United": { "penalties": ["Strujik", "Piroe"], "freekicks": ["Gruev", "Aaronson"], "corners": ["Gruev", "James"] },
-                "Liverpool": { "penalties": ["Salah", "Gakpo"], "freekicks": ["Szoboszlai", "Mac Allister"], "corners": ["Mac Allister", "Szoboszlai"] },
-                "Manchester City": { "penalties": ["Haaland", "Marmoush"], "freekicks": ["Marmoush", "Foden"], "corners": ["Marmoush", "Foden"] },
-                "Manchester Utd": { "penalties": ["Fernandes", "Mbeumo"], "freekicks": ["Fernandes", "Mbeumo"], "corners": ["Fernandes", "Amad"] },
-                "Newcastle": { "penalties": ["Wilson", "Isak"], "freekicks": ["Trippier", "Schr"], "corners": ["Trippier", "Hall"] },
-                "Nottingham Forest": { "penalties": ["Wood", "Gibbs-White"], "freekicks": ["Gibbs-White", "Murillo"], "corners": ["Elanga", "Anderson"] },
-                "Sunderland": { "penalties": ["Roberts", "Wilson"], "freekicks": ["Le Fee", "Roberts"], "corners": ["Le Fee", "Roberts"] },
-                "Tottenham Hotspur": { "penalties": ["Son", "Richarlison"], "freekicks": ["Porro", "Maddison"], "corners": ["Maddison", "Porro"] },
-                "West Ham United": { "penalties": ["Paqueta", "Bowen"], "freekicks": ["Ward-Prowse", "Paqueta"], "corners": ["Paqueta", "Ward-Prowse"] },
-                "Wolverhampton Wanderers": { "penalties": ["Hwang", "Bellagarde"], "freekicks": ["Bellagarde", ""], "corners": ["Bellagarde", ""] }
+                "Arsenal": { "penalties": ["Saka"], "freekicks": ["Rice", "Odegaard"], "corners": ["Rice", "Saka"] },
+                "Aston Villa": { "penalties": ["Watkins"], "freekicks": ["Digne", "Bailey"], "corners": ["Tielemans", "Digne"] },
+                "Bournemouth": { "penalties": ["Kluivert"], "freekicks": ["Tavernier", "Kluivert"], "corners": ["Tavernier", "Kluivert"] },
+                "Brentford": { "penalties": ["Wissa"], "freekicks": ["Damsgaard", "Lewis-Potter"], "corners": ["Damsgaard", "Jensen"] },
+                "Brighton": { "penalties": ["Welbeck"], "freekicks": ["Welbeck", "O'Riley"], "corners": ["Ayari", "O'Riley"] },
+                "Burnley": { "penalties": ["Flemming"], "freekicks": ["Anthony", "Flemming"], "corners": ["Anthony", "Lucas"] },
+                "Chelsea": { "penalties": ["Palmer"], "freekicks": ["Palmer", "James"], "corners": ["Enzo", "Neto"] },
+                "Crystal Palace": { "penalties": ["Eze"], "freekicks": ["Eze"], "corners": ["Eze", "Hughes"] },
+                "Everton": { "penalties": ["Ndiaye"], "freekicks": ["Alcaraz", "Garner"], "corners": ["McNeil", "Garner"] },
+                "Fulham": { "penalties": ["Jimenez"], "freekicks": ["Pereira", "Jimenez"], "corners": ["Pereira", "Lukic"] },
+                "Leeds United": { "penalties": ["Strujik"], "freekicks": ["Gruev", "Aaronson"], "corners": ["James", "Gruev"] },
+                "Liverpool": { "penalties": ["Salah"], "freekicks": ["Szoboszlai", "Mac Allister"], "corners": ["Mac Allister", "Wirtz"] },
+                "Manchester City": { "penalties": ["Haaland"], "freekicks": ["Marmoush", "Foden"], "corners": ["Foden", "Bernardo"] },
+                "Manchester Utd": { "penalties": ["Fernandes"], "freekicks": ["Fernandes", "Cunha"], "corners": ["Fernandes", "Mbeumo"] },
+                "Newcastle": { "penalties": ["Isak"], "freekicks": ["Trippier", "Schar"], "corners": ["Trippier", "Elanga"] }, // Normalized Schär
+                "Nottingham Forest": { "penalties": ["Wood"], "freekicks": ["Gibbs-White", "Murillo"], "corners": ["Anderson", "Gibbs-White"] },
+                "Sunderland": { "penalties": ["Isidor"], "freekicks": ["Le Fee", "Roberts"], "corners": ["Le Fee", "Roberts"] },
+                "Tottenham Hotspur": { "penalties": ["Solanke"], "freekicks": ["Porro", "Maddison"], "corners": ["Kulusevski", "Porro"] },
+                "West Ham United": { "penalties": ["Paqueta"], "freekicks": ["Ward-Prowse", "Paqueta"], "corners": ["Bowen", "Ward-Prowse"] },
+                "Wolverhampton Wanderers": { "penalties": ["Larsen"], "freekicks": ["Arias", "Bellagarde"], "corners": ["Bellagarde", "Arias"] }
             };
         }
 
@@ -356,11 +358,12 @@
                     <td>${p.expected_goal_involvements}</td>
                     <td>${p.minutes}</td>
                     <td class="${xDiffClass}">${p.xDiff.toFixed(2)}</td>
-                    <td>${p.bps}</td>
                     <td>${p.ict_index}</td>
                     <td>${p.bonus}</td>
                     <td>${p.clean_sheets}</td>
-                    <td>${p.takes_free_kicks ? '✔️' : '❌'}</td>
+                    <td>${p.takes_penalties ? '🎯' : '❌'}</td>
+                    <td>${p.takes_corners ? '⚽' : '❌'}</td>
+                    <td>${p.takes_free_kicks ? '👟' : '❌'}</td>
                     <td class="verbal-insights-cell">${generateVerbalInsights(p)}</td>
                     <td><input type="checkbox" class="compare-checkbox" data-player-id="${p.id}" onchange="toggleCompare(${p.id})"></td>
                 `;
@@ -448,7 +451,7 @@
         }
 
         function sortAndDisplay(data) {
-            const fields = ['rank', 'web_name', 'draft_score', 'team_name', 'position_name', 'now_cost', 'total_points', 'points_per_game', 'selected_by_percent', 'goals_scored', 'expected_goal_involvements', 'minutes', 'xDiff', 'bps', 'ict_index', 'bonus', 'clean_sheets', 'takes_free_kicks', 'verbal_insights'];
+            const fields = ['rank', 'web_name', 'draft_score', 'team_name', 'position_name', 'now_cost', 'total_points', 'points_per_game', 'selected_by_percent', 'goals_scored', 'expected_goal_involvements', 'minutes', 'xDiff', 'ict_index', 'bonus', 'clean_sheets', 'takes_penalties', 'takes_corners', 'takes_free_kicks', 'verbal_insights'];
             const sortField = fields[sortColumn];
 
             data.sort((a, b) => {
@@ -537,7 +540,7 @@
         }
 
         function exportToCsv() {
-            const headers = ['Rank','Player','Draft Score','Team','Position','Price','Points','PPG','Selected %','G+A','xG+xA','Minutes','xDiff','BPS','ICT','Bonus','Clean Sheets','Free Kicks','Insights'];
+            const headers = ['Rank','Player','Draft Score','Team','Position','Price','Points','PPG','Selected %','G+A','xG+xA','Minutes','xDiff','ICT','Bonus','Clean Sheets','Penalties','Corners','Free Kicks','Insights'];
             let csvContent = headers.join(',') + '\n';
             displayedData.forEach((p, i) => {
                 const insightsText = generateVerbalInsights(p).replace(/<li>/g, '').replace(/<\/li>/g, ', ').replace(/<ul class="insights-list">/g, '').replace(/<\/ul>/g, '');
@@ -555,10 +558,11 @@
                     p.expected_goal_involvements,
                     p.minutes,
                     p.xDiff.toFixed(2),
-                    p.bps,
                     p.ict_index,
                     p.bonus,
                     p.clean_sheets,
+                    p.takes_penalties ? 'Yes' : 'No',
+                    p.takes_corners ? 'Yes' : 'No',
                     p.takes_free_kicks ? 'Yes' : 'No',
                     `"${insightsText}"`
                 ];
