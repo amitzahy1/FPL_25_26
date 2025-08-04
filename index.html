@@ -395,7 +395,7 @@
                 } else { 
                     draft_score = (parseFloat(p.points_per_game) * 12) + 
                                   (p.ict_per_90 * 4) + 
-                                  (p.xGI_per90 * 12) +
+                                  (p.xGI_per_90 * 12) +
                                   (parseFloat(p.selected_by_percent) / 4);
                 }
                 p.draft_score = Math.max(0, draft_score); // Ensure no negative scores
