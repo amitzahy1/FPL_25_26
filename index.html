@@ -360,6 +360,11 @@
                 
                 const normalizedPlayerName = p.web_name.toLowerCase();
 
+                // Custom override for Maddison's injury status
+                if (p.web_name === 'Maddison') {
+                    p.news = 'Injury - Expected back 01 Aug';
+                }
+
                 // --- NEW, MORE RELIABLE LOGIC ---
                 // 1. Check against the simple, flat list of main penalty takers
                 p.takes_penalties = mainPenaltyTakers.includes(normalizedPlayerName);
@@ -428,7 +433,11 @@
                                            (p.xGC_per90 * 4);
                             break;
                     }
-                    draft_score = position_score + (parseFloat(p.selected_by_percent) / 4);
+                     // Add final universal boosts for total points and price
+                    const totalPointsBoost = p.total_points / 20; // e.g., 200 points = +10 score
+                    const priceBoost = p.now_cost * 1.5; // e.g., 10.0 price = +15 score
+                    
+                    draft_score = position_score + totalPointsBoost + priceBoost + (parseFloat(p.selected_by_percent) / 4);
                 }
                 p.draft_score = Math.max(0, draft_score); // Ensure no negative scores
 
