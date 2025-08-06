@@ -211,7 +211,8 @@
 
         async function fetchAndProcessData() {
             try {
-                const response = await fetch('FPL_Bootstrap_static.json?v=' + new Date().getTime());
+                // Switched to live FPL API via a CORS proxy to enable cross-domain requests
+                const response = await fetch('https://corsproxy.io/?' + encodeURIComponent('https://fantasy.premierleague.com/api/bootstrap-static/'));
                 if (!response.ok) throw new Error(`Failed to fetch JSON: ${response.statusText}`);
                 
                 const data = await response.json();
