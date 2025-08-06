@@ -109,6 +109,7 @@
     <div class="header">
             <h1>🏆 FPL Ultimate Draft Tool</h1>
             <p class="subtitle">ניתוח חכם | ציון דראפט ייעודי | סינון מתקדם</p>
+            <p id="lastUpdated" class="subtitle" style="font-size: 0.8em; margin-top: 5px;"></p>
         </div>
         <div class="legend">
             <p>
@@ -216,6 +217,12 @@
                 if (!response.ok) throw new Error(`Failed to fetch JSON: ${response.statusText}`);
                 
                 const data = await response.json();
+
+                // Set last updated timestamp
+                const now = new Date();
+                const formattedDate = `עדכון אחרון: ${now.toLocaleDateString('he-IL')} ${now.toLocaleTimeString('he-IL')}`;
+                document.getElementById('lastUpdated').textContent = formattedDate;
+
                 const setPieceTakers = getHardcodedSetPieceTakers();
                 
                 teamsData = data.teams.reduce((acc, team) => {
