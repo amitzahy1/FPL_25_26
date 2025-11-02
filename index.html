@@ -128,6 +128,45 @@
 
         .button-group { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; }
 
+        .hidden { display: none; }
+        .section-title { text-align: center; color: #2c3e50; margin: 10px 0; }
+        .subtle-note { color: #6b7280; font-size: 0.85em; text-align: center; margin-top: 6px; }
+        .card { background: white; border-radius: 12px; box-shadow: 0 6px 20px rgba(0,0,0,0.08); padding: 12px; }
+        .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
+        .roster-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 8px; }
+        .pos-col { background: #f8fafc; border: 1px solid #eef2f7; border-radius: 8px; padding: 8px; }
+        .pos-col h4 { margin: 0 0 6px 0; font-size: 0.9em; color: #334155; text-align: center; }
+        .chips { display: flex; flex-wrap: wrap; gap: 4px; }
+        .chip { display: inline-block; border: 1px solid transparent; color: #0f172a; border-radius: 999px; padding: 2px 8px; font-size: 0.8em; white-space: nowrap; box-shadow: 0 1px 0 rgba(0,0,0,0.04); }
+        .chip-gkp { background: #ecfdf5; border-color: #a7f3d0; }
+        .chip-def { background: #eff6ff; border-color: #bfdbfe; }
+        .chip-mid { background: #fff7ed; border-color: #fed7aa; }
+        .chip-fwd { background: #fef2f2; border-color: #fecaca; }
+        .team-card-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:6px; }
+        .card { transition: transform .2s ease, box-shadow .2s ease; }
+        .card:hover { transform: translateY(-2px); box-shadow: 0 10px 28px rgba(0,0,0,0.12); }
+
+        /* Draft analytics mini-cards */
+        .mini-card { background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%); border: 1px solid #eef2f7; border-radius: 12px; padding: 10px; box-shadow: 0 4px 16px rgba(0,0,0,0.06); }
+        .mini-title { font-weight: 700; color: #1f2937; margin-bottom: 6px; font-size: .95em; }
+        .mini-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 8px; }
+        .mini-metric { font-size: .8em; color: #334155; }
+        .mini-metric .label { display:inline-block; min-width: 120px; color:#475569; }
+        .mini-metric .value { font-weight: 700; color:#0f172a; margin-left: 6px; }
+        .mini-bar { height: 6px; background: #e5e7eb; border-radius: 999px; overflow: hidden; margin-top: 4px; }
+        .mini-bar-fill { height: 100%; width: 0; border-radius: 999px; background: linear-gradient(90deg, #60a5fa, #34d399); transition: width .7s ease; }
+        .mini-badge { display:inline-block; padding:2px 6px; border-radius:999px; font-size:.75em; background:#eef2ff; color:#3730a3; border:1px solid #c7d2fe; }
+        /* Dual comparison rows */
+        .dual-grid { display: grid; grid-template-columns: 1fr; gap: 8px; }
+        .dual-row { background:#f8fafc; border:1px solid #eef2f7; border-radius: 8px; padding:6px 8px; }
+        .dual-row .label { font-size:.82em; color:#475569; margin-bottom:4px; display:inline-block; }
+        .dual-bars { display:flex; gap:8px; align-items:center; }
+        .dual-bars .team { width: 42px; font-size:.75em; color:#64748b; text-align:center; }
+        .dual-bar { flex:1; height:8px; background:#e5e7eb; border-radius:999px; overflow:hidden; position:relative; }
+        .dual-fill-a { height:100%; width:0; background:linear-gradient(90deg,#60a5fa,#3b82f6); transition: width .6s ease; }
+        .dual-fill-b { height:100%; width:0; background:linear-gradient(90deg,#34d399,#10b981); transition: width .6s ease; }
+        .dual-value { width: 52px; text-align:left; font-size:.8em; color:#111827; }
+
     </style>
 
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -152,6 +191,15 @@
 
     </div>
 
+    <div class="controls" style="margin-top: -5px;">
+        <div class="button-group">
+            <button class="control-button active" id="tabPlayersBtn" onclick="switchMainTab('players')">נתוני שחקנים</button>
+            <button class="control-button" id="tabDraftBtn" onclick="switchMainTab('draft')">ליגת דראפט</button>
+        </div>
+    </div>
+
+    <div id="mainSection">
+
     <div class="legend">
 
         <p>
@@ -175,6 +223,7 @@
         <div class="filter-group"><label>⚽ עמדה:</label><select id="positionFilter" onchange="processChange()"><option value="">כל העמדות</option><option value="GKP">🥅 שוערים</option><option value="DEF">🛡️ מגנים</option><option value="MID">⚽ קשרים</option><option value="FWD">🎯 חלוצים</option></select></div>
 
         <div class="filter-group"><label>🏟️ קבוצה:</label><select id="teamFilter" onchange="processChange()"><option value="">כל הקבוצות</option></select></div>
+        <div class="filter-group"><label>קבוצת דראפט:</label><select id="draftTeamFilter" onchange="processChange()"><option value="">כל סגלי הדראפט</option></select></div>
 
         <div class="filter-group"><label>💰 מחיר טווח:</label><input type="text" id="priceRange" onkeyup="processChange()" placeholder="4.0-15.0"></div>
 
@@ -239,6 +288,12 @@
                 <button class="control-button" onclick="showPriceVsScoreChart()">💰 תמורה למחיר</button>
 
                 <button class="control-button" onclick="showIctBreakdownChart()">🧬 פרופיל שחקן (ICT)</button>
+
+                <button class="control-button" onclick="showXgiVsGA()">📈 xGI/90 מול G+A</button>
+
+                <button class="control-button" onclick="showDefensiveQualityMatrix()">🛡️ איכות הגנתית (שחקנים)</button>
+
+                <button class="control-button" onclick="showValueOwnershipChart()">💎 שווי מול מחיר/אחזקות</button>
 
             </div>
 
@@ -326,6 +381,55 @@
 
     </div>
 
+    </div> <!-- end of mainSection -->
+
+    <div id="draftSection" class="hidden">
+
+        <div class="controls" style="margin-top: -5px;">
+            <div class="button-group">
+                <button class="control-button" onclick="loadDraftLeague()">רענן נתונים</button>
+                <button class="control-button" onclick="showDraftTeamStrengthMatrix()">מטריצת כוח קבוצות</button>
+                <button class="control-button" onclick="showDraftSetPieceVsStarPower()">סט-פיס מול סטאר פאוור</button>
+            </div>
+        </div>
+
+        <h3 class="section-title">טבלת הליגה</h3>
+        <div class="table-container" style="margin-bottom: 12px;">
+            <table id="draftStandingsTable">
+                <thead>
+                    <tr>
+                        <th>#</th>
+                        <th>מנהל</th>
+                        <th>קבוצת דראפט</th>
+                        <th>מש'</th>
+                        <th>ניצ'</th>
+                        <th>תיקו</th>
+                        <th>הפס'</th>
+                        <th>נק'</th>
+                    </tr>
+                </thead>
+                <tbody id="draftStandingsBody"></tbody>
+            </table>
+        </div>
+
+        <h3 class="section-title">סגלים לפי קבוצה</h3>
+        <div id="draftRosters" class="cards"></div>
+
+        <h3 class="section-title" style="margin-top:14px;">אנליטיקות דראפט</h3>
+        <div id="draftAnalytics" class="cards"></div>
+
+        <div class="card" style="margin-top:12px;">
+            <div class="filters" style="margin-bottom: 0;">
+                <div class="filter-group"><label>השוואת קבוצות:</label><select id="draftCompareA"></select></div>
+                <div class="filter-group"><label>&nbsp;</label><select id="draftCompareB"></select></div>
+                <div class="filter-group"><label>&nbsp;</label><button class="control-button" onclick="renderDraftComparison()">השווה</button></div>
+            </div>
+            <div id="draftComparisonResult" style="margin-top:8px;"></div>
+        </div>
+
+        <p class="subtle-note">המידע נטען מ- draft.premierleague.com; אם יש חסימות, נסה לרענן או לבדוק חיבור.</p>
+    </div>
+
     <div id="compareModal" class="modal">
 
         <div class="modal-content">
@@ -387,6 +491,20 @@
         let visualizationChartInstance = null;
 
         let comparisonRadarChart = null;
+        let draftComparisonChart = null;
+
+        // Draft league state
+        let draft = {
+            leagueId: 689,
+            details: null,
+            standings: null,
+            rostersByEntryId: {}, // entry_id -> array of element ids
+            entryIdToName: {}, // entry_id -> manager name
+            entryIdToTeamName: {}, // entry_id -> entry (team) name
+            entryIdToElementSet: {}, // entry_id -> Set of element ids
+            currentEvent: null,
+            loaded: false
+        };
 
         document.addEventListener('DOMContentLoaded', () => {
 
@@ -397,6 +515,25 @@
             setupEventListeners();
 
         });
+
+        function switchMainTab(tab) {
+            const main = document.getElementById('mainSection');
+            const draftSec = document.getElementById('draftSection');
+            const btnPlayers = document.getElementById('tabPlayersBtn');
+            const btnDraft = document.getElementById('tabDraftBtn');
+            if (tab === 'draft') {
+                main.classList.add('hidden');
+                draftSec.classList.remove('hidden');
+                btnPlayers.classList.remove('active');
+                btnDraft.classList.add('active');
+                if (!draft.loaded) { loadDraftLeague(); }
+            } else {
+                draftSec.classList.add('hidden');
+                main.classList.remove('hidden');
+                btnDraft.classList.remove('active');
+                btnPlayers.classList.add('active');
+            }
+        }
 
         async function fetchAndProcessData() {
 
@@ -654,7 +791,7 @@
 
         function getPercentile(arr, p) { if (!arr.length) return 0; const sorted = [...arr].sort((a,b) => a-b); const i = (p/100) * (sorted.length - 1); const f = Math.floor(i); const c = Math.ceil(i); if (f === c) return sorted[f]; return sorted[f] * (c - i) + sorted[c] * (i - f); }
 
-        function setupEventListeners() { ['searchName', 'priceRange', 'minPoints'].forEach(id => document.getElementById(id).addEventListener('keyup', processChange)); ['positionFilter', 'teamFilter', 'xDiffFilter', 'showEntries', 'minMinutes'].forEach(id => document.getElementById(id).addEventListener('change', processChange)); }
+        function setupEventListeners() { ['searchName', 'priceRange', 'minPoints'].forEach(id => document.getElementById(id).addEventListener('keyup', processChange)); ['positionFilter', 'teamFilter', 'xDiffFilter', 'showEntries', 'minMinutes', 'draftTeamFilter'].forEach(id => document.getElementById(id).addEventListener('change', processChange)); }
 
         function populateTeamFilter() { const teamFilter = document.getElementById('teamFilter'); teamFilter.innerHTML = '<option value="">כל הקבוצות</option>'; if (!allPlayersData[currentDataSource].processed) return; const uniqueTeams = [...new Set(allPlayersData[currentDataSource].processed.map(p => p.team_name))].sort(); uniqueTeams.forEach(team => { const option = document.createElement('option'); option.value = team; option.textContent = team; teamFilter.appendChild(option); }); }
 
@@ -814,7 +951,15 @@
 
             const minMinutes = parseInt(minutesInput) || 0;
 
-            displayedData = allPlayersData[currentDataSource].processed.filter(p => (!nameFilter || p.web_name.toLowerCase().includes(nameFilter)) && (!posFilter || p.position_name === posFilter) && (!teamFilter || p.team_name === teamFilter) && (p.now_cost >= minPrice && p.now_cost <= maxPrice) && p.total_points >= minPoints && p.minutes >= minMinutes && (xDiffFilter === '' || (xDiffFilter === 'positive' && p.xDiff > 0) || (xDiffFilter === 'negative' && p.xDiff < 0)));
+            const draftTeamSelected = document.getElementById('draftTeamFilter') ? document.getElementById('draftTeamFilter').value : '';
+            displayedData = allPlayersData[currentDataSource].processed.filter(p => {
+                const base = (!nameFilter || p.web_name.toLowerCase().includes(nameFilter)) && (!posFilter || p.position_name === posFilter) && (!teamFilter || p.team_name === teamFilter) && (p.now_cost >= minPrice && p.now_cost <= maxPrice) && p.total_points >= minPoints && p.minutes >= minMinutes && (xDiffFilter === '' || (xDiffFilter === 'positive' && p.xDiff > 0) || (xDiffFilter === 'negative' && p.xDiff < 0));
+                if (!base) return false;
+                if (draftTeamSelected && draft.entryIdToElementSet[draftTeamSelected]) {
+                    return draft.entryIdToElementSet[draftTeamSelected].has(p.id);
+                }
+                return true;
+            });
 
             if (activeQuickFilterName) applyQuickFilter(activeQuickFilterName);
 
@@ -822,6 +967,347 @@
 
             renderTable();
 
+        }
+
+        async function loadDraftLeague() {
+            try {
+                draft.leagueId = 689;
+                const input = document.getElementById('draftLeagueId');
+                if (input) input.value = '689';
+                const detailsUrl = 'https://corsproxy.io/?' + encodeURIComponent(`https://draft.premierleague.com/api/league/${draft.leagueId}/details`);
+                const standingsUrl = 'https://corsproxy.io/?' + encodeURIComponent(`https://draft.premierleague.com/api/league/${draft.leagueId}/standings`);
+                const bootstrapUrl = 'https://corsproxy.io/?' + encodeURIComponent('https://fantasy.premierleague.com/api/bootstrap-static/');
+
+                const [detailsRes, bootstrapRes] = await Promise.all([
+                    fetch(detailsUrl), fetch(bootstrapUrl)
+                ]);
+                if (!detailsRes.ok) throw new Error('Draft details failed');
+                if (!bootstrapRes.ok) throw new Error('Bootstrap failed');
+
+                draft.details = await detailsRes.json();
+                // Try standings, but treat it as optional (can be embedded in details)
+                try {
+                    const sr = await fetch(standingsUrl);
+                    draft.standings = sr.ok ? await sr.json() : null;
+                } catch (_) {
+                    draft.standings = null;
+                }
+                const bootstrap = await bootstrapRes.json();
+
+                const events = bootstrap.events || [];
+                draft.currentEvent = (events.find(e => e.is_current) || events.find(e => !e.is_finished) || events[0] || {}).id || 1;
+
+                draft.entryIdToName = {};
+                draft.entryIdToTeamName = {};
+                (draft.details.league_entries || []).forEach(e => {
+                    draft.entryIdToName[e.entry_id] = e.entry_name || e.player_first_name + ' ' + e.player_last_name || ('Entry ' + e.entry_id);
+                    draft.entryIdToTeamName[e.entry_id] = e.entry_name || ('Team ' + e.entry_id);
+                });
+
+                // Fetch rosters for each entry (per current event)
+                draft.rostersByEntryId = {};
+                draft.entryIdToElementSet = {};
+                const entries = (draft.details.league_entries || []).map(e => e.entry_id);
+                for (const entryId of entries) {
+                    try {
+                        const picksUrl = 'https://corsproxy.io/?' + encodeURIComponent(`https://draft.premierleague.com/api/entry/${entryId}/event/${draft.currentEvent}`);
+                        const r = await fetch(picksUrl);
+                        if (r.ok) {
+                            const j = await r.json();
+                            const ids = (j.picks || []).map(p => p.element);
+                            draft.rostersByEntryId[entryId] = ids;
+                            draft.entryIdToElementSet[entryId] = new Set(ids);
+                        }
+                    } catch (e) { /* ignore individual errors */ }
+                }
+
+                draft.loaded = true;
+                renderDraftStandings();
+                renderDraftRosters();
+                renderDraftAnalytics();
+                populateDraftTeamFilter();
+                populateDraftComparisonSelectors();
+            } catch (err) {
+                console.error('loadDraftLeague error', err);
+                alert('שגיאה בטעינת נתוני הדראפט. ניתן לנסות הדבקת JSON.');
+            }
+        }
+
+        // paste JSON support removed (league fixed)
+
+        function populateDraftTeamFilter() {
+            const sel = document.getElementById('draftTeamFilter');
+            if (!sel) return;
+            sel.innerHTML = '<option value="">כל סגלי הדראפט</option>';
+            if (!draft.details || !draft.details.league_entries) return;
+            draft.details.league_entries.filter(e => e && e.entry_name).forEach(e => {
+                const opt = document.createElement('option');
+                opt.value = String(e.entry_id);
+                opt.textContent = `${e.entry_name || ''} (${e.player_first_name || ''} ${e.player_last_name || ''})`;
+                sel.appendChild(opt);
+            });
+        }
+
+        function renderDraftStandings() {
+            const tbody = document.getElementById('draftStandingsBody');
+            if (!tbody) return;
+            tbody.innerHTML = '';
+            const rows = (draft.standings && draft.standings.standings) || (draft.details && draft.details.standings) || [];
+            if (!rows.length) { tbody.innerHTML = '<tr><td colspan="8">לא נמצאה טבלת ליגה</td></tr>'; return; }
+            const leById = new Map(((draft.details && draft.details.league_entries) || []).map(e => [e.id, e]));
+            rows.slice().sort((a,b)=> (a.rank||999) - (b.rank||999)).forEach(row => {
+                const le = leById.get(row.league_entry);
+                if (!le || !le.entry_name) return; // skip average/blank rows
+                const manager = le ? `${le.player_first_name || ''} ${le.player_last_name || ''}`.trim() : '';
+                const team = le ? (le.entry_name || '') : '';
+                const tr = document.createElement('tr');
+                tr.innerHTML = `<td>${row.rank || ''}</td>`+
+                               `<td>${manager}</td>`+
+                               `<td>${team}</td>`+
+                               `<td>${row.matches_played || ''}</td>`+
+                               `<td>${row.matches_won || ''}</td>`+
+                               `<td>${row.matches_drawn || ''}</td>`+
+                               `<td>${row.matches_lost || ''}</td>`+
+                               `<td class=\"bold-cell\">${row.total || row.points_total || ''}</td>`;
+                tbody.appendChild(tr);
+            });
+        }
+
+        function groupByPosition(elementIds) {
+            const byPos = { GKP: [], DEF: [], MID: [], FWD: [] };
+            const map = allPlayersData[currentDataSource] && allPlayersData[currentDataSource].processed ? allPlayersData[currentDataSource].processed : [];
+            const idToPlayer = new Map(map.map(p => [p.id, p]));
+            (elementIds || []).forEach(id => { const p = idToPlayer.get(id); if (p) byPos[p.position_name].push(p); });
+            return byPos;
+        }
+
+        function renderDraftRosters() {
+            const container = document.getElementById('draftRosters');
+            if (!container) return;
+            container.innerHTML = '';
+            if (!draft.details || !draft.details.league_entries) return;
+            draft.details.league_entries.filter(entry => entry && entry.entry_name).forEach(entry => {
+                const ids = draft.rostersByEntryId[entry.entry_id] || [];
+                const grouped = groupByPosition(ids);
+                const card = document.createElement('div');
+                card.className = 'card';
+                const col = (pos, arr) => {
+                    const posClass = pos==='GKP'?'chip-gkp':pos==='DEF'?'chip-def':pos==='MID'?'chip-mid':'chip-fwd';
+                    const chips = arr.map(p => `<span class="chip ${posClass}" title="${p.team_name}">${p.web_name}</span>`).join('');
+                    return `<div class="pos-col"><h4>${pos}</h4>${chips || '<span class="subtle-note">—</span>'}</div>`;
+                };
+                const grid = `<div class="roster-grid">${col('GKP', grouped.GKP)}${col('DEF', grouped.DEF)}${col('MID', grouped.MID)}${col('FWD', grouped.FWD)}</div>`;
+                card.innerHTML = `<div class="team-card-header">
+                                    <div class="bold-cell">${entry.entry_name || ''}</div>
+                                    <div class="subtle-note">${entry.player_first_name || ''} ${entry.player_last_name || ''}</div>
+                                  </div>
+                                  ${grid}`;
+                container.appendChild(card);
+            });
+        }
+
+        function computeDraftMetrics(entryId) {
+            const ids = draft.rostersByEntryId[entryId] || [];
+            const processed = allPlayersData[currentDataSource] && allPlayersData[currentDataSource].processed ? allPlayersData[currentDataSource].processed : [];
+            const idToPlayer = new Map(processed.map(p => [p.id, p]));
+            let sumPred = 0, sumDraft = 0, count = 0;
+            const posCounts = { GKP:0, DEF:0, MID:0, FWD:0 };
+            const players = [];
+            let sumGoals = 0, sumAssists = 0, totalPoints = 0;
+            let totalPrice = 0, sumSelectedBy = 0, totalCleanSheets = 0, totalXGI = 0, totalDefCon = 0;
+            ids.forEach(id => {
+                const p = idToPlayer.get(id);
+                if (p) {
+                    players.push(p);
+                    sumPred += (p.predicted_points_4_gw || 0);
+                    sumDraft += (p.draft_score || 0);
+                    totalPoints += (p.total_points || 0);
+                    sumGoals += (p.goals_scored || 0);
+                    sumAssists += (p.assists || 0);
+                    totalPrice += (p.now_cost || 0);
+                    sumSelectedBy += parseFloat(p.selected_by_percent || 0) || 0;
+                    totalCleanSheets += (p.clean_sheets || 0);
+                    totalXGI += parseFloat(p.expected_goal_involvements || 0) || 0;
+                    totalDefCon += (p.def_contrib_per90 || 0);
+                    count++;
+                    posCounts[p.position_name]++;
+                }
+            });
+            const top3Draft = players.slice().sort((a,b)=> (b.draft_score||0)-(a.draft_score||0)).slice(0,3).reduce((s,p)=> s+(p.draft_score||0),0);
+            const avgXGI90 = players.length? players.reduce((s,p)=> s+(p.xGI_per90||0),0)/players.length : 0;
+            const defPlayers = players.filter(p => p.position_name==='DEF' || p.position_name==='GKP');
+            const avgXGC90Def = defPlayers.length? defPlayers.reduce((s,p)=> s+(p.xGC_per90||0),0)/defPlayers.length : 0;
+            const pkCount = players.filter(p => (p.set_piece_priority && p.set_piece_priority.penalty>0)).length;
+            const pkPrimary = players.filter(p => (p.set_piece_priority && p.set_piece_priority.penalty===1)).length;
+            const cornersCount = players.filter(p => (p.set_piece_priority && p.set_piece_priority.corner>0)).length;
+            const fkCount = players.filter(p => (p.set_piece_priority && p.set_piece_priority.free_kick>0)).length;
+            const bench900 = players.filter(p => (p.minutes||0) > 900).length;
+            const bench1800 = players.filter(p => (p.minutes||0) > 1800).length;
+            const avgICT90 = players.length? players.reduce((s,p)=> s+(p.ict_per_90||0),0)/players.length : 0;
+            const top11Pred = players.slice().sort((a,b)=> (b.predicted_points_4_gw||0)-(a.predicted_points_4_gw||0)).slice(0,11).reduce((s,p)=> s+(p.predicted_points_4_gw||0),0);
+            const gaTotal = sumGoals + sumAssists;
+            return { sumPred, sumDraft, avgDraft: count? sumDraft/count : 0, posCounts, top3Draft, avgXGI90, avgXGC90Def, pkCount, pkPrimary, cornersCount, fkCount, bench900, bench1800, avgICT90, top11Pred, sumGoals, sumAssists, totalPoints, totalPrice, sumSelectedBy, totalCleanSheets, totalXGI, totalDefCon, gaTotal };
+        }
+
+        function renderDraftAnalytics() {
+            const container = document.getElementById('draftAnalytics');
+            if (!container) return;
+            container.innerHTML = '';
+            if (!draft.details || !draft.details.league_entries) return;
+
+            const teams = draft.details.league_entries.filter(e => e && e.entry_name).map(e => ({ id: e.entry_id, name: e.entry_name }));
+            const data = teams.map(t => ({ name: t.name, m: computeDraftMetrics(t.id) }));
+            const getRange = (sel, invert=false) => {
+                const vals = data.map(d => sel(d.m)).filter(v => Number.isFinite(v));
+                const min = Math.min(...vals);
+                const max = Math.max(...vals);
+                return { min, max, invert };
+            };
+            const ranges = {
+                sumPred: getRange(m=>m.sumPred),
+                top11Pred: getRange(m=>m.top11Pred),
+                sumDraft: getRange(m=>m.sumDraft),
+                top3Draft: getRange(m=>m.top3Draft),
+                atk: getRange(m=>m.avgXGI90),
+                def: getRange(m=>m.avgXGC90Def, true),
+                setPieces: getRange(m=>m.pkPrimary + m.cornersCount + m.fkCount),
+                depth: getRange(m=>m.bench1800),
+                ict: getRange(m=>m.avgICT90)
+            };
+            const pct = (v, r) => {
+                if (!Number.isFinite(v) || r.min === r.max) return 0.5;
+                const p = (v - r.min) / (r.max - r.min);
+                return Math.max(0, Math.min(1, r.invert ? 1 - p : p));
+            };
+
+            data.sort((a,b)=> b.m.sumPred - a.m.sumPred).forEach(({name, m}) => {
+                const el = document.createElement('div');
+                el.className = 'mini-card';
+                el.innerHTML = `
+                    <div class="mini-title">${name} <span class="mini-badge">Top 11 xPts: ${m.top11Pred.toFixed(1)}</span></div>
+                    <div class="mini-grid">
+                        <div>
+                            <div class="mini-metric"><span class="label">xPts (4GW)</span><span class="value">${m.sumPred.toFixed(1)}</span></div>
+                            <div class="mini-bar"><div class="mini-bar-fill" data-w="${(pct(m.sumPred, ranges.sumPred)*100).toFixed(0)}%"></div></div>
+                        </div>
+                        <div>
+                            <div class="mini-metric"><span class="label">Draft Score</span><span class="value">${m.sumDraft.toFixed(1)}</span></div>
+                            <div class="mini-bar"><div class="mini-bar-fill" data-w="${(pct(m.sumDraft, ranges.sumDraft)*100).toFixed(0)}%"></div></div>
+                        </div>
+                        <div>
+                            <div class="mini-metric"><span class="label">סטאר פאוור</span><span class="value">${m.top3Draft.toFixed(1)}</span></div>
+                            <div class="mini-bar"><div class="mini-bar-fill" data-w="${(pct(m.top3Draft, ranges.top3Draft)*100).toFixed(0)}%"></div></div>
+                        </div>
+                        <div>
+                            <div class="mini-metric"><span class="label">התקפי xGI/90</span><span class="value">${m.avgXGI90.toFixed(2)}</span></div>
+                            <div class="mini-bar"><div class="mini-bar-fill" data-w="${(pct(m.avgXGI90, ranges.atk)*100).toFixed(0)}%"></div></div>
+                        </div>
+                        <div>
+                            <div class="mini-metric"><span class="label">הגנתי xGC/90</span><span class="value">${m.avgXGC90Def.toFixed(2)}</span></div>
+                            <div class="mini-bar"><div class="mini-bar-fill" data-w="${(pct(m.avgXGC90Def, ranges.def)*100).toFixed(0)}%"></div></div>
+                        </div>
+                        <div>
+                            <div class="mini-metric"><span class="label">סט-פיס כיסוי</span><span class="value">${m.pkPrimary + m.cornersCount + m.fkCount}</span></div>
+                            <div class="mini-bar"><div class="mini-bar-fill" data-w="${(pct(m.pkPrimary + m.cornersCount + m.fkCount, ranges.setPieces)*100).toFixed(0)}%"></div></div>
+                        </div>
+                    </div>`;
+                container.appendChild(el);
+            });
+
+            requestAnimationFrame(() => {
+                document.querySelectorAll('#draftAnalytics .mini-bar-fill').forEach(el => {
+                    const w = el.getAttribute('data-w') || '0%';
+                    el.style.width = w;
+                });
+            });
+        }
+
+        function populateDraftComparisonSelectors() {
+            const a = document.getElementById('draftCompareA');
+            const b = document.getElementById('draftCompareB');
+            if (!a || !b) return;
+            a.innerHTML = ''; b.innerHTML='';
+            if (!draft.details || !draft.details.league_entries) return;
+            draft.details.league_entries.filter(e => e && e.entry_name).forEach(e => {
+                const opt1 = document.createElement('option'); opt1.value = e.entry_id; opt1.textContent = e.entry_name || '';
+                const opt2 = document.createElement('option'); opt2.value = e.entry_id; opt2.textContent = e.entry_name || '';
+                a.appendChild(opt1); b.appendChild(opt2);
+            });
+        }
+
+        function renderDraftComparison() {
+            const aSel = document.getElementById('draftCompareA');
+            const bSel = document.getElementById('draftCompareB');
+            const out = document.getElementById('draftComparisonResult');
+            if (!aSel || !bSel || !out) return;
+            const aId = aSel.value, bId = bSel.value;
+            if (!aId || !bId || aId === bId) { out.innerHTML = '<div class="subtle-note">בחר שתי קבוצות שונות להשוואה.</div>'; return; }
+            const ma = computeDraftMetrics(aId);
+            const mb = computeDraftMetrics(bId);
+
+            // Metric-by-metric rows per your list
+            const pairs = [
+                { key:'sumDraft', label:'ציון דראפט', tip:'סכום ציון דראפט לכל שחקני הסגל (מדד פנימי).'},
+                { key:'sumPred', label:'xPts (4GW) סה"כ', tip:'סכום חיזוי נקודות ל-4 המחזורים הקרובים.'},
+                { key:'totalPrice', label:'מחיר סה"כ', tip:'סכום מחיר שוק בפנטזי הרגיל (M).'},
+                { key:'sumSelectedBy', label:'% בחירה סה"כ', tip:'סכום אחוזי בחירה של שחקני הסגל בפנטזי הרגיל.'},
+                { key:'gaTotal', label:'G+A סה"כ', tip:'שערים + בישולים של שחקני הסגל.'},
+                { key:'totalCleanSheets', label:'קלין שיטס סה"כ', tip:'סכום הקלין שיטס של שחקני הסגל.'},
+                { key:'totalXGI', label:'xGI סה"כ', tip:'סכום מעורבות צפויה בשערים (xG+xA).'},
+                { key:'totalDefCon', label:'DefCon סה"כ', tip:'סכום תרומה הגנתית/90 (DC/90) של הסגל.'}
+            ];
+            const pct2 = (a, b, invert=false) => {
+                const lo = Math.min(a, b); const hi = Math.max(a, b);
+                if (hi === lo) return [50,50];
+                const pa = (a - lo)/(hi - lo);
+                const pb = (b - lo)/(hi - lo);
+                const toPct = v => Math.round((invert ? (1-v) : v)*100);
+                return [toPct(pa), toPct(pb)];
+            };
+            const teamAName = draft.entryIdToTeamName[aId] || 'A';
+            const teamBName = draft.entryIdToTeamName[bId] || 'B';
+
+            let rowsHtml = '';
+            const fmt = (v, key) => (typeof v === 'number' && v.toFixed) ? (['sumDraft','sumPred','totalPrice','sumSelectedBy','gaTotal','totalCleanSheets','totalXGI','totalDefCon'].includes(key) ? v.toFixed(1) : v.toFixed(2)) : v;
+            pairs.forEach(p => {
+                const va = ma[p.key] || 0; const vb = mb[p.key] || 0;
+                const [wa, wb] = pct2(va, vb, !!p.invert);
+                rowsHtml += `
+                    <div class=\"dual-row\">
+                        <span class=\"label\" title=\"${p.tip || ''}\">${p.label}</span>
+                        <div class=\"dual-bars\">
+                            <div class=\"team\" title=\"${teamAName}\">${teamAName}</div>
+                            <div class=\"dual-bar\"><div class=\"dual-fill-a\" data-w=\"${wa}%\"></div></div>
+                            <div class=\"dual-value\">${fmt(va, p.key)}</div>
+                        </div>
+                        <div class=\"dual-bars\" style=\"margin-top:4px;\">
+                            <div class=\"team\" title=\"${teamBName}\">${teamBName}</div>
+                            <div class=\"dual-bar\"><div class=\"dual-fill-b\" data-w=\"${wb}%\"></div></div>
+                            <div class=\"dual-value\">${fmt(vb, p.key)}</div>
+                        </div>
+                    </div>`;
+            });
+
+            out.innerHTML = `<div class=\"dual-grid\">${rowsHtml}</div><div class=\"table-container\" style=\"margin-top:10px;\"><canvas id=\"draftComparisonChart\"></canvas></div>`;
+
+            requestAnimationFrame(() => {
+                document.querySelectorAll('#draftComparisonResult .dual-fill-a, #draftComparisonResult .dual-fill-b').forEach(el => { const w = el.getAttribute('data-w')||'0%'; el.style.width = w; });
+            });
+
+            // Horizontal bar chart summary
+            const labels = pairs.map(p=>p.label);
+            const dataA = pairs.map(p=> ma[p.key] || 0);
+            const dataB = pairs.map(p=> mb[p.key] || 0);
+            const ctxChart = document.getElementById('draftComparisonChart').getContext('2d');
+            if (draftComparisonChart) { draftComparisonChart.destroy(); }
+            draftComparisonChart = new Chart(ctxChart, {
+                type: 'bar',
+                data: { labels, datasets: [
+                    { label: teamAName, data: dataA, backgroundColor: 'rgba(59,130,246,0.6)' },
+                    { label: teamBName, data: dataB, backgroundColor: 'rgba(16,185,129,0.6)' }
+                ]},
+                options: { indexAxis: 'y', responsive:true, maintainAspectRatio:false, plugins:{ legend:{ position:'bottom' }, tooltip:{ callbacks:{ label:(c)=> `${c.dataset.label}: ${c.raw}` } } } }
+            });
         }
 
         
@@ -1190,7 +1676,7 @@
 
             if(players.length < 2) { alert(`לא נמצאו מספיק שחקנים (${spec.pos.join('/')}) להשוואה.`); return; }
 
-            const config = getChartConfig(players, spec.x, spec.y, spec.xLabel, spec.yLabel, spec.quadLabels);
+            const config = getChartConfig(players, spec.x, spec.y, spec.xLabel, spec.yLabel, spec.quadLabels, null, (v) => v.web_name);
 
             const ctx = document.getElementById('visualizationChart').getContext('2d');
 
@@ -1394,6 +1880,58 @@
 
         }
 
+        function showXgiVsGA() {
+            if (!allPlayersData[currentDataSource].processed) { alert('יש להמתין לטעינת הנתונים.'); return; }
+            const players = displayedData.filter(p => p.minutes > 450);
+            if (players.length < 2) { alert('לא נמצאו מספיק שחקנים להשוואה.'); return; }
+            const dataPoints = players.map(p => ({ x: p.xGI_per90 || 0, y: (p.goals_scored||0)+(p.assists||0), web_name: p.web_name, pos: p.position_name }));
+            const quadLabels = { topRight: 'xGI גבוה + תפוקה גבוהה', topLeft: 'תפוקה גבוהה, xGI נמוך', bottomRight: 'xGI גבוה, תפוקה נמוכה', bottomLeft: 'נמוך בשניהם' };
+            const colorByPos = (raw) => ({DEF:'#60a5fa', MID:'#34d399', FWD:'#f87171', GKP:'#f59e0b'})[raw.pos] || '#94a3b8';
+            const config = getChartConfig(dataPoints, 'x','y','xGI/90','G+A', quadLabels, (raw)=>colorByPos(raw), (v)=>v.web_name);
+            const ctx = document.getElementById('visualizationChart').getContext('2d');
+            if (visualizationChartInstance) visualizationChartInstance.destroy();
+            visualizationChartInstance = new Chart(ctx, config);
+            document.getElementById('visualizationModal').style.display = 'block';
+            document.getElementById('visualizationTitle').textContent = 'xGI/90 מול G+A';
+        }
+
+        function showDefensiveQualityMatrix() {
+            if (!allPlayersData[currentDataSource].processed) { alert('יש להמתין לטעינת הנתונים.'); return; }
+            const players = allPlayersData[currentDataSource].processed.filter(p => (p.position_name==='DEF' || p.position_name==='GKP') && p.minutes > 450);
+            if (players.length < 2) { alert('לא נמצאו מספיק שחקנים הגנתיים.'); return; }
+            const eps = 0.0001;
+            const dataPoints = players.map(p => ({
+                x: 1/((p.xGC_per90||0)+eps),
+                y: p.position_name==='DEF' ? (p.def_contrib_per90||0) : ((p.clean_sheets_per90||0)*4 + (p.saves_per90||0)*1.5),
+                web_name: p.web_name,
+                pos: p.position_name
+            }));
+            const quadLabels = { topRight: 'הגנה עלית', topLeft: 'תרומה אישית גבוהה', bottomRight: 'יעילות הגנתית קבוצתית', bottomLeft: 'פחות איכותי' };
+            const colorByPos = (raw) => ({DEF:'#60a5fa', GKP:'#f59e0b'})[raw.pos] || '#94a3b8';
+            const config = getChartConfig(dataPoints, 'x','y','איכות הגנתית (גבוה=טוב)','תרומה הגנתית/שוער', quadLabels, (raw)=>colorByPos(raw), (v)=>v.web_name);
+            const ctx = document.getElementById('visualizationChart').getContext('2d');
+            if (visualizationChartInstance) visualizationChartInstance.destroy();
+            visualizationChartInstance = new Chart(ctx, config);
+            document.getElementById('visualizationModal').style.display = 'block';
+            document.getElementById('visualizationTitle').textContent = 'איכות הגנתית (שחקנים)';
+        }
+
+        function showValueOwnershipChart() {
+            if (!allPlayersData[currentDataSource].processed) { alert('יש להמתין לטעינת הנתונים.'); return; }
+            const players = displayedData.filter(p => p.minutes > 900);
+            if (players.length < 2) { alert('לא נמצאו מספיק שחקנים להשוואה.'); return; }
+            const data = players.map(p => ({ x: p.now_cost, y: parseFloat(p.selected_by_percent)||0, r: Math.max(4, Math.min(18, (p.draft_score||0)/8)), player: p.web_name, team: p.team_name }));
+            const ctx = document.getElementById('visualizationChart').getContext('2d');
+            if (visualizationChartInstance) visualizationChartInstance.destroy();
+            visualizationChartInstance = new Chart(ctx, {
+                type: 'bubble',
+                data: { datasets: [{ label: 'Players', data: data, backgroundColor: 'rgba(99,102,241,0.35)', borderColor: 'rgba(99,102,241,0.9)' }] },
+                options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, datalabels: { display: false }, tooltip: { callbacks: { label: (c)=> { const p=c.raw; return `${p.player} (${p.team}) – מחיר ${p.x.toFixed(1)}, אחזקה ${(p.y).toFixed(1)}%, שווי ${Math.round(p.r*8)}`; } } } }, scales: { x: { title: { display: true, text: 'מחיר' } }, y: { title: { display: true, text: '% אחזקה' } } } }
+            });
+            document.getElementById('visualizationModal').style.display = 'block';
+            document.getElementById('visualizationTitle').textContent = 'שווי לפי מחיר ואחוז אחזקה';
+        }
+
         function getChartConfig(data, xKey, yKey, xLabel, yLabel, quadLabels = {}, colorFunc = null, dataLabelFunc = null) {
 
             const dataPoints = data.map(p => ({ ...p, x: parseFloat(getNestedValue(p, xKey)) || 0, y: parseFloat(getNestedValue(p, yKey)) || 0 }));
@@ -1476,9 +2014,9 @@
 
                         legend: { display: false },
 
-                        datalabels: { anchor: 'end', align: 'top', formatter: dataLabelFunc || ((v) => v.player), font: { weight: 'bold', size: 9 }, color: '#333' },
+                        datalabels: { anchor: 'end', align: 'top', formatter: dataLabelFunc || ((v) => v.web_name || v.player || v.team || ''), font: { weight: 'bold', size: 9 }, color: '#333' },
 
-                        tooltip: { callbacks: { label: c => { const p = c.raw; return [`${p.player || p.team}`, `${xLabel}: ${p.x.toFixed(2)}`, `${yLabel}: ${p.y.toFixed(2)}`]; } } },
+                        tooltip: { callbacks: { label: c => { const p = c.raw; return [`${p.web_name || p.player || p.team}`, `${xLabel}: ${p.x.toFixed(2)}`, `${yLabel}: ${p.y.toFixed(2)}`]; } } },
 
                         annotation: { annotations: annotations }
 
@@ -1490,6 +2028,49 @@
 
             };
 
+        }
+
+        function computeDraftTeamAggregates() {
+            if (!draft.details || !draft.details.league_entries) return [];
+            return draft.details.league_entries.filter(e => e && e.entry_name).map(e => {
+                const m = computeDraftMetrics(e.entry_id);
+                return { team: e.entry_name, metrics: m };
+            });
+        }
+
+        function showDraftTeamStrengthMatrix() {
+            const aggs = computeDraftTeamAggregates();
+            if (!aggs.length) { alert('אין נתונים להשוואה.'); return; }
+            const dataPoints = aggs.map(a => {
+                const x = a.metrics.avgXGI90; // התקפי
+                const defQuality = Math.max(0, 1.5 - (a.metrics.avgXGC90Def || 0)); // גבוה=טוב
+                const y = defQuality;
+                return { x, y, team: a.team };
+            });
+            const quadLabels = { topRight: 'שלמה', topLeft: 'הגנתית', bottomRight: 'התקפית', bottomLeft: 'חלשה' };
+            const config = getChartConfig(dataPoints, 'x','y','איום התקפי ממוצע (xGI/90)','איכות הגנתית (גבוה=טוב)', quadLabels, null, (v) => v.team);
+            const ctx = document.getElementById('visualizationChart').getContext('2d');
+            if (visualizationChartInstance) visualizationChartInstance.destroy();
+            visualizationChartInstance = new Chart(ctx, config);
+            document.getElementById('visualizationModal').style.display = 'block';
+            document.getElementById('visualizationTitle').textContent = 'מטריצת כוח קבוצות (התקפה מול הגנה)';
+        }
+
+        function showDraftSetPieceVsStarPower() {
+            const aggs = computeDraftTeamAggregates();
+            if (!aggs.length) { alert('אין נתונים להשוואה.'); return; }
+            const dataPoints = aggs.map(a => {
+                const x = a.metrics.pkPrimary + a.metrics.cornersCount + a.metrics.fkCount; // כיסוי סט-פיס
+                const y = a.metrics.top3Draft; // סטאר-פאוור
+                return { x, y, team: a.team };
+            });
+            const quadLabels = { topRight: 'כיסוי+כוכבים', topLeft: 'כוכבים, מעט כיסוי', bottomRight: 'כיסוי, פחות כוכבים', bottomLeft: 'נמוך בשניהם' };
+            const config = getChartConfig(dataPoints, 'x','y','כיסוי סט-פיס (PK+COR+FK)','סטאר-פאוור (טופ-3 דראפט)', quadLabels, null, (v) => v.team);
+            const ctx = document.getElementById('visualizationChart').getContext('2d');
+            if (visualizationChartInstance) visualizationChartInstance.destroy();
+            visualizationChartInstance = new Chart(ctx, config);
+            document.getElementById('visualizationModal').style.display = 'block';
+            document.getElementById('visualizationTitle').textContent = 'סט-פיס מול סטאר פאוור';
         }
 
         function calculatePercentiles(players, metric, isAscending = false) {
