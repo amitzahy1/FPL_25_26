@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>⚽ FPL Pro Analytics Hub</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/chartjs-plugin-annotation/2.2.1/chartjs-plugin-annotation.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.0.0"></script>
+</head>
+<body>
+    <div id="loadingOverlay" class="loading-overlay" style="display: none;">
+        <div class="spinner"></div>
+        <p>טוען נתונים...</p>
+    </div>
+
+    <!-- Progress Bar -->
+    <div id="progressBarContainer" class="progress-bar-container">
+        <div id="progressBar" class="progress-bar"></div>
+    </div>
+
+    <div class="container">
+    <div class="header">
+
+        <h1>⚽ FPL Pro Analytics Hub</h1>
+
+        <p class="subtitle">ניתוח מתקדם | ציון דראפט חכם | תובנות עמוקות</p>
+
+        <p id="lastUpdated" class="subtitle" style="font-size: 0.8em; margin-top: 5px;"></p>
+
+    </div>
+    <div class="tab-nav">
+        <button id="tabPlayersBtn" class="tab-button active" onclick="showTab('players')">נתוני שחקנים</button>
+        <button id="tabDraftBtn" class="tab-button" onclick="showTab('draft')">ליגת דראפט</button>
+    </div>
+    <div id="playersTabContent" class="tab-content" style="display: block;">
+    <div class="legend">
+
+        <p>
+
+            <span class="legend-item"><strong class="legend-title" title="ציון ייעודי המחושב לפי עמדה להערכת שווי בדראפט. מורכב מ'ציון חיזוי' ו'ציון איכות'.">ציון דראפט</strong></span>
+
+            <span class="legend-item"><strong class="legend-title" title="חיזוי נקודות ל-4 מחזורי המשחק הקרובים, מבוסס על כושר, קושי יריבות וחוזק קבוצתי.">xPts (4GW)</strong></span>
+
+            <span class="legend-item"><strong class="legend-title" title="ההפרש בין G+A ל-xG+xA. חיובי = ביצועי יתר. שלילי = ביצועי חסר.">xDiff</strong></span>
+
+            <span class="legend-item"><strong class="legend-title" title="מדד השפעה, יצירתיות ואיום">ICT</strong></span>
+
+        </p>
+
+    </div>
+
+    <!-- Dashboard KPIs -->
+    <div id="dashboardKPIs" class="dashboard-kpis">
+        <div class="kpi-card" data-kpi="hot-player">
+            <div class="kpi-icon">🔥</div>
+            <div class="kpi-content">
+                <div class="kpi-label">שחקן לוהט</div>
+                <div class="kpi-value" id="kpiHotPlayer">-</div>
+                <div class="kpi-subtext" id="kpiHotPlayerForm">-</div>
+            </div>
+        </div>
+        
+        <div class="kpi-card" data-kpi="best-draft">
+            <div class="kpi-icon">🏅</div>
+            <div class="kpi-content">
+                <div class="kpi-label">מלך הדראפט</div>
+                <div class="kpi-value" id="kpiBestDraft">-</div>
+                <div class="kpi-subtext" id="kpiBestDraftScore">-</div>
+            </div>
+        </div>
+        
+        <div class="kpi-card" data-kpi="top-scorer">
+            <div class="kpi-icon">⚽</div>
+            <div class="kpi-content">
+                <div class="kpi-label">מלך השערים</div>
+                <div class="kpi-value" id="kpiTopScorer">-</div>
+                <div class="kpi-subtext" id="kpiTopScorerGoals">-</div>
+            </div>
+        </div>
+        
+        <div class="kpi-card" data-kpi="top-assister">
+            <div class="kpi-icon">🎯</div>
+            <div class="kpi-content">
+                <div class="kpi-label">מלך הבישולים</div>
+                <div class="kpi-value" id="kpiTopAssister">-</div>
+                <div class="kpi-subtext" id="kpiTopAssisterAssists">-</div>
+            </div>
+        </div>
+        
+        <div class="kpi-card" data-kpi="top-points">
+            <div class="kpi-icon">🏆</div>
+            <div class="kpi-content">
+                <div class="kpi-label">מוביל נקודות</div>
+                <div class="kpi-value" id="kpiTopPoints">-</div>
+                <div class="kpi-subtext" id="kpiTopPointsValue">-</div>
+            </div>
+        </div>
+        
+        <div class="kpi-card" data-kpi="best-value">
+            <div class="kpi-icon">💎</div>
+            <div class="kpi-content">
+                <div class="kpi-label">תמורה מיטבית</div>
+                <div class="kpi-value" id="kpiBestValue">-</div>
+                <div class="kpi-subtext" id="kpiBestValueRatio">-</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="filters">
+
+        <div class="filter-group"><label>🔍 חיפוש שחקן:</label><input type="text" id="searchName" onkeyup="processChange()" placeholder="שם שחקן..."></div>
+
+        <div class="filter-group"><label>⚽ עמדה:</label><select id="positionFilter" onchange="processChange()"><option value="">כל העמדות</option><option value="GKP">🥅 שוערים</option><option value="DEF">🛡️ מגנים</option><option value="MID">⚽ קשרים</option><option value="FWD">🎯 חלוצים</option></select></div>
+
+        <div class="filter-group"><label>🏟️ קבוצה:</label><select id="teamFilter" onchange="processChange()"><option value="">כל הקבוצות</option></select></div>
+
+        <div class="filter-group"><label>💰 מחיר טווח:</label><input type="text" id="priceRange" onkeyup="processChange()" placeholder="4.0-15.0"></div>
+
+        <div class="filter-group"><label>🏆 נקודות מינימום:</label><input type="number" id="minPoints" onkeyup="processChange()" placeholder="0"></div>
+
+        <div class="filter-group"><label>⏳ דקות מינימום:</label><input type="number" id="minMinutes" onkeyup="processChange()" value="30" placeholder="0"></div>
+
+        <div class="filter-group"><label>🎯 טווח xDiff:</label><select id="xDiffFilter" onchange="processChange()"><option value="">כל הטווח</option><option value="positive">חיובי (ביצועי יתר)</option><option value="negative">שלילי (ביצועי חסר)</option></select></div>
+
+        <div class="filter-group"><label>הצג:</label><select id="showEntries" onchange="processChange()"><option value="50">50</option><option value="100">100</option><option value="200">200</option><option value="all" selected>הכל</option></select></div>
+
+    </div>
+
+    <div class="controls">
+
+        <div class="button-group">
+
+            <button class="control-button active" onclick="showAllPlayers(this)">כל השחקנים</button>
+
+            <button class="control-button" id="compareBtn" onclick="compareSelectedPlayers()">השווה שחקנים נבחרים</button>
+
+            <button class="control-button" onclick="exportToCsv()">📁 יצוא CSV</button>
+
+        </div>
+
+        <div class="controls-section">
+
+            <h3>פילטור חכם</h3>
+
+            <div class="button-group">
+
+                <button class="control-button" data-filter-name="set_pieces" onclick="quickFilter(this, 'set_pieces')">🎯 בועטי מצבים נייחים</button>
+
+                <button class="control-button" data-filter-name="attacking_defenders" onclick="quickFilter(this, 'attacking_defenders')">🛡️ מגנים תוקפים</button>
+
+                <button class="control-button" data-filter-name="differentials" onclick="quickFilter(this, 'differentials')">💎 מציאות (עד 5%)</button>
+
+            </div>
+
+        </div>
+
+        <div class="controls-section">
+
+            <h3>גרפים</h3>
+
+            <div class="button-group">
+
+                <button class="control-button" onclick="showVisualization('midfielders')">📊 מטריצת קשרים</button>
+
+                <button class="control-button" onclick="showVisualization('forwards')">📊 מטריצת חלוצים</button>
+
+                <button class="control-button" onclick="showVisualization('defenders')">📊 מטריצת מגנים</button>
+
+                <button class="control-button" onclick="showVisualization('goalkeepers')">📊 מטריצת שוערים</button>
+
+                <button class="control-button" onclick="showVisualization('defensive_offensive')">⚔️ הגנה מול התקפה</button>
+
+                <button class="control-button" onclick="showTeamDefenseChart()">🛡️ הגנת קבוצות</button>
+
+                <button class="control-button" onclick="showTeamAttackChart()">⚔️ התקפת קבוצות</button>
+
+                <button class="control-button" onclick="showPriceVsScoreChart()">💰 תמורה למחיר</button>
+
+                <button class="control-button" onclick="showIctBreakdownChart()">🧬 פרופיל שחקן (ICT)</button>
+
+            </div>
+
+        </div>
+
+        <div class="season-controls" style="margin-top: 10px; display: flex; justify-content: center; width: 100%;">
+
+            <button class="control-button" id="historicalDataBtn" onclick="switchDataSource('historical')">נתוני עבר (2024/25)</button>
+
+            <button class="control-button active" id="liveDataBtn" onclick="switchDataSource('live')">נתונים חיים (2025/26)</button>
+
+        </div>
+
+    </div>
+
+    <div class="table-container">
+
+        <table id="playersTable">
+
+            <thead>
+
+                <tr>
+
+                    <th>בחר</th>
+
+                    <th onclick="sortTable(0)">דירוג<span class="sort-indicator"></span></th>
+
+                    <th onclick="sortTable(1)">שחקן<span class="sort-indicator"></span></th>
+
+                    <th onclick="sortTable(2)" title="ציון ייעודי המחושב לפי עמדה להערכת שווי בדראפט.">ציון דראפט<span class="sort-indicator"></span></th>
+
+                    <th onclick="sortTable(3)" title="חיזוי נקודות למחזור הבא - מודל מתקדם">xPts (הבא)<span class="sort-indicator"></span></th>
+
+                    <th onclick="sortTable(4)">קבוצה<span class="sort-indicator"></span></th>
+
+                    <th onclick="sortTable(5)">עמדה<span class="sort-indicator"></span></th>
+
+                    <th onclick="sortTable(6)">מחיר<span class="sort-indicator"></span></th>
+
+                    <th onclick="sortTable(7)">נק'<span class="sort-indicator"></span></th>
+
+                    <th onclick="sortTable(8)">נק'/90<span class="sort-indicator"></span></th>
+
+                    <th onclick="sortTable(9)">% בחירה<span class="sort-indicator"></span></th>
+
+                    <th onclick="sortTable(10)">דרימטים<span class="sort-indicator"></span></th>
+
+                    <th onclick="sortTable(11)">העברות<span class="sort-indicator"></span></th>
+
+                    <th onclick="sortTable(12)">DC/90<span class="sort-indicator"></span></th>
+
+                    <th onclick="sortTable(13)">G+A<span class="sort-indicator"></span></th>
+
+                    <th onclick="sortTable(14)">xGI<span class="sort-indicator"></span></th>
+
+                    <th onclick="sortTable(15)">דקות<span class="sort-indicator"></span></th>
+
+                    <th onclick="sortTable(16)" title="ההפרש בין G+A ל-xG+xA. חיובי = ביצועי יתר. שלילי = ביצועי חסר.">xDiff<span class="sort-indicator"></span></th>
+
+                    <th onclick="sortTable(17)" title="מדד השפעה, יצירתיות ואיום">ICT<span class="sort-indicator"></span></th>
+
+                    <th onclick="sortTable(18)">בונוס<span class="sort-indicator"></span></th>
+
+                    <th onclick="sortTable(19)">CS<span class="sort-indicator"></span></th>
+
+                    <th onclick="sortTable(20)">פנדל<span class="sort-indicator"></span></th>
+
+                    <th onclick="sortTable(21)">קרן<span class="sort-indicator"></span></th>
+
+                    <th onclick="sortTable(22)">חופשית<span class="sort-indicator"></span></th>
+
+                    <th onclick="sortTable(23)">משחקים קרובים<span class="sort-indicator"></span></th>
+
+                </tr>
+
+            </thead>
+
+            <tbody id="playersTableBody"></tbody>
+
+        </table>
+
+    </div>
+
+    <div id="compareModal" class="modal">
+
+        <div class="modal-content">
+
+            <span class="close" onclick="closeModal()">&times;</span>
+
+            <div id="compareContent"></div>
+
+        </div>
+
+    </div>
+
+    <div id="visualizationModal" class="modal">
+
+        <div class="modal-content">
+
+            <span class="close" onclick="closeModal()">&times;</span>
+
+            <h2 id="visualizationTitle"></h2>
+
+            <div style="width: 100%; max-height: 70vh;">
+
+                 <canvas id="visualizationChart"></canvas>
+
+            </div>
+
+        </div>
+
+    </div>
+
+    <div id="tooltip" class="tooltip" style="display:none;"></div>
+
+    </div> <!-- end playersTabContent -->
+    
+    <!-- Toast Container -->
+    <div id="toastContainer" class="toast-container"></div>
+
+    <!-- Draft Tab Content -->
+    <div id="draftTabContent" class="tab-content" style="display: none;">
+        <div class="draft-top-grid">
+            <div class="standings-pane">
+                <h3 class="section-title">טבלת הליגה</h3>
+                <div id="draftStandingsInfo"></div>
+                <div class="table-container">
+                    <div id="draftStandingsContent">
+                        <table id="draftStandingsTable" class="styled-table draft-table">
+                            <thead>
+                                <tr>
+                                    <th onclick="sortTableDraft('rank')">דירוג</th>
+                                    <th onclick="sortTableDraft('manager')">מנהל</th>
+                                    <th onclick="sortTableDraft('team')">קבוצה</th>
+                                    <th onclick="sortTableDraft('wins')">נצ'</th>
+                                    <th onclick="sortTableDraft('draws')">ת'</th>
+                                    <th onclick="sortTableDraft('losses')">הפ'</th>
+                                    <th onclick="sortTableDraft('pf')">בעד</th>
+                                    <th onclick="sortTableDraft('pa')">נגד</th>
+                                    <th onclick="sortTableDraft('diff')">+/-</th>
+                                    <th onclick="sortTableDraft('total')">נק'</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <!-- Populated by JS -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+            <div class="right-pane">
+                <div style="margin-top: 10px;">
+                    <h3 class="section-title">ההרכב שלי</h3>
+                    <div id="myLineupContainer"></div>
+                </div>
+            </div>
+        </div>
+
+        <div style="margin-top: 10px;">
+            <h3 class="section-title">המלצות החתמה</h3>
+            <div id="draftRecommendations" class="card" style="font-size: 0.92em;"></div>
+        </div>
+
+        <h3 class="section-title" style="margin-top:14px;">סגלים לפי קבוצה</h3>
+        <div id="otherRosters" class="roster-cards"></div>
+
+        <h3 class="section-title" style="margin-top:14px;">השוואת קבוצות</h3>
+        <div id="draftComparison" class="card"></div>
+
+        <h3 class="section-title" style="margin-top:14px;">אנליטיקות דראפט</h3>
+        <div class="card" style="margin-bottom:12px; padding: 12px; text-align:center;">
+            <label for="analyticsHighlight" style="margin-left:6px; font-weight:600;">🎯 הדגשת קבוצה:</label>
+            <select id="analyticsHighlight" class="control-button" style="min-width: 220px;" onchange="updateAnalyticsHighlight()"></select>
+        </div>
+        <div id="draftAnalytics" class="analytics-grid"></div>
+
+        <h3 class="section-title" style="margin-top:14px;">מטריצות דראפט</h3>
+        <div id="draftMatrices" class="matrix-grid"></div>
+    </div> <!-- end draftTabContent -->
+
+    </div>
+    <script src="script.js" defer></script>
+</body>
+</html>
