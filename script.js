@@ -1,3 +1,427 @@
+// ============================================
+// AUTHENTICATION & USER MANAGEMENT
+// ============================================
+
+const auth = {
+    user: null,
+    isDemo: false,
+    googleClientId: 'YOUR_GOOGLE_CLIENT_ID', // Replace with your actual Google Client ID
+    allowedEmail: 'amitzahy1@gmail.com', // Only this email can access real data
+    
+    init() {
+        // Check if user is already logged in (from localStorage)
+        const savedUser = localStorage.getItem('fpl_user');
+        if (savedUser) {
+            this.user = JSON.parse(savedUser);
+            // Check if user is authorized
+            if (this.user.email === this.allowedEmail) {
+                this.showApp();
+            } else {
+                // Unauthorized user - force demo mode
+                this.user.name = this.user.name || 'משתמש';
+                this.isDemo = true;
+                this.showApp();
+            }
+        } else {
+            this.showLoginScreen();
+        }
+    },
+    
+    showLoginScreen() {
+        document.getElementById('loginScreen').style.display = 'flex';
+        document.getElementById('mainApp').style.display = 'none';
+        
+        // Setup Google Sign-In button
+        document.getElementById('googleSignInBtn').addEventListener('click', () => {
+            this.googleSignIn();
+        });
+        
+        // Setup Demo Mode button
+        document.getElementById('demoModeBtn').addEventListener('click', () => {
+            this.enterDemoMode();
+        });
+    },
+    
+    showApp() {
+        document.getElementById('loginScreen').style.display = 'none';
+        document.getElementById('mainApp').style.display = 'block';
+        
+        // Show user info
+        if (this.user) {
+            const userInfo = document.getElementById('userInfo');
+            userInfo.style.display = 'flex';
+            
+            // Set user photo or create initial circle
+            const userPhoto = document.getElementById('userPhoto');
+            if (this.user.picture && this.user.picture !== 'https://via.placeholder.com/40') {
+                userPhoto.src = this.user.picture;
+                userPhoto.style.display = 'block';
+                userPhoto.onerror = () => {
+                    // If image fails to load, hide it and show initial
+                    userPhoto.style.display = 'none';
+                    this.createUserInitial(this.user.name);
+                };
+            } else {
+                userPhoto.style.display = 'none';
+                this.createUserInitial(this.user.name);
+            }
+            
+            document.getElementById('userName').textContent = this.user.name;
+            // Show appropriate mode badge
+            if (this.isDemo && this.user.email === 'demo@fpl.com') {
+                document.getElementById('userMode').textContent = '🎭 מצב דמו';
+            } else if (this.isDemo) {
+                document.getElementById('userMode').textContent = '👁️ תצוגה בלבד';
+            } else {
+                document.getElementById('userMode').textContent = '✅ גישה מלאה';
+            }
+            
+            // Setup logout button
+            document.getElementById('logoutBtn').addEventListener('click', () => {
+                this.logout();
+            });
+        }
+        
+        // Load data based on mode
+        // Both demo and regular users see real data now
+        // Only amitzahy1@gmail.com has full access (can make changes)
+        init(); // Load real data for everyone
+    },
+    
+    createUserInitial(name) {
+        // Remove existing initial if any
+        const existingInitial = document.querySelector('.user-initial');
+        if (existingInitial) existingInitial.remove();
+        
+        // Create initial circle
+        const initial = document.createElement('div');
+        initial.className = 'user-initial';
+        initial.textContent = name.charAt(0).toUpperCase();
+        
+        // Insert before user details
+        const userInfo = document.getElementById('userInfo');
+        const userDetails = userInfo.querySelector('.user-details');
+        userInfo.insertBefore(initial, userDetails);
+    },
+    
+    googleSignIn() {
+        // For demo purposes, simulate Google Sign-In
+        // In production, use Google Identity Services
+        showToast('התחברות', 'מתחבר עם Google...', 'info', 2000);
+        
+        setTimeout(() => {
+            // Simulate Google Sign-In response
+            // In production, this will come from Google Identity Services
+            const googleUser = {
+                name: 'Amit Zahy',
+                email: 'amitzahy1@gmail.com', // Change this to test different users
+                picture: 'https://via.placeholder.com/40'
+            };
+            
+            this.user = googleUser;
+            
+            // Check if user is authorized for real data
+            if (this.user.email === this.allowedEmail) {
+                this.isDemo = false;
+                localStorage.setItem('fpl_user', JSON.stringify(this.user));
+                showToast('הצלחה!', `ברוך הבא ${this.user.name}! גישה מלאה לנתונים אמיתיים`, 'success', 3000);
+            } else {
+                this.isDemo = true;
+                localStorage.setItem('fpl_user', JSON.stringify(this.user));
+                showToast('גישה מוגבלת', `שלום ${this.user.name}! אתה יכול לצפות בנתונים אמיתיים במצב תצוגה בלבד`, 'warning', 4000);
+            }
+            
+            this.showApp();
+        }, 1500);
+    },
+    
+    enterDemoMode() {
+        this.user = {
+            name: 'משתמש דמו',
+            email: 'demo@fpl.com',
+            picture: 'https://via.placeholder.com/40'
+        };
+        this.isDemo = true;
+        showToast('מצב דמו', 'נכנסת למצב דמו - צפייה בנתונים אמיתיים', 'info', 3000);
+        this.showApp();
+    },
+    
+    logout() {
+        localStorage.removeItem('fpl_user');
+        this.user = null;
+        this.isDemo = false;
+        showToast('התנתקות', 'התנתקת בהצלחה', 'info', 2000);
+        setTimeout(() => {
+            location.reload();
+        }, 1000);
+    }
+};
+
+// ============================================
+// DEMO DATA GENERATOR
+// ============================================
+
+function generateDemoPlayer(id, name, teamName, position, price) {
+    // Map team names to IDs (simple hash)
+    const teamMap = {
+        'Liverpool': 1, 'Man City': 2, 'Arsenal': 3, 'Spurs': 4,
+        'Chelsea': 5, 'Man Utd': 6, 'Newcastle': 7, 'Aston Villa': 8,
+        'Brighton': 9, 'Brentford': 10, 'West Ham': 11, 'Wolves': 12,
+        'Crystal Palace': 13, 'Fulham': 14, 'Bournemouth': 15, 'Everton': 16,
+        "Nott'm Forest": 17, 'Luton': 18, 'Burnley': 19, 'Sheffield Utd': 20
+    };
+    
+    // Helper function to convert to number
+    const toNum = (value) => parseFloat(value);
+    
+    return {
+        id,
+        web_name: name,
+        team: teamMap[teamName] || id % 20 + 1,
+        team_name: teamName,
+        position_name: position,
+        now_cost: price,
+        total_points: Math.floor(Math.random() * 150) + 20,
+        form: toNum((Math.random() * 8 + 2).toFixed(1)),
+        points_per_game_90: toNum((Math.random() * 8 + 1).toFixed(1)),
+        selected_by_percent: toNum((Math.random() * 40 + 5).toFixed(1)),
+        minutes: Math.floor(Math.random() * 2000) + 500,
+        goals_scored: Math.floor(Math.random() * 20),
+        assists: Math.floor(Math.random() * 15),
+        clean_sheets: Math.floor(Math.random() * 10),
+        bonus: Math.floor(Math.random() * 20),
+        ict_index: toNum((Math.random() * 30 + 5).toFixed(1)),
+        expected_goal_involvements: toNum((Math.random() * 15 + 2).toFixed(2)),
+        xGI_per90: toNum((Math.random() * 1.2 + 0.1).toFixed(2)),
+        def_contrib_per90: toNum((Math.random() * 8 + 1).toFixed(1)),
+        xDiff: toNum((Math.random() * 4 - 2).toFixed(2)),
+        dreamteam_count: Math.floor(Math.random() * 8),
+        net_transfers_event: Math.floor(Math.random() * 200) - 100,
+        draft_score: toNum((Math.random() * 80 + 20).toFixed(1)),
+        predicted_points_1_gw: toNum((Math.random() * 8 + 2).toFixed(1)),
+        predicted_points_4_gw: toNum((Math.random() * 30 + 10).toFixed(1)),
+        code: Math.floor(Math.random() * 100000),
+        creativity: toNum((Math.random() * 100 + 10).toFixed(1)),
+        threat: toNum((Math.random() * 100 + 10).toFixed(1)),
+        influence: toNum((Math.random() * 100 + 10).toFixed(1)),
+        saves: Math.floor(Math.random() * 50),
+        goals_conceded: Math.floor(Math.random() * 30),
+        // Additional fields that might be needed
+        creativity_per_90: toNum((Math.random() * 10 + 2).toFixed(1)),
+        threat_per_90: toNum((Math.random() * 10 + 2).toFixed(1)),
+        influence_per_90: toNum((Math.random() * 10 + 2).toFixed(1)),
+        saves_per_90: toNum((Math.random() * 5 + 1).toFixed(1)),
+        clean_sheets_per_90: toNum((Math.random() * 0.5).toFixed(2)),
+        expected_goals: toNum((Math.random() * 10 + 1).toFixed(2)),
+        expected_assists: toNum((Math.random() * 8 + 1).toFixed(2)),
+        expected_goals_per_90: toNum((Math.random() * 0.8).toFixed(2)),
+        expected_assists_per_90: toNum((Math.random() * 0.6).toFixed(2)),
+        // Component scores (will be recalculated but provide defaults)
+        base_score: toNum((Math.random() * 50 + 20).toFixed(1)),
+        quality_score: toNum((Math.random() * 50 + 20).toFixed(1)),
+        performance_score: toNum((Math.random() * 50 + 20).toFixed(1)),
+        ga_per_game: toNum((Math.random() * 1.5).toFixed(2)),
+        xgi_per_game: toNum((Math.random() * 1.2).toFixed(2)),
+        // Percentiles object (will be populated by calculateAdvancedScores)
+        percentiles: {},
+        set_piece_priority: {
+            penalty: Math.random() > 0.8 ? 1 : 0,
+            corner: Math.random() > 0.7 ? 1 : 0,
+            free_kick: Math.random() > 0.7 ? 1 : 0
+        }
+    };
+}
+
+function loadDemoData() {
+    showLoading('טוען נתוני דמו...');
+    
+    setTimeout(() => {
+        // Create comprehensive demo dataset with real names but fake stats
+        const demoPlayers = [
+            // Liverpool
+            generateDemoPlayer(1, 'Salah', 'Liverpool', 'MID', 13.0),
+            generateDemoPlayer(2, 'Alexander-Arnold', 'Liverpool', 'DEF', 7.5),
+            generateDemoPlayer(3, 'Van Dijk', 'Liverpool', 'DEF', 6.5),
+            generateDemoPlayer(4, 'Alisson', 'Liverpool', 'GKP', 5.5),
+            generateDemoPlayer(5, 'Díaz', 'Liverpool', 'MID', 8.0),
+            generateDemoPlayer(6, 'Núñez', 'Liverpool', 'FWD', 7.5),
+            generateDemoPlayer(7, 'Szoboszlai', 'Liverpool', 'MID', 7.0),
+            generateDemoPlayer(8, 'Robertson', 'Liverpool', 'DEF', 6.5),
+            
+            // Man City
+            generateDemoPlayer(9, 'Haaland', 'Man City', 'FWD', 15.0),
+            generateDemoPlayer(10, 'De Bruyne', 'Man City', 'MID', 12.5),
+            generateDemoPlayer(11, 'Foden', 'Man City', 'MID', 9.5),
+            generateDemoPlayer(12, 'Ederson', 'Man City', 'GKP', 5.5),
+            generateDemoPlayer(13, 'Walker', 'Man City', 'DEF', 6.0),
+            generateDemoPlayer(14, 'Rodri', 'Man City', 'MID', 6.5),
+            generateDemoPlayer(15, 'Grealish', 'Man City', 'MID', 7.0),
+            generateDemoPlayer(16, 'Dias', 'Man City', 'DEF', 6.0),
+            
+            // Arsenal
+            generateDemoPlayer(17, 'Saka', 'Arsenal', 'MID', 9.5),
+            generateDemoPlayer(18, 'Ødegaard', 'Arsenal', 'MID', 8.5),
+            generateDemoPlayer(19, 'Martinelli', 'Arsenal', 'MID', 7.5),
+            generateDemoPlayer(20, 'Gabriel', 'Arsenal', 'DEF', 6.0),
+            generateDemoPlayer(21, 'Saliba', 'Arsenal', 'DEF', 6.0),
+            generateDemoPlayer(22, 'Raya', 'Arsenal', 'GKP', 5.0),
+            generateDemoPlayer(23, 'Jesus', 'Arsenal', 'FWD', 8.0),
+            generateDemoPlayer(24, 'Rice', 'Arsenal', 'MID', 6.5),
+            
+            // Spurs
+            generateDemoPlayer(25, 'Son', 'Spurs', 'MID', 10.0),
+            generateDemoPlayer(26, 'Maddison', 'Spurs', 'MID', 7.5),
+            generateDemoPlayer(27, 'Richarlison', 'Spurs', 'FWD', 7.0),
+            generateDemoPlayer(28, 'Vicario', 'Spurs', 'GKP', 5.0),
+            generateDemoPlayer(29, 'Romero', 'Spurs', 'DEF', 5.5),
+            generateDemoPlayer(30, 'Pedro Porro', 'Spurs', 'DEF', 5.5),
+            
+            // Chelsea
+            generateDemoPlayer(31, 'Palmer', 'Chelsea', 'MID', 11.0),
+            generateDemoPlayer(32, 'Jackson', 'Chelsea', 'FWD', 7.5),
+            generateDemoPlayer(33, 'Enzo', 'Chelsea', 'MID', 6.0),
+            generateDemoPlayer(34, 'Sánchez', 'Chelsea', 'GKP', 4.5),
+            generateDemoPlayer(35, 'James', 'Chelsea', 'DEF', 6.0),
+            generateDemoPlayer(36, 'Gallagher', 'Chelsea', 'MID', 5.5),
+            
+            // Man Utd
+            generateDemoPlayer(37, 'B.Fernandes', 'Man Utd', 'MID', 8.5),
+            generateDemoPlayer(38, 'Rashford', 'Man Utd', 'MID', 7.0),
+            generateDemoPlayer(39, 'Højlund', 'Man Utd', 'FWD', 7.0),
+            generateDemoPlayer(40, 'Onana', 'Man Utd', 'GKP', 5.0),
+            generateDemoPlayer(41, 'Martínez', 'Man Utd', 'DEF', 5.5),
+            
+            // Newcastle
+            generateDemoPlayer(42, 'Isak', 'Newcastle', 'FWD', 8.5),
+            generateDemoPlayer(43, 'Gordon', 'Newcastle', 'MID', 7.5),
+            generateDemoPlayer(44, 'Trippier', 'Newcastle', 'DEF', 6.5),
+            generateDemoPlayer(45, 'Pope', 'Newcastle', 'GKP', 5.0),
+            generateDemoPlayer(46, 'Bruno G.', 'Newcastle', 'MID', 6.5),
+            
+            // Aston Villa
+            generateDemoPlayer(47, 'Watkins', 'Aston Villa', 'FWD', 9.0),
+            generateDemoPlayer(48, 'Bailey', 'Aston Villa', 'MID', 6.5),
+            generateDemoPlayer(49, 'Martínez', 'Aston Villa', 'GKP', 5.0),
+            generateDemoPlayer(50, 'Digne', 'Aston Villa', 'DEF', 5.0),
+            
+            // Brighton
+            generateDemoPlayer(51, 'Mitoma', 'Brighton', 'MID', 6.5),
+            generateDemoPlayer(52, 'Ferguson', 'Brighton', 'FWD', 6.0),
+            generateDemoPlayer(53, 'Steele', 'Brighton', 'GKP', 4.5),
+            
+            // Brentford
+            generateDemoPlayer(54, 'Mbeumo', 'Brentford', 'MID', 7.0),
+            generateDemoPlayer(55, 'Toney', 'Brentford', 'FWD', 7.5),
+            generateDemoPlayer(56, 'Flekken', 'Brentford', 'GKP', 4.5),
+            
+            // West Ham
+            generateDemoPlayer(57, 'Bowen', 'West Ham', 'MID', 7.5),
+            generateDemoPlayer(58, 'Paquetá', 'West Ham', 'MID', 6.5),
+            generateDemoPlayer(59, 'Antonio', 'West Ham', 'FWD', 6.0),
+            
+            // Wolves
+            generateDemoPlayer(60, 'Cunha', 'Wolves', 'MID', 6.5),
+            generateDemoPlayer(61, 'Hwang', 'Wolves', 'FWD', 5.5),
+            
+            // Crystal Palace
+            generateDemoPlayer(62, 'Eze', 'Crystal Palace', 'MID', 7.0),
+            generateDemoPlayer(63, 'Olise', 'Crystal Palace', 'MID', 6.5),
+            
+            // Fulham
+            generateDemoPlayer(64, 'Willian', 'Fulham', 'MID', 6.0),
+            generateDemoPlayer(65, 'Jiménez', 'Fulham', 'FWD', 6.0),
+            
+            // Bournemouth
+            generateDemoPlayer(66, 'Solanke', 'Bournemouth', 'FWD', 7.5),
+            generateDemoPlayer(67, 'Kluivert', 'Bournemouth', 'MID', 5.5),
+            
+            // Everton
+            generateDemoPlayer(68, 'Calvert-Lewin', 'Everton', 'FWD', 6.0),
+            generateDemoPlayer(69, 'McNeil', 'Everton', 'MID', 5.5),
+            
+            // Nott'm Forest
+            generateDemoPlayer(70, 'Gibbs-White', "Nott'm Forest", 'MID', 6.0),
+            generateDemoPlayer(71, 'Wood', "Nott'm Forest", 'FWD', 6.5),
+            
+            // Luton
+            generateDemoPlayer(72, 'Adebayo', 'Luton', 'FWD', 5.5),
+            generateDemoPlayer(73, 'Townsend', 'Luton', 'MID', 5.0),
+            
+            // Burnley
+            generateDemoPlayer(74, 'Foster', 'Burnley', 'FWD', 5.5),
+            generateDemoPlayer(75, 'Brownhill', 'Burnley', 'MID', 5.0),
+            
+            // Sheffield Utd
+            generateDemoPlayer(76, 'McBurnie', 'Sheffield Utd', 'FWD', 5.5),
+            generateDemoPlayer(77, 'Hamer', 'Sheffield Utd', 'MID', 5.5),
+        ];
+        
+        // Process demo data
+        state.allPlayersData.demo = {
+            raw: demoPlayers,
+            processed: demoPlayers,
+            fixtures: []
+        };
+        state.currentDataSource = 'demo';
+        state.displayedData = demoPlayers;
+        
+        // Create fake teams data
+        const teams = [...new Set(demoPlayers.map(p => p.team_name))];
+        state.teamsData = {};
+        teams.forEach((team, idx) => {
+            state.teamsData[idx + 1] = {
+                id: idx + 1,
+                name: team,
+                short_name: team.substring(0, 3).toUpperCase()
+            };
+        });
+        
+        // Create fake team strength data
+        state.teamStrengthData = {};
+        teams.forEach((team, idx) => {
+            state.teamStrengthData[idx + 1] = {
+                attack: Math.random() * 1000 + 500,
+                defense: Math.random() * 1000 + 500
+            };
+        });
+        
+        // Calculate scores with fake data
+        calculateAdvancedScores(demoPlayers);
+        
+        // Update UI
+        renderTable();
+        updateDashboardKPIs(demoPlayers);
+        
+        // Setup event listeners and tooltips
+        setupEventListeners();
+        initializeTooltips();
+        
+        hideLoading();
+        
+        showToast('מצב דמו', 'נתוני דמו נטענו בהצלחה - כל המספרים מפוברקים!', 'success', 3000);
+        
+        // Show demo banner
+        const header = document.querySelector('.header');
+        const demoBanner = document.createElement('div');
+        demoBanner.style.cssText = `
+            background: linear-gradient(135deg, #f59e0b 0%, #ea580c 100%);
+            color: white;
+            padding: 12px 20px;
+            border-radius: 8px;
+            margin-top: 16px;
+            text-align: center;
+            font-weight: 600;
+            box-shadow: 0 4px 12px rgba(245, 158, 11, 0.3);
+        `;
+        demoBanner.innerHTML = '🎭 מצב דמו - כל הנתונים מפוברקים לחלוטין! | התחבר עם Google לגישה לנתונים אמיתיים';
+        header.appendChild(demoBanner);
+    }, 1000);
+}
+
+// ============================================
+// ORIGINAL CONFIG
+// ============================================
+
 const config = {
     urls: {
         bootstrap: 'https://fantasy.premierleague.com/api/bootstrap-static/',
@@ -71,7 +495,8 @@ const config = {
 const state = {
     allPlayersData: {
         historical: { raw: null, processed: null, fixtures: null },
-        live: { raw: null, processed: null, fixtures: null }
+        live: { raw: null, processed: null, fixtures: null },
+        demo: { raw: null, processed: null, fixtures: null }
     },
     currentDataSource: 'live',
     teamsData: {},
@@ -228,7 +653,8 @@ function showToast(title, message, type = 'info', duration = 4000) {
     return toast;
 }
 
-document.addEventListener('DOMContentLoaded', async () => {
+// Main init function for real data
+async function init() {
     Chart.register(ChartDataLabels);
     
     // Load both data sources in parallel
@@ -253,6 +679,11 @@ document.addEventListener('DOMContentLoaded', async () => {
         showTab(lastTab);
     }
     initializeTooltips();
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    // Initialize authentication
+    auth.init();
 });
 
 async function fetchAndProcessData() {
@@ -1464,6 +1895,199 @@ function showIctBreakdownChart() {
     document.getElementById('visualizationModal').style.display = 'block';
 }
 
+function getMatrixChartConfig(data, xLabel, yLabel, quadLabels = {}) {
+    const dataPoints = data.map(d => ({ x: d.x, y: d.y, team: d.team }));
+    const xValues = dataPoints.map(p => p.x);
+    const yValues = dataPoints.map(p => p.y);
+    const xMedian = xValues.sort((a,b) => a-b)[Math.floor(xValues.length / 2)];
+    const yMedian = yValues.sort((a,b) => a-b)[Math.floor(yValues.length / 2)];
+    
+    // Color function based on quadrant - Green (top-right), Red (bottom-left), Orange (others)
+    const getPointColor = (point) => {
+        if (point.x >= xMedian && point.y >= yMedian) {
+            return 'rgba(34, 197, 94, 0.85)'; // Green - Best
+        } else if (point.x < xMedian && point.y < yMedian) {
+            return 'rgba(239, 68, 68, 0.85)'; // Red - Worst
+        } else {
+            return 'rgba(251, 146, 60, 0.85)'; // Orange - Medium
+        }
+    };
+
+    return {
+        type: 'scatter',
+        data: {
+            datasets: [{
+                label: 'Teams',
+                data: dataPoints,
+                pointRadius: 6,
+                pointHoverRadius: 9,
+                pointBorderWidth: 2,
+                pointBorderColor: 'rgba(255, 255, 255, 0.9)',
+                backgroundColor: (context) => {
+                    if (!context.raw) return 'rgba(156, 163, 175, 0.7)';
+                    return getPointColor(context.raw);
+                },
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            layout: {
+                padding: { top: 30, right: 20, bottom: 10, left: 10 }
+            },
+            scales: {
+                x: { 
+                    title: { 
+                        display: true, 
+                        text: xLabel, 
+                        font: { size: 13.8, weight: '700' },
+                        color: '#475569'
+                    },
+                    ticks: {
+                        font: { size: 11.5, weight: '600' },
+                        color: '#64748b'
+                    },
+                    grid: {
+                        color: 'rgba(0, 0, 0, 0.05)'
+                    }
+                },
+                y: { 
+                    title: { 
+                        display: true, 
+                        text: yLabel, 
+                        font: { size: 13.8, weight: '700' },
+                        color: '#475569'
+                    },
+                    ticks: {
+                        font: { size: 11.5, weight: '600' },
+                        color: '#64748b'
+                    },
+                    grid: {
+                        color: 'rgba(0, 0, 0, 0.05)'
+                    }
+                }
+            },
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    backgroundColor: 'rgba(15, 23, 42, 0.95)',
+                    titleColor: '#fff',
+                    bodyColor: '#e2e8f0',
+                    borderColor: 'rgba(2, 132, 199, 0.5)',
+                    borderWidth: 2,
+                    padding: 12,
+                    displayColors: false,
+                    titleFont: { size: 15, weight: '700' },
+                    bodyFont: { size: 13.8 },
+                    callbacks: {
+                        label: function(context) {
+                            const d = context.raw;
+                            return `${d.team}: (${d.x.toFixed(2)}, ${d.y.toFixed(2)})`;
+                        },
+                        title: function() { return ''; }
+                    }
+                },
+                datalabels: {
+                    display: true,
+                    align: 'top',
+                    offset: 4,
+                    color: '#1e293b',
+                    font: { size: 9.7, weight: '700' },
+                    backgroundColor: null,
+                    borderWidth: 0,
+                    formatter: (value, context) => {
+                        return context.dataset.data[context.dataIndex].team || '';
+                    },
+                },
+                annotation: {
+                    annotations: {
+                        xLine: { 
+                            type: 'line', 
+                            xMin: xMedian, 
+                            xMax: xMedian, 
+                            borderColor: 'rgba(0,0,0,0.2)', 
+                            borderWidth: 2, 
+                            borderDash: [6, 6] 
+                        },
+                        yLine: { 
+                            type: 'line', 
+                            yMin: yMedian, 
+                            yMax: yMedian, 
+                            borderColor: 'rgba(0,0,0,0.2)', 
+                            borderWidth: 2, 
+                            borderDash: [6, 6] 
+                        },
+                        ...(quadLabels.topRight && {
+                            topRight: { 
+                                type: 'label', 
+                                xValue: xMedian * 1.01, 
+                                yValue: yMedian * 1.01, 
+                                content: quadLabels.topRight, 
+                                position: 'start', 
+                                xAdjust: 6, 
+                                yAdjust: -6, 
+                                font: { size: 10.4, weight: '700' }, 
+                                color: 'rgba(34, 197, 94, 0.8)',
+                                backgroundColor: 'rgba(34, 197, 94, 0.1)',
+                                borderRadius: 3,
+                                padding: 4
+                            }
+                        }),
+                        ...(quadLabels.topLeft && {
+                            topLeft: { 
+                                type: 'label', 
+                                xValue: xMedian * 0.99, 
+                                yValue: yMedian * 1.01, 
+                                content: quadLabels.topLeft, 
+                                position: 'end', 
+                                xAdjust: -6, 
+                                yAdjust: -6, 
+                                font: { size: 10.4, weight: '700' }, 
+                                color: 'rgba(251, 146, 60, 0.8)',
+                                backgroundColor: 'rgba(251, 146, 60, 0.1)',
+                                borderRadius: 3,
+                                padding: 4
+                            }
+                        }),
+                        ...(quadLabels.bottomRight && {
+                            bottomRight: { 
+                                type: 'label', 
+                                xValue: xMedian * 1.01, 
+                                yValue: yMedian * 0.99, 
+                                content: quadLabels.bottomRight, 
+                                position: 'start', 
+                                xAdjust: 6, 
+                                yAdjust: 6, 
+                                font: { size: 10.4, weight: '700' }, 
+                                color: 'rgba(251, 146, 60, 0.8)',
+                                backgroundColor: 'rgba(251, 146, 60, 0.1)',
+                                borderRadius: 3,
+                                padding: 4
+                            }
+                        }),
+                        ...(quadLabels.bottomLeft && {
+                            bottomLeft: { 
+                                type: 'label', 
+                                xValue: xMedian * 0.99, 
+                                yValue: yMedian * 0.99, 
+                                content: quadLabels.bottomLeft, 
+                                position: 'end', 
+                                xAdjust: -6, 
+                                yAdjust: 6, 
+                                font: { size: 10.4, weight: '700' }, 
+                                color: 'rgba(239, 68, 68, 0.8)',
+                                backgroundColor: 'rgba(239, 68, 68, 0.1)',
+                                borderRadius: 3,
+                                padding: 4
+                            }
+                        })
+                    }
+                }
+            }
+        }
+    };
+}
+
 function getChartConfig(data, xKey, yKey, xLabel, yLabel, quadLabels = {}, colorFunc = null, dataLabelFunc = null) {
     const dataPoints = data.map(d => ({ x: getNestedValue(d, xKey), y: getNestedValue(d, yKey), ...d }));
     const xValues = dataPoints.map(p => p.x);
@@ -1477,17 +2101,19 @@ function getChartConfig(data, xKey, yKey, xLabel, yLabel, quadLabels = {}, color
             datasets: [{
                 label: 'Players',
                 data: dataPoints,
-                pointRadius: 8,
-                pointHoverRadius: 10,
+                pointRadius: 6,
+                pointHoverRadius: 9,
+                pointBorderWidth: 2,
+                pointBorderColor: 'rgba(255, 255, 255, 0.9)',
                 backgroundColor: colorFunc ? colorFunc : (context) => {
-                    if (!context.raw) return 'rgba(201, 203, 207, 0.7)'; // Grey for safety
+                    if (!context.raw) return 'rgba(156, 163, 175, 0.7)';
                     const point = context.raw;
                     if (point.x >= xMedian && point.y >= yMedian) {
-                        return 'rgba(40, 167, 69, 0.7)'; // Green - Top Right
+                        return 'rgba(34, 197, 94, 0.85)'; // Green - Best
                     } else if (point.x < xMedian && point.y < yMedian) {
-                        return 'rgba(255, 99, 132, 0.7)'; // Red - Bottom Left
+                        return 'rgba(239, 68, 68, 0.85)'; // Red - Worst
                     } else {
-                        return 'rgba(255, 205, 86, 0.7)'; // Yellow - Other quadrants
+                        return 'rgba(251, 146, 60, 0.85)'; // Orange - Medium
                     }
                 },
             }]
@@ -1495,9 +2121,40 @@ function getChartConfig(data, xKey, yKey, xLabel, yLabel, quadLabels = {}, color
         options: {
             responsive: true,
             maintainAspectRatio: false,
+            layout: {
+                padding: { top: 30, right: 20, bottom: 10, left: 10 }
+            },
             scales: {
-                x: { title: { display: true, text: xLabel, font: { size: 12 } } },
-                y: { title: { display: true, text: yLabel, font: { size: 12 } } }
+                x: { 
+                    title: { 
+                        display: true, 
+                        text: xLabel, 
+                        font: { size: 13.8, weight: '700' },
+                        color: '#475569'
+                    },
+                    ticks: {
+                        font: { size: 11.5, weight: '600' },
+                        color: '#64748b'
+                    },
+                    grid: {
+                        color: 'rgba(0, 0, 0, 0.05)'
+                    }
+                },
+                y: { 
+                    title: { 
+                        display: true, 
+                        text: yLabel, 
+                        font: { size: 13.8, weight: '700' },
+                        color: '#475569'
+                    },
+                    ticks: {
+                        font: { size: 11.5, weight: '600' },
+                        color: '#64748b'
+                    },
+                    grid: {
+                        color: 'rgba(0, 0, 0, 0.05)'
+                    }
+                }
             },
             plugins: {
                 legend: { display: false },
@@ -1506,9 +2163,12 @@ function getChartConfig(data, xKey, yKey, xLabel, yLabel, quadLabels = {}, color
                     titleColor: '#fff',
                     bodyColor: '#e2e8f0',
                     borderColor: 'rgba(2, 132, 199, 0.5)',
-                    borderWidth: 1,
-                    padding: 12,
+                    borderWidth: 2,
+                    padding: 16,
                     displayColors: false,
+                    titleFont: { size: 15, weight: '700' },
+                    bodyFont: { size: 13.8 },
+                    footerFont: { size: 14 },
                     callbacks: {
                         label: function(context) {
                             const d = context.raw;
@@ -1533,8 +2193,11 @@ function getChartConfig(data, xKey, yKey, xLabel, yLabel, quadLabels = {}, color
                 datalabels: {
                     display: true,
                     align: 'top',
-                    color: '#0f172a',
-                    font: { size: 11, weight: '700' },
+                    offset: 4,
+                    color: '#1e293b',
+                    font: { size: 9.7, weight: '700' },
+                    backgroundColor: null,
+                    borderWidth: 0,
                     formatter: (value, context) => {
                         const dataPoint = context.dataset.data[context.dataIndex];
                         if (dataLabelFunc) {
@@ -1546,12 +2209,86 @@ function getChartConfig(data, xKey, yKey, xLabel, yLabel, quadLabels = {}, color
                 },
                 annotation: {
                     annotations: {
-                        xLine: { type: 'line', xMin: xMedian, xMax: xMedian, borderColor: 'rgba(0,0,0,0.3)', borderWidth: 1, borderDash: [6, 6] },
-                        yLine: { type: 'line', yMin: yMedian, yMax: yMedian, borderColor: 'rgba(0,0,0,0.3)', borderWidth: 1, borderDash: [6, 6] },
-                        ...(quadLabels.topRight && {topRight: { type: 'label', xValue: xMedian * 1.01, yValue: yMedian * 1.01, content: quadLabels.topRight, position: 'start', xAdjust: 5, yAdjust: -5, font: {size: 10}, color: 'rgba(0,0,0,0.4)' }}),
-                        ...(quadLabels.topLeft && {topLeft: { type: 'label', xValue: xMedian * 0.99, yValue: yMedian * 1.01, content: quadLabels.topLeft, position: 'end', xAdjust: -5, yAdjust: -5, font: {size: 10}, color: 'rgba(0,0,0,0.4)' }}),
-                        ...(quadLabels.bottomRight && {bottomRight: { type: 'label', xValue: xMedian * 1.01, yValue: yMedian * 0.99, content: quadLabels.bottomRight, position: 'start', xAdjust: 5, yAdjust: 5, font: {size: 10}, color: 'rgba(0,0,0,0.4)' }}),
-                        ...(quadLabels.bottomLeft && {bottomLeft: { type: 'label', xValue: xMedian * 0.99, yValue: yMedian * 0.99, content: quadLabels.bottomLeft, position: 'end', xAdjust: -5, yAdjust: 5, font: {size: 10}, color: 'rgba(0,0,0,0.4)' }})
+                        xLine: { 
+                            type: 'line', 
+                            xMin: xMedian, 
+                            xMax: xMedian, 
+                            borderColor: 'rgba(0,0,0,0.2)', 
+                            borderWidth: 2, 
+                            borderDash: [6, 6] 
+                        },
+                        yLine: { 
+                            type: 'line', 
+                            yMin: yMedian, 
+                            yMax: yMedian, 
+                            borderColor: 'rgba(0,0,0,0.2)', 
+                            borderWidth: 2, 
+                            borderDash: [6, 6] 
+                        },
+                        ...(quadLabels.topRight && {
+                            topRight: { 
+                                type: 'label', 
+                                xValue: xMedian * 1.01, 
+                                yValue: yMedian * 1.01, 
+                                content: quadLabels.topRight, 
+                                position: 'start', 
+                                xAdjust: 6, 
+                                yAdjust: -6, 
+                                font: { size: 10.4, weight: '700' }, 
+                                color: 'rgba(34, 197, 94, 0.8)',
+                                backgroundColor: 'rgba(34, 197, 94, 0.1)',
+                                borderRadius: 3,
+                                padding: 4
+                            }
+                        }),
+                        ...(quadLabels.topLeft && {
+                            topLeft: { 
+                                type: 'label', 
+                                xValue: xMedian * 0.99, 
+                                yValue: yMedian * 1.01, 
+                                content: quadLabels.topLeft, 
+                                position: 'end', 
+                                xAdjust: -6, 
+                                yAdjust: -6, 
+                                font: { size: 10.4, weight: '700' }, 
+                                color: 'rgba(251, 146, 60, 0.8)',
+                                backgroundColor: 'rgba(251, 146, 60, 0.1)',
+                                borderRadius: 3,
+                                padding: 4
+                            }
+                        }),
+                        ...(quadLabels.bottomRight && {
+                            bottomRight: { 
+                                type: 'label', 
+                                xValue: xMedian * 1.01, 
+                                yValue: yMedian * 0.99, 
+                                content: quadLabels.bottomRight, 
+                                position: 'start', 
+                                xAdjust: 6, 
+                                yAdjust: 6, 
+                                font: { size: 10.4, weight: '700' }, 
+                                color: 'rgba(251, 146, 60, 0.8)',
+                                backgroundColor: 'rgba(251, 146, 60, 0.1)',
+                                borderRadius: 3,
+                                padding: 4
+                            }
+                        }),
+                        ...(quadLabels.bottomLeft && {
+                            bottomLeft: { 
+                                type: 'label', 
+                                xValue: xMedian * 0.99, 
+                                yValue: yMedian * 0.99, 
+                                content: quadLabels.bottomLeft, 
+                                position: 'end', 
+                                xAdjust: -6, 
+                                yAdjust: 6, 
+                                font: { size: 10.4, weight: '700' }, 
+                                color: 'rgba(239, 68, 68, 0.8)',
+                                backgroundColor: 'rgba(239, 68, 68, 0.1)',
+                                borderRadius: 3,
+                                padding: 4
+                            }
+                        })
                     }
                 }
             }
@@ -1574,7 +2311,14 @@ function calculatePercentiles(players, metric, isAscending = false) {
 }
 
 function calculateAllPredictions(players) {
-    const fixtures = state.allPlayersData.live.fixtures || state.allPlayersData.historical.fixtures;
+    // Get fixtures based on current data source
+    let fixtures = null;
+    if (state.currentDataSource === 'demo') {
+        fixtures = state.allPlayersData.demo?.fixtures || [];
+    } else {
+        fixtures = state.allPlayersData.live?.fixtures || state.allPlayersData.historical?.fixtures || [];
+    }
+    
     if (!fixtures || fixtures.length === 0) return players;
     
     const teamFixtures = {};
@@ -2693,12 +3437,17 @@ function renderDraftAnalytics(teamAggregates) {
                 datasets: [{
                     label: dim.label,
                     data: values,
-                    borderRadius: 10,
+                    borderRadius: 12,
+                    barThickness: 'flex',
+                    maxBarThickness: 60,
                     backgroundColor: labels.map(n => {
                         const c = colorMap[n];
                         const isHi = highlightTeam && n === highlightTeam;
-                        // Highlighted: full opacity, Others: very faded
-                        return isHi ? c : hexToRgba(c, 0.2);
+                        // Highlighted: full opacity with glow, Others: faded
+                        if (highlightTeam) {
+                            return isHi ? c : hexToRgba(c, 0.25);
+                        }
+                        return hexToRgba(c, 0.75);
                     }),
                     borderColor: labels.map(n => {
                         const c = colorMap[n];
@@ -2707,11 +3456,11 @@ function renderDraftAnalytics(teamAggregates) {
                     }),
                     borderWidth: labels.map(n => {
                         const isHi = highlightTeam && n === highlightTeam;
-                        return isHi ? 4 : 0;
+                        return isHi ? 5 : 0;
                     }),
                     hoverBackgroundColor: labels.map(n => {
                         const c = colorMap[n];
-                        return hexToRgba(c, 0.9);
+                        return hexToRgba(c, 0.95);
                     }),
                 }]
             },
@@ -2731,14 +3480,18 @@ function renderDraftAnalytics(teamAggregates) {
                         },
                         ticks: {
                             color: '#64748b',
-                            font: { size: 11, weight: '500' }
+                            font: { size: 14, weight: '600' },
+                            padding: 8
                         }
                     },
                     x: { 
                         grid: { display: false },
                         ticks: {
                             color: '#475569',
-                            font: { size: 11, weight: '600' }
+                            font: { size: 11, weight: '600' },
+                            padding: 6,
+                            maxRotation: 45,
+                            minRotation: 0
                         }
                     }
                 },
@@ -2749,14 +3502,16 @@ function renderDraftAnalytics(teamAggregates) {
                         titleColor: '#fff',
                         bodyColor: '#e2e8f0',
                         borderColor: 'rgba(2, 132, 199, 0.5)',
-                        borderWidth: 1,
-                        padding: 12,
+                        borderWidth: 2,
+                        padding: 16,
                         displayColors: false,
+                        titleFont: { size: 16, weight: '700' },
+                        bodyFont: { size: 15 },
                         callbacks: {
                             label: function(context) {
                                 const isHighlighted = highlightTeam && context.label === highlightTeam;
                                 const prefix = isHighlighted ? '⭐ ' : '';
-                                return `${prefix}${context.parsed.y.toFixed(1)}`;
+                                return `${prefix}${Math.round(context.parsed.y)}`;
                             }
                         }
                     },
@@ -2764,21 +3519,34 @@ function renderDraftAnalytics(teamAggregates) {
                         anchor: 'end',
                         align: 'top',
                         clamp: true,
+                        offset: 6,
                         color: function(context) {
                             const isHighlighted = highlightTeam && labels[context.dataIndex] === highlightTeam;
-                            return isHighlighted ? '#0284c7' : '#64748b';
+                            return isHighlighted ? '#ffffff' : '#475569';
+                        },
+                        backgroundColor: function(context) {
+                            const isHighlighted = highlightTeam && labels[context.dataIndex] === highlightTeam;
+                            return isHighlighted ? '#0284c7' : 'transparent';
+                        },
+                        borderRadius: function(context) {
+                            const isHighlighted = highlightTeam && labels[context.dataIndex] === highlightTeam;
+                            return isHighlighted ? 6 : 0;
+                        },
+                        padding: function(context) {
+                            const isHighlighted = highlightTeam && labels[context.dataIndex] === highlightTeam;
+                            return isHighlighted ? { top: 6, bottom: 6, left: 10, right: 10 } : 0;
                         },
                         font: function(context) {
                             const isHighlighted = highlightTeam && labels[context.dataIndex] === highlightTeam;
                             return { 
-                                size: isHighlighted ? 14 : 12, 
-                                weight: isHighlighted ? '800' : '700' 
+                                size: isHighlighted ? 18 : 14, 
+                                weight: isHighlighted ? '900' : '700' 
                             };
                         },
                         textAlign: 'center',
                         formatter: (v, context) => {
                             const isHighlighted = highlightTeam && labels[context.dataIndex] === highlightTeam;
-                            const value = typeof v === 'number' ? v.toFixed(1) : v;
+                            const value = typeof v === 'number' ? Math.round(v) : v;
                             return isHighlighted ? `⭐ ${value}` : value;
                         }
                     }
@@ -2820,13 +3588,14 @@ function renderDraftMatrices(teamAggregates) {
         host.appendChild(card);
         
         const data = spec.build(teamAggregates);
-        const configChart = getChartConfig(data, 'x', 'y', spec.xLabel, spec.yLabel, spec.quads, null, (v)=>v.team);
         
         if (state.draft.charts.matrix && state.draft.charts.matrix[spec.key]) {
              state.draft.charts.matrix[spec.key].destroy();
         }
         if (!state.draft.charts.matrix) state.draft.charts.matrix = {};
         
+        // Create improved matrix chart
+        const configChart = getMatrixChartConfig(data, spec.xLabel, spec.yLabel, spec.quads);
         state.draft.charts.matrix[spec.key] = new Chart(canvas.getContext('2d'), configChart);
     });
 }
