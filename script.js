@@ -83,9 +83,13 @@ const auth = {
         }
         
         // Load data based on mode
-        // Both demo and regular users see real data now
-        // Only amitzahy1@gmail.com has full access (can make changes)
-        init(); // Load real data for everyone
+        if (this.isDemo) {
+            // Demo mode: show fabricated data with real player names
+            loadDemoData();
+        } else {
+            // Full access: show real data
+            init();
+        }
     },
     
     createUserInitial(name) {
@@ -128,7 +132,7 @@ const auth = {
             } else {
                 this.isDemo = true;
                 localStorage.setItem('fpl_user', JSON.stringify(this.user));
-                showToast('גישה מוגבלת', `שלום ${this.user.name}! אתה יכול לצפות בנתונים אמיתיים במצב תצוגה בלבד`, 'warning', 4000);
+                showToast('גישה מוגבלת', `שלום ${this.user.name}! תוצג תצוגה עם שמות אמיתיים ונתונים מפוברקים`, 'warning', 4000);
             }
             
             this.showApp();
@@ -142,7 +146,7 @@ const auth = {
             picture: 'https://via.placeholder.com/40'
         };
         this.isDemo = true;
-        showToast('מצב דמו', 'נכנסת למצב דמו - צפייה בנתונים אמיתיים', 'info', 3000);
+        showToast('מצב דמו', 'נכנסת למצב דמו - שמות אמיתיים, נתונים מפוברקים', 'info', 3000);
         this.showApp();
     },
     
@@ -2623,6 +2627,14 @@ function showTab(tab) {
 }
 
 function getProcessedByElementId() {
+    // Check if we're in demo mode first
+    if (state.currentDataSource === 'demo' && state.allPlayersData.demo && state.allPlayersData.demo.processed) {
+        const map = new Map();
+        state.allPlayersData.demo.processed.forEach(p => map.set(p.id, p));
+        return map;
+    }
+    
+    // Otherwise use live or historical data
     const processed = (state.allPlayersData.live && state.allPlayersData.live.processed) || (state.allPlayersData.historical && state.allPlayersData.historical.processed) || [];
     const map = new Map();
     processed.forEach(p => map.set(p.id, p));
@@ -2780,7 +2792,15 @@ async function loadDraftLeague() {
     });
 
     try {
-        if (!state.allPlayersData.live.raw && !state.allPlayersData.historical.raw) {
+        // Make sure we have player data loaded (demo or real)
+        if (state.currentDataSource === 'demo') {
+            // In demo mode, ensure demo data is loaded
+            if (!state.allPlayersData.demo || !state.allPlayersData.demo.processed) {
+                showToast('שגיאה', 'נתוני דמו לא נטענו. אנא רענן את הדף.', 'error', 3000);
+                hideLoading();
+                return;
+            }
+        } else if (!state.allPlayersData.live.raw && !state.allPlayersData.historical.raw) {
             await fetchAndProcessData();
         }
 
@@ -2995,7 +3015,13 @@ function renderMyLineup(teamId) {
 }
 
 function findFreeAgents() {
-    const allPlayers = (state.allPlayersData.live && state.allPlayersData.live.processed) || [];
+    // Check if we're in demo mode first
+    let allPlayers = [];
+    if (state.currentDataSource === 'demo' && state.allPlayersData.demo && state.allPlayersData.demo.processed) {
+        allPlayers = state.allPlayersData.demo.processed;
+    } else {
+        allPlayers = (state.allPlayersData.live && state.allPlayersData.live.processed) || [];
+    }
     return allPlayers.filter(p => !state.draft.ownedElementIds.has(p.id));
 }
 
