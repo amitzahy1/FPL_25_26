@@ -3531,17 +3531,17 @@ function renderDraftAnalytics(teamAggregates) {
                         footerColor: '#64748b',
                         borderColor: 'rgba(2, 132, 199, 0.8)',
                         borderWidth: 2,
-                        padding: 10,
+                        padding: 11,
                         displayColors: false,
-                        titleFont: { size: 11, weight: '700' },
-                        bodyFont: { size: 9, family: 'system-ui, -apple-system' },
-                        footerFont: { size: 8, weight: '500' },
-                        bodySpacing: 3,
-                        footerSpacing: 4,
-                        footerMarginTop: 6,
+                        titleFont: { size: 12.1, weight: '700' },
+                        bodyFont: { size: 9.9, family: 'system-ui, -apple-system' },
+                        footerFont: { size: 8.8, weight: '500' },
+                        bodySpacing: 3.3,
+                        footerSpacing: 4.4,
+                        footerMarginTop: 6.6,
                         cornerRadius: 8,
-                        caretSize: 5,
-                        caretPadding: 6,
+                        caretSize: 5.5,
+                        caretPadding: 6.6,
                         callbacks: {
                             title: function(context) {
                                 const teamName = context[0].label;
@@ -3622,6 +3622,7 @@ function renderDraftAnalytics(teamAggregates) {
                                 playerContributions.sort((a, b) => b.value - a.value);
                                 
                                 // Return all players (up to 15) - simple format: Position | Name | Value
+                                // Top 3 will be marked with a special prefix and bold name
                                 const posMap = {
                                     'GKP': 'GK',
                                     'DEF': 'DF',
@@ -3629,9 +3630,26 @@ function renderDraftAnalytics(teamAggregates) {
                                     'FWD': 'ST'
                                 };
                                 
-                                return playerContributions.slice(0, 15).map((pc) => {
+                                // Helper function to convert text to bold (Unicode Mathematical Bold)
+                                const toBold = (text) => {
+                                    const boldMap = {
+                                        'A': '𝗔', 'B': '𝗕', 'C': '𝗖', 'D': '𝗗', 'E': '𝗘', 'F': '𝗙', 'G': '𝗚', 'H': '𝗛', 'I': '𝗜', 'J': '𝗝',
+                                        'K': '𝗞', 'L': '𝗟', 'M': '𝗠', 'N': '𝗡', 'O': '𝗢', 'P': '𝗣', 'Q': '𝗤', 'R': '𝗥', 'S': '𝗦', 'T': '𝗧',
+                                        'U': '𝗨', 'V': '𝗩', 'W': '𝗪', 'X': '𝗫', 'Y': '𝗬', 'Z': '𝗭',
+                                        'a': '𝗮', 'b': '𝗯', 'c': '𝗰', 'd': '𝗱', 'e': '𝗲', 'f': '𝗳', 'g': '𝗴', 'h': '𝗵', 'i': '𝗶', 'j': '𝗷',
+                                        'k': '𝗸', 'l': '𝗹', 'm': '𝗺', 'n': '𝗻', 'o': '𝗼', 'p': '𝗽', 'q': '𝗾', 'r': '𝗿', 's': '𝘀', 't': '𝘁',
+                                        'u': '𝘂', 'v': '𝘃', 'w': '𝘄', 'x': '𝘅', 'y': '𝘆', 'z': '𝘇',
+                                        '0': '𝟬', '1': '𝟭', '2': '𝟮', '3': '𝟯', '4': '𝟰', '5': '𝟱', '6': '𝟲', '7': '𝟳', '8': '𝟴', '9': '𝟵'
+                                    };
+                                    return text.split('').map(char => boldMap[char] || char).join('');
+                                };
+                                
+                                return playerContributions.slice(0, 15).map((pc, idx) => {
                                     const pos = posMap[pc.position] || pc.position;
-                                    return `${pos} | ${pc.name} | ${pc.display}`;
+                                    // Mark top 3 with green indicator and bold name
+                                    const prefix = idx < 3 ? '🟢 ' : '   ';
+                                    const playerName = idx < 3 ? toBold(pc.name) : pc.name;
+                                    return `${prefix}${pos} | ${playerName} | ${pc.display}`;
                                 });
                             },
                             footer: function(context) {
