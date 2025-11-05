@@ -2743,10 +2743,10 @@ async function loadDraftDataInBackground() {
             
             // Fetch all team rosters
             const rosterPromises = details.league_entries
-                .filter(e => e && e.id)
+                .filter(e => e && e.id && e.entry_id)
                 .map(async entry => {
-                    const picksUrl = `${config.corsProxy}${encodeURIComponent(`https://draft.premierleague.com/api/entry/${entry.id}/event/${currentGW}`)}`;
-                    const picksCacheKey = `fpl_draft_picks_bg_${entry.id}_gw${currentGW}`;
+                    const picksUrl = `${config.corsProxy}${encodeURIComponent(`https://draft.premierleague.com/api/entry/${entry.entry_id}/event/${currentGW}`)}`;
+                    const picksCacheKey = `fpl_draft_picks_bg_${entry.entry_id}_gw${currentGW}`;
                     try {
                         const picksData = await fetchWithCache(picksUrl, picksCacheKey, 30);
                         if (picksData && picksData.picks) {
@@ -3524,20 +3524,125 @@ function renderDraftAnalytics(teamAggregates) {
                 plugins: {
                     legend: { display: false },
                     tooltip: {
-                        backgroundColor: 'rgba(15, 23, 42, 0.95)',
-                        titleColor: '#fff',
-                        bodyColor: '#e2e8f0',
-                        borderColor: 'rgba(2, 132, 199, 0.5)',
+                        enabled: true,
+                        backgroundColor: 'rgba(255, 255, 255, 0.98)',
+                        titleColor: '#1e293b',
+                        bodyColor: '#334155',
+                        footerColor: '#64748b',
+                        borderColor: 'rgba(2, 132, 199, 0.8)',
                         borderWidth: 2,
-                        padding: 16,
+                        padding: 10,
                         displayColors: false,
-                        titleFont: { size: 16, weight: '700' },
-                        bodyFont: { size: 15 },
+                        titleFont: { size: 11, weight: '700' },
+                        bodyFont: { size: 9, family: 'system-ui, -apple-system' },
+                        footerFont: { size: 8, weight: '500' },
+                        bodySpacing: 3,
+                        footerSpacing: 4,
+                        footerMarginTop: 6,
+                        cornerRadius: 8,
+                        caretSize: 5,
+                        caretPadding: 6,
                         callbacks: {
+                            title: function(context) {
+                                const teamName = context[0].label;
+                                const value = context[0].parsed.y;
+                                const formattedValue = typeof value === 'number' ? 
+                                    (value % 1 === 0 ? Math.round(value) : value.toFixed(1)) : value;
+                                return `${teamName} - סה"כ: ${formattedValue}`;
+                            },
+                            beforeBody: function(context) {
+                                return ''; // Remove separator
+                            },
                             label: function(context) {
-                                const isHighlighted = highlightTeam && context.label === highlightTeam;
-                                const prefix = isHighlighted ? '⭐ ' : '';
-                                return `${prefix}${Math.round(context.parsed.y)}`;
+                                // Get team name and find its players
+                                const teamName = context.label;
+                                const teamEntry = (state.draft.details?.league_entries || []).find(e => e.entry_name === teamName);
+                                if (!teamEntry) return ['לא נמצאו נתונים'];
+                                
+                                const playerIds = state.draft.rostersByEntryId.get(teamEntry.id) || [];
+                                const processedById = getProcessedByElementId();
+                                const players = playerIds.map(id => processedById.get(id)).filter(Boolean);
+                                
+                                if (players.length === 0) return ['אין שחקנים'];
+                                
+                                // Calculate player contributions based on metric
+                                const metricKey = dim.key;
+                                let playerContributions = [];
+                                
+                                players.forEach(p => {
+                                    let contribution = 0;
+                                    let displayValue = 0;
+                                    
+                                    switch(metricKey) {
+                                        case 'sumDraft':
+                                            contribution = p.draft_score || 0;
+                                            displayValue = Math.round(contribution);
+                                            break;
+                                        case 'sumPred':
+                                            contribution = p.predicted_points_4_gw || 0;
+                                            displayValue = Math.round(contribution);
+                                            break;
+                                        case 'totalPrice':
+                                            contribution = p.now_cost || 0;
+                                            displayValue = contribution.toFixed(1);
+                                            break;
+                                        case 'sumSelectedBy':
+                                            contribution = parseFloat(p.selected_by_percent) || 0;
+                                            displayValue = contribution.toFixed(1);
+                                            break;
+                                        case 'gaTotal':
+                                            contribution = (p.goals_scored || 0) + (p.assists || 0);
+                                            displayValue = contribution;
+                                            break;
+                                        case 'totalCleanSheets':
+                                            contribution = p.clean_sheets || 0;
+                                            displayValue = contribution;
+                                            break;
+                                        case 'totalXGI':
+                                            contribution = parseFloat(p.expected_goal_involvements) || 0;
+                                            displayValue = contribution.toFixed(1);
+                                            break;
+                                        case 'totalDefCon':
+                                            contribution = p.def_contrib_per90 || 0;
+                                            displayValue = contribution.toFixed(1);
+                                            break;
+                                    }
+                                    
+                                    if (contribution > 0) {
+                                        playerContributions.push({
+                                            name: p.web_name,
+                                            value: contribution,
+                                            display: displayValue,
+                                            position: p.position_name
+                                        });
+                                    }
+                                });
+                                
+                                // Sort by contribution (descending)
+                                playerContributions.sort((a, b) => b.value - a.value);
+                                
+                                // Return all players (up to 15) - simple format: Position | Name | Value
+                                const posMap = {
+                                    'GKP': 'GK',
+                                    'DEF': 'DF',
+                                    'MID': 'MF',
+                                    'FWD': 'ST'
+                                };
+                                
+                                return playerContributions.slice(0, 15).map((pc) => {
+                                    const pos = posMap[pc.position] || pc.position;
+                                    return `${pos} | ${pc.name} | ${pc.display}`;
+                                });
+                            },
+                            footer: function(context) {
+                                const teamName = context[0].label;
+                                const teamEntry = (state.draft.details?.league_entries || []).find(e => e.entry_name === teamName);
+                                if (!teamEntry) return '';
+                                
+                                const playerIds = state.draft.rostersByEntryId.get(teamEntry.id) || [];
+                                const total = playerIds.length;
+                                
+                                return total > 15 ? `מציג 15 מתוך ${total} שחקנים` : `סה"כ ${total} שחקנים`;
                             }
                         }
                     },
