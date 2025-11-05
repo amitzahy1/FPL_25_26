@@ -1571,10 +1571,69 @@ tbody tr:last-child td {
     }
 }
 
+/* Draft Comparison Table Styling */
+#draftComparison h2 {
+    font-size: 1.54em; /* 20% decrease from 1.92em */
+    font-weight: 700;
+    color: var(--text-primary);
+    margin-bottom: 20px;
+}
+
+.draft-comparison-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.86em; /* 20% decrease from 1.08em */
+    background: white;
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+
+.draft-comparison-table th {
+    background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
+    color: white;
+    padding: 11.5px; /* 20% decrease from 14.4px */
+    text-align: center;
+    font-weight: 600;
+    font-size: 0.86em; /* 20% decrease from 1.08em */
+}
+
+.draft-comparison-table td {
+    padding: 9.6px; /* 20% decrease from 12px */
+    text-align: center;
+    border-bottom: 1px solid #e2e8f0;
+    font-size: 0.86em; /* 20% decrease from 1.08em */
+}
+
+.draft-comparison-table td:first-child {
+    text-align: right;
+    font-weight: 600;
+    background-color: #f8fafc;
+    color: var(--text-primary);
+}
+
+.draft-comparison-table td.metric-value-best {
+    background-color: #e8f5e9;
+    color: #2e7d32;
+    font-weight: 600;
+}
+
 .draft-comparison-table td.metric-value-worst {
     background-color: #ffebee;
     color: #c62828;
     font-weight: 500;
+}
+
+.draft-comparison-table tr:hover td {
+    background-color: #f1f5f9;
+}
+
+.draft-comparison-table tr:hover td.metric-value-best {
+    background-color: #c8e6c9;
+}
+
+.draft-comparison-table tr:hover td.metric-value-worst {
+    background-color: #ffcdd2;
 }
 
 /* Recommendations */
