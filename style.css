@@ -666,12 +666,7 @@ tbody tr:last-child td {
 .matrix-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
 .matrix-card { background: white; border-radius: 12px; padding: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.08); height: 488px; display: flex; flex-direction: column; border: 2px solid #e2e8f0; }
 .matrix-card .title { font-weight: 800; color: #2c3e50; margin-bottom: 6px; font-size: 1.15em; }
-/* Recommendations tables */
-.recs-grid-tables { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px; }
-.rec-table { width: 100%; border-collapse: collapse; font-size: 0.78em; }
-.rec-table th, .rec-table td { border: 1px solid #e5e7eb; padding: 6px; text-align: center; }
-.rec-table th { background: #f8fafc; font-weight: 700; }
-.rec-best { background: #dcfce7; font-weight: 800; color: #065f46; }
+/* Recommendations tables - moved to line 1640 */
 .matrix-card .chart-host { flex: 1; min-height: 0; }
 /* Draft tables */
 #draftStandingsInfo { text-align: center; margin: 8px 0; color: #495057; }
@@ -1384,10 +1379,53 @@ tbody tr:last-child td {
     /* Recommendations */
     .recs-grid-tables {
         grid-template-columns: 1fr;
+        gap: 8px;
+    }
+    
+    .rec-card {
+        border-radius: 8px;
+    }
+    
+    .rec-header {
+        padding: 8px 10px;
+    }
+    
+    .rec-header h4 {
+        font-size: 0.85em;
+    }
+    
+    .rec-subtitle {
+        font-size: 0.7em;
     }
     
     .rec-table {
+        font-size: 0.68em;
+    }
+    
+    .rec-table thead th {
+        padding: 6px 4px;
         font-size: 0.85em;
+    }
+    
+    .rec-table tbody td {
+        padding: 5px 3px;
+    }
+    
+    .rec-player-img {
+        width: 28px;
+        height: 28px;
+    }
+    
+    .rec-player-name {
+        font-size: 0.8em;
+    }
+    
+    .rec-player-team {
+        font-size: 0.68em;
+    }
+    
+    .rec-reason-row td {
+        font-size: 0.75em;
     }
     
     /* Section titles */
@@ -1637,39 +1675,153 @@ tbody tr:last-child td {
 }
 
 /* Recommendations */
+/* Recommendations - Ultra Compact Design */
 .recs-grid-tables {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
-    gap: 20px;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px;
 }
+
+.rec-card {
+    background: white;
+    border-radius: 8px;
+    padding: 0;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
+    border: 1px solid #e2e8f0;
+    overflow: hidden;
+}
+
+.rec-card:hover {
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.rec-header {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    padding: 6px 10px;
+    color: white;
+}
+
+.rec-header h4 {
+    margin: 0;
+    font-size: 1.35em;
+    font-weight: 900;
+    letter-spacing: -0.02em;
+}
+
+.rec-subtitle {
+    margin: 0;
+    font-size: 0.75em;
+    opacity: 0.9;
+    font-weight: 500;
+}
+
 .rec-table {
     width: 100%;
     border-collapse: collapse;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    font-size: 0.75em;
 }
-.rec-table th {
-    background-color: #4a5568;
-    color: white;
-    padding: 10px;
-    text-align: right;
+
+.rec-table thead th {
+    background: #f8fafc;
+    color: #2d3748;
+    padding: 6px 4px;
+    text-align: center;
+    font-weight: 700;
+    border-bottom: 1px solid #e2e8f0;
+    font-size: 0.95em;
 }
-.rec-table td {
-    padding: 8px;
-    border: 1px solid #e2e8f0;
-}
-.rec-table tr:nth-child(even) {
-    background-color: #f7fafc;
-}
-.rec-player-img {
-    width: 28px;
-    height: 28px;
-    border-radius: 50%;
+
+.rec-table tbody td {
+    padding: 5px 3px;
+    text-align: center;
+    border-bottom: 1px solid #f7fafc;
     vertical-align: middle;
-    margin-left: 5px;
 }
+
+.rec-table tbody tr:hover {
+    background: #f8fafc;
+}
+
+.rec-table tbody tr td:first-child {
+    font-weight: 700;
+    color: #4a5568;
+    text-align: right;
+    padding-right: 8px;
+}
+
+.rec-player-row td {
+    padding: 8px 4px;
+    background: #fafbfc;
+    font-weight: 600;
+}
+
+.rec-player-cell {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 3px;
+}
+
+.rec-player-img {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    border: 2px solid #e2e8f0;
+    object-fit: cover;
+    background: white;
+}
+
+.rec-player-name {
+    font-size: 1.1em;
+    font-weight: 900;
+    color: #1a202c;
+    text-align: center;
+    line-height: 1.2;
+    letter-spacing: -0.01em;
+}
+
+.rec-player-team {
+    font-size: 0.7em;
+    color: #718096;
+}
+
+.rec-reason-row {
+    background: #fffbeb !important;
+    border-top: 1px solid #fbbf24;
+    border-bottom: 1px solid #fbbf24;
+}
+
+.rec-reason-row td {
+    padding: 4px 2px;
+    font-size: 0.78em;
+}
+
+.rec-reason {
+    color: #92400e;
+    font-weight: 600;
+    line-height: 1.2;
+}
+
 .rec-best {
-    background-color: #c6f6d5;
-    font-weight: bold;
+    background: linear-gradient(135deg, #d1fae5 0%, #a7f3d0 100%) !important;
+    font-weight: 800;
+    color: #065f46;
+    position: relative;
+}
+
+.rec-best::after {
+    content: '✓';
+    position: absolute;
+    top: 1px;
+    right: 1px;
+    font-size: 0.6em;
+    color: #059669;
+}
+
+.rec-worst {
+    background: #fee2e2 !important;
+    color: #991b1b;
+    font-weight: 600;
 }
 
 /* Other Rosters */

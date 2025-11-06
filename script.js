@@ -465,10 +465,34 @@ const config = {
         defensive_offensive: {title:'תרומה הגנתית מול איום התקפי', pos:['DEF', 'MID', 'FWD'], x:'def_contrib_per90', y:'xGI_per90', xLabel:'תרומה הגנתית (DC/90)', yLabel:'איום התקפי (xGI/90)', quadLabels: {topRight: 'All-Around Threat', topLeft: 'Offensive Specialist', bottomRight: 'Defensive Anchor', bottomLeft: 'Limited Impact'}}
     },
     recommendationMetrics: {
-        'ציון דראפט': { key: 'draft_score', format: v => v.toFixed(1) },
-        'xPts(4GW)': { key: 'predicted_points_4_gw', format: v => (v||0).toFixed(1) },
-        'xGI/90': { key: 'xGI_per90', format: v => v.toFixed(2) },
-        'DC/90': { key: 'def_contrib_per90', format: v => v.toFixed(1) },
+        'ציון חכם': { key: 'smart_score', format: v => {
+            const val = parseFloat(v) || 0;
+            return val.toFixed(1);
+        }},
+        'xPts (הבא)': { key: 'predicted_points_1_gw', format: v => {
+            const val = parseFloat(v) || 0;
+            return val.toFixed(1);
+        }},
+        'ציון דראפט': { key: 'draft_score', format: v => {
+            const val = parseFloat(v) || 0;
+            return val.toFixed(1);
+        }},
+        'Form': { key: 'form', format: v => {
+            const val = parseFloat(v) || 0;
+            return val.toFixed(1);
+        }},
+        'הפרש העברות': { key: 'transfers_balance', format: v => {
+            const val = parseInt(v) || 0;
+            return val > 0 ? `+${val}` : `${val}`;
+        }},
+        '% בחירה': { key: 'selected_by_percent', format: v => {
+            const val = parseFloat(v) || 0;
+            return `${val.toFixed(1)}%`;
+        }},
+        'דקות': { key: 'minutes', format: v => {
+            const val = parseInt(v) || 0;
+            return Math.round(val);
+        }},
     },
     draftAnalyticsDimensions: [
         { key:'sumDraft', label:'ציון דראפט סה"כ' },
@@ -3042,32 +3066,98 @@ function getRecommendationData() {
     console.log(`DEBUG: My team has ${myPlayers.length} players`);
     console.log(`DEBUG: Total owned players across all teams: ${state.draft.ownedElementIds.size}`);
 
-    const calculateRecScore = (p) => {
+    // Calculate Smart Score for a player
+    const calculateSmartScore = (p) => {
         if (!p) return 0;
-        return p.draft_score || 0;
+        
+        // Base metrics (normalized to 0-100 scale)
+        const xPts1GW = (p.predicted_points_1_gw || 0) * 10; // Weight: 0.30
+        const draftScore = (p.draft_score || 0); // Weight: 0.25
+        const form = parseFloat(p.form || 0) * 10; // Weight: 0.15
+        
+        // Transfers balance (difference between transfers_in and transfers_out)
+        const transfersIn = parseInt(p.transfers_in_event || 0);
+        const transfersOut = parseInt(p.transfers_out_event || 0);
+        const transfersBalance = transfersIn - transfersOut;
+        const transfersScore = Math.max(0, Math.min(100, transfersBalance * 2 + 50)); // Weight: 0.20
+        
+        // Ownership percentage (higher is better for comeback players)
+        const ownership = parseFloat(p.selected_by_percent || 0);
+        const ownershipScore = Math.min(100, ownership * 2); // Weight: 0.10
+        
+        // Comeback bonus: High ownership but low minutes = returning from injury
+        let comebackBonus = 0;
+        const minutes = p.minutes || 0;
+        if (minutes < 270 && ownership > 30 && draftScore > 70) {
+            comebackBonus = 20; // Significant bonus for comeback players
+        } else if (minutes < 180 && ownership > 20 && draftScore > 60) {
+            comebackBonus = 10; // Moderate bonus
+        }
+        
+        // Calculate weighted smart score
+        const smartScore = (
+            (xPts1GW * 0.30) +
+            (draftScore * 0.25) +
+            (form * 0.15) +
+            (transfersScore * 0.20) +
+            (ownershipScore * 0.10) +
+            comebackBonus
+        );
+        
+        return smartScore;
     };
 
-    const myPlayersWithScore = myPlayers.map(p => ({ player: p, score: calculateRecScore(p) }));
-
-    const myWeakestByPos = {
-        GKP: myPlayersWithScore.filter(p => p.player.position_name === 'GKP').sort((a,b) => a.score - b.score)[0],
-        DEF: myPlayersWithScore.filter(p => p.player.position_name === 'DEF').sort((a,b) => a.score - b.score)[0],
-        MID: myPlayersWithScore.filter(p => p.player.position_name === 'MID').sort((a,b) => a.score - b.score)[0],
-        FWD: myPlayersWithScore.filter(p => p.player.position_name === 'FWD').sort((a,b) => a.score - b.score)[0],
+    // Add smart_score and transfers_balance to all players for display
+    const enrichPlayer = (p) => {
+        const transfersIn = parseInt(p.transfers_in_event || 0);
+        const transfersOut = parseInt(p.transfers_out_event || 0);
+        return {
+            ...p,
+            smart_score: calculateSmartScore(p),
+            transfers_balance: transfersIn - transfersOut
+        };
     };
+
+    // Enrich my players and free agents
+    const myPlayersEnriched = myPlayers.map(enrichPlayer);
+    const freeAgentsEnriched = freeAgents.map(enrichPlayer);
+
+    const myPlayersWithScore = myPlayersEnriched.map(p => ({ player: p, score: p.smart_score }));
+
+    // Find 4 weakest players overall (not necessarily one per position)
+    // EXCLUDE GOALKEEPERS - never recommend replacing them
+    const weakestPlayers = myPlayersWithScore
+        .filter(p => p.player.position_name !== 'GKP') // Exclude goalkeepers
+        .sort((a, b) => a.score - b.score) // Sort by Smart Score (lowest first)
+        .slice(0, 4); // Take 4 weakest
+    
+    console.log('=== SMART RECOMMENDATION LOGIC ===');
+    console.log('Smart Score calculation:');
+    console.log('  - xPts (1GW) × 30% - תחזית למחזור הבא');
+    console.log('  - Draft Score × 25% - איכות כללית');
+    console.log('  - Form × 15% - כושר אחרון');
+    console.log('  - Transfers Balance × 20% - הפרש העברות (חכמת ההמונים)');
+    console.log('  - Ownership × 10% - אחוז בעלות');
+    console.log('  - Comeback Bonus - בונוס לשחקנים חוזרים מפציעה');
+    console.log('');
+    console.log('4 Weakest players (excluding GKP):');
+    weakestPlayers.forEach((p, i) => {
+        console.log(`  ${i+1}. ${p.player.web_name} (${p.player.position_name}) - Smart Score: ${p.score.toFixed(1)}`);
+    });
     
     const recommendations = {};
-    Object.entries(myWeakestByPos).forEach(([pos, playerToReplace]) => {
-        if (!playerToReplace) return;
-
-        // CRITICAL: Filter to ONLY free agents (double-check they're not owned)
-        const candidates = freeAgents
+    
+    weakestPlayers.forEach((playerToReplace, index) => {
+        const pos = playerToReplace.player.position_name;
+        
+        // Find top 3 free agents in same position with better smart score
+        const candidates = freeAgentsEnriched
             .filter(p => {
                 // Must be same position
                 if (p.position_name !== pos) return false;
                 
-                // Must have played at least 90 minutes
-                if (p.minutes <= 90) return false;
+                // Must have played at least 1 minute (to allow comeback players)
+                if (p.minutes <= 0) return false;
                 
                 // CRITICAL: Double-check player is NOT in ownedElementIds
                 if (state.draft.ownedElementIds.has(p.id)) {
@@ -3075,18 +3165,26 @@ function getRecommendationData() {
                     return false;
                 }
                 
+                // Must have better smart score
+                if (p.smart_score <= playerToReplace.score) return false;
+                
+                // NEW: Must have transfers_balance > 1000 (high demand)
+                if (Math.abs(p.transfers_balance) < 1000) return false;
+                
                 return true;
             })
-            .map(p => ({ player: p, score: calculateRecScore(p) }))
-            .filter(c => c.score > playerToReplace.score)
-            .sort((a, b) => b.score - a.score)
-            .slice(0, 3)
-            .map(c => c.player);
+            .sort((a, b) => b.smart_score - a.smart_score)
+            .slice(0, 3);
 
-        console.log(`DEBUG ${pos}: Found ${candidates.length} free agent candidates better than ${playerToReplace.player.web_name} (score: ${playerToReplace.score.toFixed(1)})`);
+        console.log(`DEBUG ${pos}: Found ${candidates.length} free agent candidates better than ${playerToReplace.player.web_name} (smart score: ${playerToReplace.score.toFixed(1)})`);
         
         if (candidates.length) {
-            recommendations[pos] = { player: playerToReplace.player, candidates };
+            // Use unique key based on player ID to avoid conflicts
+            recommendations[`rec_${index}_${playerToReplace.player.id}`] = { 
+                player: playerToReplace.player, 
+                candidates,
+                position: pos
+            };
         }
     });
 
@@ -3100,32 +3198,125 @@ function renderRecommendations() {
 
     const recommendationData = getRecommendationData();
     if (!recommendationData || Object.keys(recommendationData).length === 0) {
-        container.innerHTML = '<p style="text-align:center; padding: 20px;">אין המלצות משמעותיות כרגע.</p>';
+        container.innerHTML = '<p style="text-align:center; padding: 20px;">🎉 כל השחקנים שלך מצוינים! אין המלצות להחלפה כרגע.</p>';
         return;
     }
 
     const tablesContainer = document.createElement('div');
     tablesContainer.className = 'recs-grid-tables';
 
-    Object.entries(recommendationData).forEach(([pos, { player, candidates }]) => {
+    // Position names in Hebrew
+    const posNames = {
+        'GKP': '🧤 שוער',
+        'DEF': '🛡️ מגן',
+        'MID': '⚙️ קשר',
+        'FWD': '⚽ חלוץ'
+    };
+    
+    // Create recommendation reason for each candidate
+    const getRecommendationReason = (candidate) => {
+        const reasons = [];
+        
+        // Check comeback player
+        if (candidate.minutes < 270 && candidate.selected_by_percent > 30 && candidate.draft_score > 70) {
+            reasons.push('🔥 חוזר');
+        } else if (candidate.minutes < 180 && candidate.selected_by_percent > 20 && candidate.draft_score > 60) {
+            reasons.push('⚡ חוזר');
+        }
+        
+        // Check high transfers balance
+        if (candidate.transfers_balance > 50) {
+            reasons.push('📈 גבוה');
+        } else if (candidate.transfers_balance > 20) {
+            reasons.push('📈 עולה');
+        }
+        
+        // Check high xPts
+        if (candidate.predicted_points_1_gw > 6) {
+            reasons.push('⚽ תחזית');
+        }
+        
+        // Check good form
+        if (parseFloat(candidate.form) > 5) {
+            reasons.push('💪 כושר');
+        }
+        
+        // Check high draft score
+        if (candidate.draft_score > 85) {
+            reasons.push('⭐ עלית');
+        }
+        
+        return reasons.length > 0 ? reasons.join(' • ') : 'איכותי';
+    };
+
+    Object.entries(recommendationData).forEach(([key, { player, candidates, position }]) => {
+        if (candidates.length === 0) return;
+        
         const allInvolved = [player, ...candidates];
         const metrics = config.recommendationMetrics;
         
-        let tableHTML = `<table class="rec-table"><thead><tr><th colspan="${candidates.length + 2}">החלפה עבור ${player.web_name} (${pos})</th></tr></thead><tbody>`;
-        tableHTML += `<tr><td>שחקן</td>${allInvolved.map(p => `<td><img src="${getPlayerImageUrl(p)}" class="rec-player-img"> ${p.web_name.split(' ').slice(-1)[0]}</td>`).join('')}</tr>`;
+        let tableHTML = `
+            <div class="rec-card">
+                <div class="rec-header">
+                    <h4>${player.web_name}</h4>
+                    <p class="rec-subtitle">${posNames[position]} • ציון: ${player.smart_score.toFixed(1)}</p>
+                </div>
+                <table class="rec-table">
+                    <thead>
+                        <tr>
+                            <th style="width: 20%;">מדד</th>
+                            <th style="width: 20%;">נוכחי</th>
+                            <th style="width: 20%;">#1</th>
+                            <th style="width: 20%;">#2</th>
+                            <th style="width: 20%;">#3</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr class="rec-player-row">
+                            <td><strong>שחקן</strong></td>
+                            ${allInvolved.map(p => `
+                                <td>
+                                    <div class="rec-player-cell">
+                                        <img src="${getPlayerImageUrl(p)}" class="rec-player-img" alt="${p.web_name}">
+                                        <div class="rec-player-name">${p.web_name}</div>
+                                    </div>
+                                </td>
+                            `).join('')}
+                        </tr>
+                        <tr class="rec-reason-row">
+                            <td><strong>סיבה</strong></td>
+                            <td>-</td>
+                            ${candidates.map(c => `<td class="rec-reason">${getRecommendationReason(c)}</td>`).join('')}
+                        </tr>`;
         
+        // Add metrics rows
         Object.entries(metrics).forEach(([name, {key, format}]) => {
-            const values = allInvolved.map(p => getNestedValue(p, key) || 0);
+            const values = allInvolved.map(p => {
+                const val = getNestedValue(p, key);
+                return val !== null && val !== undefined ? val : 0;
+            });
             const bestValue = Math.max(...values);
-            tableHTML += `<tr><td>${name}</td>`;
+            const worstValue = Math.min(...values);
+            
+            tableHTML += `<tr><td><strong>${name}</strong></td>`;
             allInvolved.forEach((p, i) => {
                 const val = values[i];
-                tableHTML += `<td class="${val === bestValue ? 'rec-best' : ''}">${format(val)}</td>`;
+                let cellClass = '';
+                if (val === bestValue && bestValue !== worstValue) {
+                    cellClass = 'rec-best';
+                } else if (val === worstValue && bestValue !== worstValue) {
+                    cellClass = 'rec-worst';
+                }
+                tableHTML += `<td class="${cellClass}">${format(val)}</td>`;
             });
             tableHTML += `</tr>`;
         });
         
-        tableHTML += '</tbody></table>';
+        tableHTML += `
+                    </tbody>
+                </table>
+            </div>`;
+        
         tablesContainer.innerHTML += tableHTML;
     });
 
