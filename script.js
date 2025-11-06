@@ -3147,11 +3147,15 @@ function getRecommendationData() {
     
     const recommendations = {};
     
+    // Track already recommended players to avoid duplicates across multiple recommendations
+    const alreadyRecommended = new Set();
+    
     weakestPlayers.forEach((playerToReplace, index) => {
         const pos = playerToReplace.player.position_name;
         
-        // Find top 3 free agents in same position with better smart score
-        const candidates = freeAgentsEnriched
+        // Find top free agents in same position with better smart score
+        // We'll get more than 3 initially, then filter out already recommended ones
+        const allCandidates = freeAgentsEnriched
             .filter(p => {
                 // Must be same position
                 if (p.position_name !== pos) return false;
@@ -3171,14 +3175,22 @@ function getRecommendationData() {
                 // NEW: Must have transfers_balance > 1000 (high demand)
                 if (Math.abs(p.transfers_balance) < 1000) return false;
                 
+                // CRITICAL: Exclude players already recommended for other positions
+                if (alreadyRecommended.has(p.id)) return false;
+                
                 return true;
             })
-            .sort((a, b) => b.smart_score - a.smart_score)
-            .slice(0, 3);
+            .sort((a, b) => b.smart_score - a.smart_score);
+        
+        // Take top 3 candidates
+        const candidates = allCandidates.slice(0, 3);
 
-        console.log(`DEBUG ${pos}: Found ${candidates.length} free agent candidates better than ${playerToReplace.player.web_name} (smart score: ${playerToReplace.score.toFixed(1)})`);
+        console.log(`DEBUG ${pos}: Found ${candidates.length} unique free agent candidates better than ${playerToReplace.player.web_name} (smart score: ${playerToReplace.score.toFixed(1)})`);
         
         if (candidates.length) {
+            // Mark these candidates as recommended so they won't appear in future recommendations
+            candidates.forEach(c => alreadyRecommended.add(c.id));
+            
             // Use unique key based on player ID to avoid conflicts
             recommendations[`rec_${index}_${playerToReplace.player.id}`] = { 
                 player: playerToReplace.player, 
