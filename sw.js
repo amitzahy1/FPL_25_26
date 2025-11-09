@@ -1,7 +1,7 @@
-const CACHE_NAME = 'fpl-tool-v9';
+const CACHE_NAME = 'fpl-tool-v10';
 const APP_SHELL = [
   './',
-  './FPL_Tool.html',
+  './index.html',
   './FPL_Bootstrap_static.json',
   './manifest.webmanifest'
 ];
@@ -19,8 +19,7 @@ self.addEventListener('activate', (event) => {
 });
 
 const API_HOSTS = [
-  'fantasy.premierleague.com',
-  'corsproxy.io',
+  'fpl-25-26.vercel.app',
   'cdn.jsdelivr.net',
   'cdnjs.cloudflare.com'
 ];
