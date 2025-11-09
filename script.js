@@ -562,22 +562,30 @@ const charts = {
     comparisonRadar: null
 };
 
-async function fetchWithCache(url, cacheKey, cacheDurationMinutes = 120) {
-    const cachedItem = localStorage.getItem(cacheKey);
-    if (cachedItem) {
-        try {
-            const { timestamp, data } = JSON.parse(cachedItem);
-            const isCacheValid = (new Date().getTime() - timestamp) / (1000 * 60) < cacheDurationMinutes;
-            if (isCacheValid) {
-                console.log(`✅ Returning cached data for ${cacheKey}`);
-                return data;
-            } else {
-                 localStorage.removeItem(cacheKey);
+async function fetchWithCache(url, cacheKey, cacheDurationMinutes = 5) {
+    // ⚠️ FORCE FRESH DATA - Skip cache for debugging
+    const FORCE_FRESH = true;
+    
+    if (!FORCE_FRESH) {
+        const cachedItem = localStorage.getItem(cacheKey);
+        if (cachedItem) {
+            try {
+                const { timestamp, data } = JSON.parse(cachedItem);
+                const isCacheValid = (new Date().getTime() - timestamp) / (1000 * 60) < cacheDurationMinutes;
+                if (isCacheValid) {
+                    console.log(`✅ Returning cached data for ${cacheKey}`);
+                    return data;
+                } else {
+                     localStorage.removeItem(cacheKey);
+                }
+            } catch (e) {
+                console.error('Error parsing cache, removing item.', e);
+                localStorage.removeItem(cacheKey);
             }
-        } catch (e) {
-            console.error('Error parsing cache, removing item.', e);
-            localStorage.removeItem(cacheKey);
         }
+    } else {
+        console.log(`🔥 FORCE FRESH: Skipping cache for ${cacheKey}`);
+        localStorage.removeItem(cacheKey);
     }
 
     console.log(`🔄 Fetching fresh data for ${cacheKey}`);
