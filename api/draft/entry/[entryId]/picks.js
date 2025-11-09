@@ -3,15 +3,15 @@
 
 export default async function handler(req, res) {
     // Set CORS headers
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
     res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+    res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,PATCH,DELETE,POST,PUT');
+    res.setHeader('Access-Control-Allow-Headers', 'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version');
     res.setHeader('Cache-Control', 's-maxage=1800, stale-while-revalidate');
 
     // Handle preflight OPTIONS request
     if (req.method === 'OPTIONS') {
-        res.status(200).end();
-        return;
+        return res.status(200).end();
     }
 
     const { entryId } = req.query;
@@ -24,7 +24,24 @@ export default async function handler(req, res) {
     try {
         console.log(`Fetching draft entry picks for entry ${entryId}...`);
         
-        const response = await fetch(`https://draft.premierleague.com/api/entry/${entryId}/public`, {
+        // First, get the public data to find the current event
+        const publicResponse = await fetch(`https://draft.premierleague.com/api/entry/${entryId}/public`, {
+            headers: {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+            }
+        });
+
+        if (!publicResponse.ok) {
+            throw new Error(`Draft API returned ${publicResponse.status}: ${publicResponse.statusText}`);
+        }
+
+        const publicData = await publicResponse.json();
+        const currentEvent = publicData.entry?.current_event || 1;
+        
+        console.log(`Current event for entry ${entryId}: ${currentEvent}`);
+        
+        // Now fetch the picks for the current event
+        const response = await fetch(`https://draft.premierleague.com/api/entry/${entryId}/event/${currentEvent}`, {
             headers: {
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
             }
