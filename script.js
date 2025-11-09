@@ -803,12 +803,11 @@ async function fetchAndProcessData() {
         const needsFixtures = !state.allPlayersData.live.fixtures;
 
         if (needsData || needsFixtures) {
-            const dataUrl = state.currentDataSource === 'live'
-                ? `${config.vercelApi}/bootstrap`
-                : 'FPL_Bootstrap_static.json';
+            // ✅ FIX: Fetch directly from FPL API (bypasses Vercel/Firewall issues)
+            const dataUrl = 'https://fantasy.premierleague.com/api/bootstrap-static/';
             const dataCacheKey = `fpl_bootstrap_${state.currentDataSource}`;
             
-            const fixturesUrl = `${config.vercelApi}/fixtures`;
+            const fixturesUrl = 'https://fantasy.premierleague.com/api/fixtures/';
             const fixturesCacheKey = 'fpl_fixtures';
 
             if (needsData) {
@@ -2932,8 +2931,8 @@ async function loadDraftDataInBackground() {
                 console.log(`🔄 Fetching missing players from live bootstrap...`);
                 
                 try {
-                    // Fetch fresh bootstrap data to get missing players
-                    const bootstrapUrl = `${config.vercelApi}/bootstrap`;
+                    // ✅ FIX: Fetch directly from FPL API to get missing players
+                    const bootstrapUrl = 'https://fantasy.premierleague.com/api/bootstrap-static/';
                     const bootstrapData = await fetchWithCache(bootstrapUrl, 'fpl_bootstrap_live_missing', 5); // Short cache
                     
                     if (bootstrapData && bootstrapData.elements) {
