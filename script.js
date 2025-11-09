@@ -2906,9 +2906,12 @@ async function loadDraftDataInBackground() {
                     try {
                         const picksData = await fetchWithCache(picksUrl, picksCacheKey, 30);
                         if (picksData && picksData.picks) {
-                            const playerIds = picksData.picks.map(pick => pick.element);
-                            state.draft.rostersByEntryId.set(entry.id, playerIds);
-                            playerIds.forEach(id => {
+                            // ✅ FIX: Get ALL 15 players (including bench) for roster
+                            const allPlayerIds = picksData.picks.map(pick => pick.element);
+                            state.draft.rostersByEntryId.set(entry.id, allPlayerIds);
+                            
+                            // Add all players to owned set and mapping
+                            allPlayerIds.forEach(id => {
                                 state.draft.ownedElementIds.add(id);
                                 playerIdToTeamId.set(id, entry.id);
                             });
@@ -3064,8 +3067,10 @@ async function loadDraftLeague() {
                 
                 try {
                     const picksData = await fetchWithCache(url, picksCacheKey, 5);
+                    // ✅ FIX: Get ALL 15 players (including bench) for complete roster
                     const playerElements = (picksData && picksData.picks) ? picksData.picks.map(p => p.element) : [];
                     state.draft.rostersByEntryId.set(entry.id, playerElements);
+                    console.log(`✅ Loaded ${playerElements.length} players for ${entry.entry_name}`);
                 } catch (err) {
                     console.error(`Failed to fetch final picks for entry ${entry.entry_name} (${entry.entry_id})`, err);
                     state.draft.rostersByEntryId.set(entry.id, []);
