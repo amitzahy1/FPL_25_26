@@ -821,11 +821,11 @@ async function fetchAndProcessData() {
         const needsFixtures = !state.allPlayersData.live.fixtures;
 
         if (needsData || needsFixtures) {
-            // ✅ Use FPL API directly (CORS proxy will handle it)
-            const dataUrl = 'https://fantasy.premierleague.com/api/bootstrap-static/';
+            // ✅ Use Draft API for complete player data (includes all draft players)
+            const dataUrl = 'https://draft.premierleague.com/api/bootstrap-static';
             const dataCacheKey = `fpl_bootstrap_${state.currentDataSource}`;
             
-            const fixturesUrl = 'https://fantasy.premierleague.com/api/fixtures/';
+            const fixturesUrl = 'https://draft.premierleague.com/api/fixtures/';
             const fixturesCacheKey = 'fpl_fixtures';
 
             if (needsData) {
@@ -2952,8 +2952,8 @@ async function loadDraftDataInBackground() {
                 console.log(`🔄 Fetching missing players from live bootstrap...`);
                 
                 try {
-                    // ✅ Use FPL API directly to get missing players
-                    const bootstrapUrl = 'https://fantasy.premierleague.com/api/bootstrap-static/';
+                    // ✅ Use Draft API to get missing players (includes all draft players)
+                    const bootstrapUrl = 'https://draft.premierleague.com/api/bootstrap-static';
                     const bootstrapData = await fetchWithCache(bootstrapUrl, 'fpl_bootstrap_live_missing', 5); // Short cache
                     
                     if (bootstrapData && bootstrapData.elements) {
