@@ -2952,8 +2952,8 @@ async function loadDraftDataInBackground() {
             const rosterPromises = details.league_entries
                 .filter(e => e && e.id && e.entry_id)
                 .map(async entry => {
-                    // ✅ Use FPL Draft API directly
-                    const picksUrl = `https://draft.premierleague.com/api/entry/${entry.entry_id}/event/${currentGW}`;
+                    // ✅ Use Vercel serverless API to bypass CORS
+                    const picksUrl = `/api/draft/entry/${entry.entry_id}/picks`;
                     const picksCacheKey = `fpl_draft_picks_bg_${entry.entry_id}_gw${currentGW}`;
                     
                     // Clear old cache to force fresh data
@@ -3126,8 +3126,8 @@ async function loadDraftLeague() {
                     return;
                 }
                 
-                // ✅ Use FPL Draft API directly
-                const url = `https://draft.premierleague.com/api/entry/${entry.entry_id}/event/${draftGw}`;
+                // ✅ Use Vercel serverless API to bypass CORS
+                const url = `/api/draft/entry/${entry.entry_id}/picks`;
                 const picksCacheKey = `fpl_draft_picks_final_v4_${entry.entry_id}_gw${draftGw}`;
                 
                 localStorage.removeItem(picksCacheKey); 
