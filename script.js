@@ -2948,13 +2948,23 @@ async function loadDraftDataInBackground() {
                             if (state.currentDataSource === 'live' && state.allPlayersData.live.processed) {
                                 state.allPlayersData.live.processed.push(...processedMissing);
                                 console.log(`✅ Added ${processedMissing.length} missing players to live processed data`);
+                                
+                                // ✅ FIX: Always refresh displayedData to include missing players
+                                state.displayedData = [...state.allPlayersData.live.processed];
+                                console.log(`✅ Updated displayedData with ${state.displayedData.length} total players`);
                             } else if (state.currentDataSource === 'historical' && state.allPlayersData.historical.processed) {
                                 state.allPlayersData.historical.processed.push(...processedMissing);
                                 console.log(`✅ Added ${processedMissing.length} missing players to historical processed data`);
+                                
+                                // ✅ FIX: Always refresh displayedData to include missing players
+                                state.displayedData = [...state.allPlayersData.historical.processed];
+                                console.log(`✅ Updated displayedData with ${state.displayedData.length} total players`);
                             }
                             
                             // Refresh the table if we're on the players tab
-                            if (document.getElementById('playersTab').style.display === 'block') {
+                            const playersTab = document.getElementById('playersTab');
+                            if (playersTab && playersTab.style.display === 'block') {
+                                console.log(`🔄 Refreshing table with missing players...`);
                                 processChange();
                             }
                         }
