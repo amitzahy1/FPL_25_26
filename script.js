@@ -566,7 +566,7 @@ async function fetchWithCache(url, cacheKey, cacheDurationMinutes = 120) {
             const { timestamp, data } = JSON.parse(cachedItem);
             const isCacheValid = (new Date().getTime() - timestamp) / (1000 * 60) < cacheDurationMinutes;
             if (isCacheValid) {
-                console.log(`Returning cached data for ${cacheKey}`);
+                console.log(`✅ Returning cached data for ${cacheKey}`);
                 return data;
             } else {
                  localStorage.removeItem(cacheKey);
@@ -577,67 +577,75 @@ async function fetchWithCache(url, cacheKey, cacheDurationMinutes = 120) {
         }
     }
 
-    console.log(`Fetching fresh data for ${cacheKey}`);
+    console.log(`🔄 Fetching fresh data for ${cacheKey}`);
     
     // Extract original URL
     const originalUrl = url.replace(/^https:\/\/corsproxy\.io\/\?/, '');
     const decodedUrl = decodeURIComponent(originalUrl);
     
-    // List of CORS proxies to try (in order of preference)
-    const proxies = [
-        'https://corsproxy.io/?',
-        'https://api.codetabs.com/v1/proxy?quest=',
-        'https://thingproxy.freeboard.io/fetch/'
-    ];
+    // Determine which Vercel API endpoint to use based on the URL
+    let apiUrl = null;
     
-    let lastError = null;
-    
-    // Try each proxy in sequence
-    for (let i = 0; i < proxies.length; i++) {
-        const proxy = proxies[i];
-        const proxiedUrl = proxy + encodeURIComponent(decodedUrl);
-        
-        try {
-            console.log(`Trying proxy ${i + 1}/${proxies.length}: ${proxy.split('/')[2]}`);
-            const response = await fetch(proxiedUrl, {
-                method: 'GET',
-                headers: {
-                    'Accept': 'application/json'
-                }
-            });
-            
-            if (!response.ok) {
-                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-            }
-            
-            const data = await response.json();
-            
-            // Cache successful response
-            try {
-                localStorage.setItem(cacheKey, JSON.stringify({ timestamp: new Date().getTime(), data }));
-            } catch(e) {
-                console.error("Failed to write to localStorage. Cache might be full.", e);
-            }
-            
-            console.log(`✅ Successfully fetched data using proxy ${i + 1}`);
-            return data;
-            
-        } catch (error) {
-            console.warn(`❌ Proxy ${i + 1} failed:`, error.message);
-            lastError = error;
-            
-            // If this isn't the last proxy, try the next one
-            if (i < proxies.length - 1) {
-                console.log(`Trying next proxy...`);
-                continue;
-            }
-        }
+    if (decodedUrl.includes('bootstrap-static')) {
+        // FPL Bootstrap API
+        apiUrl = 'https://fpl-25-26.vercel.app/api/bootstrap';
+        console.log(`📡 Using Vercel API: Bootstrap (players data)`);
+    } else if (decodedUrl.includes('/api/fixtures')) {
+        // FPL Fixtures API
+        apiUrl = 'https://fpl-25-26.vercel.app/api/fixtures';
+        console.log(`📡 Using Vercel API: Fixtures`);
+    } else if (decodedUrl.match(/draft\.premierleague\.com\/api\/league\/(\d+)\/details/)) {
+        // Draft League Details
+        const leagueId = decodedUrl.match(/\/league\/(\d+)\/details/)[1];
+        apiUrl = `https://fpl-25-26.vercel.app/api/draft/${leagueId}/details`;
+        console.log(`📡 Using Vercel API: Draft League Details (${leagueId})`);
+    } else if (decodedUrl.match(/draft\.premierleague\.com\/api\/league\/(\d+)\/standings/)) {
+        // Draft League Standings
+        const leagueId = decodedUrl.match(/\/league\/(\d+)\/standings/)[1];
+        apiUrl = `https://fpl-25-26.vercel.app/api/draft/${leagueId}/standings`;
+        console.log(`📡 Using Vercel API: Draft League Standings (${leagueId})`);
+    } else if (decodedUrl.match(/draft\.premierleague\.com\/api\/entry\/(\d+)\/(public|event\/\d+)/)) {
+        // Draft Entry Picks
+        const entryId = decodedUrl.match(/\/entry\/(\d+)\//)[1];
+        apiUrl = `https://fpl-25-26.vercel.app/api/draft/entry/${entryId}/picks`;
+        console.log(`📡 Using Vercel API: Draft Entry Picks (${entryId})`);
     }
     
-    // All proxies failed - show user-friendly error modal
-    console.error(`All ${proxies.length} proxies failed for ${cacheKey}`);
-    showErrorModal(decodedUrl, lastError);
-    throw new Error(`Failed to fetch ${url}: ${lastError?.message || 'All proxies failed'}`);
+    if (!apiUrl) {
+        console.error(`❌ Unknown API endpoint for URL: ${decodedUrl}`);
+        showErrorModal(decodedUrl, new Error('Unsupported API endpoint'));
+        throw new Error(`Unsupported API endpoint: ${decodedUrl}`);
+    }
+    
+    try {
+        const response = await fetch(apiUrl, {
+            method: 'GET',
+            headers: {
+                'Accept': 'application/json'
+            }
+        });
+        
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+        
+        const data = await response.json();
+        
+        // Cache successful response
+        try {
+            localStorage.setItem(cacheKey, JSON.stringify({ timestamp: new Date().getTime(), data }));
+        } catch(e) {
+            console.error("Failed to write to localStorage. Cache might be full.", e);
+        }
+        
+        console.log(`✅ Successfully fetched data from Vercel API`);
+        return data;
+        
+    } catch (error) {
+        console.error(`❌ Vercel API failed:`, error.message);
+        showErrorModal(decodedUrl, error);
+        throw new Error(`Failed to fetch ${url}: ${error.message}`);
+    }
 }
 
 function showErrorModal(url, error) {
