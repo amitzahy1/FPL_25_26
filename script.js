@@ -2952,15 +2952,17 @@ async function loadDraftDataInBackground() {
             const rosterPromises = details.league_entries
                 .filter(e => e && e.id && e.entry_id)
                 .map(async entry => {
-                    // ✅ Use Vercel serverless API to bypass CORS
-                    const picksUrl = `/api/draft/entry/${entry.entry_id}/picks`;
+                    // ✅ Use own serverless function to bypass CORS
+                    const picksUrl = `${window.location.origin}/api/draft/entry/${entry.entry_id}/picks`;
                     const picksCacheKey = `fpl_draft_picks_bg_${entry.entry_id}_gw${currentGW}`;
                     
                     // Clear old cache to force fresh data
                     localStorage.removeItem(picksCacheKey);
                     
                     try {
-                        const picksData = await fetchWithCache(picksUrl, picksCacheKey, 5);
+                        const response = await fetch(picksUrl);
+                        if (!response.ok) throw new Error('Failed to fetch');
+                        const picksData = await response.json();
                         if (picksData && picksData.picks) {
                             // ✅ Get ALL 15 players (including bench) for roster
                             const allPlayerIds = picksData.picks.map(pick => pick.element);
@@ -3126,14 +3128,16 @@ async function loadDraftLeague() {
                     return;
                 }
                 
-                // ✅ Use Vercel serverless API to bypass CORS
-                const url = `/api/draft/entry/${entry.entry_id}/picks`;
+                // ✅ Use own serverless function to bypass CORS
+                const url = `${window.location.origin}/api/draft/entry/${entry.entry_id}/picks`;
                 const picksCacheKey = `fpl_draft_picks_final_v4_${entry.entry_id}_gw${draftGw}`;
                 
                 localStorage.removeItem(picksCacheKey); 
                 
                 try {
-                    const picksData = await fetchWithCache(url, picksCacheKey, 5);
+                    const response = await fetch(url);
+                    if (!response.ok) throw new Error('Failed to fetch');
+                    const picksData = await response.json();
                     // ✅ Get ALL 15 players (including bench) for complete roster
                     // Store both element ID and position (1-11 = lineup, 12-15 = bench)
                     const playerElements = (picksData && picksData.picks) ? picksData.picks.map(p => p.element) : [];
