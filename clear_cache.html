@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ניקוי Cache - FPL Tool</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+        
+        .container {
+            background: white;
+            border-radius: 20px;
+            padding: 40px;
+            max-width: 500px;
+            width: 100%;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            text-align: center;
+        }
+        
+        h1 {
+            color: #2d3748;
+            margin-bottom: 20px;
+            font-size: 28px;
+        }
+        
+        .status {
+            font-size: 18px;
+            margin: 30px 0;
+            padding: 20px;
+            border-radius: 10px;
+            font-weight: 600;
+        }
+        
+        .status.pending {
+            background: #fef3c7;
+            color: #92400e;
+        }
+        
+        .status.success {
+            background: #d1fae5;
+            color: #065f46;
+        }
+        
+        .status.error {
+            background: #fee2e2;
+            color: #991b1b;
+        }
+        
+        .btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 15px 40px;
+            border-radius: 10px;
+            font-size: 18px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+            margin: 10px;
+        }
+        
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(102, 126, 234, 0.4);
+        }
+        
+        .btn:active {
+            transform: translateY(0);
+        }
+        
+        .btn.secondary {
+            background: #6b7280;
+        }
+        
+        .info {
+            background: #e0e7ff;
+            padding: 15px;
+            border-radius: 10px;
+            margin-top: 20px;
+            text-align: right;
+            color: #3730a3;
+            font-size: 14px;
+            line-height: 1.6;
+        }
+        
+        .spinner {
+            border: 4px solid #f3f4f6;
+            border-top: 4px solid #667eea;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 20px auto;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🧹 ניקוי Cache</h1>
+        
+        <div id="status" class="status pending">
+            לחץ על הכפתור למטה כדי לנקות את כל ה-Cache
+        </div>
+        
+        <button id="clearBtn" class="btn" onclick="clearAllCache()">
+            🗑️ נקה Cache עכשיו
+        </button>
+        
+        <button id="backBtn" class="btn secondary" onclick="goBack()" style="display: none;">
+            ← חזור לאתר
+        </button>
+        
+        <div class="info">
+            <strong>📋 מה זה עושה?</strong><br>
+            • מוחק את כל הנתונים השמורים מה-localStorage<br>
+            • מנקה את כל ה-Cache של FPL<br>
+            • מאפס את כל ההגדרות השמורות<br>
+            • מכין את האתר לטעינה מחדש עם נתונים חדשים
+        </div>
+    </div>
+    
+    <script>
+        function clearAllCache() {
+            const statusEl = document.getElementById('status');
+            const clearBtn = document.getElementById('clearBtn');
+            const backBtn = document.getElementById('backBtn');
+            
+            // Show loading
+            statusEl.className = 'status pending';
+            statusEl.innerHTML = '<div class="spinner"></div>מנקה Cache...';
+            clearBtn.disabled = true;
+            
+            try {
+                // Count items before clearing
+                const itemsBefore = Object.keys(localStorage).length;
+                
+                // Clear ALL localStorage
+                localStorage.clear();
+                
+                // Also clear sessionStorage
+                sessionStorage.clear();
+                
+                // Success
+                setTimeout(() => {
+                    statusEl.className = 'status success';
+                    statusEl.innerHTML = `
+                        ✅ הצלחה!<br>
+                        <small>נוקו ${itemsBefore} פריטים מה-Cache</small><br>
+                        <small>עכשיו אתה יכול לחזור לאתר ולרענן</small>
+                    `;
+                    clearBtn.style.display = 'none';
+                    backBtn.style.display = 'inline-block';
+                }, 1000);
+                
+            } catch (error) {
+                statusEl.className = 'status error';
+                statusEl.innerHTML = `❌ שגיאה: ${error.message}`;
+                clearBtn.disabled = false;
+            }
+        }
+        
+        function goBack() {
+            // Go back to main site
+            window.location.href = './index.html';
+        }
+        
+        // Auto-clear on page load (optional)
+        // Uncomment the line below to auto-clear when page loads
+        // window.addEventListener('load', clearAllCache);
+    </script>
+</body>
+</html>
+
