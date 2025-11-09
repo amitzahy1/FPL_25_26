@@ -1,4 +1,4 @@
-const CACHE_NAME = 'fpl-tool-v15-positions-sync';
+const CACHE_NAME = 'fpl-tool-v16-force-refresh';
 const APP_SHELL = [
   './',
   './index.html',

@@ -2926,7 +2926,10 @@ async function loadDraftDataInBackground() {
         const detailsUrl = `https://draft.premierleague.com/api/league/${state.draft.leagueId}/details`;
         const detailsCacheKey = `fpl_draft_details_${state.draft.leagueId}`;
         
-        const details = await fetchWithCache(detailsUrl, detailsCacheKey, 30);
+        // Clear old cache to force fresh data
+        localStorage.removeItem(detailsCacheKey);
+        
+        const details = await fetchWithCache(detailsUrl, detailsCacheKey, 5);
         
         if (details && details.league_entries) {
             state.draft.details = details;
@@ -2952,15 +2955,18 @@ async function loadDraftDataInBackground() {
                     // ✅ Use FPL Draft API directly
                     const picksUrl = `https://draft.premierleague.com/api/entry/${entry.entry_id}/event/${currentGW}`;
                     const picksCacheKey = `fpl_draft_picks_bg_${entry.entry_id}_gw${currentGW}`;
+                    
+                    // Clear old cache to force fresh data
+                    localStorage.removeItem(picksCacheKey);
+                    
                     try {
-                        const picksData = await fetchWithCache(picksUrl, picksCacheKey, 30);
+                        const picksData = await fetchWithCache(picksUrl, picksCacheKey, 5);
                         if (picksData && picksData.picks) {
                             // ✅ Get ALL 15 players (including bench) for roster
                             const allPlayerIds = picksData.picks.map(pick => pick.element);
                             const playerPositions = picksData.picks.map(pick => ({ id: pick.element, position: pick.position }));
                             
                             state.draft.rostersByEntryId.set(entry.id, allPlayerIds);
-                            console.log(`✅ Loaded ${allPlayerIds.length} players for ${entry.entry_name}:`, allPlayerIds);
                             
                             // Store position info for later use (lineup vs bench)
                             if (!state.draft.playerPositions) {
@@ -2969,6 +2975,10 @@ async function loadDraftDataInBackground() {
                             playerPositions.forEach(p => {
                                 state.draft.playerPositions.set(p.id, p.position);
                             });
+                            
+                            console.log(`✅ Loaded ${allPlayerIds.length} players for ${entry.entry_name}:`, allPlayerIds);
+                            console.log(`   Lineup (1-11):`, playerPositions.filter(p => p.position <= 11).map(p => p.id));
+                            console.log(`   Bench (12-15):`, playerPositions.filter(p => p.position > 11).map(p => p.id));
                             
                             // Add all players to owned set and mapping
                             allPlayerIds.forEach(id => {
