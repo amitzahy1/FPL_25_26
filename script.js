@@ -1,4 +1,23 @@
 // ============================================
+// SERVICE WORKER MESSAGE HANDLER
+// ============================================
+
+// Listen for messages from Service Worker to clear localStorage
+if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.addEventListener('message', (event) => {
+        if (event.data && event.data.type === 'CLEAR_LOCALSTORAGE') {
+            console.log('🔥 Service Worker requested localStorage clear');
+            Object.keys(localStorage).forEach(key => {
+                if (key.startsWith('fpl_')) {
+                    localStorage.removeItem(key);
+                }
+            });
+            console.log('✅ localStorage cleared by Service Worker');
+        }
+    });
+}
+
+// ============================================
 // AUTHENTICATION & USER MANAGEMENT
 // ============================================
 
