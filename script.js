@@ -440,7 +440,7 @@ const config = {
     draftLeagueId: 689,
     setPieceTakers: {"Arsenal":{"penalties":["Saka","Havertz"],"freekicks":["Ødegaard","Rice","Martinelli"],"corners":["Martinelli","Saka","Ødegaard"]},"Aston Villa":{"penalties":["Watkins","Tielemans"],"freekicks":["Digne","Douglas Luiz","Bailey"],"corners":["Douglas Luiz","McGinn"]},"Bournemouth":{"penalties":["Solanke","Kluivert"],"freekicks":["Tavernier","Scott"],"corners":["Tavernier","Scott"]},"Brentford":{"penalties":["Toney","Mbeumo"],"freekicks":["Jensen","Mbeumo","Damsgaard"],"corners":["Jensen","Mbeumo"]},"Brighton":{"penalties":["João Pedro","Gross"],"freekicks":["Gross","Estupiñán"],"corners":["Gross","March"]},"Chelsea":{"penalties":["Palmer","Nkunku"],"freekicks":["Palmer","James","Enzo"],"corners":["Gallagher","Chilwell","Palmer"]},"Crystal Palace":{"penalties":["Eze","Olise"],"freekicks":["Eze","Olise"],"corners":["Eze","Olise"]},"Everton":{"penalties":["Calvert-Lewin","McNeil"],"freekicks":["McNeil","Garner"],"corners":["McNeil","Garner"]},"Fulham":{"penalties":["Andreas","Jiménez"],"freekicks":["Andreas","Willian","Wilson"],"corners":["Andreas","Willian"]},"Ipswich":{"penalties":["Chaplin","Hirst"],"freekicks":["Davis","Morsy"],"corners":["Davis","Chaplin"]},"Leicester":{"penalties":["Vardy","Dewsbury-Hall"],"freekicks":["Dewsbury-Hall","Fatawu"],"corners":["Dewsbury-Hall","Fatawu"]},"Liverpool":{"penalties":["M.Salah","Szoboszlai"],"freekicks":["Alexander-Arnold","Szoboszlai","Robertson"],"corners":["Alexander-Arnold","Robertson"]},"Man City":{"penalties":["Haaland","Alvarez"],"freekicks":["De Bruyne","Foden","Alvarez"],"corners":["Foden","De Bruyne"]},"Man Utd":{"penalties":["B.Fernandes","Rashford"],"freekicks":["B.Fernandes","Eriksen","Rashford"],"corners":["B.Fernandes","Shaw"]},"Newcastle":{"penalties":["Isak","Wilson"],"freekicks":["Trippier","Gordon"],"corners":["Trippier","Gordon"]},"Nott'm Forest":{"penalties":["Gibbs-White","Wood"],"freekicks":["Gibbs-White","Elanga"],"corners":["Gibbs-White","Elanga"]},"Southampton":{"penalties":["A. Armstrong","Ward-Prowse"],"freekicks":["Ward-Prowse","Smallbone"],"corners":["Ward-Prowse","Aribo"]},"Spurs":{"penalties":["Son","Maddison"],"freekicks":["Maddison","Pedro Porro"],"corners":["Maddison","Pedro Porro","Son"]},"West Ham":{"penalties":["Ward-Prowse","Bowen"],"freekicks":["Ward-Prowse","Emerson"],"corners":["Ward-Prowse","Bowen"]},"Wolves":{"penalties":["Cunha","Hwang"],"freekicks":["Sarabia","Bellegarde"],"corners":["Sarabia","Aït-Nouri"]}},
     tableColumns: [
-        'rank', 'web_name', 'draft_score', 'predicted_points_1_gw', 'team_name', 
+        'rank', 'web_name', 'draft_score', 'predicted_points_1_gw', 'team_name', 'draft_team',
         'position_name', 'now_cost', 'total_points', 'points_per_game_90', 'selected_by_percent', 
         'dreamteam_count', 'net_transfers_event', 'def_contrib_per90', 'goals_scored_assists', 
         'expected_goals_assists', 'minutes', 'xDiff', 'ict_index', 'bonus', 'clean_sheets', 
@@ -545,6 +545,7 @@ const state = {
         standings: null,
         rostersByEntryId: new Map(),
         entryIdToTeamName: new Map(),
+        playerIdToTeamId: new Map(), // ✅ NEW: Maps player ID to team ID
         allPicks: new Set(),
         ownedElementIds: new Set(),
         teamAggregates: [],
@@ -1016,6 +1017,13 @@ function createPlayerRowHtml(player, index) {
     const icons = generatePlayerIcons(player);
     const fixturesHTML = generateFixturesHTML(player);
     const isChecked = state.selectedForComparison.has(player.id) ? 'checked' : '';
+    
+    // Get draft team name for this player
+    let draftTeamName = '–';
+    if (state.draft.playerIdToTeamId && state.draft.playerIdToTeamId.has(player.id)) {
+        const teamId = state.draft.playerIdToTeamId.get(player.id);
+        draftTeamName = state.draft.entryIdToTeamName.get(teamId) || '–';
+    }
 
     return `<tr>
         <td><input type="checkbox" class="player-select" data-player-id="${player.id}" ${isChecked}></td>
@@ -1024,6 +1032,7 @@ function createPlayerRowHtml(player, index) {
         <td class="bold-cell">${player.draft_score.toFixed(1)}</td>
         <td class="bold-cell">${(player.predicted_points_1_gw || 0).toFixed(1)}</td>
         <td>${player.team_name}</td>
+        <td class="draft-team-cell" title="${draftTeamName}">${draftTeamName}</td>
         <td>${player.position_name}</td>
         <td>${player.now_cost.toFixed(1)}</td>
         <td>${player.total_points}</td>
@@ -1053,10 +1062,15 @@ function renderTable() {
         let aValue, bValue;
         const field = columnMapping[state.sortColumn];
 
-        if (state.sortColumn === 13) { // G+A column
+        if (state.sortColumn === 5) { // Draft Team column
+            const aTeamId = state.draft.playerIdToTeamId.get(a.id);
+            const bTeamId = state.draft.playerIdToTeamId.get(b.id);
+            aValue = aTeamId ? state.draft.entryIdToTeamName.get(aTeamId) || '–' : '–';
+            bValue = bTeamId ? state.draft.entryIdToTeamName.get(bTeamId) || '–' : '–';
+        } else if (state.sortColumn === 14) { // G+A column (shifted by 1)
             aValue = (a.goals_scored || 0) + (a.assists || 0);
             bValue = (b.goals_scored || 0) + (b.assists || 0);
-        } else if (state.sortColumn === 14) { // xGI column
+        } else if (state.sortColumn === 15) { // xGI column (shifted by 1)
             aValue = parseFloat(a.expected_goal_involvements || 0);
             bValue = parseFloat(b.expected_goal_involvements || 0);
         } else {
@@ -2880,6 +2894,9 @@ async function loadDraftDataInBackground() {
                 }
             });
             
+            // Build a map to track which player belongs to which team
+            const playerIdToTeamId = new Map();
+            
             // Fetch all team rosters
             const rosterPromises = details.league_entries
                 .filter(e => e && e.id && e.entry_id)
@@ -2891,7 +2908,10 @@ async function loadDraftDataInBackground() {
                         if (picksData && picksData.picks) {
                             const playerIds = picksData.picks.map(pick => pick.element);
                             state.draft.rostersByEntryId.set(entry.id, playerIds);
-                            playerIds.forEach(id => state.draft.ownedElementIds.add(id));
+                            playerIds.forEach(id => {
+                                state.draft.ownedElementIds.add(id);
+                                playerIdToTeamId.set(id, entry.id);
+                            });
                         }
                     } catch (err) {
                         console.log(`Could not load roster for ${entry.entry_name}`);
@@ -2899,6 +2919,53 @@ async function loadDraftDataInBackground() {
                 });
             
             await Promise.all(rosterPromises);
+            
+            // ✅ FIX: Check for missing players and fetch them from live bootstrap
+            const processedById = getProcessedByElementId();
+            const missingPlayerIds = Array.from(state.draft.ownedElementIds).filter(id => !processedById.has(id));
+            
+            if (missingPlayerIds.length > 0) {
+                console.log(`⚠️ Found ${missingPlayerIds.length} missing players in processed data:`, missingPlayerIds);
+                console.log(`🔄 Fetching missing players from live bootstrap...`);
+                
+                try {
+                    // Fetch fresh bootstrap data to get missing players
+                    const bootstrapUrl = `${config.vercelApi}/bootstrap`;
+                    const bootstrapData = await fetchWithCache(bootstrapUrl, 'fpl_bootstrap_live_missing', 5); // Short cache
+                    
+                    if (bootstrapData && bootstrapData.elements) {
+                        const missingPlayers = bootstrapData.elements.filter(p => missingPlayerIds.includes(p.id));
+                        
+                        if (missingPlayers.length > 0) {
+                            console.log(`✅ Found ${missingPlayers.length} missing players in bootstrap:`, missingPlayers.map(p => p.web_name));
+                            
+                            // Process missing players and add them to the processed data
+                            const setPieceTakers = config.setPieceTakers;
+                            let processedMissing = preprocessPlayerData(missingPlayers, setPieceTakers);
+                            processedMissing = calculateAdvancedScores(processedMissing);
+                            
+                            // Add to the current data source
+                            if (state.currentDataSource === 'live' && state.allPlayersData.live.processed) {
+                                state.allPlayersData.live.processed.push(...processedMissing);
+                                console.log(`✅ Added ${processedMissing.length} missing players to live processed data`);
+                            } else if (state.currentDataSource === 'historical' && state.allPlayersData.historical.processed) {
+                                state.allPlayersData.historical.processed.push(...processedMissing);
+                                console.log(`✅ Added ${processedMissing.length} missing players to historical processed data`);
+                            }
+                            
+                            // Refresh the table if we're on the players tab
+                            if (document.getElementById('playersTab').style.display === 'block') {
+                                processChange();
+                            }
+                        }
+                    }
+                } catch (fetchError) {
+                    console.error('❌ Failed to fetch missing players:', fetchError);
+                }
+            }
+            
+            // Store player-to-team mapping for later use
+            state.draft.playerIdToTeamId = playerIdToTeamId;
             
             // Populate team filter with draft teams
             populateTeamFilter();
