@@ -436,7 +436,7 @@ const config = {
         playerImage: (code) => `https://resources.premierleague.com/premierleague/photos/players/110x140/p${code}.png`,
         missingPlayerImage: 'https://resources.premierleague.com/premierleague/photos/players/110x140/Photo-Missing.png'
     },
-    corsProxy: 'https://corsproxy.io/?',
+    vercelApi: 'https://fpl-25-26.vercel.app/api',
     draftLeagueId: 689,
     setPieceTakers: {"Arsenal":{"penalties":["Saka","Havertz"],"freekicks":["Ødegaard","Rice","Martinelli"],"corners":["Martinelli","Saka","Ødegaard"]},"Aston Villa":{"penalties":["Watkins","Tielemans"],"freekicks":["Digne","Douglas Luiz","Bailey"],"corners":["Douglas Luiz","McGinn"]},"Bournemouth":{"penalties":["Solanke","Kluivert"],"freekicks":["Tavernier","Scott"],"corners":["Tavernier","Scott"]},"Brentford":{"penalties":["Toney","Mbeumo"],"freekicks":["Jensen","Mbeumo","Damsgaard"],"corners":["Jensen","Mbeumo"]},"Brighton":{"penalties":["João Pedro","Gross"],"freekicks":["Gross","Estupiñán"],"corners":["Gross","March"]},"Chelsea":{"penalties":["Palmer","Nkunku"],"freekicks":["Palmer","James","Enzo"],"corners":["Gallagher","Chilwell","Palmer"]},"Crystal Palace":{"penalties":["Eze","Olise"],"freekicks":["Eze","Olise"],"corners":["Eze","Olise"]},"Everton":{"penalties":["Calvert-Lewin","McNeil"],"freekicks":["McNeil","Garner"],"corners":["McNeil","Garner"]},"Fulham":{"penalties":["Andreas","Jiménez"],"freekicks":["Andreas","Willian","Wilson"],"corners":["Andreas","Willian"]},"Ipswich":{"penalties":["Chaplin","Hirst"],"freekicks":["Davis","Morsy"],"corners":["Davis","Chaplin"]},"Leicester":{"penalties":["Vardy","Dewsbury-Hall"],"freekicks":["Dewsbury-Hall","Fatawu"],"corners":["Dewsbury-Hall","Fatawu"]},"Liverpool":{"penalties":["M.Salah","Szoboszlai"],"freekicks":["Alexander-Arnold","Szoboszlai","Robertson"],"corners":["Alexander-Arnold","Robertson"]},"Man City":{"penalties":["Haaland","Alvarez"],"freekicks":["De Bruyne","Foden","Alvarez"],"corners":["Foden","De Bruyne"]},"Man Utd":{"penalties":["B.Fernandes","Rashford"],"freekicks":["B.Fernandes","Eriksen","Rashford"],"corners":["B.Fernandes","Shaw"]},"Newcastle":{"penalties":["Isak","Wilson"],"freekicks":["Trippier","Gordon"],"corners":["Trippier","Gordon"]},"Nott'm Forest":{"penalties":["Gibbs-White","Wood"],"freekicks":["Gibbs-White","Elanga"],"corners":["Gibbs-White","Elanga"]},"Southampton":{"penalties":["A. Armstrong","Ward-Prowse"],"freekicks":["Ward-Prowse","Smallbone"],"corners":["Ward-Prowse","Aribo"]},"Spurs":{"penalties":["Son","Maddison"],"freekicks":["Maddison","Pedro Porro"],"corners":["Maddison","Pedro Porro","Son"]},"West Ham":{"penalties":["Ward-Prowse","Bowen"],"freekicks":["Ward-Prowse","Emerson"],"corners":["Ward-Prowse","Bowen"]},"Wolves":{"penalties":["Cunha","Hwang"],"freekicks":["Sarabia","Bellegarde"],"corners":["Sarabia","Aït-Nouri"]}},
     tableColumns: [
@@ -579,46 +579,11 @@ async function fetchWithCache(url, cacheKey, cacheDurationMinutes = 120) {
 
     console.log(`🔄 Fetching fresh data for ${cacheKey}`);
     
-    // Extract original URL
-    const originalUrl = url.replace(/^https:\/\/corsproxy\.io\/\?/, '');
-    const decodedUrl = decodeURIComponent(originalUrl);
-    
-    // Determine which Vercel API endpoint to use based on the URL
-    let apiUrl = null;
-    
-    if (decodedUrl.includes('bootstrap-static')) {
-        // FPL Bootstrap API
-        apiUrl = 'https://fpl-25-26.vercel.app/api/bootstrap';
-        console.log(`📡 Using Vercel API: Bootstrap (players data)`);
-    } else if (decodedUrl.includes('/api/fixtures')) {
-        // FPL Fixtures API
-        apiUrl = 'https://fpl-25-26.vercel.app/api/fixtures';
-        console.log(`📡 Using Vercel API: Fixtures`);
-    } else if (decodedUrl.match(/draft\.premierleague\.com\/api\/league\/(\d+)\/details/)) {
-        // Draft League Details
-        const leagueId = decodedUrl.match(/\/league\/(\d+)\/details/)[1];
-        apiUrl = `https://fpl-25-26.vercel.app/api/draft/${leagueId}/details`;
-        console.log(`📡 Using Vercel API: Draft League Details (${leagueId})`);
-    } else if (decodedUrl.match(/draft\.premierleague\.com\/api\/league\/(\d+)\/standings/)) {
-        // Draft League Standings
-        const leagueId = decodedUrl.match(/\/league\/(\d+)\/standings/)[1];
-        apiUrl = `https://fpl-25-26.vercel.app/api/draft/${leagueId}/standings`;
-        console.log(`📡 Using Vercel API: Draft League Standings (${leagueId})`);
-    } else if (decodedUrl.match(/draft\.premierleague\.com\/api\/entry\/(\d+)\/(public|event\/\d+)/)) {
-        // Draft Entry Picks
-        const entryId = decodedUrl.match(/\/entry\/(\d+)\//)[1];
-        apiUrl = `https://fpl-25-26.vercel.app/api/draft/entry/${entryId}/picks`;
-        console.log(`📡 Using Vercel API: Draft Entry Picks (${entryId})`);
-    }
-    
-    if (!apiUrl) {
-        console.error(`❌ Unknown API endpoint for URL: ${decodedUrl}`);
-        showErrorModal(decodedUrl, new Error('Unsupported API endpoint'));
-        throw new Error(`Unsupported API endpoint: ${decodedUrl}`);
-    }
-    
+    // URL is already the Vercel API endpoint
     try {
-        const response = await fetch(apiUrl, {
+        console.log(`📡 Calling Vercel API: ${url}`);
+        
+        const response = await fetch(url, {
             method: 'GET',
             headers: {
                 'Accept': 'application/json'
@@ -643,7 +608,7 @@ async function fetchWithCache(url, cacheKey, cacheDurationMinutes = 120) {
         
     } catch (error) {
         console.error(`❌ Vercel API failed:`, error.message);
-        showErrorModal(decodedUrl, error);
+        showErrorModal(url, error);
         throw new Error(`Failed to fetch ${url}: ${error.message}`);
     }
 }
@@ -838,11 +803,11 @@ async function fetchAndProcessData() {
 
         if (needsData || needsFixtures) {
             const dataUrl = state.currentDataSource === 'live'
-                ? config.corsProxy + encodeURIComponent(config.urls.bootstrap)
+                ? `${config.vercelApi}/bootstrap`
                 : 'FPL_Bootstrap_static.json';
             const dataCacheKey = `fpl_bootstrap_${state.currentDataSource}`;
             
-            const fixturesUrl = config.corsProxy + encodeURIComponent(config.urls.fixtures);
+            const fixturesUrl = `${config.vercelApi}/fixtures`;
             const fixturesCacheKey = 'fpl_fixtures';
 
             if (needsData) {
@@ -2896,7 +2861,7 @@ function getTeamColor(name) {
 async function loadDraftDataInBackground() {
     // Load draft data silently in the background without showing loading overlay
     try {
-        const detailsUrl = `${config.corsProxy}${encodeURIComponent(`https://draft.premierleague.com/api/league/${state.draft.leagueId}/details`)}`;
+        const detailsUrl = `${config.vercelApi}/draft/${state.draft.leagueId}/details`;
         const detailsCacheKey = `fpl_draft_details_${state.draft.leagueId}`;
         
         const details = await fetchWithCache(detailsUrl, detailsCacheKey, 30);
@@ -2919,7 +2884,7 @@ async function loadDraftDataInBackground() {
             const rosterPromises = details.league_entries
                 .filter(e => e && e.id && e.entry_id)
                 .map(async entry => {
-                    const picksUrl = `${config.corsProxy}${encodeURIComponent(`https://draft.premierleague.com/api/entry/${entry.entry_id}/event/${currentGW}`)}`;
+                    const picksUrl = `${config.vercelApi}/draft/entry/${entry.entry_id}/picks`;
                     const picksCacheKey = `fpl_draft_picks_bg_${entry.entry_id}_gw${currentGW}`;
                     try {
                         const picksData = await fetchWithCache(picksUrl, picksCacheKey, 30);
@@ -2983,12 +2948,12 @@ async function loadDraftLeague() {
         localStorage.removeItem(detailsCacheKey);
         localStorage.removeItem(standingsCacheKey);
         
-        const encodedDetails = config.corsProxy + encodeURIComponent(config.urls.draftLeagueDetails(config.draftLeagueId));
-        const encodedStandings = config.corsProxy + encodeURIComponent(config.urls.draftLeagueStandings(config.draftLeagueId));
+        const detailsUrl = `${config.vercelApi}/draft/${config.draftLeagueId}/details`;
+        const standingsUrl = `${config.vercelApi}/draft/${config.draftLeagueId}/standings`;
 
         const [detailsData, standingsData] = await Promise.all([
-            fetchWithCache(encodedDetails, detailsCacheKey, 5),
-            fetchWithCache(encodedStandings, standingsCacheKey, 5).catch(() => null)
+            fetchWithCache(detailsUrl, detailsCacheKey, 5),
+            fetchWithCache(standingsUrl, standingsCacheKey, 5).catch(() => null)
         ]);
         
         state.draft.details = detailsData;
@@ -3015,7 +2980,7 @@ async function loadDraftLeague() {
                     return;
                 }
                 
-                const url = config.corsProxy + encodeURIComponent(config.urls.draftEntryPicks(entry.entry_id, draftGw));
+                const url = `${config.vercelApi}/draft/entry/${entry.entry_id}/picks`;
                 const picksCacheKey = `fpl_draft_picks_final_v4_${entry.entry_id}_gw${draftGw}`;
                 
                 localStorage.removeItem(picksCacheKey); 
