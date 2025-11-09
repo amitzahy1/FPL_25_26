@@ -436,6 +436,8 @@ const config = {
         playerImage: (code) => `https://resources.premierleague.com/premierleague/photos/players/110x140/p${code}.png`,
         missingPlayerImage: 'https://resources.premierleague.com/premierleague/photos/players/110x140/Photo-Missing.png'
     },
+    // ✅ Use CORS proxy as fallback (Vercel API not deployed)
+    corsProxy: 'https://api.allorigins.win/raw?url=',
     vercelApi: 'https://fpl-25-26.vercel.app/api',
     draftLeagueId: 689,
     setPieceTakers: {"Arsenal":{"penalties":["Saka","Havertz"],"freekicks":["Ødegaard","Rice","Martinelli"],"corners":["Martinelli","Saka","Ødegaard"]},"Aston Villa":{"penalties":["Watkins","Tielemans"],"freekicks":["Digne","Douglas Luiz","Bailey"],"corners":["Douglas Luiz","McGinn"]},"Bournemouth":{"penalties":["Solanke","Kluivert"],"freekicks":["Tavernier","Scott"],"corners":["Tavernier","Scott"]},"Brentford":{"penalties":["Toney","Mbeumo"],"freekicks":["Jensen","Mbeumo","Damsgaard"],"corners":["Jensen","Mbeumo"]},"Brighton":{"penalties":["João Pedro","Gross"],"freekicks":["Gross","Estupiñán"],"corners":["Gross","March"]},"Chelsea":{"penalties":["Palmer","Nkunku"],"freekicks":["Palmer","James","Enzo"],"corners":["Gallagher","Chilwell","Palmer"]},"Crystal Palace":{"penalties":["Eze","Olise"],"freekicks":["Eze","Olise"],"corners":["Eze","Olise"]},"Everton":{"penalties":["Calvert-Lewin","McNeil"],"freekicks":["McNeil","Garner"],"corners":["McNeil","Garner"]},"Fulham":{"penalties":["Andreas","Jiménez"],"freekicks":["Andreas","Willian","Wilson"],"corners":["Andreas","Willian"]},"Ipswich":{"penalties":["Chaplin","Hirst"],"freekicks":["Davis","Morsy"],"corners":["Davis","Chaplin"]},"Leicester":{"penalties":["Vardy","Dewsbury-Hall"],"freekicks":["Dewsbury-Hall","Fatawu"],"corners":["Dewsbury-Hall","Fatawu"]},"Liverpool":{"penalties":["M.Salah","Szoboszlai"],"freekicks":["Alexander-Arnold","Szoboszlai","Robertson"],"corners":["Alexander-Arnold","Robertson"]},"Man City":{"penalties":["Haaland","Alvarez"],"freekicks":["De Bruyne","Foden","Alvarez"],"corners":["Foden","De Bruyne"]},"Man Utd":{"penalties":["B.Fernandes","Rashford"],"freekicks":["B.Fernandes","Eriksen","Rashford"],"corners":["B.Fernandes","Shaw"]},"Newcastle":{"penalties":["Isak","Wilson"],"freekicks":["Trippier","Gordon"],"corners":["Trippier","Gordon"]},"Nott'm Forest":{"penalties":["Gibbs-White","Wood"],"freekicks":["Gibbs-White","Elanga"],"corners":["Gibbs-White","Elanga"]},"Southampton":{"penalties":["A. Armstrong","Ward-Prowse"],"freekicks":["Ward-Prowse","Smallbone"],"corners":["Ward-Prowse","Aribo"]},"Spurs":{"penalties":["Son","Maddison"],"freekicks":["Maddison","Pedro Porro"],"corners":["Maddison","Pedro Porro","Son"]},"West Ham":{"penalties":["Ward-Prowse","Bowen"],"freekicks":["Ward-Prowse","Emerson"],"corners":["Ward-Prowse","Bowen"]},"Wolves":{"penalties":["Cunha","Hwang"],"freekicks":["Sarabia","Bellegarde"],"corners":["Sarabia","Aït-Nouri"]}},
@@ -580,11 +582,19 @@ async function fetchWithCache(url, cacheKey, cacheDurationMinutes = 120) {
 
     console.log(`🔄 Fetching fresh data for ${cacheKey}`);
     
-    // Fetch directly from the provided URL (FPL API or Vercel API)
+    // Use CORS proxy for FPL API calls
     try {
-        console.log(`📡 Calling API: ${url}`);
+        let finalUrl = url;
         
-        const response = await fetch(url, {
+        // If calling FPL API directly (not Vercel), use CORS proxy
+        if (url.includes('premierleague.com') || url.includes('draft.premierleague.com')) {
+            finalUrl = `${config.corsProxy}${encodeURIComponent(url)}`;
+            console.log(`📡 Using CORS proxy for: ${url}`);
+        } else {
+            console.log(`📡 Calling API: ${url}`);
+        }
+        
+        const response = await fetch(finalUrl, {
             method: 'GET',
             headers: {
                 'Accept': 'application/json'
@@ -803,11 +813,11 @@ async function fetchAndProcessData() {
         const needsFixtures = !state.allPlayersData.live.fixtures;
 
         if (needsData || needsFixtures) {
-            // ✅ Use Vercel API to bypass corporate firewall
-            const dataUrl = `${config.vercelApi}/bootstrap`;
+            // ✅ Use FPL API directly (CORS proxy will handle it)
+            const dataUrl = 'https://fantasy.premierleague.com/api/bootstrap-static/';
             const dataCacheKey = `fpl_bootstrap_${state.currentDataSource}`;
             
-            const fixturesUrl = `${config.vercelApi}/fixtures`;
+            const fixturesUrl = 'https://fantasy.premierleague.com/api/fixtures/';
             const fixturesCacheKey = 'fpl_fixtures';
 
             if (needsData) {
@@ -2874,8 +2884,8 @@ function getTeamColor(name) {
 async function loadDraftDataInBackground() {
     // Load draft data silently in the background without showing loading overlay
     try {
-        // ✅ Use Vercel API for draft data
-        const detailsUrl = `${config.vercelApi}/draft/${state.draft.leagueId}/details`;
+        // ✅ Use FPL Draft API directly
+        const detailsUrl = `https://draft.premierleague.com/api/league/${state.draft.leagueId}/details`;
         const detailsCacheKey = `fpl_draft_details_${state.draft.leagueId}`;
         
         const details = await fetchWithCache(detailsUrl, detailsCacheKey, 30);
@@ -2901,8 +2911,8 @@ async function loadDraftDataInBackground() {
             const rosterPromises = details.league_entries
                 .filter(e => e && e.id && e.entry_id)
                 .map(async entry => {
-                    // ✅ Use Vercel API to bypass firewall
-                    const picksUrl = `${config.vercelApi}/draft/entry/${entry.entry_id}/picks`;
+                    // ✅ Use FPL Draft API directly
+                    const picksUrl = `https://draft.premierleague.com/api/entry/${entry.entry_id}/event/${currentGW}`;
                     const picksCacheKey = `fpl_draft_picks_bg_${entry.entry_id}_gw${currentGW}`;
                     try {
                         const picksData = await fetchWithCache(picksUrl, picksCacheKey, 30);
@@ -2934,8 +2944,8 @@ async function loadDraftDataInBackground() {
                 console.log(`🔄 Fetching missing players from live bootstrap...`);
                 
                 try {
-                    // ✅ Use Vercel API to get missing players
-                    const bootstrapUrl = `${config.vercelApi}/bootstrap`;
+                    // ✅ Use FPL API directly to get missing players
+                    const bootstrapUrl = 'https://fantasy.premierleague.com/api/bootstrap-static/';
                     const bootstrapData = await fetchWithCache(bootstrapUrl, 'fpl_bootstrap_live_missing', 5); // Short cache
                     
                     if (bootstrapData && bootstrapData.elements) {
@@ -3030,9 +3040,9 @@ async function loadDraftLeague() {
         localStorage.removeItem(detailsCacheKey);
         localStorage.removeItem(standingsCacheKey);
         
-        // ✅ Use Vercel API to bypass firewall
-        const detailsUrl = `${config.vercelApi}/draft/${config.draftLeagueId}/details`;
-        const standingsUrl = `${config.vercelApi}/draft/${config.draftLeagueId}/standings`;
+        // ✅ Use FPL Draft API directly
+        const detailsUrl = `https://draft.premierleague.com/api/league/${config.draftLeagueId}/details`;
+        const standingsUrl = `https://draft.premierleague.com/api/league/${config.draftLeagueId}/standings`;
 
         const [detailsData, standingsData] = await Promise.all([
             fetchWithCache(detailsUrl, detailsCacheKey, 5),
@@ -3063,8 +3073,8 @@ async function loadDraftLeague() {
                     return;
                 }
                 
-                // ✅ Use Vercel API to bypass firewall
-                const url = `${config.vercelApi}/draft/entry/${entry.entry_id}/picks`;
+                // ✅ Use FPL Draft API directly
+                const url = `https://draft.premierleague.com/api/entry/${entry.entry_id}/event/${draftGw}`;
                 const picksCacheKey = `fpl_draft_picks_final_v4_${entry.entry_id}_gw${draftGw}`;
                 
                 localStorage.removeItem(picksCacheKey); 
