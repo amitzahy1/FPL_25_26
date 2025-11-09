@@ -183,9 +183,11 @@
             window.location.href = './index.html';
         }
         
-        // Auto-clear on page load (optional)
-        // Uncomment the line below to auto-clear when page loads
-        // window.addEventListener('load', clearAllCache);
+        // Auto-clear on page load
+        window.addEventListener('load', () => {
+            // Auto-clear immediately
+            setTimeout(clearAllCache, 500);
+        });
     </script>
 </body>
 </html>
