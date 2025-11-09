@@ -450,7 +450,7 @@ const config = {
         bootstrap: 'https://fantasy.premierleague.com/api/bootstrap-static/',
         fixtures: 'https://fantasy.premierleague.com/api/fixtures/',
         draftLeagueDetails: (leagueId) => `https://draft.premierleague.com/api/league/${leagueId}/details`,
-        draftLeagueStandings: (leagueId) => `https://draft.premierleague.com/api/league/${leagueId}/standings`,
+        // Note: /standings is included in /details response, no separate endpoint needed
         draftEntryPicks: (entryId, gw) => `https://draft.premierleague.com/api/entry/${entryId}/event/${gw}`,
         playerImage: (code) => `https://resources.premierleague.com/premierleague/photos/players/110x140/p${code}.png`,
         missingPlayerImage: 'https://resources.premierleague.com/premierleague/photos/players/110x140/Photo-Missing.png'
@@ -3063,21 +3063,16 @@ async function loadDraftLeague() {
         }
 
         const detailsCacheKey = `fpl_draft_details_${config.draftLeagueId}`;
-        const standingsCacheKey = `fpl_draft_standings_${config.draftLeagueId}`;
         localStorage.removeItem(detailsCacheKey);
-        localStorage.removeItem(standingsCacheKey);
         
-        // ✅ Use FPL Draft API directly
+        // ✅ Use FPL Draft API directly - /details contains everything (league_entries, matches, standings)
         const detailsUrl = `https://draft.premierleague.com/api/league/${config.draftLeagueId}/details`;
-        const standingsUrl = `https://draft.premierleague.com/api/league/${config.draftLeagueId}/standings`;
 
-        const [detailsData, standingsData] = await Promise.all([
-            fetchWithCache(detailsUrl, detailsCacheKey, 5),
-            fetchWithCache(standingsUrl, standingsCacheKey, 5).catch(() => null)
-        ]);
+        const detailsData = await fetchWithCache(detailsUrl, detailsCacheKey, 5);
         
         state.draft.details = detailsData;
-        state.draft.standings = standingsData;
+        // ✅ Extract standings from details response (no separate /standings endpoint needed)
+        state.draft.standings = detailsData?.standings || null;
         
         console.log("--- Draft League Debug ---");
         console.log("1. Fetched Details Data:", JSON.parse(JSON.stringify(detailsData)));

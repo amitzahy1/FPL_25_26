@@ -1,4 +1,4 @@
-const CACHE_NAME = 'fpl-tool-v12-draft-api-final';
+const CACHE_NAME = 'fpl-tool-v13-optimized';
 const APP_SHELL = [
   './',
   './index.html',
