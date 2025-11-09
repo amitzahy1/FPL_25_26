@@ -344,6 +344,14 @@
     <!-- Toast Container -->
     <div id="toastContainer" class="toast-container"></div>
 
+    <!-- Error Modal -->
+    <div id="errorModal" class="modal" style="display: none;">
+        <div class="modal-content" style="max-width: 600px;">
+            <span class="close" onclick="document.getElementById('errorModal').style.display='none'">&times;</span>
+            <div id="errorModalContent"></div>
+        </div>
+    </div>
+
     <!-- Draft Tab Content -->
     <div id="draftTabContent" class="tab-content" style="display: none;">
         <div class="draft-top-grid">

@@ -578,17 +578,125 @@ async function fetchWithCache(url, cacheKey, cacheDurationMinutes = 120) {
     }
 
     console.log(`Fetching fresh data for ${cacheKey}`);
-    const response = await fetch(url);
-    if (!response.ok) {
-        throw new Error(`Failed to fetch ${url}: ${response.statusText}`);
+    
+    // Extract original URL
+    const originalUrl = url.replace(/^https:\/\/corsproxy\.io\/\?/, '');
+    const decodedUrl = decodeURIComponent(originalUrl);
+    
+    // List of CORS proxies to try (in order of preference)
+    const proxies = [
+        'https://corsproxy.io/?',
+        'https://api.codetabs.com/v1/proxy?quest=',
+        'https://thingproxy.freeboard.io/fetch/'
+    ];
+    
+    let lastError = null;
+    
+    // Try each proxy in sequence
+    for (let i = 0; i < proxies.length; i++) {
+        const proxy = proxies[i];
+        const proxiedUrl = proxy + encodeURIComponent(decodedUrl);
+        
+        try {
+            console.log(`Trying proxy ${i + 1}/${proxies.length}: ${proxy.split('/')[2]}`);
+            const response = await fetch(proxiedUrl, {
+                method: 'GET',
+                headers: {
+                    'Accept': 'application/json'
+                }
+            });
+            
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+            
+            const data = await response.json();
+            
+            // Cache successful response
+            try {
+                localStorage.setItem(cacheKey, JSON.stringify({ timestamp: new Date().getTime(), data }));
+            } catch(e) {
+                console.error("Failed to write to localStorage. Cache might be full.", e);
+            }
+            
+            console.log(`✅ Successfully fetched data using proxy ${i + 1}`);
+            return data;
+            
+        } catch (error) {
+            console.warn(`❌ Proxy ${i + 1} failed:`, error.message);
+            lastError = error;
+            
+            // If this isn't the last proxy, try the next one
+            if (i < proxies.length - 1) {
+                console.log(`Trying next proxy...`);
+                continue;
+            }
+        }
     }
-    const data = await response.json();
-    try {
-        localStorage.setItem(cacheKey, JSON.stringify({ timestamp: new Date().getTime(), data }));
-    } catch(e) {
-        console.error("Failed to write to localStorage. Cache might be full.", e);
+    
+    // All proxies failed - show user-friendly error modal
+    console.error(`All ${proxies.length} proxies failed for ${cacheKey}`);
+    showErrorModal(decodedUrl, lastError);
+    throw new Error(`Failed to fetch ${url}: ${lastError?.message || 'All proxies failed'}`);
+}
+
+function showErrorModal(url, error) {
+    const modal = document.getElementById('errorModal');
+    const content = document.getElementById('errorModalContent');
+    
+    const isBootstrap = url.includes('bootstrap-static');
+    const isDraft = url.includes('draft.premierleague.com');
+    
+    let title = '❌ שגיאה בטעינת נתונים';
+    let message = 'לא ניתן להתחבר לשרתי FPL';
+    let suggestions = '';
+    
+    if (isBootstrap) {
+        title = '❌ שגיאת חיבור ל-FPL API';
+        message = 'לא ניתן לטעון את נתוני השחקנים מהשרת';
+        suggestions = `
+            <div style="background: #e3f2fd; padding: 15px; border-radius: 8px; margin: 15px 0; border-right: 4px solid #2196f3;">
+                <strong style="color: #1976d2;">💡 פתרון מהיר:</strong>
+                <p style="margin: 10px 0; color: #424242;">השתמש בנתונים היסטוריים במקום נתונים חיים:</p>
+                <button onclick="switchDataSource('historical'); document.getElementById('errorModal').style.display='none'" 
+                        style="background: #2196f3; color: white; border: none; padding: 10px 20px; border-radius: 6px; cursor: pointer; font-weight: bold;">
+                    📊 עבור לנתונים היסטוריים
+                </button>
+            </div>
+        `;
+    } else if (isDraft) {
+        title = '❌ שגיאת חיבור ל-Draft API';
+        message = 'לא ניתן לטעון את נתוני ליגת הדראפט';
     }
-    return data;
+    
+    content.innerHTML = `
+        <div style="text-align: center; padding: 20px;">
+            <h2 style="color: #dc3545; margin-bottom: 15px;">${title}</h2>
+            <p style="font-size: 16px; color: #666; margin-bottom: 20px;">${message}</p>
+            ${suggestions}
+            <div style="background: #fff3cd; padding: 15px; border-radius: 8px; margin: 20px 0; border-right: 4px solid #ffc107; text-align: right;">
+                <strong style="color: #856404;">⚠️ פתרונות נוספים:</strong>
+                <ul style="margin: 10px 0; padding-right: 25px; text-align: right; line-height: 1.8; color: #856404;">
+                    <li>בדוק את החיבור לאינטרנט</li>
+                    <li>נסה לרענן את הדף (F5)</li>
+                    <li>נקה את ה-Cache (Ctrl+Shift+Del)</li>
+                    <li>נסה שוב בעוד כמה דקות</li>
+                </ul>
+            </div>
+            <div style="margin-top: 20px;">
+                <button onclick="location.reload()" 
+                        style="background: #28a745; color: white; border: none; padding: 12px 24px; border-radius: 6px; cursor: pointer; font-size: 15px; font-weight: bold; margin-left: 10px;">
+                    🔄 רענן דף
+                </button>
+                <button onclick="document.getElementById('errorModal').style.display='none'" 
+                        style="background: #6c757d; color: white; border: none; padding: 12px 24px; border-radius: 6px; cursor: pointer; font-size: 15px; font-weight: bold;">
+                    ✖️ סגור
+                </button>
+            </div>
+        </div>
+    `;
+    
+    modal.style.display = 'block';
 }
 
 function showLoading(message = 'טוען נתונים...') {
@@ -773,8 +881,42 @@ async function fetchAndProcessData() {
         showToast('נתונים נטענו בהצלחה', `${state.allPlayersData[state.currentDataSource].processed.length} שחקנים נטענו`, 'success', 3000);
     } catch (error) {
         console.error('Error in fetchAndProcessData:', error);
-        document.getElementById('playersTableBody').innerHTML = `<tr><td colspan="26" style="text-align:center; padding: 20px; color: red;">שגיאה בטעינת נתונים: ${error.message}</td></tr>`;
-        showToast('שגיאה בטעינת נתונים', error.message, 'error', 5000);
+        
+        // Friendly error message with suggestions
+        let errorMessage = error.message;
+        let suggestions = '';
+        
+        if (error.message.includes('All proxies failed') || error.message.includes('Failed to fetch')) {
+            errorMessage = 'לא ניתן להתחבר לשרתי FPL';
+            suggestions = `
+                <div style="margin-top: 15px; text-align: right; background: #fff3cd; padding: 15px; border-radius: 8px; border-right: 4px solid #ffc107;">
+                    <strong>💡 פתרונות אפשריים:</strong>
+                    <ul style="margin: 10px 0; padding-right: 20px; text-align: right;">
+                        <li>בדוק את החיבור לאינטרנט שלך</li>
+                        <li>נסה לרענן את הדף (F5)</li>
+                        <li>נקה את ה-Cache של הדפדפן (Ctrl+Shift+Del)</li>
+                        <li>נסה שוב בעוד כמה דקות</li>
+                        <li>השתמש במצב דמו (לחץ על "מצב דמו" למעלה)</li>
+                    </ul>
+                    <button onclick="location.reload()" style="background: #28a745; color: white; border: none; padding: 10px 20px; border-radius: 6px; cursor: pointer; font-size: 14px; font-weight: bold;">
+                        🔄 רענן דף
+                    </button>
+                </div>
+            `;
+        }
+        
+        document.getElementById('playersTableBody').innerHTML = `
+            <tr>
+                <td colspan="26" style="text-align:center; padding: 30px;">
+                    <div style="color: #dc3545; font-size: 18px; font-weight: bold; margin-bottom: 10px;">
+                        ❌ ${errorMessage}
+                    </div>
+                    ${suggestions}
+                </td>
+            </tr>
+        `;
+        
+        showToast('שגיאה בטעינת נתונים', errorMessage, 'error', 8000);
     } finally {
         hideLoading();
     }
@@ -2930,8 +3072,40 @@ async function loadDraftLeague() {
         showToast('ליגת דראפט נטענה בהצלחה', `${totalTeams} קבוצות, ${totalPlayers} שחקנים`, 'success', 3000);
     } catch (e) {
         console.error('loadDraftLeague error', e);
-        draftContainer.innerHTML = `<div style="text-align:center; padding: 20px; color: red;">שגיאה בטעינת נתוני הליגה: ${e.message}</div>`;
-        showToast('שגיאה בטעינת הליגה', e.message, 'error', 5000);
+        
+        // Friendly error message with suggestions
+        let errorMessage = e.message;
+        let suggestions = '';
+        
+        if (e.message.includes('All proxies failed') || e.message.includes('Failed to fetch')) {
+            errorMessage = 'לא ניתן להתחבר לשרתי FPL Draft';
+            suggestions = `
+                <div style="margin-top: 20px; text-align: right; background: #fff3cd; padding: 20px; border-radius: 8px; border-right: 4px solid #ffc107; max-width: 600px; margin: 20px auto;">
+                    <strong style="font-size: 16px;">💡 פתרונות אפשריים:</strong>
+                    <ul style="margin: 15px 0; padding-right: 25px; text-align: right; line-height: 1.8;">
+                        <li>בדוק את החיבור לאינטרנט שלך</li>
+                        <li>נסה לרענן את הדף (F5)</li>
+                        <li>נקה את ה-Cache של הדפדפן (Ctrl+Shift+Del)</li>
+                        <li>נסה שוב בעוד כמה דקות</li>
+                        <li>ודא שה-League ID נכון (689)</li>
+                    </ul>
+                    <button onclick="location.reload()" style="background: #28a745; color: white; border: none; padding: 12px 24px; border-radius: 6px; cursor: pointer; font-size: 15px; font-weight: bold; margin-top: 10px;">
+                        🔄 רענן דף
+                    </button>
+                </div>
+            `;
+        }
+        
+        draftContainer.innerHTML = `
+            <div style="text-align:center; padding: 40px;">
+                <div style="color: #dc3545; font-size: 20px; font-weight: bold; margin-bottom: 15px;">
+                    ❌ ${errorMessage}
+                </div>
+                ${suggestions}
+            </div>
+        `;
+        
+        showToast('שגיאה בטעינת הליגה', errorMessage, 'error', 8000);
     } finally {
         hideLoading();
     }
