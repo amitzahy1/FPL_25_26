@@ -803,11 +803,11 @@ async function fetchAndProcessData() {
         const needsFixtures = !state.allPlayersData.live.fixtures;
 
         if (needsData || needsFixtures) {
-            // ✅ FIX: Fetch directly from FPL API (bypasses Vercel/Firewall issues)
-            const dataUrl = 'https://fantasy.premierleague.com/api/bootstrap-static/';
+            // ✅ Use Vercel API to bypass corporate firewall
+            const dataUrl = `${config.vercelApi}/bootstrap`;
             const dataCacheKey = `fpl_bootstrap_${state.currentDataSource}`;
             
-            const fixturesUrl = 'https://fantasy.premierleague.com/api/fixtures/';
+            const fixturesUrl = `${config.vercelApi}/fixtures`;
             const fixturesCacheKey = 'fpl_fixtures';
 
             if (needsData) {
@@ -2874,8 +2874,8 @@ function getTeamColor(name) {
 async function loadDraftDataInBackground() {
     // Load draft data silently in the background without showing loading overlay
     try {
-        // ✅ FIX: Fetch directly from FPL Draft API
-        const detailsUrl = `https://draft.premierleague.com/api/league/${state.draft.leagueId}/details`;
+        // ✅ Use Vercel API for draft data
+        const detailsUrl = `${config.vercelApi}/draft/${state.draft.leagueId}/details`;
         const detailsCacheKey = `fpl_draft_details_${state.draft.leagueId}`;
         
         const details = await fetchWithCache(detailsUrl, detailsCacheKey, 30);
@@ -2901,15 +2901,16 @@ async function loadDraftDataInBackground() {
             const rosterPromises = details.league_entries
                 .filter(e => e && e.id && e.entry_id)
                 .map(async entry => {
-                    // ✅ FIX: Fetch directly from FPL Draft API
-                    const picksUrl = `https://draft.premierleague.com/api/entry/${entry.entry_id}/event/${currentGW}`;
+                    // ✅ Use Vercel API to bypass firewall
+                    const picksUrl = `${config.vercelApi}/draft/entry/${entry.entry_id}/picks`;
                     const picksCacheKey = `fpl_draft_picks_bg_${entry.entry_id}_gw${currentGW}`;
                     try {
                         const picksData = await fetchWithCache(picksUrl, picksCacheKey, 30);
                         if (picksData && picksData.picks) {
-                            // ✅ FIX: Get ALL 15 players (including bench) for roster
+                            // ✅ Get ALL 15 players (including bench) for roster
                             const allPlayerIds = picksData.picks.map(pick => pick.element);
                             state.draft.rostersByEntryId.set(entry.id, allPlayerIds);
+                            console.log(`✅ Loaded ${allPlayerIds.length} players for ${entry.entry_name}:`, allPlayerIds);
                             
                             // Add all players to owned set and mapping
                             allPlayerIds.forEach(id => {
@@ -2918,7 +2919,7 @@ async function loadDraftDataInBackground() {
                             });
                         }
                     } catch (err) {
-                        console.log(`Could not load roster for ${entry.entry_name}`);
+                        console.error(`❌ Could not load roster for ${entry.entry_name}:`, err);
                     }
                 });
             
@@ -2933,8 +2934,8 @@ async function loadDraftDataInBackground() {
                 console.log(`🔄 Fetching missing players from live bootstrap...`);
                 
                 try {
-                    // ✅ FIX: Fetch directly from FPL API to get missing players
-                    const bootstrapUrl = 'https://fantasy.premierleague.com/api/bootstrap-static/';
+                    // ✅ Use Vercel API to get missing players
+                    const bootstrapUrl = `${config.vercelApi}/bootstrap`;
                     const bootstrapData = await fetchWithCache(bootstrapUrl, 'fpl_bootstrap_live_missing', 5); // Short cache
                     
                     if (bootstrapData && bootstrapData.elements) {
@@ -3029,9 +3030,9 @@ async function loadDraftLeague() {
         localStorage.removeItem(detailsCacheKey);
         localStorage.removeItem(standingsCacheKey);
         
-        // ✅ FIX: Fetch directly from FPL Draft API
-        const detailsUrl = `https://draft.premierleague.com/api/league/${config.draftLeagueId}/details`;
-        const standingsUrl = `https://draft.premierleague.com/api/league/${config.draftLeagueId}/standings`;
+        // ✅ Use Vercel API to bypass firewall
+        const detailsUrl = `${config.vercelApi}/draft/${config.draftLeagueId}/details`;
+        const standingsUrl = `${config.vercelApi}/draft/${config.draftLeagueId}/standings`;
 
         const [detailsData, standingsData] = await Promise.all([
             fetchWithCache(detailsUrl, detailsCacheKey, 5),
@@ -3062,20 +3063,20 @@ async function loadDraftLeague() {
                     return;
                 }
                 
-                // ✅ FIX: Fetch directly from FPL Draft API
-                const url = `https://draft.premierleague.com/api/entry/${entry.entry_id}/event/${draftGw}`;
+                // ✅ Use Vercel API to bypass firewall
+                const url = `${config.vercelApi}/draft/entry/${entry.entry_id}/picks`;
                 const picksCacheKey = `fpl_draft_picks_final_v4_${entry.entry_id}_gw${draftGw}`;
                 
                 localStorage.removeItem(picksCacheKey); 
                 
                 try {
                     const picksData = await fetchWithCache(url, picksCacheKey, 5);
-                    // ✅ FIX: Get ALL 15 players (including bench) for complete roster
+                    // ✅ Get ALL 15 players (including bench) for complete roster
                     const playerElements = (picksData && picksData.picks) ? picksData.picks.map(p => p.element) : [];
                     state.draft.rostersByEntryId.set(entry.id, playerElements);
-                    console.log(`✅ Loaded ${playerElements.length} players for ${entry.entry_name}`);
+                    console.log(`✅ Loaded ${playerElements.length} players for ${entry.entry_name}:`, playerElements);
                 } catch (err) {
-                    console.error(`Failed to fetch final picks for entry ${entry.entry_name} (${entry.entry_id})`, err);
+                    console.error(`❌ Failed to fetch final picks for entry ${entry.entry_name} (${entry.entry_id})`, err);
                     state.draft.rostersByEntryId.set(entry.id, []);
                 }
             });
