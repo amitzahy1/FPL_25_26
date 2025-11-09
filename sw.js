@@ -1,4 +1,4 @@
-const CACHE_NAME = 'fpl-tool-v11-force-fresh';
+const CACHE_NAME = 'fpl-tool-v12-draft-api-final';
 const APP_SHELL = [
   './',
   './index.html',
@@ -14,7 +14,17 @@ self.addEventListener('install', (event) => {
 
 self.addEventListener('activate', (event) => {
   event.waitUntil(
-    caches.keys().then((keys) => Promise.all(keys.filter(k => k !== CACHE_NAME).map(k => caches.delete(k)))).then(() => self.clients.claim())
+    caches.keys()
+      .then((keys) => Promise.all(keys.filter(k => k !== CACHE_NAME).map(k => caches.delete(k))))
+      .then(() => {
+        // ⚠️ Clear all localStorage on activation to force fresh data
+        return self.clients.matchAll().then(clients => {
+          clients.forEach(client => {
+            client.postMessage({ type: 'CLEAR_LOCALSTORAGE' });
+          });
+        });
+      })
+      .then(() => self.clients.claim())
   );
 });
 
