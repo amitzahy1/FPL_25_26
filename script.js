@@ -1056,9 +1056,20 @@ function createPlayerRowHtml(player, index) {
     
     // Get draft team name for this player
     let draftTeamName = '–';
+    let positionIndicator = '';
     if (state.draft.playerIdToTeamId && state.draft.playerIdToTeamId.has(player.id)) {
         const teamId = state.draft.playerIdToTeamId.get(player.id);
         draftTeamName = state.draft.entryIdToTeamName.get(teamId) || '–';
+        
+        // Add lineup/bench indicator
+        if (state.draft.playerPositions && state.draft.playerPositions.has(player.id)) {
+            const position = state.draft.playerPositions.get(player.id);
+            if (position <= 11) {
+                positionIndicator = ' ⭐'; // Lineup
+            } else {
+                positionIndicator = ' 🪑'; // Bench
+            }
+        }
     }
 
     return `<tr>
@@ -1068,7 +1079,7 @@ function createPlayerRowHtml(player, index) {
         <td class="bold-cell">${player.draft_score.toFixed(1)}</td>
         <td class="bold-cell">${(player.predicted_points_1_gw || 0).toFixed(1)}</td>
         <td>${player.team_name}</td>
-        <td class="draft-team-cell" title="${draftTeamName}">${draftTeamName}</td>
+        <td class="draft-team-cell" title="${draftTeamName}${positionIndicator ? (positionIndicator === ' ⭐' ? ' (הרכב)' : ' (ספסל)') : ''}">${draftTeamName}${positionIndicator}</td>
         <td>${player.position_name}</td>
         <td>${player.now_cost.toFixed(1)}</td>
         <td>${player.total_points}</td>
@@ -3104,9 +3115,23 @@ async function loadDraftLeague() {
                 try {
                     const picksData = await fetchWithCache(url, picksCacheKey, 5);
                     // ✅ Get ALL 15 players (including bench) for complete roster
+                    // Store both element ID and position (1-11 = lineup, 12-15 = bench)
                     const playerElements = (picksData && picksData.picks) ? picksData.picks.map(p => p.element) : [];
+                    const playerPositions = (picksData && picksData.picks) ? picksData.picks.map(p => ({ id: p.element, position: p.position })) : [];
+                    
                     state.draft.rostersByEntryId.set(entry.id, playerElements);
+                    
+                    // Store position info for later use (lineup vs bench)
+                    if (!state.draft.playerPositions) {
+                        state.draft.playerPositions = new Map();
+                    }
+                    playerPositions.forEach(p => {
+                        state.draft.playerPositions.set(p.id, p.position);
+                    });
+                    
                     console.log(`✅ Loaded ${playerElements.length} players for ${entry.entry_name}:`, playerElements);
+                    console.log(`   Lineup (1-11):`, playerPositions.filter(p => p.position <= 11).map(p => p.id));
+                    console.log(`   Bench (12-15):`, playerPositions.filter(p => p.position > 11).map(p => p.id));
                 } catch (err) {
                     console.error(`❌ Failed to fetch final picks for entry ${entry.entry_name} (${entry.entry_id})`, err);
                     state.draft.rostersByEntryId.set(entry.id, []);
@@ -4301,9 +4326,27 @@ function renderPitch(containerEl, playerIds, isMyLineup = false) {
         </div>
     `;
 
-    const startingXI_ids = pickStartingXI(playerIds);
+    // ✅ Use actual lineup/bench positions from API instead of pickStartingXI
+    let startingXI_ids, benchPlayerIds;
+    
+    if (state.draft.playerPositions && state.draft.playerPositions.size > 0) {
+        // Use real positions from API (1-11 = lineup, 12-15 = bench)
+        startingXI_ids = playerIds.filter(id => {
+            const pos = state.draft.playerPositions.get(id);
+            return pos && pos <= 11;
+        });
+        benchPlayerIds = playerIds.filter(id => {
+            const pos = state.draft.playerPositions.get(id);
+            return pos && pos > 11;
+        });
+    } else {
+        // Fallback to automatic selection if position data not available
+        startingXI_ids = pickStartingXI(playerIds);
+        benchPlayerIds = playerIds.filter(id => !startingXI_ids.includes(id));
+    }
+    
     const startingXI = startingXI_ids.map(id => processedById.get(id)).filter(Boolean);
-    const benchPlayers = players.filter(p => !startingXI_ids.includes(p.id));
+    const benchPlayers = benchPlayerIds.map(id => processedById.get(id)).filter(Boolean);
 
     const byPos = { GKP: [], DEF: [], MID: [], FWD: [] };
     startingXI.forEach(p => byPos[p.position_name].push(p));
