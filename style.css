@@ -245,6 +245,16 @@ tbody tr:last-child td {
     text-align: right; 
     overflow: visible; 
     white-space: normal;
+}
+
+.draft-team-cell {
+    max-width: 80px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 0.85em;
+    color: var(--text-secondary);
+    text-align: center;
     font-weight: 600;
 }
 
