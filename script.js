@@ -580,9 +580,9 @@ async function fetchWithCache(url, cacheKey, cacheDurationMinutes = 120) {
 
     console.log(`🔄 Fetching fresh data for ${cacheKey}`);
     
-    // URL is already the Vercel API endpoint
+    // Fetch directly from the provided URL (FPL API or Vercel API)
     try {
-        console.log(`📡 Calling Vercel API: ${url}`);
+        console.log(`📡 Calling API: ${url}`);
         
         const response = await fetch(url, {
             method: 'GET',
@@ -604,11 +604,11 @@ async function fetchWithCache(url, cacheKey, cacheDurationMinutes = 120) {
             console.error("Failed to write to localStorage. Cache might be full.", e);
         }
         
-        console.log(`✅ Successfully fetched data from Vercel API`);
+        console.log(`✅ Successfully fetched data from API`);
         return data;
         
     } catch (error) {
-        console.error(`❌ Vercel API failed:`, error.message);
+        console.error(`❌ API call failed:`, error.message);
         showErrorModal(url, error);
         throw new Error(`Failed to fetch ${url}: ${error.message}`);
     }
