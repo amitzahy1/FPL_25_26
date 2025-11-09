@@ -1,4 +1,4 @@
-const CACHE_NAME = 'fpl-tool-v14-lineup-bench';
+const CACHE_NAME = 'fpl-tool-v15-positions-sync';
 const APP_SHELL = [
   './',
   './index.html',

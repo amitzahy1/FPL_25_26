@@ -2957,8 +2957,18 @@ async function loadDraftDataInBackground() {
                         if (picksData && picksData.picks) {
                             // ✅ Get ALL 15 players (including bench) for roster
                             const allPlayerIds = picksData.picks.map(pick => pick.element);
+                            const playerPositions = picksData.picks.map(pick => ({ id: pick.element, position: pick.position }));
+                            
                             state.draft.rostersByEntryId.set(entry.id, allPlayerIds);
                             console.log(`✅ Loaded ${allPlayerIds.length} players for ${entry.entry_name}:`, allPlayerIds);
+                            
+                            // Store position info for later use (lineup vs bench)
+                            if (!state.draft.playerPositions) {
+                                state.draft.playerPositions = new Map();
+                            }
+                            playerPositions.forEach(p => {
+                                state.draft.playerPositions.set(p.id, p.position);
+                            });
                             
                             // Add all players to owned set and mapping
                             allPlayerIds.forEach(id => {
