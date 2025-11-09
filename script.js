@@ -2874,7 +2874,8 @@ function getTeamColor(name) {
 async function loadDraftDataInBackground() {
     // Load draft data silently in the background without showing loading overlay
     try {
-        const detailsUrl = `${config.vercelApi}/draft/${state.draft.leagueId}/details`;
+        // ✅ FIX: Fetch directly from FPL Draft API
+        const detailsUrl = `https://draft.premierleague.com/api/league/${state.draft.leagueId}/details`;
         const detailsCacheKey = `fpl_draft_details_${state.draft.leagueId}`;
         
         const details = await fetchWithCache(detailsUrl, detailsCacheKey, 30);
@@ -2900,7 +2901,8 @@ async function loadDraftDataInBackground() {
             const rosterPromises = details.league_entries
                 .filter(e => e && e.id && e.entry_id)
                 .map(async entry => {
-                    const picksUrl = `${config.vercelApi}/draft/entry/${entry.entry_id}/picks`;
+                    // ✅ FIX: Fetch directly from FPL Draft API
+                    const picksUrl = `https://draft.premierleague.com/api/entry/${entry.entry_id}/event/${currentGW}`;
                     const picksCacheKey = `fpl_draft_picks_bg_${entry.entry_id}_gw${currentGW}`;
                     try {
                         const picksData = await fetchWithCache(picksUrl, picksCacheKey, 30);
@@ -3027,8 +3029,9 @@ async function loadDraftLeague() {
         localStorage.removeItem(detailsCacheKey);
         localStorage.removeItem(standingsCacheKey);
         
-        const detailsUrl = `${config.vercelApi}/draft/${config.draftLeagueId}/details`;
-        const standingsUrl = `${config.vercelApi}/draft/${config.draftLeagueId}/standings`;
+        // ✅ FIX: Fetch directly from FPL Draft API
+        const detailsUrl = `https://draft.premierleague.com/api/league/${config.draftLeagueId}/details`;
+        const standingsUrl = `https://draft.premierleague.com/api/league/${config.draftLeagueId}/standings`;
 
         const [detailsData, standingsData] = await Promise.all([
             fetchWithCache(detailsUrl, detailsCacheKey, 5),
@@ -3059,7 +3062,8 @@ async function loadDraftLeague() {
                     return;
                 }
                 
-                const url = `${config.vercelApi}/draft/entry/${entry.entry_id}/picks`;
+                // ✅ FIX: Fetch directly from FPL Draft API
+                const url = `https://draft.premierleague.com/api/entry/${entry.entry_id}/event/${draftGw}`;
                 const picksCacheKey = `fpl_draft_picks_final_v4_${entry.entry_id}_gw${draftGw}`;
                 
                 localStorage.removeItem(picksCacheKey); 
