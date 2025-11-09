@@ -1,4 +1,4 @@
-const CACHE_NAME = 'fpl-tool-v10';
+const CACHE_NAME = 'fpl-tool-v11-force-fresh';
 const APP_SHELL = [
   './',
   './index.html',
@@ -30,6 +30,20 @@ self.addEventListener('fetch', (event) => {
 
   // Network-first for APIs
   if (API_HOSTS.includes(url.hostname)) {
+    event.respondWith(
+      fetch(event.request)
+        .then((res) => {
+          const copy = res.clone();
+          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copy));
+          return res;
+        })
+        .catch(() => caches.match(event.request))
+    );
+    return;
+  }
+
+  // ⚠️ Network-first for script.js to ensure fresh code
+  if (url.pathname.includes('script.js')) {
     event.respondWith(
       fetch(event.request)
         .then((res) => {
