@@ -236,6 +236,15 @@ tr:hover {
     background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
 }
 
+.my-player-row {
+    background-color: #e0f2fe !important; /* Light blue background */
+    font-weight: 600;
+}
+
+.my-player-row .name-cell {
+    color: #0c4a6e; /* Darker blue text */
+}
+
 tbody tr:last-child td {
     border-bottom: none;
 }
@@ -492,13 +501,14 @@ tbody tr:last-child td {
     letter-spacing: -0.3px;
     position: relative;
     padding-bottom: 10px;
+    text-align: right; /* Align title text to the right for RTL */
 }
 
 .section-title::after {
     content: '';
     position: absolute;
     bottom: 0;
-    left: 0;
+    right: 0; /* Changed from left: 0 to support RTL */
     width: 60px;
     height: 4px;
     background: linear-gradient(90deg, var(--primary-color) 0%, var(--primary-light) 100%);
@@ -649,7 +659,12 @@ tbody tr:last-child td {
 .player-name { color: #111827; font-weight: 800; font-size: 0.76em; text-shadow: none; background: rgba(255,255,255,0.85); padding: 1px 4px; border-radius: 6px; }
 .position-chip { background: rgba(255,255,255,0.9); color: #2c3e50; font-weight: 700; padding: 1px 6px; border-radius: 12px; font-size: 0.65em; }
 /* Size tweaks */
-#myLineup .pitch-container { height: 480px; width: 75%; max-width: 320px; margin: 0 auto; }
+#myLineup .pitch-container { 
+    height: 480px; 
+    width: 85%; /* Increased from 75% */
+    max-width: 400px; /* Increased from 320px */
+    margin: 0 auto; 
+}
 #myLineup.card { padding: 8px; }
 .roster-cards .pitch-container { height: 414px; max-width: 345px; margin: 0 auto; }
 .bench-strip { margin-top: 6px; display: flex; gap: 6px; justify-content: center; flex-wrap: nowrap; }
@@ -3034,4 +3049,13 @@ tbody tr:last-child td {
     .dashboard-kpis {
         grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
     }
+}
+
+.pitch {
+    background-color: #008746;
+    background-image: linear-gradient(to bottom, rgba(0,0,0,0.1), transparent 50%, rgba(0,0,0,0.1) 50%, transparent), url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100" viewBox="0 0 100 100"><rect width="100" height="100" fill="%23008746"/><path d="M0 50 H100" stroke="%23fff" stroke-width="1" stroke-opacity="0.3"/><circle cx="50" cy="50" r="10" stroke="%23fff" stroke-width="1" stroke-opacity="0.3" fill="none"/></svg>');
+    width: 100%;
+    max-width: 950px; /* Increased from ~800px */
+    aspect-ratio: 1.5;
+    margin: 20px auto;
 }
