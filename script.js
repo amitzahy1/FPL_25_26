@@ -609,12 +609,17 @@ async function fetchWithCache(url, cacheKey, cacheDurationMinutes = 5) {
 
     console.log(`🔄 Fetching fresh data for ${cacheKey}`);
     
-    // Use CORS proxy for FPL API calls
+    // Use Vercel API or CORS proxy for FPL API calls
     try {
         let finalUrl = url;
         
+        // ✅ Use Vercel API for bootstrap-static to ensure fresh data
+        if (url.includes('bootstrap-static')) {
+            finalUrl = `${window.location.origin}/api/bootstrap`;
+            console.log(`📡 Using Vercel API for bootstrap-static: ${finalUrl}`);
+        }
         // If calling FPL API directly (not Vercel), use CORS proxy
-        if (url.includes('premierleague.com') || url.includes('draft.premierleague.com')) {
+        else if (url.includes('premierleague.com') || url.includes('draft.premierleague.com')) {
             finalUrl = `${config.corsProxy}${encodeURIComponent(url)}`;
             console.log(`📡 Using CORS proxy for: ${url}`);
         } else {
@@ -2952,16 +2957,19 @@ async function loadDraftDataInBackground() {
             const rosterPromises = details.league_entries
                 .filter(e => e && e.id && e.entry_id)
                 .map(async entry => {
-                    // ✅ Use own serverless function to bypass CORS
-                    const picksUrl = `${window.location.origin}/api/draft/entry/${entry.entry_id}/picks`;
-                    const picksCacheKey = `fpl_draft_picks_bg_${entry.entry_id}_gw${currentGW}`;
+                    // ✅ Use simplified serverless API to bypass CORS
+                    const picksUrl = `${window.location.origin}/api/draft-picks?entryId=${entry.entry_id}&event=${currentGW}`;
+                    const picksCacheKey = `fpl_draft_picks_bg_v5_${entry.entry_id}_gw${currentGW}`;
                     
                     // Clear old cache to force fresh data
                     localStorage.removeItem(picksCacheKey);
                     
                     try {
                         const response = await fetch(picksUrl);
-                        if (!response.ok) throw new Error('Failed to fetch');
+                        if (!response.ok) {
+                            console.error(`BG: Failed to fetch picks for ${entry.entry_name}: ${response.status}`);
+                            throw new Error('Failed to fetch');
+                        }
                         const picksData = await response.json();
                         if (picksData && picksData.picks) {
                             // ✅ Get ALL 15 players (including bench) for roster
@@ -3128,15 +3136,18 @@ async function loadDraftLeague() {
                     return;
                 }
                 
-                // ✅ Use own serverless function to bypass CORS
-                const url = `${window.location.origin}/api/draft/entry/${entry.entry_id}/picks`;
-                const picksCacheKey = `fpl_draft_picks_final_v4_${entry.entry_id}_gw${draftGw}`;
+                // ✅ Use simplified serverless API to bypass CORS
+                const url = `${window.location.origin}/api/draft-picks?entryId=${entry.entry_id}&event=${draftGw}`;
+                const picksCacheKey = `fpl_draft_picks_final_v5_${entry.entry_id}_gw${draftGw}`;
                 
                 localStorage.removeItem(picksCacheKey); 
                 
                 try {
                     const response = await fetch(url);
-                    if (!response.ok) throw new Error('Failed to fetch');
+                    if (!response.ok) {
+                        console.error(`Failed to fetch picks for ${entry.entry_name}: ${response.status}`);
+                        throw new Error('Failed to fetch');
+                    }
                     const picksData = await response.json();
                     // ✅ Get ALL 15 players (including bench) for complete roster
                     // Store both element ID and position (1-11 = lineup, 12-15 = bench)

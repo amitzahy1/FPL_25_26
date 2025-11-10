@@ -15,27 +15,28 @@ export default async function handler(req, res) {
     }
 
     try {
-        console.log('Fetching FPL bootstrap data...');
+        console.log('Fetching FPL Draft bootstrap data...');
         
-        const response = await fetch('https://fantasy.premierleague.com/api/bootstrap-static/', {
+        // ✅ Use Draft API instead of Fantasy API to get all draft players
+        const response = await fetch('https://draft.premierleague.com/api/bootstrap-static', {
             headers: {
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
             }
         });
 
         if (!response.ok) {
-            throw new Error(`FPL API returned ${response.status}: ${response.statusText}`);
+            throw new Error(`FPL Draft API returned ${response.status}: ${response.statusText}`);
         }
 
         const data = await response.json();
         
-        console.log(`✅ Successfully fetched ${data.elements?.length || 0} players`);
+        console.log(`✅ Successfully fetched ${data.elements?.length || 0} draft players`);
         
         res.status(200).json(data);
     } catch (error) {
-        console.error('Error fetching FPL data:', error);
+        console.error('Error fetching FPL Draft data:', error);
         res.status(500).json({ 
-            error: 'Failed to fetch FPL data',
+            error: 'Failed to fetch FPL Draft data',
             message: error.message 
         });
     }
