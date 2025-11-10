@@ -1,4 +1,4 @@
-const CACHE_NAME = 'fpl-tool-v17-github-pages';
+const CACHE_NAME = 'fpl-tool-v18-github-pages';
 const APP_SHELL = [
   './',
   './index.html',
@@ -31,7 +31,7 @@ self.addEventListener('activate', (event) => {
 });
 
 const API_HOSTS = [
-  'api.allorigins.win',
+  'corsproxy.io',
   'cdn.jsdelivr.net',
   'cdnjs.cloudflare.com',
   'accounts.google.com'
