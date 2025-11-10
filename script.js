@@ -1,14 +1,4 @@
 // ============================================
-// FPL DRAFT ANALYTICS - VERSION INFO
-// ============================================
-console.log('🚀 FPL Draft Analytics - GitHub Pages v3.0');
-console.log('📅 Updated: 2025-11-10');
-console.log('✅ Features: Draft API (752 players) - Direct CORS proxy');
-console.log('🔧 Fix: Lammens (ID 729) & Woltemade (ID 715) now included');
-console.log('🌐 Hosting: GitHub Pages (no Vercel)');
-console.log('=' .repeat(60));
-
-// ============================================
 // SERVICE WORKER MESSAGE HANDLER
 // ============================================
 
@@ -465,7 +455,7 @@ const config = {
         playerImage: (code) => `https://resources.premierleague.com/premierleague/photos/players/110x140/p${code}.png`,
         missingPlayerImage: 'https://resources.premierleague.com/premierleague/photos/players/110x140/Photo-Missing.png'
     },
-    // ✅ Use CORS proxy for GitHub Pages (no Vercel)
+    // ✅ Use CORS proxy for all API calls (GitHub Pages compatible)
     corsProxy: 'https://api.allorigins.win/raw?url=',
     draftLeagueId: 689,
     setPieceTakers: {"Arsenal":{"penalties":["Saka","Havertz"],"freekicks":["Ødegaard","Rice","Martinelli"],"corners":["Martinelli","Saka","Ødegaard"]},"Aston Villa":{"penalties":["Watkins","Tielemans"],"freekicks":["Digne","Douglas Luiz","Bailey"],"corners":["Douglas Luiz","McGinn"]},"Bournemouth":{"penalties":["Solanke","Kluivert"],"freekicks":["Tavernier","Scott"],"corners":["Tavernier","Scott"]},"Brentford":{"penalties":["Toney","Mbeumo"],"freekicks":["Jensen","Mbeumo","Damsgaard"],"corners":["Jensen","Mbeumo"]},"Brighton":{"penalties":["João Pedro","Gross"],"freekicks":["Gross","Estupiñán"],"corners":["Gross","March"]},"Chelsea":{"penalties":["Palmer","Nkunku"],"freekicks":["Palmer","James","Enzo"],"corners":["Gallagher","Chilwell","Palmer"]},"Crystal Palace":{"penalties":["Eze","Olise"],"freekicks":["Eze","Olise"],"corners":["Eze","Olise"]},"Everton":{"penalties":["Calvert-Lewin","McNeil"],"freekicks":["McNeil","Garner"],"corners":["McNeil","Garner"]},"Fulham":{"penalties":["Andreas","Jiménez"],"freekicks":["Andreas","Willian","Wilson"],"corners":["Andreas","Willian"]},"Ipswich":{"penalties":["Chaplin","Hirst"],"freekicks":["Davis","Morsy"],"corners":["Davis","Chaplin"]},"Leicester":{"penalties":["Vardy","Dewsbury-Hall"],"freekicks":["Dewsbury-Hall","Fatawu"],"corners":["Dewsbury-Hall","Fatawu"]},"Liverpool":{"penalties":["M.Salah","Szoboszlai"],"freekicks":["Alexander-Arnold","Szoboszlai","Robertson"],"corners":["Alexander-Arnold","Robertson"]},"Man City":{"penalties":["Haaland","Alvarez"],"freekicks":["De Bruyne","Foden","Alvarez"],"corners":["Foden","De Bruyne"]},"Man Utd":{"penalties":["B.Fernandes","Rashford"],"freekicks":["B.Fernandes","Eriksen","Rashford"],"corners":["B.Fernandes","Shaw"]},"Newcastle":{"penalties":["Isak","Wilson"],"freekicks":["Trippier","Gordon"],"corners":["Trippier","Gordon"]},"Nott'm Forest":{"penalties":["Gibbs-White","Wood"],"freekicks":["Gibbs-White","Elanga"],"corners":["Gibbs-White","Elanga"]},"Southampton":{"penalties":["A. Armstrong","Ward-Prowse"],"freekicks":["Ward-Prowse","Smallbone"],"corners":["Ward-Prowse","Aribo"]},"Spurs":{"penalties":["Son","Maddison"],"freekicks":["Maddison","Pedro Porro"],"corners":["Maddison","Pedro Porro","Son"]},"West Ham":{"penalties":["Ward-Prowse","Bowen"],"freekicks":["Ward-Prowse","Emerson"],"corners":["Ward-Prowse","Bowen"]},"Wolves":{"penalties":["Cunha","Hwang"],"freekicks":["Sarabia","Bellegarde"],"corners":["Sarabia","Aït-Nouri"]}},
@@ -618,17 +608,38 @@ async function fetchWithCache(url, cacheKey, cacheDurationMinutes = 5) {
 
     console.log(`🔄 Fetching fresh data for ${cacheKey}`);
     
-    // Use CORS proxy for FPL API calls (GitHub Pages - no serverless functions)
+    // Use CORS proxy for all FPL API calls (GitHub Pages compatible)
     try {
         let finalUrl = url;
         
-        // ✅ Use CORS proxy for all FPL API calls (GitHub Pages compatible)
-        if (url.includes('premierleague.com') || url.includes('draft.premierleague.com')) {
+        // ✅ For bootstrap-static, try static file first, then fallback to API
+        if (url.includes('bootstrap-static')) {
+            // First try to load from static file
+            try {
+                const staticResponse = await fetch('./FPL_Bootstrap_static.json');
+                if (staticResponse.ok) {
+                    const staticData = await staticResponse.json();
+                    console.log(`✅ Loaded bootstrap data from static file (${staticData.elements?.length || 0} players)`);
+                    // Cache it
+                    try {
+                        localStorage.setItem(cacheKey, JSON.stringify({ timestamp: new Date().getTime(), data: staticData }));
+                    } catch(e) {
+                        console.error("Failed to write to localStorage.", e);
+                    }
+                    return staticData;
+                }
+            } catch (err) {
+                console.log(`⚠️ Static file not available, falling back to API`);
+            }
+            
+            // Fallback to Draft API with CORS proxy
+            finalUrl = `${config.corsProxy}${encodeURIComponent('https://draft.premierleague.com/api/bootstrap-static')}`;
+            console.log(`📡 Using CORS proxy for bootstrap-static: ${finalUrl}`);
+        }
+        // For all other FPL API calls, use CORS proxy
+        else if (url.includes('premierleague.com') || url.includes('draft.premierleague.com')) {
             finalUrl = `${config.corsProxy}${encodeURIComponent(url)}`;
             console.log(`📡 Using CORS proxy for: ${url}`);
-            if (url.includes('bootstrap-static')) {
-                console.log(`🎯 VERSION: GitHub Pages v3.0 - Updated 2025-11-10 with Lammens & Woltemade fix`);
-            }
         } else {
             console.log(`📡 Calling API: ${url}`);
         }
@@ -2964,19 +2975,21 @@ async function loadDraftDataInBackground() {
             const rosterPromises = details.league_entries
                 .filter(e => e && e.id && e.entry_id)
                 .map(async entry => {
-                    // ✅ Use Draft API directly with CORS proxy (GitHub Pages compatible)
-                    const picksUrl = `https://draft.premierleague.com/api/entry/${entry.entry_id}/event/${currentGW}`;
-                    const picksCacheKey = `fpl_draft_picks_bg_v5_${entry.entry_id}_gw${currentGW}`;
+                    // ✅ Use CORS proxy to fetch picks (GitHub Pages compatible)
+                    const picksApiUrl = `https://draft.premierleague.com/api/entry/${entry.entry_id}/event/${currentGW}`;
+                    const picksUrl = `${config.corsProxy}${encodeURIComponent(picksApiUrl)}`;
+                    const picksCacheKey = `fpl_draft_picks_bg_v6_${entry.entry_id}_gw${currentGW}`;
                     
                     // Clear old cache to force fresh data
                     localStorage.removeItem(picksCacheKey);
                     
                     try {
-                        const picksData = await fetchWithCache(picksUrl, picksCacheKey, 60 * 60 * 1000);
-                        if (!picksData) {
-                            console.error(`BG: Failed to fetch picks for ${entry.entry_name}`);
+                        const response = await fetch(picksUrl);
+                        if (!response.ok) {
+                            console.error(`BG: Failed to fetch picks for ${entry.entry_name}: ${response.status}`);
                             throw new Error('Failed to fetch');
                         }
+                        const picksData = await response.json();
                         if (picksData && picksData.picks) {
                             // ✅ Get ALL 15 players (including bench) for roster
                             const allPlayerIds = picksData.picks.map(pick => pick.element);
@@ -3142,18 +3155,20 @@ async function loadDraftLeague() {
                     return;
                 }
                 
-                // ✅ Use Draft API directly with CORS proxy (GitHub Pages compatible)
-                const url = `https://draft.premierleague.com/api/entry/${entry.entry_id}/event/${draftGw}`;
-                const picksCacheKey = `fpl_draft_picks_final_v5_${entry.entry_id}_gw${draftGw}`;
+                // ✅ Use CORS proxy to fetch picks (GitHub Pages compatible)
+                const picksApiUrl = `https://draft.premierleague.com/api/entry/${entry.entry_id}/event/${draftGw}`;
+                const url = `${config.corsProxy}${encodeURIComponent(picksApiUrl)}`;
+                const picksCacheKey = `fpl_draft_picks_final_v6_${entry.entry_id}_gw${draftGw}`;
                 
                 localStorage.removeItem(picksCacheKey); 
                 
                 try {
-                    const picksData = await fetchWithCache(url, picksCacheKey, 60 * 60 * 1000);
-                    if (!picksData) {
-                        console.error(`Failed to fetch picks for ${entry.entry_name}`);
+                    const response = await fetch(url);
+                    if (!response.ok) {
+                        console.error(`Failed to fetch picks for ${entry.entry_name}: ${response.status}`);
                         throw new Error('Failed to fetch');
                     }
+                    const picksData = await response.json();
                     // ✅ Get ALL 15 players (including bench) for complete roster
                     // Store both element ID and position (1-11 = lineup, 12-15 = bench)
                     const playerElements = (picksData && picksData.picks) ? picksData.picks.map(p => p.element) : [];

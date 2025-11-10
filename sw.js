@@ -1,7 +1,9 @@
-const CACHE_NAME = 'fpl-tool-v16-force-refresh';
+const CACHE_NAME = 'fpl-tool-v17-github-pages';
 const APP_SHELL = [
   './',
   './index.html',
+  './style.css',
+  './script.js',
   './FPL_Bootstrap_static.json',
   './manifest.webmanifest'
 ];
@@ -29,9 +31,10 @@ self.addEventListener('activate', (event) => {
 });
 
 const API_HOSTS = [
-  'fpl-25-26.vercel.app',
+  'api.allorigins.win',
   'cdn.jsdelivr.net',
-  'cdnjs.cloudflare.com'
+  'cdnjs.cloudflare.com',
+  'accounts.google.com'
 ];
 
 self.addEventListener('fetch', (event) => {
