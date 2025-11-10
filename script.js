@@ -2891,170 +2891,40 @@ async function loadDraftDataInBackground() {
     }
 }
 
-async function loadDraftLeague() {
-    showLoading('טוען ליגת דראפט...');
-    const draftContainer = document.getElementById('draftTabContent');
-    const sectionsToClear = ['draftStandingsContent', 'draftRecommendations', 'draftAnalytics', 'draftComparison', 'draftMatrices'];
+async function loadDraftLeague(leagueId, entryId) {
+    if (state.draft.details) {
+        console.log('ℹ️ Draft details already loaded.');
+        return;
+    }
+    console.log(`[Draft] ⏳ Loading league ${leagueId} for entry ${entryId}...`);
+    showLoading('טוען נתוני ליגת דראפט...');
     
-    // Clear containers that will be rendered into
-    const myLineupContainer = document.getElementById('myLineupContainer');
-    const otherRostersContainer = document.getElementById('otherRosters');
-    if (myLineupContainer) myLineupContainer.innerHTML = '';
-    if (otherRostersContainer) otherRostersContainer.innerHTML = '';
-
-    // Show mini loaders for sections that take time
-    sectionsToClear.forEach(id => {
-        const el = document.getElementById(id);
-        if(el) {
-            el.innerHTML = `<div class="mini-loader" style="display:block;"></div>`;
-        }
-    });
-
     try {
-        // Build Draft→FPL ID mapping first (if not already built)
-        if (!draftToFplIdMap) {
-            console.log('🔧 Initializing Draft→FPL ID mapping...');
-            const mappingResult = await buildDraftToFplMapping();
-            if (mappingResult.success) {
-                showToast('מיפוי הושלם', `${mappingResult.mapped} שחקנים מופו בהצלחה`, 'success', 2000);
-                if (mappingResult.unmapped > 0) {
-                    console.warn(`⚠️  ${mappingResult.unmapped} שחקנים לא נמצאה להם התאמה`);
-                }
-            } else {
-                showToast('אזהרה', 'מיפוי Draft→FPL נכשל, נתונים עשויים להיות לא מדויקים', 'warning', 3000);
-            }
-        }
-        
-        // Make sure we have player data loaded (demo or real)
-        if (state.currentDataSource === 'demo') {
-            // In demo mode, ensure demo data is loaded
-            if (!state.allPlayersData.demo || !state.allPlayersData.demo.processed) {
-                showToast('שגיאה', 'נתוני דמו לא נטענו. אנא רענן את הדף.', 'error', 3000);
-                hideLoading();
-                return;
-            }
-        } else if (!state.allPlayersData.live.raw && !state.allPlayersData.historical.raw) {
-            await fetchAndProcessData();
-        }
+        await buildDraftToFplMapping();
 
-        const detailsCacheKey = `fpl_draft_details_${config.draftLeagueId}`;
-        const standingsCacheKey = `fpl_draft_standings_${config.draftLeagueId}`;
-        localStorage.removeItem(detailsCacheKey);
-        localStorage.removeItem(standingsCacheKey);
-        
-        const encodedDetails = config.corsProxy + encodeURIComponent(config.urls.draftLeagueDetails(config.draftLeagueId));
-        const encodedStandings = config.corsProxy + encodeURIComponent(config.urls.draftLeagueStandings(config.draftLeagueId));
+        const urls = {
+            details: `https://draft.premierleague.com/api/league/${leagueId}/details`,
+            standings: `https://draft.premierleague.com/api/league/${leagueId}/standings`
+        };
 
-        const [detailsData, standingsData] = await Promise.all([
-            fetchWithCache(encodedDetails, detailsCacheKey, 5),
-            fetchWithCache(encodedStandings, standingsCacheKey, 5).catch(() => null)
+        const [details, standings] = await Promise.all([
+            fetchWithCache(config.corsProxy + encodeURIComponent(urls.details), `draft_details_${leagueId}`, 5),
+            fetchWithCache(config.corsProxy + encodeURIComponent(urls.standings), `draft_standings_${leagueId}`, 5)
         ]);
         
-        state.draft.details = detailsData;
-        state.draft.standings = standingsData;
-        
-        console.log("--- Draft League Debug ---");
-        console.log("1. Fetched Details Data:", JSON.parse(JSON.stringify(detailsData)));
-        
-        state.draft.entryIdToTeamName = new Map((state.draft.details?.league_entries || []).filter(e=>e && e.entry_name).map(e => [e.id, e.entry_name]));
-        
-        // --- Final, reliable roster population method V4 ---
-        // Based on debug logs, element_status is empty. We MUST revert to fetching individual picks.
-        // This is the most robust method confirmed by community projects.
-        try {
-            state.draft.rostersByEntryId.clear();
-            state.draft.ownedElementIds.clear();
+        state.draft.details = details;
+        state.draft.standings = standings;
+        state.draft.myEntryId = entryId;
 
-            const leagueEntries = state.draft.details?.league_entries || [];
-            const draftGw = state.draft.details?.league?.current_event || getCurrentEventId();
-            console.log(`2. Determined Draft GW: ${draftGw}. Found ${leagueEntries.length} league entries.`);
-
-            const picksPromises = leagueEntries.map(async (entry) => {
-                if (!entry || !entry.entry_id || !entry.id) {
-                    return;
-                }
-                
-                const url = config.corsProxy + encodeURIComponent(config.urls.draftEntryPicks(entry.entry_id, draftGw));
-                const picksCacheKey = `fpl_draft_picks_final_v4_${entry.entry_id}_gw${draftGw}`;
-                
-                localStorage.removeItem(picksCacheKey); 
-                
-                try {
-                    const picksData = await fetchWithCache(url, picksCacheKey, 5);
-                    const playerElements = (picksData && picksData.picks) ? picksData.picks.map(p => p.element) : [];
-                    state.draft.rostersByEntryId.set(entry.id, playerElements);
-                } catch (err) {
-                    console.error(`Failed to fetch final picks for entry ${entry.entry_name} (${entry.entry_id})`, err);
-                    state.draft.rostersByEntryId.set(entry.id, []);
-                }
-            });
-
-            await Promise.all(picksPromises);
-
-            for (const playerIds of state.draft.rostersByEntryId.values()) {
-                playerIds.forEach(id => state.draft.ownedElementIds.add(id));
-            }
-            
-            console.log("3. Rosters Populated:", state.draft.rostersByEntryId.size, "teams.");
-            let totalPlayers = 0;
-            const processedById = getProcessedByElementId();
-            
-            state.draft.rostersByEntryId.forEach((roster, teamId) => {
-                const teamName = state.draft.entryIdToTeamName.get(teamId) || `Unknown ID: ${teamId}`;
-                const playerNames = roster.map(draftId => {
-                    // Map Draft ID to FPL ID
-                    const fplId = getFplIdFromDraft(draftId);
-                    const player = processedById.get(fplId);
-                    if (player) {
-                        return player.web_name;
-                    } else {
-                        // Player not found - check if it's in unmapped list
-                        const unmapped = unmappedPlayers.find(p => p.id === draftId);
-                        if (unmapped) {
-                            return `${unmapped.name} ⚠️`;
-                        }
-                        return `ID ${draftId}→${fplId} ❌`;
-                    }
-                }).join(', ');
-                console.log(`  - Team '${teamName}':`, roster.length, "players -> [", playerNames, "]");
-                totalPlayers += roster.length;
-            });
-            console.log("4. Total players in all rosters:", totalPlayers);
-            console.log("5. Total owned player IDs:", state.draft.ownedElementIds.size);
-
-        } catch (debugError) {
-            console.error("!!! CRITICAL ERROR during roster population !!!", debugError);
-            draftContainer.innerHTML = `<div style="text-align:center; padding: 20px; color: red;">שגיאה קריטית בעיבוד נתוני הסגלים: ${debugError.message}<br>אנא בדוק את הקונסול.</div>`;
-            return; // Stop execution if rosters failed
-        }
-        // --- End of Roster Population ---
+        await processDraftData();
+        renderDraftTab();
         
-        renderDraftStandings();
-        
-        const myTeam = findMyTeam();
+        // FIX: Re-render the main players table to apply highlighting for my team
+        filterAndSortPlayers();
 
-        if (myTeam) {
-            renderMyLineup(myTeam.id);
-        }
-        
-        renderRecommendations();
-
-        const aggregates = computeDraftTeamAggregates();
-        populateAnalyticsHighlight(); // Populate highlight dropdown
-        renderDraftAnalytics(aggregates);
-        renderDraftComparison(aggregates);
-        renderDraftRosters();
-        renderDraftMatrices(aggregates);
-        populateTeamFilter(); // Repopulate with draft teams
-        
-        // Show success toast
-        const totalTeams = state.draft.rostersByEntryId.size;
-        const totalPlayers = state.draft.ownedElementIds.size;
-        showToast('ליגת דראפט נטענה בהצלחה', `${totalTeams} קבוצות, ${totalPlayers} שחקנים`, 'success', 3000);
-    } catch (e) {
-        console.error('loadDraftLeague error', e);
-        draftContainer.innerHTML = `<div style="text-align:center; padding: 20px; color: red;">שגיאה בטעינת נתוני הליגה: ${e.message}</div>`;
-        showToast('שגיאה בטעינת הליגה', e.message, 'error', 5000);
+    } catch (error) {
+        console.error('❌ Failed to load draft league data:', error);
+        document.getElementById('draftTabContent').innerHTML = `<p class="error-msg">שגיאה בטעינת נתוני הליגה. אנא בדוק את ה-ID ורענן.</p>`;
     } finally {
         hideLoading();
     }
@@ -4131,13 +4001,11 @@ function renderDraftComparison(aggregates) {
     container.innerHTML = tableHTML;
 }
 
-function renderPitch(containerEl, playerIds, isMyLineup = false) {
+function renderPitch(containerEl, playerIds, title = '') {
     if (!containerEl) {
-        console.error('renderPitch: containerEl is null or undefined');
+        console.error("Pitch container element not found for title:", title);
         return;
     }
-    
-    containerEl.innerHTML = ''; // Clear loader
     
     if (!playerIds || playerIds.length === 0) {
         containerEl.innerHTML = '<p style="text-align:center; padding: 20px; color: #666;">אין שחקנים בסגל.</p>';
@@ -4156,73 +4024,60 @@ function renderPitch(containerEl, playerIds, isMyLineup = false) {
         return;
     }
 
-    const pitch = document.createElement('div');
-    pitch.className = isMyLineup ? 'pitch-container my-lineup' : 'pitch-container other-team';
-    
-    // Add pitch lines
-    pitch.innerHTML = `
-        <div class="pitch-lines">
-            <div class="pitch-half"></div>
-            <div class="pitch-circle"></div>
-            <div class="penalty-top"></div>
-            <div class="penalty-bottom"></div>
-            <div class="goal-top"></div>
-            <div class="goal-bottom"></div>
-        </div>
+    containerEl.innerHTML = `
+        <div class="pitch-lines"></div>
+        <div class="pitch-center-circle"></div>
+        <div class="penalty-top"></div>
+        <div class="penalty-bottom"></div>
+        <div class="goal-top"></div>
+        <div class="goal-bottom"></div>
     `;
 
-    const startingXI_ids = pickStartingXI(playerIds);
-    const startingXI = startingXI_ids.map(draftId => {
-        const fplId = getFplIdFromDraft(draftId);
-        return processedById.get(fplId);
-    }).filter(Boolean);
+    const startingXI_ids = pickStartingXI(playerIds); // Expects Draft IDs, returns FPL IDs
+    const startingXI = startingXI_ids.map(id => processedById.get(id)).filter(Boolean);
     const benchPlayers = players.filter(p => !startingXI_ids.includes(p.id));
 
     const byPos = { GKP: [], DEF: [], MID: [], FWD: [] };
     startingXI.forEach(p => byPos[p.position_name].push(p));
-    
-    // Sort players within position by name for consistent layout
-    for (const pos in byPos) {
-        byPos[pos].sort((a,b) => a.web_name.localeCompare(b.web_name));
-    }
-
-    const rowsY = { GKP: 92, DEF: 75, MID: 50, FWD: 25 };
 
     const placeRow = (players, y) => {
         const count = players.length;
         if (count === 0) return;
+        const step = 100 / (count + 1);
         players.forEach((p, i) => {
+            const x = step * (i + 1);
             const spot = document.createElement('div');
             spot.className = 'player-spot';
+            spot.style.left = `${x}%`;
             spot.style.top = `${y}%`;
-            spot.style.left = `${(i + 1) * 100 / (count + 1)}%`;
-            
             spot.innerHTML = `
-                <img class="player-photo" src="${getPlayerImageUrl(p)}" alt="${p.web_name}">
+                <img src="${p.photo_url}" class="player-photo" alt="${p.web_name}">
                 <div class="player-name">${p.web_name}</div>
             `;
-            pitch.appendChild(spot);
+            containerEl.appendChild(spot);
         });
     };
 
+    const rowsY = { GKP: 92, DEF: 75, MID: 50, FWD: 25 };
     placeRow(byPos.GKP, rowsY.GKP);
     placeRow(byPos.DEF, rowsY.DEF);
     placeRow(byPos.MID, rowsY.MID);
     placeRow(byPos.FWD, rowsY.FWD);
     
-    containerEl.appendChild(pitch);
-
     // Bench
-    if (benchPlayers.length > 0) {
-        const bench = document.createElement('div');
-        bench.className = 'bench-strip';
-        bench.innerHTML = benchPlayers.map(p => `
-            <div class="bench-item">
-                <img src="${getPlayerImageUrl(p)}" alt="${p.web_name}">
-                <div>${p.web_name}</div>
-            </div>
-        `).join('');
-        containerEl.appendChild(bench);
+    const benchContainerId = containerEl.id.includes('myLineup') ? 'myLineupBench' : null;
+    if (benchContainerId) {
+        const benchEl = document.getElementById(benchContainerId);
+        if (benchEl) {
+            benchEl.innerHTML = benchPlayers.sort((a,b) => a.element_type - b.element_type).map(p => `
+                <div class="bench-item" title="${p.first_name} ${p.second_name}">
+                    <img src="${p.photo_url}" alt="${p.web_name}">
+                    <div class="bench-player-details">
+                        <div class="bench-player-name">${p.web_name}</div>
+                    </div>
+                </div>
+            `).join('');
+        }
     }
 }
 
@@ -4271,4 +4126,47 @@ function renderDraftRosters() {
     if (rosteredCount === 0) {
         container.innerHTML = '<p style="text-align:center; padding: 40px; color: #666;">לא נמצאו סגלים להצגה.</p>';
     }
+}
+
+function renderPlayersTable(players) {
+    const tableBody = document.getElementById('playersTableBody');
+    if (!tableBody) return;
+
+    // Get the user's team players
+    const myTeamId = state.draft?.myEntryId;
+    const myPlayerDraftIds = myTeamId ? (state.draft.rostersByEntryId.get(myTeamId) || []) : [];
+    const myPlayerFplIds = new Set(myPlayerDraftIds.map(draftId => getFplIdFromDraft(draftId)));
+
+    const rows = players.map(p => {
+        const isMyPlayer = myPlayerFplIds.has(p.id);
+        const position = state.positions[p.element_type]?.singular_name_short || 'UNK';
+        const team = state.teams[p.team]?.short_name || 'UNK';
+        const teamFullName = state.teams[p.team]?.name || "N/A";
+
+        return `
+            <tr data-player-id="${p.id}" class="${isMyPlayer ? 'my-player-row' : ''}">
+                <td class="name-cell" title="${p.first_name} ${p.second_name}">
+                    <span class="player-name-icon">${p.player_icon}</span>
+                    <span class="player-name-main">${p.web_name}</span>
+                    <span class="player-team-pos">${team} / ${position}</span>
+                </td>
+                <td class="bold-cell">${p.draft_score}</td>
+                <td>${p.predicted_points_4_gw?.toFixed(1) || 'N/A'}</td>
+                <td>${p.ict_index_rank}</td>
+                <td class="${p.xdiff_class}">${p.xdiff?.toFixed(2) || 'N/A'}</td>
+                <td>${p.ep_next}</td>
+                <td>${(p.now_cost / 10).toFixed(1)}</td>
+                <td>${p.goals_scored}</td>
+                <td>${p.assists}</td>
+                <td>${p.total_points}</td>
+                <td class="transfers-cell">
+                    <span class="${p.net_transfers_class}">${p.net_transfers_formatted}</span>
+                </td>
+                <td class="verbal-insights-cell" title="${p.verbal_insights || ''}">${p.verbal_insights || ''}</td>
+                <td class="${p.set_piece_class}">${p.set_piece_taker_verbal}</td>
+            </tr>
+        `;
+    }).join('');
+
+    tableBody.innerHTML = rows;
 }
