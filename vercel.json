@@ -16,6 +16,10 @@
       "dest": "/api/fixtures.js"
     },
     {
+      "src": "/api/draft-picks",
+      "dest": "/api/draft-picks.js"
+    },
+    {
       "src": "/api/draft/(.*)/details",
       "dest": "/api/draft/[leagueId]/details.js"
     },

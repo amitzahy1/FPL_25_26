@@ -1,0 +1,42 @@
+🔧 תיקון בעיית רשימת שחקנים - מדריך מהיר
+================================================
+
+✅ מה תוקן?
+-----------
+הבעיה: הקובץ api/bootstrap.js היה מושך נתונים מ-Fantasy API במקום מ-Draft API
+התוצאה: 82 שחקנים חסרים (670 במקום 752), כולל Lammens ו-Woltemade
+
+🛠️ הקבצים שעודכנו:
+------------------
+1. api/bootstrap.js - עכשיו מושך מ-draft.premierleague.com ✅
+2. script.js - משתמש ב-Vercel API במקום CORS proxy ✅
+3. FPL_Bootstrap_static.json - עודכן ל-752 שחקנים ✅
+
+📤 מה לעשות עכשיו?
+------------------
+1. העלה את 3 הקבצים ל-GitHub
+2. Vercel יעדכן אוטומטית
+3. נקה cache בדפדפן (Ctrl+Shift+Delete או Cmd+Shift+Delete)
+4. רענן את האתר
+
+🧪 איך לבדוק שזה עובד?
+----------------------
+1. פתח F12 (Developer Tools)
+2. לך ל-Console
+3. רענן את הדף
+4. חפש: "📡 Using Vercel API for bootstrap-static"
+5. חפש: "✅ Successfully fetched 752 draft players"
+6. בדוק שכל 15 השחקנים שלך מופיעים ברשימה
+
+💡 טיפ חשוב!
+------------
+אם עדיין רואה בעיות, נקה את localStorage:
+1. F12 -> Application (או Storage)
+2. Local Storage -> בחר את האתר שלך
+3. לחץ ימין -> Clear
+4. רענן את הדף
+
+📝 פרטים נוספים
+---------------
+ראה את הקובץ FIX_SUMMARY.md להסבר מפורט על הבעיה והתיקון.
+
