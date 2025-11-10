@@ -1,23 +1,4 @@
 // ============================================
-// SERVICE WORKER MESSAGE HANDLER
-// ============================================
-
-// Listen for messages from Service Worker to clear localStorage
-if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.addEventListener('message', (event) => {
-        if (event.data && event.data.type === 'CLEAR_LOCALSTORAGE') {
-            console.log('🔥 Service Worker requested localStorage clear');
-            Object.keys(localStorage).forEach(key => {
-                if (key.startsWith('fpl_')) {
-                    localStorage.removeItem(key);
-                }
-            });
-            console.log('✅ localStorage cleared by Service Worker');
-        }
-    });
-}
-
-// ============================================
 // AUTHENTICATION & USER MANAGEMENT
 // ============================================
 
@@ -31,22 +12,15 @@ const auth = {
         // Check if user is already logged in (from localStorage)
         const savedUser = localStorage.getItem('fpl_user');
         if (savedUser) {
-            try {
-                this.user = JSON.parse(savedUser);
-                // Check if user is authorized
-                if (this.user.email === this.allowedEmail) {
-                    this.showApp();
-                } else {
-                    // Unauthorized user - force demo mode
-                    this.user.name = this.user.name || 'משתמש';
-                    this.isDemo = true;
-                    this.showApp();
-                }
-            } catch (e) {
-                // Invalid saved user data, clear and show login
-                console.error('Invalid saved user data:', e);
-                localStorage.removeItem('fpl_user');
-                this.showLoginScreen();
+            this.user = JSON.parse(savedUser);
+            // Check if user is authorized
+            if (this.user.email === this.allowedEmail) {
+                this.showApp();
+            } else {
+                // Unauthorized user - force demo mode
+                this.user.name = this.user.name || 'משתמש';
+                this.isDemo = true;
+                this.showApp();
             }
         } else {
             this.showLoginScreen();
@@ -457,14 +431,12 @@ const config = {
         bootstrap: 'https://fantasy.premierleague.com/api/bootstrap-static/',
         fixtures: 'https://fantasy.premierleague.com/api/fixtures/',
         draftLeagueDetails: (leagueId) => `https://draft.premierleague.com/api/league/${leagueId}/details`,
-        // Note: /standings is included in /details response, no separate endpoint needed
+        draftLeagueStandings: (leagueId) => `https://draft.premierleague.com/api/league/${leagueId}/standings`,
         draftEntryPicks: (entryId, gw) => `https://draft.premierleague.com/api/entry/${entryId}/event/${gw}`,
         playerImage: (code) => `https://resources.premierleague.com/premierleague/photos/players/110x140/p${code}.png`,
         missingPlayerImage: 'https://resources.premierleague.com/premierleague/photos/players/110x140/Photo-Missing.png'
     },
-    // ✅ Use CORS proxy for all API calls (GitHub Pages compatible)
-    // Using corsproxy.io - more reliable than allorigins
-    corsProxy: 'https://corsproxy.io/?',
+    vercelApi: 'https://fpl-25-26.vercel.app/api',
     draftLeagueId: 689,
     setPieceTakers: {"Arsenal":{"penalties":["Saka","Havertz"],"freekicks":["Ødegaard","Rice","Martinelli"],"corners":["Martinelli","Saka","Ødegaard"]},"Aston Villa":{"penalties":["Watkins","Tielemans"],"freekicks":["Digne","Douglas Luiz","Bailey"],"corners":["Douglas Luiz","McGinn"]},"Bournemouth":{"penalties":["Solanke","Kluivert"],"freekicks":["Tavernier","Scott"],"corners":["Tavernier","Scott"]},"Brentford":{"penalties":["Toney","Mbeumo"],"freekicks":["Jensen","Mbeumo","Damsgaard"],"corners":["Jensen","Mbeumo"]},"Brighton":{"penalties":["João Pedro","Gross"],"freekicks":["Gross","Estupiñán"],"corners":["Gross","March"]},"Chelsea":{"penalties":["Palmer","Nkunku"],"freekicks":["Palmer","James","Enzo"],"corners":["Gallagher","Chilwell","Palmer"]},"Crystal Palace":{"penalties":["Eze","Olise"],"freekicks":["Eze","Olise"],"corners":["Eze","Olise"]},"Everton":{"penalties":["Calvert-Lewin","McNeil"],"freekicks":["McNeil","Garner"],"corners":["McNeil","Garner"]},"Fulham":{"penalties":["Andreas","Jiménez"],"freekicks":["Andreas","Willian","Wilson"],"corners":["Andreas","Willian"]},"Ipswich":{"penalties":["Chaplin","Hirst"],"freekicks":["Davis","Morsy"],"corners":["Davis","Chaplin"]},"Leicester":{"penalties":["Vardy","Dewsbury-Hall"],"freekicks":["Dewsbury-Hall","Fatawu"],"corners":["Dewsbury-Hall","Fatawu"]},"Liverpool":{"penalties":["M.Salah","Szoboszlai"],"freekicks":["Alexander-Arnold","Szoboszlai","Robertson"],"corners":["Alexander-Arnold","Robertson"]},"Man City":{"penalties":["Haaland","Alvarez"],"freekicks":["De Bruyne","Foden","Alvarez"],"corners":["Foden","De Bruyne"]},"Man Utd":{"penalties":["B.Fernandes","Rashford"],"freekicks":["B.Fernandes","Eriksen","Rashford"],"corners":["B.Fernandes","Shaw"]},"Newcastle":{"penalties":["Isak","Wilson"],"freekicks":["Trippier","Gordon"],"corners":["Trippier","Gordon"]},"Nott'm Forest":{"penalties":["Gibbs-White","Wood"],"freekicks":["Gibbs-White","Elanga"],"corners":["Gibbs-White","Elanga"]},"Southampton":{"penalties":["A. Armstrong","Ward-Prowse"],"freekicks":["Ward-Prowse","Smallbone"],"corners":["Ward-Prowse","Aribo"]},"Spurs":{"penalties":["Son","Maddison"],"freekicks":["Maddison","Pedro Porro"],"corners":["Maddison","Pedro Porro","Son"]},"West Ham":{"penalties":["Ward-Prowse","Bowen"],"freekicks":["Ward-Prowse","Emerson"],"corners":["Ward-Prowse","Bowen"]},"Wolves":{"penalties":["Cunha","Hwang"],"freekicks":["Sarabia","Bellegarde"],"corners":["Sarabia","Aït-Nouri"]}},
     tableColumns: [
@@ -588,71 +560,31 @@ const charts = {
     comparisonRadar: null
 };
 
-async function fetchWithCache(url, cacheKey, cacheDurationMinutes = 5) {
-    // ⚠️ FORCE FRESH DATA - Skip cache for debugging
-    const FORCE_FRESH = true;
-    
-    if (!FORCE_FRESH) {
-        const cachedItem = localStorage.getItem(cacheKey);
-        if (cachedItem) {
-            try {
-                const { timestamp, data } = JSON.parse(cachedItem);
-                const isCacheValid = (new Date().getTime() - timestamp) / (1000 * 60) < cacheDurationMinutes;
-                if (isCacheValid) {
-                    console.log(`✅ Returning cached data for ${cacheKey}`);
-                    return data;
-                } else {
-                     localStorage.removeItem(cacheKey);
-                }
-            } catch (e) {
-                console.error('Error parsing cache, removing item.', e);
-                localStorage.removeItem(cacheKey);
+async function fetchWithCache(url, cacheKey, cacheDurationMinutes = 120) {
+    const cachedItem = localStorage.getItem(cacheKey);
+    if (cachedItem) {
+        try {
+            const { timestamp, data } = JSON.parse(cachedItem);
+            const isCacheValid = (new Date().getTime() - timestamp) / (1000 * 60) < cacheDurationMinutes;
+            if (isCacheValid) {
+                console.log(`✅ Returning cached data for ${cacheKey}`);
+                return data;
+            } else {
+                 localStorage.removeItem(cacheKey);
             }
+        } catch (e) {
+            console.error('Error parsing cache, removing item.', e);
+            localStorage.removeItem(cacheKey);
         }
-    } else {
-        console.log(`🔥 FORCE FRESH: Skipping cache for ${cacheKey}`);
-        localStorage.removeItem(cacheKey);
     }
 
     console.log(`🔄 Fetching fresh data for ${cacheKey}`);
     
-    // Use CORS proxy for all FPL API calls (GitHub Pages compatible)
+    // URL is already the Vercel API endpoint
     try {
-        let finalUrl = url;
+        console.log(`📡 Calling Vercel API: ${url}`);
         
-        // ✅ For bootstrap-static, try static file first, then fallback to API
-        if (url.includes('bootstrap-static')) {
-            // First try to load from static file
-            try {
-                const staticResponse = await fetch('./FPL_Bootstrap_static.json');
-                if (staticResponse.ok) {
-                    const staticData = await staticResponse.json();
-                    console.log(`✅ Loaded bootstrap data from static file (${staticData.elements?.length || 0} players)`);
-                    // Cache it
-                    try {
-                        localStorage.setItem(cacheKey, JSON.stringify({ timestamp: new Date().getTime(), data: staticData }));
-                    } catch(e) {
-                        console.error("Failed to write to localStorage.", e);
-                    }
-                    return staticData;
-                }
-            } catch (err) {
-                console.log(`⚠️ Static file not available, falling back to API`);
-            }
-            
-            // Fallback to Draft API with CORS proxy
-            finalUrl = `${config.corsProxy}https://draft.premierleague.com/api/bootstrap-static`;
-            console.log(`📡 Using CORS proxy for bootstrap-static: ${finalUrl}`);
-        }
-        // For all other FPL API calls, use CORS proxy
-        else if (url.includes('premierleague.com') || url.includes('draft.premierleague.com')) {
-            finalUrl = `${config.corsProxy}${url}`;
-            console.log(`📡 Using CORS proxy for: ${url}`);
-        } else {
-            console.log(`📡 Calling API: ${url}`);
-        }
-        
-        const response = await fetch(finalUrl, {
+        const response = await fetch(url, {
             method: 'GET',
             headers: {
                 'Accept': 'application/json'
@@ -672,11 +604,11 @@ async function fetchWithCache(url, cacheKey, cacheDurationMinutes = 5) {
             console.error("Failed to write to localStorage. Cache might be full.", e);
         }
         
-        console.log(`✅ Successfully fetched data from API`);
+        console.log(`✅ Successfully fetched data from Vercel API`);
         return data;
         
     } catch (error) {
-        console.error(`❌ API call failed:`, error.message);
+        console.error(`❌ Vercel API failed:`, error.message);
         showErrorModal(url, error);
         throw new Error(`Failed to fetch ${url}: ${error.message}`);
     }
@@ -871,11 +803,12 @@ async function fetchAndProcessData() {
         const needsFixtures = !state.allPlayersData.live.fixtures;
 
         if (needsData || needsFixtures) {
-            // ✅ Use Draft API for complete player data (includes all draft players)
-            const dataUrl = 'https://draft.premierleague.com/api/bootstrap-static';
+            const dataUrl = state.currentDataSource === 'live'
+                ? `${config.vercelApi}/bootstrap`
+                : 'FPL_Bootstrap_static.json';
             const dataCacheKey = `fpl_bootstrap_${state.currentDataSource}`;
             
-            const fixturesUrl = 'https://draft.premierleague.com/api/fixtures/';
+            const fixturesUrl = `${config.vercelApi}/fixtures`;
             const fixturesCacheKey = 'fpl_fixtures';
 
             if (needsData) {
@@ -1087,20 +1020,9 @@ function createPlayerRowHtml(player, index) {
     
     // Get draft team name for this player
     let draftTeamName = '–';
-    let positionIndicator = '';
     if (state.draft.playerIdToTeamId && state.draft.playerIdToTeamId.has(player.id)) {
         const teamId = state.draft.playerIdToTeamId.get(player.id);
         draftTeamName = state.draft.entryIdToTeamName.get(teamId) || '–';
-        
-        // Add lineup/bench indicator
-        if (state.draft.playerPositions && state.draft.playerPositions.has(player.id)) {
-            const position = state.draft.playerPositions.get(player.id);
-            if (position <= 11) {
-                positionIndicator = ' ⭐'; // Lineup
-            } else {
-                positionIndicator = ' 🪑'; // Bench
-            }
-        }
     }
 
     return `<tr>
@@ -1110,7 +1032,7 @@ function createPlayerRowHtml(player, index) {
         <td class="bold-cell">${player.draft_score.toFixed(1)}</td>
         <td class="bold-cell">${(player.predicted_points_1_gw || 0).toFixed(1)}</td>
         <td>${player.team_name}</td>
-        <td class="draft-team-cell" title="${draftTeamName}${positionIndicator ? (positionIndicator === ' ⭐' ? ' (הרכב)' : ' (ספסל)') : ''}">${draftTeamName}${positionIndicator}</td>
+        <td class="draft-team-cell" title="${draftTeamName}">${draftTeamName}</td>
         <td>${player.position_name}</td>
         <td>${player.now_cost.toFixed(1)}</td>
         <td>${player.total_points}</td>
@@ -2953,14 +2875,10 @@ function getTeamColor(name) {
 async function loadDraftDataInBackground() {
     // Load draft data silently in the background without showing loading overlay
     try {
-        // ✅ Use FPL Draft API directly
-        const detailsUrl = `https://draft.premierleague.com/api/league/${state.draft.leagueId}/details`;
+        const detailsUrl = `${config.vercelApi}/draft/${state.draft.leagueId}/details`;
         const detailsCacheKey = `fpl_draft_details_${state.draft.leagueId}`;
         
-        // Clear old cache to force fresh data
-        localStorage.removeItem(detailsCacheKey);
-        
-        const details = await fetchWithCache(detailsUrl, detailsCacheKey, 5);
+        const details = await fetchWithCache(detailsUrl, detailsCacheKey, 30);
         
         if (details && details.league_entries) {
             state.draft.details = details;
@@ -2983,48 +2901,20 @@ async function loadDraftDataInBackground() {
             const rosterPromises = details.league_entries
                 .filter(e => e && e.id && e.entry_id)
                 .map(async entry => {
-                    // ✅ Use CORS proxy to fetch picks (GitHub Pages compatible)
-                    const picksApiUrl = `https://draft.premierleague.com/api/entry/${entry.entry_id}/event/${currentGW}`;
-                    const picksUrl = `${config.corsProxy}${picksApiUrl}`;
-                    const picksCacheKey = `fpl_draft_picks_bg_v6_${entry.entry_id}_gw${currentGW}`;
-                    
-                    // Clear old cache to force fresh data
-                    localStorage.removeItem(picksCacheKey);
-                    
+                    const picksUrl = `${config.vercelApi}/draft/entry/${entry.entry_id}/picks`;
+                    const picksCacheKey = `fpl_draft_picks_bg_${entry.entry_id}_gw${currentGW}`;
                     try {
-                        const response = await fetch(picksUrl);
-                        if (!response.ok) {
-                            console.error(`BG: Failed to fetch picks for ${entry.entry_name}: ${response.status}`);
-                            throw new Error('Failed to fetch');
-                        }
-                        const picksData = await response.json();
+                        const picksData = await fetchWithCache(picksUrl, picksCacheKey, 30);
                         if (picksData && picksData.picks) {
-                            // ✅ Get ALL 15 players (including bench) for roster
-                            const allPlayerIds = picksData.picks.map(pick => pick.element);
-                            const playerPositions = picksData.picks.map(pick => ({ id: pick.element, position: pick.position }));
-                            
-                            state.draft.rostersByEntryId.set(entry.id, allPlayerIds);
-                            
-                            // Store position info for later use (lineup vs bench)
-                            if (!state.draft.playerPositions) {
-                                state.draft.playerPositions = new Map();
-                            }
-                            playerPositions.forEach(p => {
-                                state.draft.playerPositions.set(p.id, p.position);
-                            });
-                            
-                            console.log(`✅ Loaded ${allPlayerIds.length} players for ${entry.entry_name}:`, allPlayerIds);
-                            console.log(`   Lineup (1-11):`, playerPositions.filter(p => p.position <= 11).map(p => p.id));
-                            console.log(`   Bench (12-15):`, playerPositions.filter(p => p.position > 11).map(p => p.id));
-                            
-                            // Add all players to owned set and mapping
-                            allPlayerIds.forEach(id => {
+                            const playerIds = picksData.picks.map(pick => pick.element);
+                            state.draft.rostersByEntryId.set(entry.id, playerIds);
+                            playerIds.forEach(id => {
                                 state.draft.ownedElementIds.add(id);
                                 playerIdToTeamId.set(id, entry.id);
                             });
                         }
                     } catch (err) {
-                        console.error(`❌ Could not load roster for ${entry.entry_name}:`, err);
+                        console.log(`Could not load roster for ${entry.entry_name}`);
                     }
                 });
             
@@ -3039,8 +2929,8 @@ async function loadDraftDataInBackground() {
                 console.log(`🔄 Fetching missing players from live bootstrap...`);
                 
                 try {
-                    // ✅ Use Draft API to get missing players (includes all draft players)
-                    const bootstrapUrl = 'https://draft.premierleague.com/api/bootstrap-static';
+                    // Fetch fresh bootstrap data to get missing players
+                    const bootstrapUrl = `${config.vercelApi}/bootstrap`;
                     const bootstrapData = await fetchWithCache(bootstrapUrl, 'fpl_bootstrap_live_missing', 5); // Short cache
                     
                     if (bootstrapData && bootstrapData.elements) {
@@ -3058,23 +2948,13 @@ async function loadDraftDataInBackground() {
                             if (state.currentDataSource === 'live' && state.allPlayersData.live.processed) {
                                 state.allPlayersData.live.processed.push(...processedMissing);
                                 console.log(`✅ Added ${processedMissing.length} missing players to live processed data`);
-                                
-                                // ✅ FIX: Always refresh displayedData to include missing players
-                                state.displayedData = [...state.allPlayersData.live.processed];
-                                console.log(`✅ Updated displayedData with ${state.displayedData.length} total players`);
                             } else if (state.currentDataSource === 'historical' && state.allPlayersData.historical.processed) {
                                 state.allPlayersData.historical.processed.push(...processedMissing);
                                 console.log(`✅ Added ${processedMissing.length} missing players to historical processed data`);
-                                
-                                // ✅ FIX: Always refresh displayedData to include missing players
-                                state.displayedData = [...state.allPlayersData.historical.processed];
-                                console.log(`✅ Updated displayedData with ${state.displayedData.length} total players`);
                             }
                             
                             // Refresh the table if we're on the players tab
-                            const playersTab = document.getElementById('playersTab');
-                            if (playersTab && playersTab.style.display === 'block') {
-                                console.log(`🔄 Refreshing table with missing players...`);
+                            if (document.getElementById('playersTab').style.display === 'block') {
                                 processChange();
                             }
                         }
@@ -3131,16 +3011,20 @@ async function loadDraftLeague() {
         }
 
         const detailsCacheKey = `fpl_draft_details_${config.draftLeagueId}`;
+        const standingsCacheKey = `fpl_draft_standings_${config.draftLeagueId}`;
         localStorage.removeItem(detailsCacheKey);
+        localStorage.removeItem(standingsCacheKey);
         
-        // ✅ Use FPL Draft API directly - /details contains everything (league_entries, matches, standings)
-        const detailsUrl = `https://draft.premierleague.com/api/league/${config.draftLeagueId}/details`;
+        const detailsUrl = `${config.vercelApi}/draft/${config.draftLeagueId}/details`;
+        const standingsUrl = `${config.vercelApi}/draft/${config.draftLeagueId}/standings`;
 
-        const detailsData = await fetchWithCache(detailsUrl, detailsCacheKey, 5);
+        const [detailsData, standingsData] = await Promise.all([
+            fetchWithCache(detailsUrl, detailsCacheKey, 5),
+            fetchWithCache(standingsUrl, standingsCacheKey, 5).catch(() => null)
+        ]);
         
         state.draft.details = detailsData;
-        // ✅ Extract standings from details response (no separate /standings endpoint needed)
-        state.draft.standings = detailsData?.standings || null;
+        state.draft.standings = standingsData;
         
         console.log("--- Draft League Debug ---");
         console.log("1. Fetched Details Data:", JSON.parse(JSON.stringify(detailsData)));
@@ -3163,40 +3047,17 @@ async function loadDraftLeague() {
                     return;
                 }
                 
-                // ✅ Use CORS proxy to fetch picks (GitHub Pages compatible)
-                const picksApiUrl = `https://draft.premierleague.com/api/entry/${entry.entry_id}/event/${draftGw}`;
-                const url = `${config.corsProxy}${picksApiUrl}`;
-                const picksCacheKey = `fpl_draft_picks_final_v6_${entry.entry_id}_gw${draftGw}`;
+                const url = `${config.vercelApi}/draft/entry/${entry.entry_id}/picks`;
+                const picksCacheKey = `fpl_draft_picks_final_v4_${entry.entry_id}_gw${draftGw}`;
                 
                 localStorage.removeItem(picksCacheKey); 
                 
                 try {
-                    const response = await fetch(url);
-                    if (!response.ok) {
-                        console.error(`Failed to fetch picks for ${entry.entry_name}: ${response.status}`);
-                        throw new Error('Failed to fetch');
-                    }
-                    const picksData = await response.json();
-                    // ✅ Get ALL 15 players (including bench) for complete roster
-                    // Store both element ID and position (1-11 = lineup, 12-15 = bench)
+                    const picksData = await fetchWithCache(url, picksCacheKey, 5);
                     const playerElements = (picksData && picksData.picks) ? picksData.picks.map(p => p.element) : [];
-                    const playerPositions = (picksData && picksData.picks) ? picksData.picks.map(p => ({ id: p.element, position: p.position })) : [];
-                    
                     state.draft.rostersByEntryId.set(entry.id, playerElements);
-                    
-                    // Store position info for later use (lineup vs bench)
-                    if (!state.draft.playerPositions) {
-                        state.draft.playerPositions = new Map();
-                    }
-                    playerPositions.forEach(p => {
-                        state.draft.playerPositions.set(p.id, p.position);
-                    });
-                    
-                    console.log(`✅ Loaded ${playerElements.length} players for ${entry.entry_name}:`, playerElements);
-                    console.log(`   Lineup (1-11):`, playerPositions.filter(p => p.position <= 11).map(p => p.id));
-                    console.log(`   Bench (12-15):`, playerPositions.filter(p => p.position > 11).map(p => p.id));
                 } catch (err) {
-                    console.error(`❌ Failed to fetch final picks for entry ${entry.entry_name} (${entry.entry_id})`, err);
+                    console.error(`Failed to fetch final picks for entry ${entry.entry_name} (${entry.entry_id})`, err);
                     state.draft.rostersByEntryId.set(entry.id, []);
                 }
             });
@@ -4389,27 +4250,9 @@ function renderPitch(containerEl, playerIds, isMyLineup = false) {
         </div>
     `;
 
-    // ✅ Use actual lineup/bench positions from API instead of pickStartingXI
-    let startingXI_ids, benchPlayerIds;
-    
-    if (state.draft.playerPositions && state.draft.playerPositions.size > 0) {
-        // Use real positions from API (1-11 = lineup, 12-15 = bench)
-        startingXI_ids = playerIds.filter(id => {
-            const pos = state.draft.playerPositions.get(id);
-            return pos && pos <= 11;
-        });
-        benchPlayerIds = playerIds.filter(id => {
-            const pos = state.draft.playerPositions.get(id);
-            return pos && pos > 11;
-        });
-    } else {
-        // Fallback to automatic selection if position data not available
-        startingXI_ids = pickStartingXI(playerIds);
-        benchPlayerIds = playerIds.filter(id => !startingXI_ids.includes(id));
-    }
-    
+    const startingXI_ids = pickStartingXI(playerIds);
     const startingXI = startingXI_ids.map(id => processedById.get(id)).filter(Boolean);
-    const benchPlayers = benchPlayerIds.map(id => processedById.get(id)).filter(Boolean);
+    const benchPlayers = players.filter(p => !startingXI_ids.includes(p.id));
 
     const byPos = { GKP: [], DEF: [], MID: [], FWD: [] };
     startingXI.forEach(p => byPos[p.position_name].push(p));
