@@ -1,46 +1,113 @@
-# ⚽ FPL Draft Analytics
+# FPL Draft Analytics Tool
 
-כלי מתקדם לניתוח ליגות דראפט פנטזי של הפרמיירליג.
+כלי ניתוח מתקדם לליגות דראפט פנטזי של הפרמיירליג.
 
-## 🚀 תכונות
+## 🚀 תכונות עיקריות
 
-- 📊 **ניתוח מתקדם** - מטריצות השוואה, גרפים אינטראקטיביים
-- 🎯 **חיזוי ביצועים** - מודל xPts חכם ל-4 מחזורים קדימה
-- 💡 **המלצות חכמות** - מערכת המלצות להחלפת שחקנים
-- 🏆 **ליגת דראפט** - מעקב אחר ליגת הדראפט שלך
-- 📱 **Responsive** - תמיכה מלאה במובייל
+- **ניתוח שחקנים מתקדם** - ציוני דראפט, חיזוי נקודות, מטריצות השוואה
+- **ניהול ליגת דראפט** - צפייה בסגלים, טבלת ליגה, המלצות חכמות
+- **גרפים ומטריצות** - ויזואליזציות מתקדמות לניתוח ביצועים
+- **אימות Google** - גישה מאובטחת עם מצב דמו לצפייה
 
-## 🌐 אתר חי
+## 📦 התקנה והפעלה
 
-https://amitzahy1.github.io/FPL_25_26/
+### דרישות מקדימות
+- דפדפן מודרני (Chrome, Firefox, Safari, Edge)
+- חיבור לאינטרנט
 
-## 🛠️ טכנולוגיות
+### הפעלה מקומית
+פשוט פתח את `index.html` בדפדפן.
 
-- **Frontend**: HTML, CSS, JavaScript (Vanilla)
-- **Charts**: Chart.js
-- **Backend API**: Vercel Serverless Functions
-- **Data Source**: Fantasy Premier League API
+### פריסה ל-GitHub Pages
 
-## 📦 התקנה מקומית
+1. העלה את כל הקבצים למאגר GitHub
+2. הפעל GitHub Pages מהגדרות המאגר
+3. בחר את הענף הראשי (main/master) כמקור
+4. האתר יהיה זמין ב-`https://[username].github.io/[repository-name]`
 
-```bash
-# Clone the repository
-git clone https://github.com/amitzahy1/FPL_25_26.git
+## 🏗️ מבנה הפרויקט
 
-# Navigate to directory
-cd FPL_25_26
-
-# Open index.html in browser
-open index.html
+```
+/
+├── index.html              # עמוד ראשי
+├── style.css              # עיצוב
+├── script.js              # לוגיקה ראשית
+├── sw.js                  # Service Worker
+├── manifest.webmanifest   # PWA Manifest
+├── FPL_Bootstrap_static.json  # נתוני שחקנים סטטיים
+└── README.md              # תיעוד
 ```
 
-## 🚀 Deploy ל-Vercel
+## 🔧 הגדרות
 
-1. Fork את ה-repo
-2. חבר את GitHub ל-Vercel
-3. Deploy אוטומטית!
+### Google OAuth
+לשימוש באימות Google, עדכן את ה-Client ID ב-`script.js`:
+```javascript
+googleClientId: 'YOUR_GOOGLE_CLIENT_ID'
+```
 
-## 📝 License
+### ליגת דראפט
+עדכן את מזהה הליגה ב-`script.js`:
+```javascript
+draftLeagueId: 689  // שנה למזהה הליגה שלך
+```
 
-MIT License - Amit Zahy © 2025
+## 📊 מקורות נתונים
+
+האתר משתמש ב-API הרשמי של Fantasy Premier League:
+- **נתוני שחקנים**: Draft API (`draft.premierleague.com`)
+- **משחקים**: Fantasy API (`fantasy.premierleague.com`)
+- **CORS Proxy**: `api.allorigins.win` (לפתרון בעיות CORS)
+
+### קובץ נתונים סטטי
+הקובץ `FPL_Bootstrap_static.json` משמש כגיבוי כאשר ה-API לא זמין.
+כרגע מכיל 670 שחקנים (מעודכן לעונת 2024/25).
+
+**הערה**: ה-API החי של Draft מחזיר 752 שחקנים, אך לעיתים חוסם בקשות.
+האתר ינסה תחילה לטעון מהקובץ הסטטי, ואז יעבור ל-API החי דרך CORS proxy.
+
+## 🌐 תאימות דפדפנים
+
+- ✅ Chrome 90+
+- ✅ Firefox 88+
+- ✅ Safari 14+
+- ✅ Edge 90+
+
+## 🔐 אבטחה ופרטיות
+
+- אימות Google מאובטח
+- נתונים נשמרים רק ב-localStorage המקומי
+- אין שרת backend - הכל רץ בצד הלקוח
+- מצב דמו לצפייה ללא התחברות
+
+## 🐛 פתרון בעיות
+
+### האתר לא טוען נתונים
+1. נקה את ה-cache של הדפדפן (Ctrl+Shift+Delete)
+2. בדוק את ה-Console (F12) לשגיאות
+3. וודא שיש חיבור לאינטרנט
+
+### שחקנים חסרים
+- הקובץ הסטטי מכיל 670 שחקנים
+- ה-API החי אמור להחזיר 752 שחקנים
+- אם ה-API חסום, האתר ישתמש בקובץ הסטטי
+
+### בעיות CORS
+האתר משתמש ב-CORS proxy (`api.allorigins.win`).
+אם הוא לא זמין, ייתכנו בעיות בטעינת נתונים.
+
+## 📝 רישיון
+
+MIT License - ראה קובץ LICENSE לפרטים
+
+## 👨‍💻 מפתח
+
+Amit Zahy - [amitzahy1@gmail.com](mailto:amitzahy1@gmail.com)
+
+## 🙏 תודות
+
+- Fantasy Premier League API
+- Chart.js
+- Google OAuth
+- AllOrigins CORS Proxy
 
