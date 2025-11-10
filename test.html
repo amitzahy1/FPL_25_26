@@ -1,0 +1,448 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🧪 FPL Draft Test - Live Data</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+            direction: rtl;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 20px;
+            padding: 30px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+        }
+        
+        h1 {
+            color: #667eea;
+            margin-bottom: 10px;
+            font-size: 2.5em;
+        }
+        
+        .subtitle {
+            color: #666;
+            margin-bottom: 30px;
+            font-size: 1.1em;
+        }
+        
+        .test-section {
+            background: #f8f9fa;
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 20px;
+            border-right: 4px solid #667eea;
+        }
+        
+        .test-section h2 {
+            color: #333;
+            margin-bottom: 15px;
+            font-size: 1.5em;
+        }
+        
+        .status {
+            display: inline-block;
+            padding: 5px 15px;
+            border-radius: 20px;
+            font-weight: bold;
+            margin-left: 10px;
+        }
+        
+        .status.loading {
+            background: #ffc107;
+            color: #000;
+        }
+        
+        .status.success {
+            background: #28a745;
+            color: white;
+        }
+        
+        .status.error {
+            background: #dc3545;
+            color: white;
+        }
+        
+        .player-list {
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            margin-top: 10px;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+        
+        .player-item {
+            padding: 10px;
+            border-bottom: 1px solid #eee;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .player-item:last-child {
+            border-bottom: none;
+        }
+        
+        .player-name {
+            font-weight: bold;
+            color: #333;
+        }
+        
+        .player-team {
+            color: #666;
+            font-size: 0.9em;
+        }
+        
+        button {
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 12px 30px;
+            border-radius: 8px;
+            font-size: 1em;
+            cursor: pointer;
+            transition: all 0.3s;
+            font-weight: bold;
+        }
+        
+        button:hover {
+            background: #764ba2;
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+        }
+        
+        button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+            transform: none;
+        }
+        
+        .info-box {
+            background: #e3f2fd;
+            border-right: 4px solid #2196f3;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 15px 0;
+        }
+        
+        .warning-box {
+            background: #fff3cd;
+            border-right: 4px solid #ffc107;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 15px 0;
+        }
+        
+        .error-box {
+            background: #f8d7da;
+            border-right: 4px solid #dc3545;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 15px 0;
+        }
+        
+        pre {
+            background: #2d2d2d;
+            color: #f8f8f2;
+            padding: 15px;
+            border-radius: 8px;
+            overflow-x: auto;
+            font-size: 0.9em;
+            direction: ltr;
+            text-align: left;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🧪 FPL Draft - בדיקת נתונים חיים</h1>
+        <p class="subtitle">בדיקה של חיבור Draft API ל-FPL API עם מיפוי שחקנים</p>
+        
+        <div class="test-section">
+            <h2>📡 שלב 1: טעינת נתוני FPL <span id="status1" class="status loading">טוען...</span></h2>
+            <div id="result1"></div>
+        </div>
+        
+        <div class="test-section">
+            <h2>🎯 שלב 2: טעינת נתוני Draft <span id="status2" class="status loading">ממתין...</span></h2>
+            <div id="result2"></div>
+        </div>
+        
+        <div class="test-section">
+            <h2>🔗 שלב 3: מיפוי Draft→FPL <span id="status3" class="status loading">ממתין...</span></h2>
+            <div id="result3"></div>
+        </div>
+        
+        <div class="test-section">
+            <h2>👤 שלב 4: הסגל שלך (Amit United) <span id="status4" class="status loading">ממתין...</span></h2>
+            <div id="result4"></div>
+        </div>
+        
+        <div style="text-align: center; margin-top: 30px;">
+            <button onclick="runTests()">🔄 הרץ בדיקה מחדש</button>
+        </div>
+    </div>
+
+    <script>
+        const CORS_PROXY = 'https://corsproxy.io/?';
+        const FPL_API = 'https://fantasy.premierleague.com/api/bootstrap-static/';
+        const DRAFT_API = 'https://draft.premierleague.com/api/bootstrap-static';
+        const LEAGUE_ID = 689;
+        const YOUR_ENTRY_ID = 1889;
+        const CURRENT_GW = 11;
+        
+        let fplData = null;
+        let draftData = null;
+        let mapping = null;
+        
+        async function runTests() {
+            // Reset
+            document.querySelectorAll('.status').forEach(el => {
+                el.className = 'status loading';
+                el.textContent = 'טוען...';
+            });
+            
+            await testFPLData();
+            await testDraftData();
+            await testMapping();
+            await testYourTeam();
+        }
+        
+        async function testFPLData() {
+            const status = document.getElementById('status1');
+            const result = document.getElementById('result1');
+            
+            try {
+                const response = await fetch(CORS_PROXY + encodeURIComponent(FPL_API));
+                fplData = await response.json();
+                
+                status.className = 'status success';
+                status.textContent = '✓ הצלחה';
+                
+                result.innerHTML = `
+                    <div class="info-box">
+                        <strong>✅ נתוני FPL נטענו בהצלחה!</strong><br>
+                        סה"כ שחקנים: ${fplData.elements.length}<br>
+                        סה"כ קבוצות: ${fplData.teams.length}<br>
+                        גיימוויק נוכחי: ${fplData.events.find(e => e.is_current)?.id || 'לא ידוע'}
+                    </div>
+                `;
+            } catch (error) {
+                status.className = 'status error';
+                status.textContent = '✗ שגיאה';
+                result.innerHTML = `<div class="error-box"><strong>שגיאה:</strong> ${error.message}</div>`;
+            }
+        }
+        
+        async function testDraftData() {
+            const status = document.getElementById('status2');
+            const result = document.getElementById('result2');
+            
+            try {
+                const response = await fetch(CORS_PROXY + encodeURIComponent(DRAFT_API));
+                draftData = await response.json();
+                
+                status.className = 'status success';
+                status.textContent = '✓ הצלחה';
+                
+                result.innerHTML = `
+                    <div class="info-box">
+                        <strong>✅ נתוני Draft נטענו בהצלחה!</strong><br>
+                        סה"כ שחקנים: ${draftData.elements.length}
+                    </div>
+                `;
+            } catch (error) {
+                status.className = 'status error';
+                status.textContent = '✗ שגיאה';
+                result.innerHTML = `<div class="error-box"><strong>שגיאה:</strong> ${error.message}</div>`;
+            }
+        }
+        
+        async function testMapping() {
+            const status = document.getElementById('status3');
+            const result = document.getElementById('result3');
+            
+            if (!fplData || !draftData) {
+                status.className = 'status error';
+                status.textContent = '✗ שגיאה';
+                result.innerHTML = `<div class="error-box">חסרים נתונים בסיסיים</div>`;
+                return;
+            }
+            
+            try {
+                // Build mapping
+                const fplByName = new Map();
+                for (const p of fplData.elements) {
+                    const key = `${p.first_name}_${p.second_name}`.toLowerCase().trim();
+                    fplByName.set(key, p);
+                }
+                
+                mapping = new Map();
+                let matches = 0;
+                let mismatches = 0;
+                let unmapped = [];
+                
+                for (const draftPlayer of draftData.elements) {
+                    const key = `${draftPlayer.first_name}_${draftPlayer.second_name}`.toLowerCase().trim();
+                    const fplPlayer = fplByName.get(key);
+                    
+                    if (fplPlayer) {
+                        mapping.set(draftPlayer.id, fplPlayer.id);
+                        if (draftPlayer.id === fplPlayer.id) {
+                            matches++;
+                        } else {
+                            mismatches++;
+                        }
+                    } else {
+                        unmapped.push(draftPlayer.web_name);
+                    }
+                }
+                
+                status.className = 'status success';
+                status.textContent = '✓ הצלחה';
+                
+                let html = `
+                    <div class="info-box">
+                        <strong>✅ מיפוי הושלם!</strong><br>
+                        התאמות מדויקות (ID זהה): ${matches}<br>
+                        התאמות עם ID שונה: ${mismatches}<br>
+                        שחקנים ללא התאמה: ${unmapped.length}
+                    </div>
+                `;
+                
+                if (unmapped.length > 0) {
+                    html += `
+                        <div class="warning-box">
+                            <strong>⚠️ שחקנים ללא התאמה:</strong><br>
+                            ${unmapped.slice(0, 10).join(', ')}
+                            ${unmapped.length > 10 ? ` ועוד ${unmapped.length - 10}...` : ''}
+                        </div>
+                    `;
+                }
+                
+                result.innerHTML = html;
+            } catch (error) {
+                status.className = 'status error';
+                status.textContent = '✗ שגיאה';
+                result.innerHTML = `<div class="error-box"><strong>שגיאה:</strong> ${error.message}</div>`;
+            }
+        }
+        
+        async function testYourTeam() {
+            const status = document.getElementById('status4');
+            const result = document.getElementById('result4');
+            
+            if (!mapping || !fplData) {
+                status.className = 'status error';
+                status.textContent = '✗ שגיאה';
+                result.innerHTML = `<div class="error-box">חסרים נתונים בסיסיים</div>`;
+                return;
+            }
+            
+            try {
+                // Get your picks
+                const picksUrl = `https://draft.premierleague.com/api/entry/${YOUR_ENTRY_ID}/event/${CURRENT_GW}`;
+                const response = await fetch(CORS_PROXY + encodeURIComponent(picksUrl));
+                const picksData = await response.json();
+                
+                const draftIds = picksData.picks.map(p => p.element);
+                
+                // Map to FPL and get player details
+                const players = draftIds.map(draftId => {
+                    const fplId = mapping.get(draftId) || draftId;
+                    const player = fplData.elements.find(p => p.id === fplId);
+                    return { draftId, fplId, player };
+                });
+                
+                const found = players.filter(p => p.player).length;
+                const notFound = players.filter(p => !p.player).length;
+                
+                // Check for Lammens
+                const lammens = players.find(p => p.player && p.player.web_name.toLowerCase().includes('lamm'));
+                
+                status.className = found === players.length ? 'status success' : 'status error';
+                status.textContent = found === players.length ? '✓ הצלחה' : '⚠ חלקי';
+                
+                let html = `
+                    <div class="${found === players.length ? 'info-box' : 'warning-box'}">
+                        <strong>${found === players.length ? '✅' : '⚠️'} הסגל שלך (Amit United):</strong><br>
+                        סה"כ שחקנים: ${players.length}<br>
+                        נמצאו: ${found}<br>
+                        לא נמצאו: ${notFound}
+                    </div>
+                `;
+                
+                if (lammens) {
+                    html += `
+                        <div class="info-box" style="background: #d4edda; border-color: #28a745;">
+                            <strong>🎉 Lammens נמצא בסגל!</strong><br>
+                            Draft ID: ${lammens.draftId} → FPL ID: ${lammens.fplId}<br>
+                            שם: ${lammens.player.web_name} (${lammens.player.first_name} ${lammens.player.second_name})<br>
+                            קבוצה: ${fplData.teams[lammens.player.team - 1].name}
+                        </div>
+                    `;
+                } else {
+                    html += `
+                        <div class="warning-box">
+                            <strong>⚠️ Lammens לא נמצא בסגל הנוכחי (GW${CURRENT_GW})</strong>
+                        </div>
+                    `;
+                }
+                
+                html += '<div class="player-list">';
+                for (const p of players) {
+                    if (p.player) {
+                        const team = fplData.teams[p.player.team - 1];
+                        html += `
+                            <div class="player-item">
+                                <div>
+                                    <div class="player-name">${p.player.web_name}</div>
+                                    <div class="player-team">${team.name} - ${p.player.element_type === 1 ? 'GK' : p.player.element_type === 2 ? 'DEF' : p.player.element_type === 3 ? 'MID' : 'FWD'}</div>
+                                </div>
+                                <div style="color: #666; font-size: 0.9em;">
+                                    Draft:${p.draftId} → FPL:${p.fplId}
+                                </div>
+                            </div>
+                        `;
+                    } else {
+                        html += `
+                            <div class="player-item" style="background: #fff3cd;">
+                                <div>
+                                    <div class="player-name">❌ לא נמצא</div>
+                                    <div class="player-team">Draft ID: ${p.draftId}</div>
+                                </div>
+                            </div>
+                        `;
+                    }
+                }
+                html += '</div>';
+                
+                result.innerHTML = html;
+            } catch (error) {
+                status.className = 'status error';
+                status.textContent = '✗ שגיאה';
+                result.innerHTML = `<div class="error-box"><strong>שגיאה:</strong> ${error.message}</div>`;
+            }
+        }
+        
+        // Run tests on load
+        window.onload = runTests;
+    </script>
+</body>
+</html>
+

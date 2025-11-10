@@ -714,6 +714,98 @@ document.addEventListener('DOMContentLoaded', () => {
     auth.init();
 });
 
+// ============================================
+// DRAFT TO FPL ID MAPPING
+// ============================================
+
+// Global mapping cache
+let draftToFplIdMap = null;
+let fplToDraftIdMap = null;
+let unmappedPlayers = [];
+
+async function buildDraftToFplMapping() {
+    console.log('🔄 Building Draft to FPL ID mapping...');
+    
+    try {
+        // Fetch both APIs
+        const fplUrl = config.corsProxy + encodeURIComponent(config.urls.bootstrap);
+        const draftUrl = config.corsProxy + encodeURIComponent('https://draft.premierleague.com/api/bootstrap-static');
+        
+        const [fplData, draftData] = await Promise.all([
+            fetchWithCache(fplUrl, 'fpl_bootstrap_mapping', 60),
+            fetchWithCache(draftUrl, 'draft_bootstrap_mapping', 60)
+        ]);
+        
+        // Create lookups by player name
+        const fplByName = new Map();
+        for (const p of fplData.elements) {
+            const key = `${p.first_name}_${p.second_name}`.toLowerCase().trim();
+            fplByName.set(key, p);
+        }
+        
+        // Build mapping
+        draftToFplIdMap = new Map();
+        fplToDraftIdMap = new Map();
+        unmappedPlayers = [];
+        
+        let matches = 0;
+        let mismatches = 0;
+        
+        for (const draftPlayer of draftData.elements) {
+            const key = `${draftPlayer.first_name}_${draftPlayer.second_name}`.toLowerCase().trim();
+            const fplPlayer = fplByName.get(key);
+            
+            if (fplPlayer) {
+                draftToFplIdMap.set(draftPlayer.id, fplPlayer.id);
+                fplToDraftIdMap.set(fplPlayer.id, draftPlayer.id);
+                
+                if (draftPlayer.id === fplPlayer.id) {
+                    matches++;
+                } else {
+                    mismatches++;
+                    console.log(`  ⚠️  ID mismatch: ${draftPlayer.web_name} - Draft:${draftPlayer.id} → FPL:${fplPlayer.id}`);
+                }
+            } else {
+                unmappedPlayers.push({
+                    id: draftPlayer.id,
+                    name: draftPlayer.web_name,
+                    fullName: `${draftPlayer.first_name} ${draftPlayer.second_name}`
+                });
+                console.warn(`  ❌ No FPL match for Draft player: ${draftPlayer.web_name} (ID: ${draftPlayer.id})`);
+            }
+        }
+        
+        console.log(`✅ Mapping complete: ${matches} exact matches, ${mismatches} ID mismatches, ${unmappedPlayers.length} unmapped`);
+        console.log(`   Total mapped: ${draftToFplIdMap.size} players`);
+        
+        if (unmappedPlayers.length > 0) {
+            console.warn(`⚠️  Unmapped players:`, unmappedPlayers.map(p => p.name).join(', '));
+        }
+        
+        return { success: true, mapped: draftToFplIdMap.size, unmapped: unmappedPlayers.length };
+        
+    } catch (error) {
+        console.error('❌ Failed to build Draft→FPL mapping:', error);
+        return { success: false, error: error.message };
+    }
+}
+
+function getDraftIdFromFpl(fplId) {
+    if (!fplToDraftIdMap) {
+        console.warn('Mapping not initialized, returning same ID');
+        return fplId;
+    }
+    return fplToDraftIdMap.get(fplId) || fplId;
+}
+
+function getFplIdFromDraft(draftId) {
+    if (!draftToFplIdMap) {
+        console.warn('Mapping not initialized, returning same ID');
+        return draftId;
+    }
+    return draftToFplIdMap.get(draftId) || draftId;
+}
+
 async function fetchAndProcessData() {
     showLoading('טוען נתוני שחקנים...');
     try {
@@ -721,10 +813,9 @@ async function fetchAndProcessData() {
         const needsFixtures = !state.allPlayersData.live.fixtures;
 
         if (needsData || needsFixtures) {
-            const dataUrl = state.currentDataSource === 'live'
-                ? config.corsProxy + encodeURIComponent(config.urls.bootstrap)
-                : 'FPL_Bootstrap_static.json';
-            const dataCacheKey = `fpl_bootstrap_${state.currentDataSource}`;
+            // Always use live data - no more static JSON
+            const dataUrl = config.corsProxy + encodeURIComponent(config.urls.bootstrap);
+            const dataCacheKey = `fpl_bootstrap_live_${Date.now()}`; // Force fresh data
             
             const fixturesUrl = config.corsProxy + encodeURIComponent(config.urls.fixtures);
             const fixturesCacheKey = 'fpl_fixtures';
@@ -2667,7 +2758,11 @@ function getProcessedByElementId() {
 
 function pickStartingXI(playerIds) {
     const processedById = getProcessedByElementId();
-    const players = playerIds.map(id => processedById.get(id)).filter(Boolean);
+    // Map Draft IDs to FPL IDs before looking up players
+    const players = playerIds.map(draftId => {
+        const fplId = getFplIdFromDraft(draftId);
+        return processedById.get(fplId);
+    }).filter(Boolean);
 
     const byPos = { GKP: [], DEF: [], MID: [], FWD: [] };
     players.forEach(p => byPos[p.position_name].push(p));
@@ -2816,6 +2911,20 @@ async function loadDraftLeague() {
     });
 
     try {
+        // Build Draft→FPL ID mapping first (if not already built)
+        if (!draftToFplIdMap) {
+            console.log('🔧 Initializing Draft→FPL ID mapping...');
+            const mappingResult = await buildDraftToFplMapping();
+            if (mappingResult.success) {
+                showToast('מיפוי הושלם', `${mappingResult.mapped} שחקנים מופו בהצלחה`, 'success', 2000);
+                if (mappingResult.unmapped > 0) {
+                    console.warn(`⚠️  ${mappingResult.unmapped} שחקנים לא נמצאה להם התאמה`);
+                }
+            } else {
+                showToast('אזהרה', 'מיפוי Draft→FPL נכשל, נתונים עשויים להיות לא מדויקים', 'warning', 3000);
+            }
+        }
+        
         // Make sure we have player data loaded (demo or real)
         if (state.currentDataSource === 'demo') {
             // In demo mode, ensure demo data is loaded
@@ -2892,7 +3001,21 @@ async function loadDraftLeague() {
             
             state.draft.rostersByEntryId.forEach((roster, teamId) => {
                 const teamName = state.draft.entryIdToTeamName.get(teamId) || `Unknown ID: ${teamId}`;
-                const playerNames = roster.map(id => processedById.get(id)?.web_name || `ID ${id} not found`).join(', ');
+                const playerNames = roster.map(draftId => {
+                    // Map Draft ID to FPL ID
+                    const fplId = getFplIdFromDraft(draftId);
+                    const player = processedById.get(fplId);
+                    if (player) {
+                        return player.web_name;
+                    } else {
+                        // Player not found - check if it's in unmapped list
+                        const unmapped = unmappedPlayers.find(p => p.id === draftId);
+                        if (unmapped) {
+                            return `${unmapped.name} ⚠️`;
+                        }
+                        return `ID ${draftId}→${fplId} ❌`;
+                    }
+                }).join(', ');
                 console.log(`  - Team '${teamName}':`, roster.length, "players -> [", playerNames, "]");
                 totalPlayers += roster.length;
             });
@@ -3057,7 +3180,10 @@ function getRecommendationData() {
     if (!myPlayerIds.size) return null;
 
     const processedById = getProcessedByElementId();
-    const myPlayers = Array.from(myPlayerIds).map(id => processedById.get(id)).filter(Boolean);
+    const myPlayers = Array.from(myPlayerIds).map(draftId => {
+        const fplId = getFplIdFromDraft(draftId);
+        return processedById.get(fplId);
+    }).filter(Boolean);
     
     // Get ONLY free agents (not owned by ANY team)
     const freeAgents = findFreeAgents();
@@ -3339,7 +3465,10 @@ function computeDraftTeamAggregates() {
     const processedById = getProcessedByElementId();
     return (state.draft.details?.league_entries || []).filter(e => e && e.entry_name).map(e => {
         const playerIds = state.draft.rostersByEntryId.get(e.id) || [];
-        const players = playerIds.map(id => processedById.get(id)).filter(Boolean);
+        const players = playerIds.map(draftId => {
+            const fplId = getFplIdFromDraft(draftId);
+            return processedById.get(fplId);
+        }).filter(Boolean);
         if (!players.length) return { team: e.entry_name, metrics: {} };
         
         const sumDraft = players.reduce((s,p)=>s+p.draft_score,0);
@@ -3764,7 +3893,10 @@ function renderDraftAnalytics(teamAggregates) {
                                 
                                 const playerIds = state.draft.rostersByEntryId.get(teamEntry.id) || [];
                                 const processedById = getProcessedByElementId();
-                                const players = playerIds.map(id => processedById.get(id)).filter(Boolean);
+                                const players = playerIds.map(draftId => {
+                                    const fplId = getFplIdFromDraft(draftId);
+                                    return processedById.get(fplId);
+                                }).filter(Boolean);
                                 
                                 if (players.length === 0) return ['אין שחקנים'];
                                 
@@ -4013,7 +4145,10 @@ function renderPitch(containerEl, playerIds, isMyLineup = false) {
     }
     
     const processedById = getProcessedByElementId();
-    const players = playerIds.map(id => processedById.get(id)).filter(Boolean);
+    const players = playerIds.map(draftId => {
+        const fplId = getFplIdFromDraft(draftId);
+        return processedById.get(fplId);
+    }).filter(Boolean);
     
     if (players.length === 0) {
         console.warn(`renderPitch: Could not find any player data for IDs:`, playerIds.slice(0, 5));
@@ -4037,7 +4172,10 @@ function renderPitch(containerEl, playerIds, isMyLineup = false) {
     `;
 
     const startingXI_ids = pickStartingXI(playerIds);
-    const startingXI = startingXI_ids.map(id => processedById.get(id)).filter(Boolean);
+    const startingXI = startingXI_ids.map(draftId => {
+        const fplId = getFplIdFromDraft(draftId);
+        return processedById.get(fplId);
+    }).filter(Boolean);
     const benchPlayers = players.filter(p => !startingXI_ids.includes(p.id));
 
     const byPos = { GKP: [], DEF: [], MID: [], FWD: [] };
