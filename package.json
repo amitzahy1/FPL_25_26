@@ -1,0 +1,21 @@
+{
+  "name": "fpl-draft-analytics",
+  "version": "1.0.0",
+  "description": "FPL Draft Analytics Tool with Vercel Serverless API",
+  "main": "script.js",
+  "scripts": {
+    "dev": "vercel dev",
+    "deploy": "vercel --prod"
+  },
+  "keywords": [
+    "fpl",
+    "fantasy",
+    "premier",
+    "league",
+    "draft",
+    "analytics"
+  ],
+  "author": "Amit Zahy",
+  "license": "MIT"
+}
+
