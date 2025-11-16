@@ -101,63 +101,89 @@ class MLPredictor {
 
     /**
      * Predict next GW points
-     * Using simplified ML approach based on top features
+     * Using realistic form-based approach
      */
     predict(player, historicalData = null) {
         // Extract features
         const features = this.extractFeatures(player, historicalData);
         
-        // Debug: Log first prediction
-        if (player.web_name === 'Salah' || player.web_name === 'Haaland') {
-            console.log(`🤖 ML Prediction for ${player.web_name}:`, {
-                form_5: features['form_5'],
-                selected: features['selected'],
-                ict_index: features['ict_index'],
-                transfers_in: features['transfers_in']
-            });
+        // ============================================
+        // BASE PREDICTION: Form (0-10 scale)
+        // ============================================
+        const form = features['form_5'] || 0;
+        
+        // Start with form as base (most players: 2-6)
+        let prediction = form;
+        
+        // ============================================
+        // ADJUSTMENTS (Small increments!)
+        // ============================================
+        
+        // 1. Popularity boost (0-1 points)
+        // High ownership = better player
+        const selected = features['selected'] || 0;
+        if (selected > 20) prediction += 0.8;
+        else if (selected > 10) prediction += 0.5;
+        else if (selected > 5) prediction += 0.3;
+        
+        // 2. ICT Index boost (0-1.5 points)
+        // High ICT = high involvement
+        const ict = features['ict_index'] || 0;
+        if (ict > 150) prediction += 1.5;
+        else if (ict > 100) prediction += 1.0;
+        else if (ict > 50) prediction += 0.5;
+        
+        // 3. Transfer momentum (0-0.8 points)
+        const transfersIn = features['transfers_in'] || 0;
+        if (transfersIn > 100000) prediction += 0.8;
+        else if (transfersIn > 50000) prediction += 0.5;
+        else if (transfersIn > 20000) prediction += 0.3;
+        
+        // 4. Position adjustments
+        if (features['is_FWD']) {
+            prediction += 0.5; // Forwards get bonus
+        } else if (features['is_GKP']) {
+            prediction -= 0.5; // Keepers score less
+        } else if (features['is_DEF']) {
+            prediction -= 0.3; // Defenders score less
         }
         
-        // Base prediction on form (most important feature)
-        let prediction = features['form_5'] || 0;
-        
-        // Apply feature importance weights for top 10 features
-        // Based on Ultimate Model feature importance
-        const selectedWeight = (features['selected'] || 0) * 0.11; // 11.5% importance
-        const form5Weight = (features['form_5'] || 0) * 0.06; // 6.5%
-        const ictWeight = (features['ict_index'] || 0) / 100 * 0.04; // 4.3%
-        const transfersInWeight = (features['transfers_in'] || 0) / 10 * 0.04; // 4%
-        const savesWeight = (features['saves'] || 0) / 5 * 0.04; // 3.8%
-        const isDefWeight = features['is_DEF'] * 0.04; // 3.9%
-        const form3Weight = (features['form_3'] || 0) * 0.03; // 3.3%
-        const idWeight = (features['id'] || 0) / 100 * 0.03; // 3.3%
-        const minutesStdWeight = (features['minutes_std_5'] || 0) / 100 * 0.03; // 3.1%
-        const minutesLast3Weight = (features['minutes_last3'] || 0) / 270 * 0.03; // 3.1%
-        
-        // Combine weighted features
-        prediction = selectedWeight + form5Weight + ictWeight + transfersInWeight +
-                    savesWeight + isDefWeight + form3Weight + idWeight +
-                    minutesStdWeight + minutesLast3Weight;
-        
-        // Scale to realistic points range (0-15)
-        prediction = prediction * 2;
-        
-        // Add bonus for hot streak
+        // 5. Hot streak bonus
         if (features['hot_streak']) {
-            prediction += 1;
+            prediction += 0.8;
         }
         
-        // Position adjustments
-        if (features['is_FWD']) prediction *= 1.1; // Forwards score more
-        if (features['is_GKP']) prediction *= 0.8; // Keepers score less
+        // 6. Expected goals boost (attacking threat)
+        const xgi = features['expected_goal_involvements'] || 0;
+        if (xgi > 0.5) prediction += 0.5;
+        else if (xgi > 0.3) prediction += 0.3;
         
-        // Cap at reasonable range
-        prediction = Math.max(0, Math.min(15, prediction));
+        // 7. Minutes consistency
+        // If played last 3 games fully, slight boost
+        const minutesLast3 = features['minutes_last3'] || 0;
+        if (minutesLast3 > 240) prediction += 0.3; // 3×90 = 270
         
+        // ============================================
+        // FINAL ADJUSTMENTS
+        // ============================================
+        
+        // Cap at realistic range (1-12)
+        // Very few players score more than 10-12
+        prediction = Math.max(1.0, Math.min(12.0, prediction));
+        
+        // Round to 1 decimal
         const finalPrediction = Math.round(prediction * 10) / 10;
         
-        // Debug: Log final prediction
-        if (player.web_name === 'Salah' || player.web_name === 'Haaland') {
-            console.log(`🎯 Final ML Prediction for ${player.web_name}: ${finalPrediction}`);
+        // Debug: Log sample predictions
+        if (player.web_name === 'Salah' || player.web_name === 'Haaland' || 
+            player.web_name === 'Pope' || player.web_name === 'Saka') {
+            console.log(`🤖 ML for ${player.web_name}:`, {
+                form: form,
+                selected: selected,
+                ict: ict,
+                position: features['is_FWD'] ? 'FWD' : features['is_GKP'] ? 'GKP' : features['is_DEF'] ? 'DEF' : 'MID',
+                prediction: finalPrediction
+            });
         }
         
         return finalPrediction;
