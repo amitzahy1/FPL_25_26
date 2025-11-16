@@ -440,7 +440,7 @@ const config = {
     draftLeagueId: 689,
     setPieceTakers: {"Arsenal":{"penalties":["Saka","Havertz"],"freekicks":["Ødegaard","Rice","Martinelli"],"corners":["Martinelli","Saka","Ødegaard"]},"Aston Villa":{"penalties":["Watkins","Tielemans"],"freekicks":["Digne","Douglas Luiz","Bailey"],"corners":["Douglas Luiz","McGinn"]},"Bournemouth":{"penalties":["Solanke","Kluivert"],"freekicks":["Tavernier","Scott"],"corners":["Tavernier","Scott"]},"Brentford":{"penalties":["Toney","Mbeumo"],"freekicks":["Jensen","Mbeumo","Damsgaard"],"corners":["Jensen","Mbeumo"]},"Brighton":{"penalties":["João Pedro","Gross"],"freekicks":["Gross","Estupiñán"],"corners":["Gross","March"]},"Chelsea":{"penalties":["Palmer","Nkunku"],"freekicks":["Palmer","James","Enzo"],"corners":["Gallagher","Chilwell","Palmer"]},"Crystal Palace":{"penalties":["Eze","Olise"],"freekicks":["Eze","Olise"],"corners":["Eze","Olise"]},"Everton":{"penalties":["Calvert-Lewin","McNeil"],"freekicks":["McNeil","Garner"],"corners":["McNeil","Garner"]},"Fulham":{"penalties":["Andreas","Jiménez"],"freekicks":["Andreas","Willian","Wilson"],"corners":["Andreas","Willian"]},"Ipswich":{"penalties":["Chaplin","Hirst"],"freekicks":["Davis","Morsy"],"corners":["Davis","Chaplin"]},"Leicester":{"penalties":["Vardy","Dewsbury-Hall"],"freekicks":["Dewsbury-Hall","Fatawu"],"corners":["Dewsbury-Hall","Fatawu"]},"Liverpool":{"penalties":["M.Salah","Szoboszlai"],"freekicks":["Alexander-Arnold","Szoboszlai","Robertson"],"corners":["Alexander-Arnold","Robertson"]},"Man City":{"penalties":["Haaland","Alvarez"],"freekicks":["De Bruyne","Foden","Alvarez"],"corners":["Foden","De Bruyne"]},"Man Utd":{"penalties":["B.Fernandes","Rashford"],"freekicks":["B.Fernandes","Eriksen","Rashford"],"corners":["B.Fernandes","Shaw"]},"Newcastle":{"penalties":["Isak","Wilson"],"freekicks":["Trippier","Gordon"],"corners":["Trippier","Gordon"]},"Nott'm Forest":{"penalties":["Gibbs-White","Wood"],"freekicks":["Gibbs-White","Elanga"],"corners":["Gibbs-White","Elanga"]},"Southampton":{"penalties":["A. Armstrong","Ward-Prowse"],"freekicks":["Ward-Prowse","Smallbone"],"corners":["Ward-Prowse","Aribo"]},"Spurs":{"penalties":["Son","Maddison"],"freekicks":["Maddison","Pedro Porro"],"corners":["Maddison","Pedro Porro","Son"]},"West Ham":{"penalties":["Ward-Prowse","Bowen"],"freekicks":["Ward-Prowse","Emerson"],"corners":["Ward-Prowse","Bowen"]},"Wolves":{"penalties":["Cunha","Hwang"],"freekicks":["Sarabia","Bellegarde"],"corners":["Sarabia","Aït-Nouri"]}},
     tableColumns: [
-        'rank', 'web_name', 'draft_score', 'predicted_points_1_gw', 'team_name', 
+        'rank', 'web_name', 'draft_score', 'stability_index', 'predicted_points_1_gw', 'team_name', 
         'position_name', 'now_cost', 'total_points', 'points_per_game_90', 'selected_by_percent', 
         'dreamteam_count', 'net_transfers_event', 'def_contrib_per90', 'goals_scored_assists', 
         'expected_goals_assists', 'minutes', 'xDiff', 'ict_index', 'bonus', 'clean_sheets', 
@@ -468,6 +468,10 @@ const config = {
         'ציון חכם': { key: 'smart_score', format: v => {
             const val = parseFloat(v) || 0;
             return val.toFixed(1);
+        }},
+        'יציבות': { key: 'stability_index', format: v => {
+            const val = parseFloat(v) || 0;
+            return val.toFixed(0);
         }},
         'xPts (הבא)': { key: 'predicted_points_1_gw', format: v => {
             const val = parseFloat(v) || 0;
@@ -514,6 +518,7 @@ const config = {
         'draft_score': 'ציון דראפט מושלם: 35% נקודות בפועל, 15% תרומה הגנתית, 12% G+A למשחק, 12% xG למשחק, 10% איכות משחק, 8% אחוז בעלות, 8% בונוס. מחושב לפי עמדה!',
         'predicted_points_1_gw': 'חיזוי נקודות למחזור הבא - מודל מתקדם: 17% מומנטום העברות 🔥, 28% כושר 📈, 25% xGI/90 ⚽, 20% קושי יריבות 🎯, 10% חוזק קבוצה 💪',
         'predicted_points_4_gw': 'צפי נקודות ממוצע ל-4 המחזורים הקרובים (לשימוש פנימי).',
+        'stability_index': 'מדד יציבות (0-100) 📊 - מודד עקביות השחקן: 40% כושר אחרון 📈, 30% דיוק xG ⚽, 20% זמן משחק קבוע ⏱️, 10% שונות נקודות 📉. ככל שגבוה יותר = שחקן יציב ויותר צפוי ✅',
         'def_contrib_per90': 'תרומה הגנתית ל-90 דקות (תיקולים, חטיפות, חילוצים).',
         'xDiff': 'ההפרש בין שערים+בישולים בפועל לצפי (xGI). ערך חיובי מעיד על מימוש יתר.',
         'net_transfers_event': 'סה"כ העברות נכנסות פחות יוצאות במחזור הנוכחי - מדד למומנטום ביקוש לשחקן.'
@@ -563,36 +568,96 @@ const charts = {
     comparisonRadar: null
 };
 
-async function fetchWithCache(url, cacheKey, cacheDurationMinutes = 120) {
+/**
+ * Fetch with cache, retry logic, and rate limiting
+ * 
+ * Features:
+ * - Cache with configurable duration
+ * - Retry on failure with exponential backoff
+ * - Rate limiting detection (429 status)
+ * - Network error handling
+ * 
+ * @param {string} url - URL to fetch
+ * @param {string} cacheKey - Cache key for localStorage
+ * @param {number} cacheDurationMinutes - Cache validity duration
+ * @param {Object} options - Fetch options
+ * @param {number} options.maxRetries - Maximum retry attempts (default: 3)
+ * @param {number} options.retryDelay - Initial retry delay in ms (default: 1000)
+ * @returns {Promise<Object>} - Fetched data
+ */
+async function fetchWithCache(url, cacheKey, cacheDurationMinutes = 120, options = {}) {
+    const { maxRetries = 3, retryDelay = 1000 } = options;
+    
+    // Try cache first
     const cachedItem = localStorage.getItem(cacheKey);
     if (cachedItem) {
         try {
             const { timestamp, data } = JSON.parse(cachedItem);
             const isCacheValid = (new Date().getTime() - timestamp) / (1000 * 60) < cacheDurationMinutes;
             if (isCacheValid) {
-                console.log(`Returning cached data for ${cacheKey}`);
+                console.log(`✅ Returning cached data for ${cacheKey}`);
                 return data;
             } else {
                  localStorage.removeItem(cacheKey);
+                 console.log(`⏰ Cache expired for ${cacheKey}`);
             }
         } catch (e) {
-            console.error('Error parsing cache, removing item.', e);
+            console.error('❌ Error parsing cache, removing item:', e);
             localStorage.removeItem(cacheKey);
         }
     }
 
-    console.log(`Fetching fresh data for ${cacheKey}`);
-    const response = await fetch(url);
-    if (!response.ok) {
-        throw new Error(`Failed to fetch ${url}: ${response.statusText}`);
+    // Fetch with retry logic
+    console.log(`🌐 Fetching fresh data for ${cacheKey}`);
+    
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+        try {
+            const response = await fetch(url);
+            
+            // Handle rate limiting (429)
+            if (response.status === 429) {
+                const waitTime = retryDelay * Math.pow(2, attempt - 1); // Exponential backoff
+                console.warn(`⚠️ Rate limited (429), waiting ${waitTime}ms before retry ${attempt}/${maxRetries}...`);
+                await new Promise(resolve => setTimeout(resolve, waitTime));
+                continue; // Retry
+            }
+            
+            // Handle other HTTP errors
+            if (!response.ok) {
+                if (attempt === maxRetries) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                console.warn(`⚠️ HTTP ${response.status}, retry ${attempt}/${maxRetries}...`);
+                await new Promise(resolve => setTimeout(resolve, retryDelay));
+                continue;
+            }
+            
+            // Success - parse and cache
+            const data = await response.json();
+            
+            // Save to cache
+            try {
+                localStorage.setItem(cacheKey, JSON.stringify({ timestamp: new Date().getTime(), data }));
+                console.log(`💾 Cached data for ${cacheKey}`);
+            } catch(e) {
+                console.error("⚠️ Failed to write to localStorage. Cache might be full.", e);
+            }
+            
+            return data;
+            
+        } catch (error) {
+            // Network error or JSON parse error
+            if (attempt === maxRetries) {
+                console.error(`❌ Failed after ${maxRetries} attempts:`, error);
+                throw error;
+            }
+            
+            console.warn(`⚠️ Attempt ${attempt}/${maxRetries} failed: ${error.message}`);
+            await new Promise(resolve => setTimeout(resolve, retryDelay));
+        }
     }
-    const data = await response.json();
-    try {
-        localStorage.setItem(cacheKey, JSON.stringify({ timestamp: new Date().getTime(), data }));
-    } catch(e) {
-        console.error("Failed to write to localStorage. Cache might be full.", e);
-    }
-    return data;
+    
+    throw new Error(`Failed to fetch ${url} after ${maxRetries} attempts`);
 }
 
 // ============================================
@@ -1109,6 +1174,7 @@ function createPlayerRowHtml(player, index) {
         <td>${index + 1}</td>
         <td class="name-cell"><span class="player-name-icon">${icons.icons}</span>${player.web_name}</td>
         <td class="bold-cell">${player.draft_score.toFixed(1)}</td>
+        <td class="bold-cell stability-cell">${(player.stability_index || 0).toFixed(0)}</td>
         <td class="bold-cell">${(player.predicted_points_1_gw || 0).toFixed(1)}</td>
         <td>${player.team_name}</td>
         <td>${player.position_name}</td>
@@ -1182,7 +1248,7 @@ function renderTable() {
 
     // Add tooltips to headers
     const headers = document.querySelectorAll('#playersTable thead th');
-    const columnKeys = ['rank', 'web_name', 'draft_score', 'base_score', 'quality_score', 'predicted_points_4_gw', 'team_name', 'position_name', 'now_cost', 'total_points', 'points_per_game_90', 'selected_by_percent', 'dreamteam_count', 'net_transfers_event', 'def_contrib_per90', 'goals_scored_assists', 'expected_goals_assists', 'minutes', 'xDiff', 'ict_index', 'bonus', 'clean_sheets', 'set_piece_priority.penalty', 'set_piece_priority.corner', 'set_piece_priority.free_kick', 'fixtures'];
+    const columnKeys = ['rank', 'web_name', 'draft_score', 'stability_index', 'base_score', 'quality_score', 'predicted_points_4_gw', 'team_name', 'position_name', 'now_cost', 'total_points', 'points_per_game_90', 'selected_by_percent', 'dreamteam_count', 'net_transfers_event', 'def_contrib_per90', 'goals_scored_assists', 'expected_goals_assists', 'minutes', 'xDiff', 'ict_index', 'bonus', 'clean_sheets', 'set_piece_priority.penalty', 'set_piece_priority.corner', 'set_piece_priority.free_kick', 'fixtures'];
 
     headers.forEach((th, i) => {
         const key = columnKeys[i-1];
@@ -1354,7 +1420,7 @@ function quickFilter(button, filterName) {
 }
 
 function exportToCsv() {
-    const headers = ['Rank','Player','Draft Score','Prediction Score','Quality Score','xPts (4GW)','Team','Pos','Price','Pts','PPG','Sel %','DreamTeam','Net TF (GW)','DC/90','G+A','xGI','Mins','xDiff','ICT','Bonus','CS','Pen','Cor','FK'];
+    const headers = ['Rank','Player','Draft Score','Stability','Prediction Score','Quality Score','xPts (4GW)','Team','Pos','Price','Pts','PPG','Sel %','DreamTeam','Net TF (GW)','DC/90','G+A','xGI','Mins','xDiff','ICT','Bonus','CS','Pen','Cor','FK'];
     let csvContent = headers.join(',') + '\n';
     
     state.displayedData.forEach((p, i) => {
@@ -1362,6 +1428,7 @@ function exportToCsv() {
             i + 1,
             p.web_name.replace(/,/g, ''),
             p.draft_score.toFixed(2),
+            (p.stability_index || 0).toFixed(0),
             p.base_score.toFixed(2),
             p.quality_score.toFixed(2),
             (p.predicted_points_4_gw || 0).toFixed(2),
@@ -2682,6 +2749,59 @@ function predictPointsForFixture(player, fixture) {
     return Math.max(0, Math.min(predictedPoints, 20)); // Cap at 20 points per game
 }
 
+/**
+ * Calculate Stability Index for a player
+ * Measures consistency/reliability (0-100, higher = more stable)
+ * 
+ * Based on:
+ * 1. Form consistency (40%) - Higher form = more stable
+ * 2. xG accuracy (30%) - xG close to actual goals = predictable
+ * 3. Minutes consistency (20%) - Playing regularly = reliable
+ * 4. Points variance (10%) - Points per game variation
+ */
+function calculateStabilityIndex(player) {
+    const gamesPlayed = Math.max((player.minutes || 0) / 90, 0.1);
+    
+    // 1. Form Factor (40%) - Higher form = more stable recent performance
+    const form = parseFloat(player.form) || 0;
+    const formStability = Math.min(form * 10, 100); // 10 form = 100 stability
+    
+    // 2. xG Accuracy (30%) - How predictable are the player's returns?
+    const actualGoals = player.goals_scored || 0;
+    const expectedGoals = parseFloat(player.expected_goals) || 0;
+    const goalsPerGame = actualGoals / gamesPlayed;
+    const xGPerGame = expectedGoals / gamesPlayed;
+    
+    // Calculate how close actual is to expected (lower diff = more stable)
+    const xGDiff = Math.abs(goalsPerGame - xGPerGame);
+    const xGAccuracy = Math.max(0, 100 - (xGDiff * 100)); // Perfect match = 100
+    
+    // 3. Minutes Stability (20%) - Playing regularly
+    const minutesPlayed = player.minutes || 0;
+    const appearancesEstimate = Math.max((player.appearances || gamesPlayed), 1);
+    const minutesPerAppearance = minutesPlayed / appearancesEstimate;
+    const minutesStability = Math.min((minutesPerAppearance / 90) * 100, 100); // 90 min/game = 100
+    
+    // 4. Points Variance (10%) - Using coefficient of variation approach
+    const totalPoints = player.total_points || 0;
+    const pointsPerGame = totalPoints / gamesPlayed;
+    
+    // Estimate variance using form as proxy (form is avg last 5 GW)
+    // If form is close to PPG, variance is low (stable)
+    const formVsPPG = Math.abs(form - pointsPerGame);
+    const pointsStability = Math.max(0, 100 - (formVsPPG * 20)); // Small diff = stable
+    
+    // Calculate weighted stability index
+    const stabilityIndex = (
+        formStability * 0.40 +      // 40% Form
+        xGAccuracy * 0.30 +          // 30% xG Accuracy
+        minutesStability * 0.20 +    // 20% Minutes
+        pointsStability * 0.10       // 10% Points Variance
+    );
+    
+    return Math.round(Math.max(0, Math.min(stabilityIndex, 100)));
+}
+
 function calculateAdvancedScores(players) {
     // Filter out players with less than 180 minutes (2 full games)
     const activePlayers = players.filter(p => (p.minutes || 0) >= 180);
@@ -2767,6 +2887,12 @@ function calculateAdvancedScores(players) {
         p.performance_score = pointsScore;
         p.ga_per_game = gaPerGame;
         p.xgi_per_game = xgiPerGame;
+        
+        // ============================================
+        // 📊 STABILITY INDEX - New!
+        // ============================================
+        // Measures player consistency (0-100, higher = more stable)
+        p.stability_index = calculateStabilityIndex(p);
         
         // Calculate predictions for future reference
         p = calculateAllPredictions([p])[0];
