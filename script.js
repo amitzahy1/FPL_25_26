@@ -1888,23 +1888,33 @@ function exportToCsv() {
         return;
     }
     
-    // Define columns to export
+    // Define columns to export (all table columns)
     const columns = [
         { key: 'web_name', header: 'שם' },
+        { key: 'draft_score', header: 'ציון דראפט' },
+        { key: 'stability_index', header: 'יציבות' },
+        { key: 'predicted_points_1_gw', header: 'חיזוי טכני' },
+        { key: 'ml_prediction', header: 'ML חיזוי' },
         { key: 'team_name', header: 'קבוצה' },
+        { key: 'draft_team', header: 'קבוצת דראפט', format: (player) => getDraftTeamForPlayer(player.id) || 'חופשי' },
         { key: 'position_name', header: 'עמדה' },
         { key: 'now_cost', header: 'מחיר' },
-        { key: 'selected_by_percent', header: 'בחירה %' },
-        { key: 'draft_score', header: 'ציון דראפט' },
-        { key: 'predicted_points_4_gw', header: 'xPts(4GW)' },
         { key: 'total_points', header: 'נקודות' },
-        { key: 'goals_scored', header: 'שערים' },
-        { key: 'assists', header: 'בישולים' },
-        { key: 'clean_sheets', header: 'CS' },
-        { key: 'minutes', header: 'דקות' },
-        { key: 'xGI_per90', header: 'xGI/90' },
+        { key: 'points_per_game_90', header: 'נק/משחק' },
+        { key: 'selected_by_percent', header: 'בחירה %' },
+        { key: 'dreamteam_count', header: 'DreamTeam' },
+        { key: 'net_transfers_event', header: 'העברות' },
         { key: 'def_contrib_per90', header: 'DC/90' },
-        { key: 'ict_index', header: 'ICT' }
+        { key: 'goals_scored_assists', header: 'G+A', format: (player) => (player.goals_scored || 0) + (player.assists || 0) },
+        { key: 'expected_goals_assists', header: 'xG+xA', format: (player) => parseFloat(player.expected_goal_involvements || 0).toFixed(2) },
+        { key: 'minutes', header: 'דקות' },
+        { key: 'xDiff', header: 'xDiff' },
+        { key: 'ict_index', header: 'ICT' },
+        { key: 'bonus', header: 'Bonus' },
+        { key: 'clean_sheets', header: 'CS' },
+        { key: 'penalty_priority', header: 'פנדל', format: (player) => player.set_piece_priority?.penalty === 1 ? 'כן' : 'לא' },
+        { key: 'corner_priority', header: 'קרן', format: (player) => player.set_piece_priority?.corner || 0 },
+        { key: 'free_kick_priority', header: 'בעיטה חופשית', format: (player) => player.set_piece_priority?.free_kick || 0 }
     ];
     
     // Create CSV header
@@ -1913,22 +1923,34 @@ function exportToCsv() {
     // Create CSV rows
     const csvRows = data.map(player => {
         return columns.map(col => {
-            let value = player[col.key];
+            // Use custom format function if provided
+            let value;
+            if (col.format && typeof col.format === 'function') {
+                value = col.format(player);
+            } else {
+                value = player[col.key];
+            }
             
             // Format numbers
             if (typeof value === 'number') {
                 value = value.toFixed(2);
             }
             
-            // Escape commas and quotes
-            if (typeof value === 'string') {
-                value = value.replace(/"/g, '""');
-                if (value.includes(',') || value.includes('"') || value.includes('\n')) {
-                    value = `"${value}"`;
-                }
+            // Handle undefined/null
+            if (value === undefined || value === null) {
+                value = '';
             }
             
-            return value || '';
+            // Convert to string
+            value = String(value);
+            
+            // Escape commas and quotes
+            value = value.replace(/"/g, '""');
+            if (value.includes(',') || value.includes('"') || value.includes('\n')) {
+                value = `"${value}"`;
+            }
+            
+            return value;
         }).join(',');
     });
     
@@ -2069,8 +2091,11 @@ function showTeamDefenseChart() {
     }
     document.getElementById('visualizationTitle').textContent = 'הגנת קבוצות (צפוי ספיגות מול ספיגות בפועל)';
     
+    // Use filtered data if available, otherwise use all data
+    const dataToUse = state.displayedData || state.allPlayersData[state.currentDataSource].processed;
+    
     const teamStats = {};
-    state.allPlayersData[state.currentDataSource].processed.forEach(p => {
+    dataToUse.forEach(p => {
         if (!teamStats[p.team_name]) teamStats[p.team_name] = { xGC: 0, GC: 0, minutes: 0 };
         teamStats[p.team_name].xGC += parseFloat(p.expected_goals_conceded) || 0;
         teamStats[p.team_name].GC += p.goals_conceded || 0;
@@ -2105,8 +2130,11 @@ function showTeamAttackChart() {
     }
     document.getElementById('visualizationTitle').textContent = 'התקפת קבוצות (צפי מעורבות בשערים מול מעורבות בפועל)';
     
+    // Use filtered data if available, otherwise use all data
+    const dataToUse = state.displayedData || state.allPlayersData[state.currentDataSource].processed;
+    
     const teamStats = {};
-     state.allPlayersData[state.currentDataSource].processed.forEach(p => {
+    dataToUse.forEach(p => {
         if (!teamStats[p.team_name]) teamStats[p.team_name] = { xGI: 0, GI: 0, minutes: 0 };
         teamStats[p.team_name].xGI += parseFloat(p.expected_goal_involvements) || 0;
         teamStats[p.team_name].GI += (p.goals_scored || 0) + (p.assists || 0);

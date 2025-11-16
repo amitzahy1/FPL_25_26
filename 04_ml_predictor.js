@@ -173,6 +173,18 @@ class DecisionTreePredictor {
             // Extract features
             const features = this.extractFeatures(player);
             
+            // Debug: Log key features for first few players
+            if (Math.random() < 0.05) { // 5% sample
+                console.log(`🔍 ${player.web_name}:`, {
+                    points_per_million: features['points_per_million']?.toFixed(2),
+                    bps: features['bps'],
+                    value: features['value']?.toFixed(1),
+                    bonus: features['bonus'],
+                    total_points: player.total_points,
+                    price: (player.now_cost || 0) / 10
+                });
+            }
+            
             // Traverse tree
             const prediction = this.traverseTree(this.tree, features);
             
