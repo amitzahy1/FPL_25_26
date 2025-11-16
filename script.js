@@ -2860,18 +2860,13 @@ function getProcessedByElementId() {
     }
     
     // Otherwise use live or historical data
+    // Since rostersByEntryId now stores FPL IDs (not Draft IDs), 
+    // we only need to map by FPL ID
     const processed = (state.allPlayersData.live && state.allPlayersData.live.processed) || (state.allPlayersData.historical && state.allPlayersData.historical.processed) || [];
     const map = new Map();
     
-    // CRITICAL: Add each player twice - once by FPL ID, once by Draft ID (if different)
     processed.forEach(p => {
-        map.set(p.id, p); // Add by FPL ID (standard)
-        
-        // ALSO add by Draft ID if mapping exists
-        const draftId = state.draft.fplToDraftIdMap.get(p.id);
-        if (draftId && draftId !== p.id) {
-            map.set(draftId, p); // Add by Draft ID for lookup
-        }
+        map.set(p.id, p); // Map by FPL ID only
     });
     
     return map;
@@ -2987,11 +2982,17 @@ async function loadDraftDataInBackground() {
                         const picksData = await fetchWithCache(picksUrl, picksCacheKey, 30);
                         if (picksData && picksData.picks) {
                             const draftPlayerIds = picksData.picks.map(pick => pick.element);
-                            state.draft.rostersByEntryId.set(entry.id, draftPlayerIds);
                             
-                            // Add to owned set - use FPL ID if mapping exists, otherwise Draft ID
-                            draftPlayerIds.forEach(draftId => {
-                                const fplId = state.draft.draftToFplIdMap.get(draftId) || draftId;
+                            // 🔑 CRITICAL: Convert Draft IDs to FPL IDs for consistent storage
+                            const fplPlayerIds = draftPlayerIds.map(draftId => 
+                                state.draft.draftToFplIdMap.get(draftId) || draftId
+                            );
+                            
+                            // Store FPL IDs (not Draft IDs!)
+                            state.draft.rostersByEntryId.set(entry.id, fplPlayerIds);
+                            
+                            // Add to owned set (already FPL IDs)
+                            fplPlayerIds.forEach(fplId => {
                                 state.draft.ownedElementIds.add(fplId);
                             });
                         }
@@ -3097,8 +3098,14 @@ async function loadDraftLeague() {
                 
                 try {
                     const picksData = await fetchWithCache(url, picksCacheKey, 5);
-                    const playerElements = (picksData && picksData.picks) ? picksData.picks.map(p => p.element) : [];
-                    state.draft.rostersByEntryId.set(entry.id, playerElements);
+                    const draftPlayerIds = (picksData && picksData.picks) ? picksData.picks.map(p => p.element) : [];
+                    
+                    // 🔑 CRITICAL: Convert Draft IDs to FPL IDs
+                    const fplPlayerIds = draftPlayerIds.map(draftId => 
+                        state.draft.draftToFplIdMap.get(draftId) || draftId
+                    );
+                    
+                    state.draft.rostersByEntryId.set(entry.id, fplPlayerIds);
                 } catch (err) {
                     console.error(`Failed to fetch final picks for entry ${entry.entry_name} (${entry.entry_id})`, err);
                     state.draft.rostersByEntryId.set(entry.id, []);
@@ -3107,10 +3114,9 @@ async function loadDraftLeague() {
 
             await Promise.all(picksPromises);
 
-            // Convert Draft IDs to FPL IDs when adding to ownedElementIds
-            for (const draftPlayerIds of state.draft.rostersByEntryId.values()) {
-                draftPlayerIds.forEach(draftId => {
-                    const fplId = state.draft.draftToFplIdMap.get(draftId) || draftId;
+            // Add all roster players to ownedElementIds (already FPL IDs!)
+            for (const fplPlayerIds of state.draft.rostersByEntryId.values()) {
+                fplPlayerIds.forEach(fplId => {
                     state.draft.ownedElementIds.add(fplId);
                 });
             }
@@ -3124,16 +3130,12 @@ async function loadDraftLeague() {
             
             state.draft.rostersByEntryId.forEach((roster, teamId) => {
                 const teamName = state.draft.entryIdToTeamName.get(teamId) || `Unknown ID: ${teamId}`;
-                const playerNames = roster.map(id => {
-                    const player = processedById.get(id);
+                // roster now contains FPL IDs (already converted), so lookup is straightforward
+                const playerNames = roster.map(fplId => {
+                    const player = processedById.get(fplId);
                     if (!player) {
-                        // Debug: try to find via mapping
-                        const fplId = state.draft.draftToFplIdMap.get(id);
-                        if (fplId) {
-                            const playerViaMap = processedById.get(fplId);
-                            console.log(`  ⚠️ Draft ID ${id} → FPL ${fplId} → ${playerViaMap ? playerViaMap.web_name : 'NOT FOUND'}`);
-                        }
-                        return `ID ${id} not found`;
+                        console.warn(`  ⚠️ FPL ID ${fplId} not found in processed players`);
+                        return `ID ${fplId} not found`;
                     }
                     return player.web_name;
                 }).join(', ');
