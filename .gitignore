@@ -1,0 +1,21 @@
+# Large data files
+Fantasy-Premier-League/
+historical_data.csv
+features_data.csv
+
+# Model files (optional - they're large)
+*.pkl
+
+# System files
+.DS_Store
+.cursor/
+
+# Logs
+training_log.txt
+*.log
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+
