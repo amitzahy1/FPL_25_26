@@ -501,25 +501,34 @@ function init() {
 }
 
 function setupEventListeners() {
-    document.getElementById('position-filter').addEventListener('change', filterAndSortPlayers);
-    document.getElementById('team-filter').addEventListener('change', filterAndSortPlayers);
-    document.getElementById('sort-metric').addEventListener('change', filterAndSortPlayers);
-    document.getElementById('search-player').addEventListener('input', filterAndSortPlayers);
-    document.getElementById('show-all').addEventListener('click', () => {
-        document.getElementById('position-filter').value = 'all';
-        document.getElementById('team-filter').value = 'all';
-        document.getElementById('search-player').value = '';
-        filterAndSortPlayers();
-    });
+    // Helper function to safely add event listener
+    const safeAddListener = (id, event, handler) => {
+        const element = document.getElementById(id);
+        if (element) {
+            element.addEventListener(event, handler);
+        } else {
+            console.warn(`Element with id '${id}' not found`);
+        }
+    };
 
+    // Add event listeners only if elements exist
+    // Note: These elements already have inline onchange/onkeyup handlers in HTML
+    // We don't need to add duplicate listeners here
+    // safeAddListener('positionFilter', 'change', filterAndSortPlayers);
+    // safeAddListener('teamFilter', 'change', filterAndSortPlayers);
+    // etc.
+
+    // Tab buttons
     document.querySelectorAll('.tab-button').forEach(button => {
         button.addEventListener('click', () => {
             const tabName = button.getAttribute('data-tab');
-            showTab(tabName);
+            if (tabName) {
+                showTab(tabName);
+            }
         });
     });
 
-    // New event listener for team selection in standings
+    // Draft standings table interaction
     const standingsBody = document.getElementById('draftStandingsTable')?.querySelector('tbody');
     if (standingsBody) {
         standingsBody.addEventListener('click', (e) => {
@@ -541,18 +550,26 @@ function setupEventListeners() {
         });
     }
 
-    document.getElementById('playersTable').querySelector('thead').addEventListener('click', (e) => {
-        if (e.target.tagName === 'TH') {
-            const newSortColumn = e.target.getAttribute('data-sort');
-            if (state.ui.sortColumn === newSortColumn) {
-                state.ui.sortDirection = state.ui.sortDirection === 'asc' ? 'desc' : 'asc';
-            } else {
-                state.ui.sortColumn = newSortColumn;
-                state.ui.sortDirection = 'desc';
-            }
-            filterAndSortPlayers();
+    // Players table sorting (if it exists)
+    const playersTable = document.getElementById('playersTable');
+    if (playersTable) {
+        const thead = playersTable.querySelector('thead');
+        if (thead) {
+            thead.addEventListener('click', (e) => {
+                if (e.target.tagName === 'TH') {
+                    const sortAttr = e.target.getAttribute('onclick');
+                    if (sortAttr) {
+                        // Extract sort index from onclick="sortTable(X)"
+                        const match = sortAttr.match(/sortTable\((\d+)\)/);
+                        if (match) {
+                            const columnIndex = parseInt(match[1]);
+                            sortTable(columnIndex);
+                        }
+                    }
+                }
+            });
         }
-    });
+    }
 }
 async function fetchWithCache(url, key, expiryMinutes = 60) {
     const cachedItem = localStorage.getItem(key);
@@ -667,18 +684,40 @@ function populateFilters() {
     });
 }
 
-function filterAndSortPlayers() {
-    const position = document.getElementById('position-filter').value;
-    const team = document.getElementById('team-filter').value;
-    const sortMetric = document.getElementById('sort-metric').value;
-    const searchTerm = document.getElementById('search-player').value.toLowerCase();
+// Wrapper function for HTML inline handlers
+function processChange() {
+    filterAndSortPlayers();
+}
 
-    state.ui.sortColumn = sortMetric;
+function filterAndSortPlayers() {
+    // Get filter values - check if elements exist first
+    const positionEl = document.getElementById('positionFilter');
+    const teamEl = document.getElementById('teamFilter');
+    const searchEl = document.getElementById('searchName');
+    
+    if (!positionEl || !teamEl || !searchEl) {
+        console.warn('Filter elements not found yet');
+        return;
+    }
+    
+    const position = positionEl.value;
+    const team = teamEl.value;
+    const searchTerm = searchEl.value.toLowerCase();
     
     let filteredPlayers = state.players.filter(p => {
-        const nameMatch = p.web_name.toLowerCase().includes(searchTerm) || p.first_name.toLowerCase().includes(searchTerm) || p.second_name.toLowerCase().includes(searchTerm);
-        const positionMatch = position === 'all' || p.element_type == position;
-        const teamMatch = team === 'all' || p.team == team;
+        const nameMatch = p.web_name.toLowerCase().includes(searchTerm) || 
+                          p.first_name.toLowerCase().includes(searchTerm) || 
+                          p.second_name.toLowerCase().includes(searchTerm);
+        
+        // Position matching: map position names to element_type numbers
+        let positionMatch = true;
+        if (position && position !== '') {
+            const positionMap = { 'GKP': 1, 'DEF': 2, 'MID': 3, 'FWD': 4 };
+            positionMatch = p.element_type == positionMap[position];
+        }
+        
+        const teamMatch = !team || team === '' || p.team == team;
+        
         return nameMatch && positionMatch && teamMatch;
     });
 
