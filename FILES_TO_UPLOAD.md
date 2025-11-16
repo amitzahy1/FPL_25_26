@@ -1,4 +1,11 @@
-# 📦 קבצים להעלאה ל-GitHub
+# 📦 קבצים להעלאה ל-GitHub - V2.6.1 🔧
+
+## 🐛 מה תוקן בגרסה זו?
+- ✅ **קבוצת דראפט** - עכשיו מוצג נכון מההתחלה (לא רק אחרי מיון)
+- ✅ **ML חיזוי** - מחשב נכון את החיזויים (תוקן `loadMLWeights`)
+- ✅ **חיזוי טכני** - שינוי שם מ-"xPts (הבא)" ל-"📊 חיזוי טכני"
+
+---
 
 ## ✅ קבצים עיקריים (חובה!)
 
@@ -80,7 +87,20 @@ node_modules/                  - אם יש
 cd /Users/amitzahy/Documents/Draft/FPL_25_26
 
 git add .
-git commit -m "✨ v2.5.0 - Ultimate ML Model + Grid Layout + Optimizations"
+git commit -m "🔧 v2.6.1 - Bug Fixes for ML & Draft Team
+
+🐛 Fixes:
+- ✅ Draft Team column now displays correctly on first load
+- ✅ ML Prediction now calculates correctly (fixed loadMLWeights)
+- ✅ Renamed 'xPts (הבא)' to '📊 חיזוי טכני'
+
+🔧 Technical Changes:
+- loadMLWeights() now accepts filename parameter
+- Added auto-initialization for ML model
+- renderTable() called after draft data loads
+- Added re-render after ML model loads
+- Better error handling in predictPlayerPoints()
+"
 git push origin main
 ```
 
@@ -123,9 +143,15 @@ git push origin main
 
 ---
 
-## 📊 סיכום השינויים
+## 📊 סיכום השינויים - V2.6.1
 
-### 🆕 קבצים חדשים (11)
+### 🔧 קבצים שתוקנו (4)
+1. `04_ml_predictor.js` - תיקון `loadMLWeights()` + auto-init + re-render
+2. `script.js` - `renderTable()` אחרי טעינת נתוני דראפט
+3. `index.html` - שינוי שם ל"📊 חיזוי טכני"
+4. `CHANGELOG.md` - V2.6.1
+
+### 🆕 קבצים חדשים/משולבים (מגרסה קודמת - 12)
 1. `model_weights.json` - המודל הסופי
 2. `README.md` - תיעוד מסודר
 3. `WORK_SUMMARY.md` - סיכום עבודה
@@ -138,11 +164,13 @@ git push origin main
 10. `ml_implementation/model_weights_ultimate.json`
 11. `ml_implementation/model_weights_balanced.json`
 
-### 🔄 קבצים ששונו (4)
-1. `script.js` - סידור מטריקס בהשוואה
-2. `style.css` - Grid Layout (2 עמודות)
-3. `CHANGELOG.md` - עודכן עם כל השינויים
-4. `ml_implementation/01_load_data.py` - תיקון encoding
+### 🔄 קבצים ששונו (6)
+1. `index.html` - הוספת עמודות ML חיזוי וקבוצת דראפט 🆕
+2. `script.js` - אינטגרציה של ML predictor + פונקציה לזיהוי קבוצות 🆕
+3. `style.css` - עיצוב מדהים לעמודות החדשות 🆕
+4. `CHANGELOG.md` - עודכן עם כל השינויים
+5. `FILES_TO_UPLOAD.md` - עודכן ל-V2.6.0
+6. `ml_implementation/01_load_data.py` - תיקון encoding
 
 ### 📁 קבצים שהועברו לארכיון (17)
 - כל התיעוד הישן → `docs/archive/`

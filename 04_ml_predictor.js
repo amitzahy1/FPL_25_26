@@ -194,14 +194,17 @@ class MLPredictor {
 /**
  * Load ML weights from JSON file
  */
-async function loadMLWeights() {
+async function loadMLWeights(filename = 'model_weights.json') {
     try {
-        const response = await fetch('model_weights_xgboost.json');
+        const response = await fetch(filename);
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
         const weights = await response.json();
-        console.log('✅ ML model weights loaded');
+        console.log(`✅ ML model weights loaded from ${filename}`);
         return weights;
     } catch (error) {
-        console.error('❌ Failed to load ML weights:', error);
+        console.error(`❌ Failed to load ML weights from ${filename}:`, error);
         return null;
     }
 }
@@ -288,8 +291,61 @@ async function exampleUsage() {
     console.log(`Predicted points for ${salah.web_name}: ${prediction}`);
 }
 
+// Global prediction function for use in script.js
+let globalMLPredictor = null;
+
+async function initializeMLModel() {
+    try {
+        const weights = await loadMLWeights('model_weights.json');
+        globalMLPredictor = new MLPredictor(weights);
+        console.log('✅ ML Model loaded successfully!');
+        return true;
+    } catch (error) {
+        console.error('❌ Failed to load ML model:', error);
+        return false;
+    }
+}
+
+function predictPlayerPoints(player) {
+    if (!globalMLPredictor) {
+        // Model not loaded yet, return 0 silently
+        return 0;
+    }
+    
+    try {
+        const prediction = globalMLPredictor.predict(player);
+        // Ensure prediction is a valid number
+        if (typeof prediction !== 'number' || isNaN(prediction)) {
+            console.warn(`Invalid ML prediction for ${player.web_name}:`, prediction);
+            return 0;
+        }
+        return Math.max(0, prediction); // Ensure non-negative
+    } catch (error) {
+        console.error(`ML prediction error for ${player.web_name}:`, error);
+        return 0;
+    }
+}
+
+// Auto-initialize on load (with proper async handling)
+if (typeof window !== 'undefined') {
+    // Initialize immediately and set a flag when ready
+    window.mlModelReady = false;
+    initializeMLModel().then(() => {
+        window.mlModelReady = true;
+        console.log('🎯 ML Model ready for predictions');
+        
+        // Trigger re-render if renderTable exists
+        if (typeof renderTable === 'function') {
+            console.log('♻️ Re-rendering table with ML predictions...');
+            renderTable();
+        }
+    }).catch(error => {
+        console.error('❌ ML Model initialization failed:', error);
+    });
+}
+
 // Export
 if (typeof module !== 'undefined' && module.exports) {
-    module.exports = { MLPredictor, loadMLWeights, initMLPredictor };
+    module.exports = { MLPredictor, loadMLWeights, initMLPredictor, predictPlayerPoints };
 }
 
