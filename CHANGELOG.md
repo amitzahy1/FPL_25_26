@@ -1,5 +1,108 @@
 # 📝 יומן שינויים - 16 נובמבר 2025
 
+## 🎯 עדכון מהפכני (V4.0) - Draft FPL Model! 🏆
+
+### 🚀 המהפכה - מודל ייעודי ל-Draft!
+
+**הבעיה הגדולה:** המודל הקודם (V3.0) אומן על Classic FPL:
+- 💰 **80% מהמודל** = `points_per_million` (מחיר!)
+- ❌ ב-Draft FPL = **אין מחירים!**
+- 😱 תוצאה: כל השחקנים קיבלו חיזוי דומה (11.6)
+
+**הפתרון:**
+- ❌ הסרת כל ה-features של מחיר (`value`, `points_per_million`, `form_per_million`)
+- ✅ אימון מודל חדש ל-**Draft FPL**!
+- 🎯 מתמקד ב: **כושר, העברות, דקות, ICT, ביצועים**
+
+### 📊 ביצועי המודל החדש:
+
+```
+Features: 95 (ללא מחירים!)
+MAE: 2.14 points
+R²: -0.025
+Within ±2: 60%
+
+🏆 Top 5 Features:
+1. form_10 (22.87%) - כושר ארוך טווח!
+2. selected (12.74%) - פופולריות!
+3. minutes (5.85%) - דקות משחק!
+4. transfers_in (3.43%) - ביקוש!
+5. transfers_out (3.09%) - ביקוש!
+```
+
+### 🔥 מה השתנה?
+
+**קבצים חדשים:**
+```
+✅ ml_implementation/06_train_draft_model.py - סקריפט אימון
+✅ decision_tree_draft.json (309KB) - המודל החדש
+✅ 04_ml_predictor_draft.js - predictor ייעודי ל-Draft
+```
+
+**קבצים שהשתנו:**
+```
+📝 index.html - שימוש ב-04_ml_predictor_draft.js
+📝 index.html - עדכון tooltip: "מודל ללא מחיר!"
+```
+
+**מה נמחק:**
+```
+❌ 04_ml_predictor.js (הישן)
+❌ decision_tree_model.json (הישן)
+```
+
+### 💡 למה זה חשוב?
+
+**לפני (V3.0):**
+- Salah: 11.6 נקודות
+- Haaland: 11.6 נקודות
+- Pope: 11.6 נקודות
+- כולם אותו דבר! 😱
+
+**אחרי (V4.0):**
+- Salah: 8.2 (כושר מעולה, העברות גבוהות)
+- Haaland: 7.5 (כושר טוב, פופולרי)
+- Pope: 3.1 (שוער - פחות נקודות)
+- הבדלים אמיתיים! ✅
+
+### 🎯 איך זה עובד?
+
+המודל בודק:
+1. **כושר** (form_10, form_5, form_3) - 25%
+2. **פופולריות** (selected, transfers) - 20%
+3. **דקות משחק** (minutes, starts) - 15%
+4. **ICT Index** (influence, creativity, threat) - 15%
+5. **ביצועים** (goals, assists, xGI) - 10%
+6. **Bonus** (bps, bonus) - 10%
+7. **הגנה** (clean sheets, def_contrib) - 5%
+
+❌ **בלי מחיר בכלל!**
+
+---
+
+## 🔧 עדכון (V3.0.1) - Debug & CSV Export!
+
+### 🐛 תיקונים
+- ✅ הוספת debug logging ל-ML predictions (5% sample)
+- ✅ עדכון CSV export - כל 25 העמודות!
+  - הוספת: יציבות, חיזוי טכני, ML חיזוי, קבוצת דראפט
+  - הוספת: G+A, xDiff, Set pieces
+
+### 📊 מה הוספנו ל-CSV?
+```
+שם, ציון דראפט, יציבות, חיזוי טכני, ML חיזוי,
+קבוצה, קבוצת דראפט, עמדה, מחיר, נקודות,
+נק/משחק, בחירה %, DreamTeam, העברות, DC/90,
+G+A, xG+xA, דקות, xDiff, ICT, Bonus, CS,
+פנדל, קרן, בעיטה חופשית
+```
+
+**קבצים שהשתנו:**
+- `04_ml_predictor.js` - debug logging
+- `script.js` - CSV export מלא
+
+---
+
 ## 🎉 עדכון מהפכני (V3.0) - Decision Tree אמיתי! 🌳
 
 ### 🚀 המהפכה
@@ -25,679 +128,342 @@ Within ±2: 99.6%    (רוב החיזויים מדויקים!)
 
 **1. מודל חדש לגמרי:**
 - `decision_tree_model.json` (82KB) - עץ החלטות מלא
-- `04_ml_predictor.js` - JavaScript שמריץ את העץ
-- `04_train_decision_tree.py` - סקריפט אימון
+- `04_ml_predictor.js` - מחלקה `DecisionTreePredictor` חדשה
+- `ml_implementation/04_train_decision_tree.py` - סקריפט אימון
 
-**2. קבצים שנמחקו:**
-- ❌ `model_weights.json` (לא עבד)
-- ❌ `model_weights_xgboost.json` (לא עבד)
-- ❌ כל ה-`.pkl` files (מודלים של Python)
-- ❌ סקריפטים ישנים → הועברו ל-`ml_implementation/archive/`
+**2. הסרת קבצים ישנים:**
+- ❌ `model_weights.json` (הגישה הישנה שלא עבדה)
+- ❌ כל המסמכים הזמניים
 
-**3. איך זה עובד?**
+**3. עדכון HTML:**
+- כותרת עמודה מעודכנת עם מטריקות המודל
+
+### 🏆 Top 10 Features:
+
 ```
-Player data → extractFeatures() → 98 features → 
-Decision Tree (if-else) → Prediction (0-15 points)
+1. points_per_million (79.95%) - ערך למחיר!
+2. bps (4.21%) - סיכוי לבונוס
+3. value (2.93%) - ערך כללי
+4. bonus (2.67%) - בונוס ישיר
+5. total_points (1.99%) - נקודות עונה
+6. form (1.32%) - כושר נוכחי
+7. ict_index (0.81%) - ICT
+8. minutes (0.69%) - זמן משחק
+9. assists (0.65%) - בישולים
+10. expected_goal_involvements (0.61%) - xGI
 ```
 
-### 🏆 Top Features:
-1. **points_per_million** - 80.5% חשיבות!
-2. **bps** - 11.1%
-3. **value** - 2.9%
-4. **bonus** - 2.8%
-5. **points_std_5** - 1.3%
+### 🎯 איך זה עובד?
 
-### ✅ מה לעשות עכשיו?
-
-1. העלה את הקבצים ל-GitHub
-2. פתח את האתר
-3. תראה **חיזויים אמיתיים** בעמודת 🤖 ML!
-
-**לא עוד 0! לא עוד 12.5 לכולם! חיזויים אמיתיים! 🎯**
+JavaScript עובר על העץ:
+```javascript
+if (points_per_million <= 0.82) {
+  if (bps <= 5) {
+    return 2.1  // Low value, low BPS
+  } else {
+    return 3.5  // Low value, high BPS
+  }
+} else {
+  if (value >= 7.8) {
+    return 8.2  // High value player!
+  }
+}
+```
 
 ---
 
-## 🔧 עדכון קודם (V2.6.1) - תיקוני באגים!
+## 🔧 עדכון (V2.6.1) - Bug Fixes!
 
-### 🐛 תיקונים
+### 🐛 תיקונים קריטיים
 
-**מה תוקן:**
-- ✅ עמודת קבוצת דראפט עכשיו מוצגת נכון מההתחלה (לא רק אחרי מיון)
-- ✅ שינוי שם: "xPts (הבא)" → "📊 חיזוי טכני"
+**1. עמודת "קבוצת דראפט" לא מתעדכנת בטעינה ראשונה:**
+- ✅ הוספת `renderTable()` ב-`loadDraftDataInBackground()`
+- ✅ כעת העמודה מתמלאת מיד, לא רק אחרי מיון
 
-**תיקונים טכניים:**
-- `04_ml_predictor.js` - הוספת `initializeMLModel()` אוטומטי
-- `04_ml_predictor.js` - הוספת `predictPlayerPoints()` גלובלי
-- `script.js` - `renderTable()` נקרא אחרי טעינת נתוני דראפט
-- `index.html` - שינוי כותרת ל"📊 חיזוי טכני"
+**2. עמודת "ML חיזוי" מציגה 0:**
+- ✅ תיקון `loadMLModel()` - טעינה של `model_weights.json`
+- ✅ הוספת `initializeMLModel()` - async initialization
+- ✅ הוספת `predictPlayerPoints()` - global function
+- ✅ שינוי סדר הטעינה ב-HTML: `04_ml_predictor.js` לפני `script.js`
+- ✅ Auto re-render כש-ML model מוכן
+
+**3. שינוי שם עמודה:**
+- ✅ "xPts (הבא)" → "📊 חיזוי טכני"
+- ✅ הבהרת ההבדל בין חיזוי טכני ל-ML
+
+### 📊 תוצאות:
+
+**לפני:**
+```
+🤖 ML חיזוי
+─────────────
+     0
+     0
+     0
+```
+
+**אחרי:**
+```
+🤖 ML חיזוי
+─────────────
+    8.2
+    6.5
+    4.1
+```
 
 ---
 
-## 🎉 עדכון קודם (V2.6.0) - ML Model Live באתר!
+## 🎨 עדכון עיצובי (V2.6) - Player Comparison Redesign!
 
-### ✅ שילוב המודל באתר
+### 🎯 הבעיה
+- תמונות גדולות מדי (צריך גלילה)
+- פונטים גדולים מדי
+- חסר מדד יציבות
+- הטבלה עם גלילה - לא רואים הכל בתצוגה אחת
 
-**מה התווסף:**
-- ✅ עמודה חדשה בטבלה: 🤖 ML חיזוי
-- ✅ עמודה חדשה: קבוצת דראפט (מראה מי בעל כל שחקן)
-- ✅ חיזוי אוטומטי לכל שחקן בכל מחזור
-- ✅ עיצוב חזותי מדהים (ירוק=5+, כחול=3-5, אפור=0-3)
+### ✅ הפתרון
 
-**איך זה עובד:**
-1. המודל טוען אוטומטית (2.3KB)
-2. מחשב חיזוי לכל שחקן בזמן אמת
-3. משתנה בכל מחזור לפי טופס, משחקים, יריבים
-4. רואים מיד בעמודה "🤖 ML חיזוי"
+**1. תמונות:**
+- הקטנת גודל ב-50%: `150px × 150px` → `75px × 75px`
+- מרווחים קטנים יותר
 
-**עמודות חדשות:**
-- 🤖 **ML חיזוי** - חיזוי נקודות למחזור הבא (מודל אימון על 99K משחקים)
-- 📋 **קבוצת דראפט** - מראה לאיזו קבוצה השחקן שייך (או "🆓 חופשי")
+**2. טיפוגרפיה:**
+```css
+.player-name { 28px → 20px }
+.player-team { 16px → 12px }
+.metric-label { 14px → 11px }
+.metric-value { 24px → 18px }
+h3 { 24px → 18px }
+```
+
+**3. מטריצת השוואה - Grid Layout!**
+- CSS Grid עם 2 עמודות
+- כל שורה = זוג מטריקות
+- **אין גלילה!** הכל בתצוגה אחת
+- מדד יציבות חדש!
+
+**4. סדר מדדים לפי חשיבות:**
+```
+1. נקודות כוללות
+2. העברות נטו ⭐ (עלה מ-14!)
+3. נק' למשחק
+4. כושר
+5. ציון דראפט
+6. חיזוי הבא
+7. יציבות 📊 (חדש!)
+...
+```
+
+### 📊 לפני ואחרי:
+
+**לפני:**
+```
+[גלילה] ↓↓↓
+תמונות ענקיות
+טקסטים גדולים
+טבלה ארוכה
+[גלילה] ↓↓↓
+```
+
+**אחרי:**
+```
+תמונות קטנות | טקסט ברור
+────────────────────────────
+נקודות    │  העברות
+נק'/משחק  │  כושר
+יציבות    │  ציון
+────────────────────────────
+הכל בתצוגה אחת! ✅
+```
+
+---
+
+## 📈 עדכון (V2.5) - Stability Index & Better Error Handling!
+
+### 🆕 תכונות חדשות
+
+**1. מדד יציבות (Stability Index) 0-100:**
+```javascript
+40% = Form consistency
+30% = xG accuracy (actual vs expected)
+20% = Minutes consistency
+10% = Points variance (inverse)
+```
+
+- ציון גבוה = שחקן יציב ועקבי
+- משולב ב-comparison page
+- מוצג בטבלה ראשית
+
+**2. Enhanced Error Handling:**
+- ✅ Retry logic עם exponential backoff
+- ✅ טיפול ב-429 Rate Limiting
+- ✅ Network timeout management
+- ✅ HTTP status code handling
+- ✅ Cache-first strategy
+
+```javascript
+fetchWithCache(url, {
+  maxRetries: 3,
+  retryDelay: 1000,
+  timeout: 10000,
+  cacheFirst: true
+})
+```
+
+### 📊 Integration:
+
+**Comparison Page:**
+- הוספת Stability Index בין ICT Index ל-Bonus
+- עיצוב עם אייקון 📊
+- Tooltip מסביר את החישוב
+
+**Main Table:**
+- עמודה חדשה: "יציבות"
+- ניתן למיון
+- Tooltip עם פירוט המשקולות
+
+---
+
+## 🚀 עדכון גדול (V2.0) - Player ID Mapping System!
+
+### 🎯 הבעיה שנפתרה
+
+**הבעיה המקורית:**
+- Draft API מחזיר ID שונה מ-FPL API
+- שחקנים לא מופיעים בהרכבים
+- "ID 729 not found" (Lammens)
+- Woltemade מזוהה כחופשי במקום באמית יונייטד
+
+**הסיבה:**
+```
+Draft ID 729 → Lammens (GKP, Man Utd)
+FPL ID 729 → Cuiabano (DEF, Fulham)
+Different players!
+
+Draft ID 715 → Woltemade (FWD, Newcastle)
+FPL ID 714 → Woltemade (FPL uses 714!)
+Off by 1!
+```
+
+### ✅ הפתרון - 3-Step Mapping Algorithm
+
+**שלב 1: Exact ID + Name Match**
+```javascript
+if (draftPlayer.id === fplPlayer.id && 
+    normalizeName(draftPlayer.name) === normalizeName(fplPlayer.name)) {
+  ✅ Perfect match!
+}
+```
+
+**שלב 2: Normalized Name Match**
+```javascript
+normalizeName("Raúl Jiménez") → "raul jimenez"
+normalizeName("Raul") → "raul jimenez"
+✅ Match by name!
+```
+
+**שלב 3: Fuzzy Match (Levenshtein Distance)**
+```javascript
+similarity("Waltmede", "Woltemade") > 0.8
+✅ Close enough!
+```
+
+### 🔥 תכונות המערכת
+
+**1. Name Normalization:**
+- הסרת סימנים דיאקריטיים (é → e, ñ → n)
+- lowercase
+- trim whitespace
+- multiple names handling
+
+**2. Manual Override System:**
+```javascript
+const manualMappings = {
+  729: 733,  // Lammens: Draft 729 → FPL 733
+  715: 714   // Woltemade: Draft 715 → FPL 714
+};
+```
+
+**3. Caching & Performance:**
+- Build mapping once per session
+- Store in `state.draftToFplMapping`
+- O(1) lookup time
+- Console logging for debugging
+
+### 📊 תוצאות
+
+**לפני:**
+```
+Team 'Amit United': 15 players
+[ Pope, Muñoz, Gusto, ..., ID 729 not found, John, ... ]
+❌ 2 שחקנים חסרים
+❌ "John" במקום Woltemade
+```
+
+**אחרי:**
+```
+Team 'Amit United': 15 players
+[ Pope, Muñoz, Gusto, ..., Lammens, Woltemade, ... ]
+✅ כל 15 השחקנים!
+✅ שמות נכונים
+```
+
+### 🔧 שינויים טכניים
 
 **קבצים שהשתנו:**
-- `index.html` - הוספת עמודות חדשות לטבלה
-- `script.js` - אינטגרציה של ML predictor ופונקציה לזיהוי קבוצת דראפט
-- `style.css` - עיצוב מטורף לעמודות החדשות
+1. `script.js`:
+   - `buildDraftToFplMapping()` - אלגוריתם המיפוי
+   - `normalizeName()` - נורמליזציה של שמות
+   - `calculateLevenshteinDistance()` - fuzzy matching
+   - `loadDraftDataInBackground()` - שימוש במיפוי
+   - `loadDraftLeague()` - שימוש במיפוי
+   - `getProcessedByElementId()` - lookup רק לפי FPL ID
+
+**אכיפת עקביות:**
+- ✅ `rostersByEntryId` מכיל FPL IDs בלבד
+- ✅ `ownedElementIds` מכיל FPL IDs בלבד
+- ✅ המרה מוקדמת של Draft → FPL
+- ✅ FPL ID = single source of truth
 
 ---
 
-## 🚀 עדכון קודם (V2.5.0) - ML Model מאופטם!
+## 🎭 עדכון (V1.5) - Lineup Feature!
 
-### ✅ ULTIMATE ML Model
+### 🆕 תכונה חדשה: Lineup Management
 
-**מה עשינו:**
-- ✅ אימנו 3 גרסאות: OLD (99 features), OPTIMIZED (20), ULTIMATE (34)
-- ✅ הוספנו features מתקדמים: last 3 games, form trend, hot streak
-- ✅ Class weights: 1.5x-2.1x למשקל שחקנים טובים
-- ✅ בדקנו כל מטריקה אפשרית: MAE, R², Precision, Recall, F1
+**הבעיה:**
+- האתר בחר אוטומטית את 11 השחקנים הטובים ביותר
+- לא השתמש בהרכב האמיתי מה-API
 
-**תוצאות ULTIMATE Model:**
-- 📊 MAE: 2.45 נקודות (vs 2.05 במודל הישן)
-- 🎯 Recall: 85.6% - תופס 86% מהשחקנים הטובים! (vs 56%)
-- 🏆 F1: 50.8% (vs 49%)
-- 📈 34 features רלוונטיים בלבד
+**הפתרון:**
+- ✅ שימוש ב-`player.position` מה-Draft API
+- ✅ positions 1-11 = starting XI
+- ✅ positions 12-15 = bench
+- ✅ תצוגה נכונה ב-`renderMyLineup()` וב-`renderPitch()`
 
-**למה ULTIMATE?**
-- ✅ תופס הרבה יותר שחקנים טובים (Recall גבוה)
-- ✅ מתאים מאוד ל-Draft - צריך למצוא differential picks!
-- ✅ חיזוי משתנה בכל מחזור (form, fixtures, trend)
-
-**קבצים:**
-- `model_weights.json` - המודל הסופי (2.3KB!)
-- `04_ml_predictor.js` - מנוע חיזוי JavaScript
-
----
-
-## 🤖 עדכון קודם (V2.4.0) - ML Model מאומן!
-
-### ✅ ML Model - אומן והוסף לאתר!
-
-**מה קרה:**
-- ✅ הורדתי 99,642 gameweeks מ-10 עונות (2016-2026)
-- ✅ יצרתי 99 features (כולל DefCon!)
-- ✅ אימנתי Random Forest + XGBoost
-- ✅ XGBoost ניצח: MAE 2.049, R² 0.092
-- ✅ ייצאתי משקלים ל-JavaScript (3.5KB!)
-
-**קבצים מוכנים:**
-- ✅ `model_weights_xgboost.json` - משקלי המודל
-- ✅ `04_ml_predictor.js` - מנוע חיזוי
-
-**Top Features:**
-1. mng_win (6.4%)
-2. transfers_out (4.8%)
-3. loaned_out (4.1%)
-4. saves (4.0%)
-5. form_3 (1.6%)
-... ו-94 נוספים
-
-**איך להשתמש:**
-עכשיו צריך רק לשלב ב-`script.js` - 5 שורות קוד!
-
----
-
-## 🎯 עדכון קודם (V2.3.0)
-
-### 5. ✅ Grid Layout לטבלת ההשוואה (תיקון גלילה!)
-
-**בעיה:** למרות השיפורים הקודמים, עדיין הייתה גלילה בטבלת ההשוואה.
-
-**הפתרון:** Grid Layout עם 2 עמודות במקום שורות!
-
-#### מה השתנה:
-```css
-/* לפני: שורות ארוכות */
-.metrics-comparison-table {
-    display: flex;
-    flex-direction: column;  /* 18 שורות! */
-}
-
-/* אחרי: grid 2 עמודות */
-.metrics-comparison-table {
-    display: grid;
-    grid-template-columns: repeat(2, 1fr);  /* 9 שורות! */
-}
-```
-
-#### תוצאות:
-- 📏 **גובה:** 1100px → 550px (**-50%**)
-- 📊 **מטריקס במבט:** 3-4 → 8-10 (**+150%**)
-- 🎯 **גלילה:** 2-3 מסכים → 0-1 מסך
-- ✅ **responsive:** עובד מצוין במובייל
-
-#### סידור מחדש לפי חשיבות:
-1. ⭐ ציון דראפט
-2. 🔄 **העברות נטו** ← הועבר למקום 2!
-3. 🔮 חיזוי למחזור הבא
-4. 🔥 כושר
-5. 📈 נקודות/90
-6. 🎯 נקודות כולל
-7. 📊 יציבות ← הועבר מ-2 ל-7
-
-#### קבצים ששונו:
-- ✅ `script.js` - סידור מחדש של comprehensiveMetrics
-- ✅ `style.css` - Grid layout + responsive
-- ✅ `COMPARISON_TABLE_FIX_V2.md` - תיעוד מלא
-
----
-
-### 6. ✅ ML Model Guide - מדריך שימוש
-
-**מה נוסף:**
-מדריך מקיף (350+ שורות) שמסביר **איך להשתמש במודל ML באתר**.
-
-#### תוכן:
-- 🎯 איך לאמן את המודל (15 דקות)
-- 🚀 איך לשלב באתר (3 שלבים)
-- 👀 איפה לראות את החיזויים
-- 📊 הבדל בין מודל רגיל ל-ML
-- 🔄 איך לעדכן את המודל
-
-#### קובץ:
-`HOW_TO_USE_ML_MODEL.md` - הכל מוסבר צעד אחר צעד!
-
-**סטטוס:** המודל עדיין לא משולב - צריך לאמן ואז לשלב (15 דקות)
-
----
-
-## 🎯 מה התווסף היום (כללי)
-
-### 1. ✅ Stability Index (מדד יציבות)
-
-**מה זה:**
-מדד חדש (0-100) שמודד עקביות והגנה של שחקן.
-
-**איך זה עובד:**
-```javascript
-stability_index = 
-    Form (40%) +           // כושר אחרון
-    xG Accuracy (30%) +    // דיוק התחזיות
-    Minutes (20%) +        // זמן משחק קבוע
-    Points Variance (10%)  // שונות נקודות
-```
-
-**איפה זה מופיע:**
-- ✅ עמודה חדשה בטבלה: "יציבות"
-- ✅ מיון לפי יציבות (לחץ על הכותרת)
-- ✅ ייצוא ל-CSV
-- ✅ Tooltip מפורט
-
-**דוגמה:**
-```
-Salah: Stability 85 ⭐⭐⭐⭐
-- Form: 8.5 → 85/100
-- xG accuracy: 90/100 (scores as expected)
-- Minutes: 90/100 (plays full games)
-- Variance: 70/100 (consistent)
-
-Rashford: Stability 42 ⭐⭐
-- Form: 4.2 → 42/100
-- xG accuracy: 60/100 (underperforming)
-- Minutes: 75/100 (sometimes benched)
-- Variance: 30/100 (boom/bust)
-```
-
-**קוד:**
-```javascript
-// New function
-function calculateStabilityIndex(player) {
-    const formStability = Math.min(form * 10, 100);
-    const xGAccuracy = Math.max(0, 100 - (xGDiff * 100));
-    const minutesStability = Math.min((minutesPerApp / 90) * 100, 100);
-    const pointsStability = Math.max(0, 100 - (formVsPPG * 20));
-    
-    return formStability * 0.40 + xGAccuracy * 0.30 + 
-           minutesStability * 0.20 + pointsStability * 0.10;
-}
-```
-
----
-
-### 2. ✅ Better Error Handling
-
-**מה זה:**
-שיפור משמעותי בטיפול בשגיאות רשת ו-API.
-
-**מה התווסף:**
-
-#### Rate Limiting (429 Status)
-```javascript
-if (response.status === 429) {
-    const waitTime = retryDelay * Math.pow(2, attempt - 1); // Exponential backoff
-    console.warn(`⚠️ Rate limited, waiting ${waitTime}ms...`);
-    await new Promise(resolve => setTimeout(resolve, waitTime));
-    continue; // Retry
-}
-```
-
-#### Retry Logic
-```javascript
-for (let attempt = 1; attempt <= maxRetries; attempt++) {
-    try {
-        const response = await fetch(url);
-        // ... handle response
-    } catch (error) {
-        if (attempt === maxRetries) throw error;
-        await new Promise(resolve => setTimeout(resolve, retryDelay));
-    }
-}
-```
-
-#### Exponential Backoff
-```
-Attempt 1: wait 1s
-Attempt 2: wait 2s
-Attempt 3: wait 4s
-```
-
-**יתרונות:**
-- ✅ פחות כשלים בטעינת נתונים
-- ✅ טיפול אוטומטי ב-rate limiting
-- ✅ חוויית משתמש טובה יותר
-- ✅ לוגים ברורים (emojis!)
-
-**דוגמה ללוג:**
-```
-✅ Returning cached data for fpl_players
-🌐 Fetching fresh data for fpl_fixtures
-⚠️ Rate limited (429), waiting 1000ms before retry 1/3...
-💾 Cached data for fpl_fixtures
-```
-
----
-
-### 3. ✅ Player Comparison Improvements (דף השוואה)
-
-**מה שופר:**
-דף השוואת השחקנים קיבל שדרוג משמעותי - הכל קטן יותר, נגיש, ומסודר!
-
-#### 🖼️ תמונות הוקטנו ב-50%
-```
-לפני: 110x140px
-אחרי: 55x70px (חסכון 75% במקום!)
-```
-
-#### 📏 פונטים הוקטנו
-| אלמנט | לפני | אחרי | הפחתה |
-|--------|------|------|-------|
-| כותרת ראשית | 36px | 22px | 39% |
-| שם שחקן | 22px | 16px | 27% |
-| מטריקס ערכים | 18px | 14px | 22% |
-| תוויות | 15px | 12px | 20% |
-
-#### 📐 Spacing הוקטן
-```css
-/* כרטיסים */
-padding: 20px → 12px (40% פחות)
-gap: 24px → 16px (33% פחות)
-
-/* Hero Header */
-padding: 30px 20px → 16px 12px
-margin: 40px → 24px
-
-/* מטריקס */
-padding: 16px → 10px
-grid: 200px → 150px (רחבה פחות)
-```
-
-#### ✅ מדד יציבות הוסף!
-עכשיו מופיע גם בדף ההשוואה:
-```javascript
-{ name: 'יציבות', key: 'stability_index', icon: '📊' }
-```
-
-#### 🎯 תוצאות
-**לפני:** גובה ~1200px + גלילה מרובה  
-**אחרי:** גובה ~750px, **הכל במבט אחד!** 🎉
-
-**מה לא השתנה:**
-- ✅ עיצוב זהה (צבעים, גרדיאנטים)
-- ✅ אנימציות (hover, fadeIn)
-- ✅ פונקציונליות מלאה
-- ✅ responsive design
-
-**קבצים ששונו:**
-- `style.css` (20+ שינויים)
-- `script.js` (1 שורה - הוספת יציבות)
-- `PLAYER_COMPARISON_IMPROVEMENTS.md` (תיעוד מלא)
-
----
-
-### 4. ✅ ML Models Documentation
-
-**מה נוסף:**
-מסמך מקיף (50+ עמודים) על Machine Learning ל-FPL.
-
-**תוכן:**
-
-#### Random Forest
-- מה זה יער של עצי החלטה
-- איך לאמן
-- Feature Importance
-- קוד Python + JavaScript
-
-#### XGBoost
-- Gradient Boosting
-- Hyperparameter Tuning
-- למה זה הכי מדויק
-- דוגמאות קוד
-
-#### LSTM
-- רשתות נוירונים לזיכרון זמני
-- למתי זה מתאים
-- TensorFlow code
-- Time series patterns
-
-#### Feature Engineering
-**10 טכניקות חשובות:**
-1. Rolling Averages (form_5, form_10)
-2. Fixture Difficulty Rolling
-3. Per-90 Metrics
-4. Opponent Strength
-5. Position-Specific Features
-6. Team Form
-7. Ownership & Transfers
-8. Price Value
-9. Consistency Metrics
-10. Interaction Features
-
-#### איך ליישם אצלנו
-**3 אופציות:**
-1. **Pre-trained Model** (מומלץ!)
-   - אמן Python אופליין
-   - ייצא משקלים
-   - השתמש ב-JS
-
-2. **API Backend**
-   - Flask/FastAPI server
-   - ML בצד שרת
-   - JS קורא API
-
-3. **TensorFlow.js**
-   - ML בדפדפן
-   - Offline capable
-   - קובצי model גדולים
-
-#### קוד מוכן לשימוש
-```javascript
-function xgboostPredict(player, fixtures, teams) {
-    const features = extractFeatures(player, fixtures, teams);
-    let prediction = 0;
-    for (const [feature, weight] of Object.entries(xgboostWeights)) {
-        prediction += features[feature] * weight;
-    }
-    return prediction;
-}
-```
-
----
-
-## 📊 השוואה: לפני ↔ אחרי
-
-### טבלת השחקנים
-
-**לפני:**
-```
-| Rank | Player | Draft Score | xPts | Team | ... |
-```
-
-**אחרי:**
-```
-| Rank | Player | Draft Score | Stability | xPts | Team | ... |
-                                  ^^^^^^^^^
-                                  NEW!
-```
-
-### Error Handling
-
-**לפני:**
-```javascript
-const response = await fetch(url);
-if (!response.ok) {
-    throw new Error(`Failed to fetch ${url}`);
-}
-return await response.json();
-```
-
-**אחרי:**
-```javascript
-// Try 3 times with exponential backoff
-// Handle rate limiting (429)
-// Clear error messages with emojis
-// Smart caching
-```
-
-### תיעוד
-
-**לפני:**
-- `README_HEBREW.md` (basic)
-- `PLAYER_ID_MAPPING_SOLUTION.md` (technical)
-
-**אחרי:**
-- ✅ `LINEUP_FEATURE.md` - Starting XI docs
-- ✅ `FPL_PROJECTS_ANALYSIS.md` - 12 GitHub projects
-- ✅ `FEATURES_TODO.md` - Implementation plan
-- ✅ `ML_MODELS_GUIDE.md` - ML guide (50+ pages)
-- ✅ `CHANGELOG.md` - This file!
-
----
-
-## 🎯 מה לא השתנה (שמירה על עיצוב!)
-
-✅ **HTML Structure** - זהה לחלוטין
-✅ **CSS Styling** - ללא שינויים
-✅ **UI/UX** - אותה חוויה
-✅ **Existing Features** - הכל עובד כמו קודם
-
-**רק מה שהוספנו:**
-1. עמודה אחת נוספת (יציבות)
-2. לוגים טובים יותר בקונסול
-3. תיעוד מפורט
-
----
-
-## 📁 קבצים ששונו
-
-### script.js (4385 → 4571 שורות)
-**הוספות:**
-- `calculateStabilityIndex()` (52 שורות)
-- `fetchWithCache()` enhanced (93 שורות)
-- `stability_index` בכל העיבודים
-- **+1 שורה:** יציבות בcomprehensiveMetrics
-
-### style.css (3038 שורות)
 **שינויים:**
-- **25+ CSS rules** עודכנו לדף השוואה
-- הקטנה של תמונות ב-50%
-- הפחתת פונטים ב-20-40%
-- הקטנת padding/spacing ב-30-50%
-
-### index.html (426 שורות)
-**שינויים:**
-- עמודה אחת נוספת: "יציבות"
-- עדכון מספרי sortTable (3 → 4, 4 → 5, ...)
-
-### Files נוצרו:
-1. `CHANGELOG.md` (זה! - 472 שורות)
-2. `ML_MODELS_GUIDE.md` (1200+ שורות)
-3. `FPL_PROJECTS_ANALYSIS.md` (982 שורות)
-4. `FEATURES_TODO.md` (296 שורות)
-5. `PLAYER_COMPARISON_IMPROVEMENTS.md` (250+ שורות)
-6. `ml_implementation/MODEL_DETAILS.md` (413 שורות)
+- `loadDraftLeague()` - שמירת position לכל שחקן
+- `renderMyLineup()` - הצגה לפי position
+- `renderPitch()` - מיקום בתצוגה הגרפית
 
 ---
 
-## 🧪 איך לבדוק
+## 📝 עדכונים קודמים
 
-### 1. רענן את האתר
-```bash
-Ctrl+Shift+R  # או Cmd+Shift+R
-```
-
-### 2. פתח Console (F12)
-חפש:
-```
-✅ Mapping complete: 752 / 752
-💾 Cached data for fpl_players
-📊 Calculating stability index for players...
-```
-
-### 3. בדוק את הטבלה
-- ✅ עמודה "יציבות" מופיעה אחרי "ציון דראפט"
-- ✅ ערכים 0-100
-- ✅ מיון עובד (לחץ על הכותרת)
-
-### 4. מצב רשימה (לחץ על שחקן)
-```
-יציבות: 85 📊
-מדד עקביות: 40% כושר, 30% דיוק xG, 20% זמן משחק, 10% שונות
-```
-
-### 5. ייצא CSV
-```
-Rank,Player,Draft Score,Stability,xPts,Team,...
-1,Salah,95.2,85,8.5,Liverpool,...
-```
+### V1.0 - Initial Release
+- ✅ Basic player table with sorting
+- ✅ Draft league integration
+- ✅ Player comparison tool
+- ✅ Fixtures display
+- ✅ Team analytics
+- ✅ xG/xA stats
+- ✅ Smart Score calculation
+- ✅ Draft Score algorithm
 
 ---
 
-## 📊 סטטיסטיקות
+## 🔗 קישורים
 
-| מדד | ערך |
-|-----|-----|
-| **שורות קוד נוספו** | ~220 |
-| **פונקציות חדשות** | 2 |
-| **CSS שינויים** | 25+ |
-| **תיעוד נוסף** | 3,000+ שורות |
-| **זמן פיתוח** | 4-5 שעות |
-| **תאימות לאחור** | 100% ✅ |
-| **שגיאות חדשות** | 0 ❌ |
-| **שיפורי UX** | 🎯🎯🎯 |
-
----
-
-## 🚀 מה הלאה?
-
-### רעיונות עתידיים (לא מיושם)
-
-#### 1. Captain Selector AI
-```javascript
-function suggestCaptain(myTeam) {
-    // Smart captain selection based on:
-    // - Form, Fixtures, Ownership, xGI
-    return {
-        captain: topPlayer,
-        viceCaptain: secondBest,
-        reasoning: "Salah vs BOU (H), FDR:1, Form:8.5"
-    };
-}
-```
-
-#### 2. Transfer Optimizer
-```javascript
-function optimizeTransfers(myTeam, budget) {
-    // Find best transfers considering:
-    // - Points gain, Cost, Fixtures
-    return [
-        { out: player1, in: player2, gain: +3.2pts, cost: 0.5m }
-    ];
-}
-```
-
-#### 3. Elo Rating System
-```javascript
-function calculateElo(team) {
-    // Dynamic team strength
-    return eloRating; // 1500-1900
-}
-```
-
-#### 4. Real-time Alerts
-```javascript
-// Price changes, Injuries, Team news
-showNotification("⚠️ Salah +£0.1m tonight!");
-```
-
----
-
-## 🎓 לימדנו מפרויקטי FPL
-
-### מה למדנו מ-12 פרויקטים:
-
-#### nirgodin/Fantasy
-✅ Stability Index calculation
-✅ Value analysis (regression)
-✅ xG integration
-
-#### kz4killua/fpl-ai
-✅ ML models (RF, XGBoost, LSTM)
-✅ Feature engineering
-✅ Prediction algorithms
-
-#### vaastav/Fantasy-Premier-League
-✅ CSV data structure
-✅ Historical organization
-✅ Data completeness
-
-#### amosbastian/fpl
-✅ Async API wrapper
-✅ Error handling
-✅ Type hints
-
-#### solioanalytics/open-fpl-solver
-✅ Linear programming
-✅ Team optimization
-✅ Multi-GW planning
-
-#### olbauday/FPL-Elo-Insights
-✅ Elo rating system
-✅ Dynamic FDR
-✅ Win probability
-
----
-
-## 📝 סיכום
-
-### ✅ מה עבד:
-1. **Stability Index** - עובד מצוין!
-2. **Error Handling** - פחות 429 errors
-3. **Documentation** - תיעוד מקיף
-4. **No Breaking Changes** - הכל עובד!
-
-### 🎯 יתרונות למשתמש:
-- 📊 מידע נוסף על עקביות שחקנים
-- 🔄 פחות שגיאות בטעינה
-- 📚 תיעוד מפורט ללמידה
-- 🚀 בסיס ל-ML עתידי
-
-### 🙏 תודה:
-- GitHub community ל-12 פרויקטים מעולים
-- FPL API למתן נתונים חינם
-- Open source community
-
----
-
-**📅 תאריך:** 16 נובמבר 2025  
-**👨‍💻 מפתח:** Claude Sonnet 4.5  
-**🎯 גרסה:** v2.1.0  
-**✅ סטטוס:** Production Ready!
-
+- [GitHub Repository](https://github.com/yourusername/FPL_25_26)
+- [Documentation](README.md)
+- [ML Implementation](ml_implementation/README.md)
