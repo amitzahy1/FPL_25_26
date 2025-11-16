@@ -551,6 +551,9 @@ const state = {
         _standingsData: [],
         _standingsSort: null,
         charts: { analytics: {}, matrix: null, progress: null },
+        // Player ID mapping between Draft API and Fantasy API
+        draftToFplIdMap: new Map(), // Draft ID -> Fantasy ID
+        fplToDraftIdMap: new Map(), // Fantasy ID -> Draft ID
     }
 };
 
@@ -589,6 +592,200 @@ async function fetchWithCache(url, cacheKey, cacheDurationMinutes = 120) {
         console.error("Failed to write to localStorage. Cache might be full.", e);
     }
     return data;
+}
+
+// ============================================
+// DRAFT TO FPL PLAYER ID MAPPING
+// ============================================
+
+/**
+ * Normalize player name for comparison
+ * Removes accents, converts to lowercase, removes extra spaces
+ */
+function normalizePlayerName(player) {
+    const fullName = `${player.first_name} ${player.second_name}`.toLowerCase();
+    // Remove accents and special characters
+    return fullName
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/[^a-z0-9\s]/g, '')
+        .trim();
+}
+
+/**
+ * Check if two player names match (either first or second name)
+ */
+function namesMatch(player1, player2) {
+    const name1Lower = player1.second_name.toLowerCase();
+    const name2Lower = player2.second_name.toLowerCase();
+    
+    // Exact match on second name
+    if (name1Lower === name2Lower) return true;
+    
+    // Check if one contains the other (for hyphenated names)
+    if (name1Lower.includes(name2Lower) || name2Lower.includes(name1Lower)) return true;
+    
+    return false;
+}
+
+/**
+ * Calculate Levenshtein distance between two strings
+ */
+function levenshteinDistance(str1, str2) {
+    const matrix = [];
+    
+    for (let i = 0; i <= str2.length; i++) {
+        matrix[i] = [i];
+    }
+    
+    for (let j = 0; j <= str1.length; j++) {
+        matrix[0][j] = j;
+    }
+    
+    for (let i = 1; i <= str2.length; i++) {
+        for (let j = 1; j <= str1.length; j++) {
+            if (str2.charAt(i - 1) === str1.charAt(j - 1)) {
+                matrix[i][j] = matrix[i - 1][j - 1];
+            } else {
+                matrix[i][j] = Math.min(
+                    matrix[i - 1][j - 1] + 1, // substitution
+                    matrix[i][j - 1] + 1,     // insertion
+                    matrix[i - 1][j] + 1      // deletion
+                );
+            }
+        }
+    }
+    
+    return matrix[str2.length][str1.length];
+}
+
+/**
+ * Find fuzzy match for a player using Levenshtein distance
+ */
+function findFuzzyMatch(draftPlayer, fplPlayers) {
+    const draftName = normalizePlayerName(draftPlayer);
+    const draftPos = draftPlayer.element_type;
+    
+    let bestMatch = null;
+    let bestSimilarity = 0;
+    
+    for (const fplPlayer of fplPlayers) {
+        // Only compare players in the same position
+        if (fplPlayer.element_type !== draftPos) continue;
+        
+        const fplName = normalizePlayerName(fplPlayer);
+        const distance = levenshteinDistance(draftName, fplName);
+        const maxLength = Math.max(draftName.length, fplName.length);
+        const similarity = 1 - (distance / maxLength);
+        
+        if (similarity > bestSimilarity && similarity > 0.8) {
+            bestSimilarity = similarity;
+            bestMatch = fplPlayer;
+        }
+    }
+    
+    return bestMatch ? { player: bestMatch, similarity: bestSimilarity } : null;
+}
+
+/**
+ * Build mapping between Draft API player IDs and Fantasy API player IDs
+ * This solves the problem where IDs don't match between the two APIs
+ */
+async function buildDraftToFplMapping() {
+    console.log('🔄 Building Draft to FPL ID mapping...');
+    
+    try {
+        const fplUrl = config.corsProxy + encodeURIComponent(config.urls.bootstrap);
+        const draftUrl = config.corsProxy + encodeURIComponent('https://draft.premierleague.com/api/bootstrap-static');
+        
+        const [fplData, draftData] = await Promise.all([
+            fetchWithCache(fplUrl, 'fpl_bootstrap_mapping', 60),
+            fetchWithCache(draftUrl, 'draft_bootstrap_mapping', 60)
+        ]);
+        
+        // Create lookup maps
+        const fplById = new Map(fplData.elements.map(p => [p.id, p]));
+        const fplByName = new Map();
+        
+        // Build name-based lookup for FPL players
+        for (const p of fplData.elements) {
+            const key = normalizePlayerName(p);
+            fplByName.set(key, p);
+        }
+        
+        // Clear existing mappings
+        state.draft.draftToFplIdMap.clear();
+        state.draft.fplToDraftIdMap.clear();
+        
+        let exactMatches = 0;
+        let nameMatches = 0;
+        let fuzzyMatches = 0;
+        let unmapped = 0;
+        
+        console.log('📋 Starting player mapping...');
+        
+        for (const draftPlayer of draftData.elements) {
+            let fplPlayer = null;
+            let matchType = null;
+            
+            // Step 1: Try exact ID match + name verification
+            const candidate = fplById.get(draftPlayer.id);
+            if (candidate && namesMatch(candidate, draftPlayer)) {
+                fplPlayer = candidate;
+                matchType = 'exact_id';
+                exactMatches++;
+            }
+            
+            // Step 2: Try name-based matching
+            if (!fplPlayer) {
+                const nameKey = normalizePlayerName(draftPlayer);
+                fplPlayer = fplByName.get(nameKey);
+                if (fplPlayer) {
+                    matchType = 'name';
+                    nameMatches++;
+                    if (draftPlayer.id !== fplPlayer.id) {
+                        console.log(`  🔗 Name match: ${draftPlayer.web_name} - Draft:${draftPlayer.id} → FPL:${fplPlayer.id}`);
+                    }
+                }
+            }
+            
+            // Step 3: Try fuzzy matching (for name variations)
+            if (!fplPlayer) {
+                const fuzzyMatch = findFuzzyMatch(draftPlayer, fplData.elements);
+                if (fuzzyMatch && fuzzyMatch.similarity > 0.85) {
+                    fplPlayer = fuzzyMatch.player;
+                    matchType = 'fuzzy';
+                    fuzzyMatches++;
+                    console.log(`  🔍 Fuzzy match: ${draftPlayer.web_name} → ${fplPlayer.web_name} (${(fuzzyMatch.similarity * 100).toFixed(0)}% similar, Draft:${draftPlayer.id} → FPL:${fplPlayer.id})`);
+                }
+            }
+            
+            if (fplPlayer) {
+                state.draft.draftToFplIdMap.set(draftPlayer.id, fplPlayer.id);
+                state.draft.fplToDraftIdMap.set(fplPlayer.id, draftPlayer.id);
+            } else {
+                unmapped++;
+                console.warn(`  ❌ No match found for: ${draftPlayer.web_name} (Draft ID: ${draftPlayer.id}, Position: ${draftPlayer.element_type})`);
+            }
+        }
+        
+        console.log('✅ Mapping complete:');
+        console.log(`  - Exact ID matches: ${exactMatches}`);
+        console.log(`  - Name matches: ${nameMatches}`);
+        console.log(`  - Fuzzy matches: ${fuzzyMatches}`);
+        console.log(`  - Unmapped: ${unmapped}`);
+        console.log(`  - Total mapped: ${state.draft.draftToFplIdMap.size} / ${draftData.elements.length}`);
+        
+        return {
+            success: true,
+            mapped: state.draft.draftToFplIdMap.size,
+            unmapped: unmapped
+        };
+        
+    } catch (error) {
+        console.error('❌ Failed to build Draft→FPL mapping:', error);
+        return { success: false, error: error.message };
+    }
 }
 
 function showLoading(message = 'טוען נתונים...') {
