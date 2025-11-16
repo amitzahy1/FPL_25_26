@@ -1,0 +1,2538 @@
+{
+  "model_type": "Decision Tree",
+  "version": "3.0",
+  "max_depth": 12,
+  "n_leaves": 270,
+  "features": [
+    "assists",
+    "attempted_passes",
+    "big_chances_created",
+    "big_chances_missed",
+    "bonus",
+    "bps",
+    "clean_sheets",
+    "clearances_blocks_interceptions",
+    "completed_passes",
+    "creativity",
+    "dribbles",
+    "ea_index",
+    "element",
+    "errors_leading_to_goal",
+    "errors_leading_to_goal_attempt",
+    "fixture",
+    "fouls",
+    "goals_conceded",
+    "goals_scored",
+    "ict_index",
+    "id",
+    "influence",
+    "key_passes",
+    "loaned_in",
+    "loaned_out",
+    "minutes",
+    "offside",
+    "open_play_crosses",
+    "opponent_team",
+    "own_goals",
+    "penalties_conceded",
+    "penalties_missed",
+    "penalties_saved",
+    "recoveries",
+    "red_cards",
+    "round",
+    "saves",
+    "selected",
+    "tackled",
+    "tackles",
+    "target_missed",
+    "team_a_score",
+    "team_h_score",
+    "threat",
+    "transfers_balance",
+    "transfers_in",
+    "transfers_out",
+    "value",
+    "winning_goals",
+    "yellow_cards",
+    "GW",
+    "xP",
+    "expected_assists",
+    "expected_goal_involvements",
+    "expected_goals",
+    "expected_goals_conceded",
+    "starts",
+    "mng_clean_sheets",
+    "mng_draw",
+    "mng_goals_scored",
+    "mng_loss",
+    "mng_underdog_draw",
+    "mng_underdog_win",
+    "mng_win",
+    "defensive_contribution",
+    "form_3",
+    "form_5",
+    "form_10",
+    "form_trend",
+    "minutes_rolling",
+    "goals_per_90",
+    "assists_per_90",
+    "xG_per_90",
+    "xA_per_90",
+    "xGI_per_90",
+    "xGI_per_90_avg_5",
+    "points_std_5",
+    "points_cv",
+    "minutes_std_5",
+    "finishing_efficiency",
+    "assist_efficiency",
+    "def_contrib",
+    "def_contrib_per_90",
+    "def_contrib_per_90_avg_5",
+    "influence_per_90",
+    "creativity_per_90",
+    "threat_per_90",
+    "bonus_per_90",
+    "bps_per_90",
+    "is_GKP",
+    "is_DEF",
+    "is_MID",
+    "is_FWD",
+    "cs_per_game",
+    "cs_rolling_5",
+    "points_per_million",
+    "form_per_million",
+    "target_next_gw_points"
+  ],
+  "n_features": 98,
+  "metrics": {
+    "mae": 0.04858048639541049,
+    "rmse": 0.25733529577007747,
+    "r2": 0.9926799170806796,
+    "within_2": 99.59213941416388
+  },
+  "tree": {
+    "type": "split",
+    "feature": "points_per_million",
+    "threshold": 0.6988371908664703,
+    "left": {
+      "type": "split",
+      "feature": "points_per_million",
+      "threshold": 0.25751547515392303,
+      "left": {
+        "type": "split",
+        "feature": "points_per_million",
+        "threshold": 0.035971224308013916,
+        "left": {
+          "type": "split",
+          "feature": "points_per_million",
+          "threshold": -0.043103449046611786,
+          "left": {
+            "type": "split",
+            "feature": "points_per_million",
+            "threshold": -0.2597840875387192,
+            "left": {
+              "type": "split",
+              "feature": "points_per_million",
+              "threshold": -0.5195681750774384,
+              "left": {
+                "type": "split",
+                "feature": "goals_conceded",
+                "threshold": 3.5,
+                "left": {
+                  "type": "leaf",
+                  "value": -3.0
+                },
+                "right": {
+                  "type": "leaf",
+                  "value": -3.68
+                }
+              },
+              "right": {
+                "type": "split",
+                "feature": "points_per_million",
+                "threshold": -0.47065338492393494,
+                "left": {
+                  "type": "leaf",
+                  "value": -2.15
+                },
+                "right": {
+                  "type": "split",
+                  "feature": "expected_goals_conceded",
+                  "threshold": 2.2699999809265137,
+                  "left": {
+                    "type": "leaf",
+                    "value": -2.0
+                  },
+                  "right": {
+                    "type": "leaf",
+                    "value": -1.95
+                  }
+                }
+              }
+            },
+            "right": {
+              "type": "split",
+              "feature": "value",
+              "threshold": 72.5,
+              "left": {
+                "type": "leaf",
+                "value": -1.0
+              },
+              "right": {
+                "type": "leaf",
+                "value": -1.2
+              }
+            }
+          },
+          "right": {
+            "type": "leaf",
+            "value": 0.0
+          }
+        },
+        "right": {
+          "type": "split",
+          "feature": "value",
+          "threshold": 77.5,
+          "left": {
+            "type": "leaf",
+            "value": 1.0
+          },
+          "right": {
+            "type": "split",
+            "feature": "points_per_million",
+            "threshold": 0.12903763353824615,
+            "left": {
+              "type": "leaf",
+              "value": 1.0
+            },
+            "right": {
+              "type": "split",
+              "feature": "value",
+              "threshold": 116.5,
+              "left": {
+                "type": "leaf",
+                "value": 2.0
+              },
+              "right": {
+                "type": "split",
+                "feature": "points_per_million",
+                "threshold": 0.1889183670282364,
+                "left": {
+                  "type": "leaf",
+                  "value": 2.0
+                },
+                "right": {
+                  "type": "leaf",
+                  "value": 3.0
+                }
+              }
+            }
+          }
+        }
+      },
+      "right": {
+        "type": "split",
+        "feature": "value",
+        "threshold": 77.5,
+        "left": {
+          "type": "split",
+          "feature": "points_per_million",
+          "threshold": 0.5042372941970825,
+          "left": {
+            "type": "split",
+            "feature": "clean_sheets",
+            "threshold": 0.5,
+            "left": {
+              "type": "split",
+              "feature": "value",
+              "threshold": 39.0,
+              "left": {
+                "type": "leaf",
+                "value": 1.0
+              },
+              "right": {
+                "type": "split",
+                "feature": "bonus",
+                "threshold": 0.5,
+                "left": {
+                  "type": "split",
+                  "feature": "assist_efficiency",
+                  "threshold": 4.195804119110107,
+                  "left": {
+                    "type": "split",
+                    "feature": "points_per_million",
+                    "threshold": 0.48980408906936646,
+                    "left": {
+                      "type": "split",
+                      "feature": "influence_per_90",
+                      "threshold": 48.47907066345215,
+                      "left": {
+                        "type": "split",
+                        "feature": "yellow_cards",
+                        "threshold": 0.5,
+                        "left": {
+                          "type": "split",
+                          "feature": "points_per_million",
+                          "threshold": 0.48003071546554565,
+                          "left": {
+                            "type": "leaf",
+                            "value": 2.0
+                          },
+                          "right": {
+                            "type": "leaf",
+                            "value": 2.0135135135135136
+                          }
+                        },
+                        "right": {
+                          "type": "split",
+                          "feature": "points_per_million",
+                          "threshold": 0.4396135210990906,
+                          "left": {
+                            "type": "leaf",
+                            "value": 2.0
+                          },
+                          "right": {
+                            "type": "leaf",
+                            "value": 2.05
+                          }
+                        }
+                      },
+                      "right": {
+                        "type": "leaf",
+                        "value": 2.0344827586206895
+                      }
+                    },
+                    "right": {
+                      "type": "split",
+                      "feature": "selected",
+                      "threshold": 614550.5,
+                      "left": {
+                        "type": "leaf",
+                        "value": 2.0
+                      },
+                      "right": {
+                        "type": "leaf",
+                        "value": 2.2777777777777777
+                      }
+                    }
+                  },
+                  "right": {
+                    "type": "leaf",
+                    "value": 2.5142857142857142
+                  }
+                },
+                "right": {
+                  "type": "leaf",
+                  "value": 2.522727272727273
+                }
+              }
+            },
+            "right": {
+              "type": "split",
+              "feature": "points_per_million",
+              "threshold": 0.4095610976219177,
+              "left": {
+                "type": "split",
+                "feature": "value",
+                "threshold": 73.5,
+                "left": {
+                  "type": "leaf",
+                  "value": 2.0
+                },
+                "right": {
+                  "type": "split",
+                  "feature": "points_per_million",
+                  "threshold": 0.3299403190612793,
+                  "left": {
+                    "type": "leaf",
+                    "value": 2.0
+                  },
+                  "right": {
+                    "type": "leaf",
+                    "value": 3.0
+                  }
+                }
+              },
+              "right": {
+                "type": "split",
+                "feature": "value",
+                "threshold": 54.0,
+                "left": {
+                  "type": "leaf",
+                  "value": 2.0
+                },
+                "right": {
+                  "type": "leaf",
+                  "value": 3.0
+                }
+              }
+            }
+          },
+          "right": {
+            "type": "split",
+            "feature": "value",
+            "threshold": 59.5,
+            "left": {
+              "type": "split",
+              "feature": "value",
+              "threshold": 41.0,
+              "left": {
+                "type": "leaf",
+                "value": 2.0
+              },
+              "right": {
+                "type": "split",
+                "feature": "assists_per_90",
+                "threshold": 1.1043360829353333,
+                "left": {
+                  "type": "split",
+                  "feature": "value",
+                  "threshold": 57.5,
+                  "left": {
+                    "type": "leaf",
+                    "value": 3.0
+                  },
+                  "right": {
+                    "type": "split",
+                    "feature": "clean_sheets",
+                    "threshold": 0.5,
+                    "left": {
+                      "type": "leaf",
+                      "value": 3.4523809523809526
+                    },
+                    "right": {
+                      "type": "leaf",
+                      "value": 3.0
+                    }
+                  }
+                },
+                "right": {
+                  "type": "split",
+                  "feature": "value",
+                  "threshold": 57.5,
+                  "left": {
+                    "type": "leaf",
+                    "value": 3.0
+                  },
+                  "right": {
+                    "type": "leaf",
+                    "value": 3.953488372093023
+                  }
+                }
+              }
+            },
+            "right": {
+              "type": "split",
+              "feature": "value",
+              "threshold": 71.5,
+              "left": {
+                "type": "leaf",
+                "value": 4.0
+              },
+              "right": {
+                "type": "split",
+                "feature": "points_per_million",
+                "threshold": 0.6024531126022339,
+                "left": {
+                  "type": "leaf",
+                  "value": 4.0
+                },
+                "right": {
+                  "type": "leaf",
+                  "value": 5.0
+                }
+              }
+            }
+          }
+        },
+        "right": {
+          "type": "split",
+          "feature": "points_per_million",
+          "threshold": 0.38610614836215973,
+          "left": {
+            "type": "split",
+            "feature": "value",
+            "threshold": 117.0,
+            "left": {
+              "type": "split",
+              "feature": "clean_sheets",
+              "threshold": 0.5,
+              "left": {
+                "type": "leaf",
+                "value": 3.5652173913043477
+              },
+              "right": {
+                "type": "split",
+                "feature": "influence",
+                "threshold": 22.100000381469727,
+                "left": {
+                  "type": "leaf",
+                  "value": 3.0
+                },
+                "right": {
+                  "type": "leaf",
+                  "value": 3.1
+                }
+              }
+            },
+            "right": {
+              "type": "leaf",
+              "value": 4.583333333333333
+            }
+          },
+          "right": {
+            "type": "split",
+            "feature": "finishing_efficiency",
+            "threshold": 0.4408366233110428,
+            "left": {
+              "type": "split",
+              "feature": "points_per_million",
+              "threshold": 0.643093466758728,
+              "left": {
+                "type": "split",
+                "feature": "minutes",
+                "threshold": 49.0,
+                "left": {
+                  "type": "leaf",
+                  "value": 4.046511627906977
+                },
+                "right": {
+                  "type": "split",
+                  "feature": "value",
+                  "threshold": 94.5,
+                  "left": {
+                    "type": "split",
+                    "feature": "points_per_million",
+                    "threshold": 0.5223677158355713,
+                    "left": {
+                      "type": "leaf",
+                      "value": 4.0
+                    },
+                    "right": {
+                      "type": "split",
+                      "feature": "value",
+                      "threshold": 92.5,
+                      "left": {
+                        "type": "leaf",
+                        "value": 5.0
+                      },
+                      "right": {
+                        "type": "leaf",
+                        "value": 5.095238095238095
+                      }
+                    }
+                  },
+                  "right": {
+                    "type": "split",
+                    "feature": "points_per_million",
+                    "threshold": 0.5286446213722229,
+                    "left": {
+                      "type": "split",
+                      "feature": "value",
+                      "threshold": 116.5,
+                      "left": {
+                        "type": "split",
+                        "feature": "points_per_million",
+                        "threshold": 0.4444532245397568,
+                        "left": {
+                          "type": "leaf",
+                          "value": 4.695652173913044
+                        },
+                        "right": {
+                          "type": "split",
+                          "feature": "bps_per_90",
+                          "threshold": 21.625,
+                          "left": {
+                            "type": "leaf",
+                            "value": 5.0
+                          },
+                          "right": {
+                            "type": "leaf",
+                            "value": 5.1
+                          }
+                        }
+                      },
+                      "right": {
+                        "type": "split",
+                        "feature": "points_per_million",
+                        "threshold": 0.43106651306152344,
+                        "left": {
+                          "type": "leaf",
+                          "value": 5.054054054054054
+                        },
+                        "right": {
+                          "type": "leaf",
+                          "value": 6.043478260869565
+                        }
+                      }
+                    },
+                    "right": {
+                      "type": "leaf",
+                      "value": 6.113636363636363
+                    }
+                  }
+                }
+              },
+              "right": {
+                "type": "leaf",
+                "value": 6.25
+              }
+            },
+            "right": {
+              "type": "split",
+              "feature": "value",
+              "threshold": 113.5,
+              "left": {
+                "type": "split",
+                "feature": "points_per_million",
+                "threshold": 0.6416137516498566,
+                "left": {
+                  "type": "split",
+                  "feature": "value",
+                  "threshold": 93.0,
+                  "left": {
+                    "type": "leaf",
+                    "value": 4.903225806451613
+                  },
+                  "right": {
+                    "type": "split",
+                    "feature": "points_per_million",
+                    "threshold": 0.5429975390434265,
+                    "left": {
+                      "type": "leaf",
+                      "value": 5.238095238095238
+                    },
+                    "right": {
+                      "type": "leaf",
+                      "value": 6.065217391304348
+                    }
+                  }
+                },
+                "right": {
+                  "type": "leaf",
+                  "value": 6.4
+                }
+              },
+              "right": {
+                "type": "split",
+                "feature": "points_per_million",
+                "threshold": 0.5283094048500061,
+                "left": {
+                  "type": "split",
+                  "feature": "threat_per_90",
+                  "threshold": 61.0,
+                  "left": {
+                    "type": "leaf",
+                    "value": 6.129032258064516
+                  },
+                  "right": {
+                    "type": "leaf",
+                    "value": 5.739130434782608
+                  }
+                },
+                "right": {
+                  "type": "split",
+                  "feature": "points_per_million",
+                  "threshold": 0.6147098541259766,
+                  "left": {
+                    "type": "split",
+                    "feature": "value",
+                    "threshold": 126.5,
+                    "left": {
+                      "type": "leaf",
+                      "value": 7.0
+                    },
+                    "right": {
+                      "type": "leaf",
+                      "value": 7.6
+                    }
+                  },
+                  "right": {
+                    "type": "split",
+                    "feature": "value",
+                    "threshold": 123.5,
+                    "left": {
+                      "type": "leaf",
+                      "value": 8.0
+                    },
+                    "right": {
+                      "type": "leaf",
+                      "value": 8.217391304347826
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "right": {
+      "type": "split",
+      "feature": "bps",
+      "threshold": 34.5,
+      "left": {
+        "type": "split",
+        "feature": "bonus",
+        "threshold": 1.5,
+        "left": {
+          "type": "split",
+          "feature": "points_per_million",
+          "threshold": 1.3976743817329407,
+          "left": {
+            "type": "split",
+            "feature": "points_per_million",
+            "threshold": 0.9317829608917236,
+            "left": {
+              "type": "split",
+              "feature": "value",
+              "threshold": 64.5,
+              "left": {
+                "type": "split",
+                "feature": "value",
+                "threshold": 53.5,
+                "left": {
+                  "type": "split",
+                  "feature": "value",
+                  "threshold": 42.5,
+                  "left": {
+                    "type": "leaf",
+                    "value": 3.0
+                  },
+                  "right": {
+                    "type": "leaf",
+                    "value": 4.0
+                  }
+                },
+                "right": {
+                  "type": "split",
+                  "feature": "points_per_million",
+                  "threshold": 0.7609953582286835,
+                  "left": {
+                    "type": "leaf",
+                    "value": 4.0
+                  },
+                  "right": {
+                    "type": "leaf",
+                    "value": 5.0
+                  }
+                }
+              },
+              "right": {
+                "type": "split",
+                "feature": "value",
+                "threshold": 85.5,
+                "left": {
+                  "type": "split",
+                  "feature": "points_per_million",
+                  "threshold": 0.7742257714271545,
+                  "left": {
+                    "type": "split",
+                    "feature": "value",
+                    "threshold": 74.5,
+                    "left": {
+                      "type": "leaf",
+                      "value": 5.0
+                    },
+                    "right": {
+                      "type": "leaf",
+                      "value": 6.0
+                    }
+                  },
+                  "right": {
+                    "type": "split",
+                    "feature": "value",
+                    "threshold": 75.5,
+                    "left": {
+                      "type": "leaf",
+                      "value": 6.0
+                    },
+                    "right": {
+                      "type": "split",
+                      "feature": "points_per_million",
+                      "threshold": 0.806501567363739,
+                      "left": {
+                        "type": "leaf",
+                        "value": 6.0
+                      },
+                      "right": {
+                        "type": "leaf",
+                        "value": 7.0
+                      }
+                    }
+                  }
+                },
+                "right": {
+                  "type": "split",
+                  "feature": "value",
+                  "threshold": 107.5,
+                  "left": {
+                    "type": "split",
+                    "feature": "points_per_million",
+                    "threshold": 0.8151400089263916,
+                    "left": {
+                      "type": "split",
+                      "feature": "value",
+                      "threshold": 98.5,
+                      "left": {
+                        "type": "leaf",
+                        "value": 7.0
+                      },
+                      "right": {
+                        "type": "leaf",
+                        "value": 7.809523809523809
+                      }
+                    },
+                    "right": {
+                      "type": "leaf",
+                      "value": 8.146341463414634
+                    }
+                  },
+                  "right": {
+                    "type": "leaf",
+                    "value": 9.6
+                  }
+                }
+              }
+            },
+            "right": {
+              "type": "split",
+              "feature": "value",
+              "threshold": 64.5,
+              "left": {
+                "type": "split",
+                "feature": "points_per_million",
+                "threshold": 1.1647286415100098,
+                "left": {
+                  "type": "split",
+                  "feature": "value",
+                  "threshold": 51.5,
+                  "left": {
+                    "type": "split",
+                    "feature": "value",
+                    "threshold": 42.5,
+                    "left": {
+                      "type": "leaf",
+                      "value": 4.0
+                    },
+                    "right": {
+                      "type": "leaf",
+                      "value": 5.0
+                    }
+                  },
+                  "right": {
+                    "type": "split",
+                    "feature": "points_per_million",
+                    "threshold": 0.9646401703357697,
+                    "left": {
+                      "type": "split",
+                      "feature": "value",
+                      "threshold": 58.0,
+                      "left": {
+                        "type": "leaf",
+                        "value": 5.0
+                      },
+                      "right": {
+                        "type": "leaf",
+                        "value": 6.0
+                      }
+                    },
+                    "right": {
+                      "type": "split",
+                      "feature": "value",
+                      "threshold": 62.5,
+                      "left": {
+                        "type": "split",
+                        "feature": "value",
+                        "threshold": 60.5,
+                        "left": {
+                          "type": "leaf",
+                          "value": 6.0
+                        },
+                        "right": {
+                          "type": "split",
+                          "feature": "points_per_million",
+                          "threshold": 1.0563194155693054,
+                          "left": {
+                            "type": "leaf",
+                            "value": 6.0
+                          },
+                          "right": {
+                            "type": "leaf",
+                            "value": 7.0
+                          }
+                        }
+                      },
+                      "right": {
+                        "type": "leaf",
+                        "value": 7.0
+                      }
+                    }
+                  }
+                },
+                "right": {
+                  "type": "split",
+                  "feature": "value",
+                  "threshold": 51.5,
+                  "left": {
+                    "type": "split",
+                    "feature": "value",
+                    "threshold": 42.5,
+                    "left": {
+                      "type": "leaf",
+                      "value": 5.0
+                    },
+                    "right": {
+                      "type": "split",
+                      "feature": "value",
+                      "threshold": 50.5,
+                      "left": {
+                        "type": "leaf",
+                        "value": 6.0
+                      },
+                      "right": {
+                        "type": "split",
+                        "feature": "points_per_million",
+                        "threshold": 1.274509847164154,
+                        "left": {
+                          "type": "leaf",
+                          "value": 6.0
+                        },
+                        "right": {
+                          "type": "leaf",
+                          "value": 7.0
+                        }
+                      }
+                    }
+                  },
+                  "right": {
+                    "type": "split",
+                    "feature": "points_per_million",
+                    "threshold": 1.3510430455207825,
+                    "left": {
+                      "type": "split",
+                      "feature": "value",
+                      "threshold": 60.5,
+                      "left": {
+                        "type": "split",
+                        "feature": "value",
+                        "threshold": 59.5,
+                        "left": {
+                          "type": "leaf",
+                          "value": 7.0
+                        },
+                        "right": {
+                          "type": "split",
+                          "feature": "points_per_million",
+                          "threshold": 1.25,
+                          "left": {
+                            "type": "leaf",
+                            "value": 7.0
+                          },
+                          "right": {
+                            "type": "leaf",
+                            "value": 8.0
+                          }
+                        }
+                      },
+                      "right": {
+                        "type": "leaf",
+                        "value": 8.0
+                      }
+                    },
+                    "right": {
+                      "type": "leaf",
+                      "value": 8.0
+                    }
+                  }
+                }
+              },
+              "right": {
+                "type": "split",
+                "feature": "points_per_million",
+                "threshold": 1.0790020823478699,
+                "left": {
+                  "type": "split",
+                  "feature": "value",
+                  "threshold": 75.5,
+                  "left": {
+                    "type": "split",
+                    "feature": "value",
+                    "threshold": 74.5,
+                    "left": {
+                      "type": "leaf",
+                      "value": 7.0
+                    },
+                    "right": {
+                      "type": "leaf",
+                      "value": 7.53125
+                    }
+                  },
+                  "right": {
+                    "type": "split",
+                    "feature": "value",
+                    "threshold": 83.5,
+                    "left": {
+                      "type": "leaf",
+                      "value": 8.0
+                    },
+                    "right": {
+                      "type": "leaf",
+                      "value": 9.045454545454545
+                    }
+                  }
+                },
+                "right": {
+                  "type": "split",
+                  "feature": "value",
+                  "threshold": 73.5,
+                  "left": {
+                    "type": "split",
+                    "feature": "points_per_million",
+                    "threshold": 1.2318229675292969,
+                    "left": {
+                      "type": "leaf",
+                      "value": 8.0
+                    },
+                    "right": {
+                      "type": "leaf",
+                      "value": 9.0
+                    }
+                  },
+                  "right": {
+                    "type": "leaf",
+                    "value": 9.452380952380953
+                  }
+                }
+              }
+            }
+          },
+          "right": {
+            "type": "split",
+            "feature": "points_per_million",
+            "threshold": 1.6302800178527832,
+            "left": {
+              "type": "split",
+              "feature": "value",
+              "threshold": 50.5,
+              "left": {
+                "type": "split",
+                "feature": "value",
+                "threshold": 42.5,
+                "left": {
+                  "type": "leaf",
+                  "value": 6.0
+                },
+                "right": {
+                  "type": "split",
+                  "feature": "points_per_million",
+                  "threshold": 1.5954545736312866,
+                  "left": {
+                    "type": "leaf",
+                    "value": 7.0
+                  },
+                  "right": {
+                    "type": "split",
+                    "feature": "points_per_million",
+                    "threshold": 1.6139534711837769,
+                    "left": {
+                      "type": "leaf",
+                      "value": 8.0
+                    },
+                    "right": {
+                      "type": "leaf",
+                      "value": 7.0
+                    }
+                  }
+                }
+              },
+              "right": {
+                "type": "split",
+                "feature": "value",
+                "threshold": 57.5,
+                "left": {
+                  "type": "split",
+                  "feature": "points_per_million",
+                  "threshold": 1.553544521331787,
+                  "left": {
+                    "type": "leaf",
+                    "value": 8.0
+                  },
+                  "right": {
+                    "type": "leaf",
+                    "value": 8.34375
+                  }
+                },
+                "right": {
+                  "type": "leaf",
+                  "value": 9.326530612244898
+                }
+              }
+            },
+            "right": {
+              "type": "split",
+              "feature": "points_per_million",
+              "threshold": 2.0991432666778564,
+              "left": {
+                "type": "split",
+                "feature": "value",
+                "threshold": 49.5,
+                "left": {
+                  "type": "split",
+                  "feature": "value",
+                  "threshold": 42.5,
+                  "left": {
+                    "type": "split",
+                    "feature": "points_per_million",
+                    "threshold": 1.8734335899353027,
+                    "left": {
+                      "type": "leaf",
+                      "value": 7.0
+                    },
+                    "right": {
+                      "type": "leaf",
+                      "value": 8.0
+                    }
+                  },
+                  "right": {
+                    "type": "split",
+                    "feature": "points_per_million",
+                    "threshold": 1.867732584476471,
+                    "left": {
+                      "type": "split",
+                      "feature": "points_per_million",
+                      "threshold": 1.8274582624435425,
+                      "left": {
+                        "type": "leaf",
+                        "value": 8.0
+                      },
+                      "right": {
+                        "type": "leaf",
+                        "value": 8.441176470588236
+                      }
+                    },
+                    "right": {
+                      "type": "split",
+                      "feature": "bps_per_90",
+                      "threshold": 31.75,
+                      "left": {
+                        "type": "leaf",
+                        "value": 9.0
+                      },
+                      "right": {
+                        "type": "leaf",
+                        "value": 9.1
+                      }
+                    }
+                  }
+                },
+                "right": {
+                  "type": "split",
+                  "feature": "value",
+                  "threshold": 55.5,
+                  "left": {
+                    "type": "split",
+                    "feature": "assist_efficiency",
+                    "threshold": 3.5539214611053467,
+                    "left": {
+                      "type": "split",
+                      "feature": "transfers_in",
+                      "threshold": 3101.5,
+                      "left": {
+                        "type": "leaf",
+                        "value": 9.05
+                      },
+                      "right": {
+                        "type": "leaf",
+                        "value": 9.0
+                      }
+                    },
+                    "right": {
+                      "type": "leaf",
+                      "value": 9.541666666666666
+                    }
+                  },
+                  "right": {
+                    "type": "leaf",
+                    "value": 11.090909090909092
+                  }
+                }
+              },
+              "right": {
+                "type": "leaf",
+                "value": 11.043478260869565
+              }
+            }
+          }
+        },
+        "right": {
+          "type": "split",
+          "feature": "points_per_million",
+          "threshold": 1.8624359965324402,
+          "left": {
+            "type": "split",
+            "feature": "goals_per_90",
+            "threshold": 0.5,
+            "left": {
+              "type": "split",
+              "feature": "points_per_million",
+              "threshold": 1.2838827967643738,
+              "left": {
+                "type": "split",
+                "feature": "value",
+                "threshold": 57.5,
+                "left": {
+                  "type": "split",
+                  "feature": "points_per_million",
+                  "threshold": 1.0365198850631714,
+                  "left": {
+                    "type": "split",
+                    "feature": "points_per_million",
+                    "threshold": 0.8908730149269104,
+                    "left": {
+                      "type": "leaf",
+                      "value": 4.0
+                    },
+                    "right": {
+                      "type": "leaf",
+                      "value": 4.809523809523809
+                    }
+                  },
+                  "right": {
+                    "type": "split",
+                    "feature": "value",
+                    "threshold": 54.5,
+                    "left": {
+                      "type": "leaf",
+                      "value": 5.666666666666667
+                    },
+                    "right": {
+                      "type": "leaf",
+                      "value": 6.769230769230769
+                    }
+                  }
+                },
+                "right": {
+                  "type": "split",
+                  "feature": "value",
+                  "threshold": 83.5,
+                  "left": {
+                    "type": "split",
+                    "feature": "goals_conceded",
+                    "threshold": 0.5,
+                    "left": {
+                      "type": "leaf",
+                      "value": 7.975
+                    },
+                    "right": {
+                      "type": "split",
+                      "feature": "points_per_million",
+                      "threshold": 1.0396293997764587,
+                      "left": {
+                        "type": "leaf",
+                        "value": 6.625
+                      },
+                      "right": {
+                        "type": "split",
+                        "feature": "bonus_per_90",
+                        "threshold": 2.7611241340637207,
+                        "left": {
+                          "type": "leaf",
+                          "value": 7.0
+                        },
+                        "right": {
+                          "type": "leaf",
+                          "value": 7.7
+                        }
+                      }
+                    }
+                  },
+                  "right": {
+                    "type": "leaf",
+                    "value": 8.48
+                  }
+                }
+              },
+              "right": {
+                "type": "split",
+                "feature": "value",
+                "threshold": 54.5,
+                "left": {
+                  "type": "split",
+                  "feature": "points_per_million",
+                  "threshold": 1.5954545736312866,
+                  "left": {
+                    "type": "split",
+                    "feature": "value",
+                    "threshold": 50.5,
+                    "left": {
+                      "type": "split",
+                      "feature": "value",
+                      "threshold": 44.5,
+                      "left": {
+                        "type": "leaf",
+                        "value": 6.5
+                      },
+                      "right": {
+                        "type": "split",
+                        "feature": "points_per_million",
+                        "threshold": 1.4142857193946838,
+                        "left": {
+                          "type": "leaf",
+                          "value": 6.75
+                        },
+                        "right": {
+                          "type": "leaf",
+                          "value": 7.0
+                        }
+                      }
+                    },
+                    "right": {
+                      "type": "split",
+                      "feature": "points_per_million",
+                      "threshold": 1.427015244960785,
+                      "left": {
+                        "type": "leaf",
+                        "value": 7.0
+                      },
+                      "right": {
+                        "type": "leaf",
+                        "value": 8.0
+                      }
+                    }
+                  },
+                  "right": {
+                    "type": "split",
+                    "feature": "value",
+                    "threshold": 48.5,
+                    "left": {
+                      "type": "split",
+                      "feature": "clean_sheets",
+                      "threshold": 0.5,
+                      "left": {
+                        "type": "leaf",
+                        "value": 7.65625
+                      },
+                      "right": {
+                        "type": "split",
+                        "feature": "element",
+                        "threshold": 540.5,
+                        "left": {
+                          "type": "leaf",
+                          "value": 8.0
+                        },
+                        "right": {
+                          "type": "leaf",
+                          "value": 7.923076923076923
+                        }
+                      }
+                    },
+                    "right": {
+                      "type": "split",
+                      "feature": "points_per_million",
+                      "threshold": 1.6496598720550537,
+                      "left": {
+                        "type": "leaf",
+                        "value": 8.0
+                      },
+                      "right": {
+                        "type": "split",
+                        "feature": "transfers_out",
+                        "threshold": 20949.0,
+                        "left": {
+                          "type": "leaf",
+                          "value": 9.0
+                        },
+                        "right": {
+                          "type": "leaf",
+                          "value": 9.1
+                        }
+                      }
+                    }
+                  }
+                },
+                "right": {
+                  "type": "split",
+                  "feature": "points_per_million",
+                  "threshold": 1.4649776816368103,
+                  "left": {
+                    "type": "split",
+                    "feature": "value",
+                    "threshold": 61.5,
+                    "left": {
+                      "type": "leaf",
+                      "value": 8.0
+                    },
+                    "right": {
+                      "type": "leaf",
+                      "value": 9.16
+                    }
+                  },
+                  "right": {
+                    "type": "split",
+                    "feature": "points_per_million",
+                    "threshold": 1.6378539204597473,
+                    "left": {
+                      "type": "split",
+                      "feature": "value",
+                      "threshold": 59.5,
+                      "left": {
+                        "type": "leaf",
+                        "value": 9.0
+                      },
+                      "right": {
+                        "type": "leaf",
+                        "value": 9.565217391304348
+                      }
+                    },
+                    "right": {
+                      "type": "leaf",
+                      "value": 10.130434782608695
+                    }
+                  }
+                }
+              }
+            },
+            "right": {
+              "type": "split",
+              "feature": "minutes",
+              "threshold": 59.0,
+              "left": {
+                "type": "split",
+                "feature": "points_per_million",
+                "threshold": 1.5620915293693542,
+                "left": {
+                  "type": "split",
+                  "feature": "bonus",
+                  "threshold": 2.5,
+                  "left": {
+                    "type": "split",
+                    "feature": "is_FWD",
+                    "threshold": 0.5,
+                    "left": {
+                      "type": "leaf",
+                      "value": 7.510204081632653
+                    },
+                    "right": {
+                      "type": "leaf",
+                      "value": 6.925
+                    }
+                  },
+                  "right": {
+                    "type": "leaf",
+                    "value": 8.0
+                  }
+                },
+                "right": {
+                  "type": "leaf",
+                  "value": 8.37037037037037
+                }
+              },
+              "right": {
+                "type": "split",
+                "feature": "assist_efficiency",
+                "threshold": 0.8064516186714172,
+                "left": {
+                  "type": "split",
+                  "feature": "bonus",
+                  "threshold": 2.5,
+                  "left": {
+                    "type": "split",
+                    "feature": "is_FWD",
+                    "threshold": 0.5,
+                    "left": {
+                      "type": "split",
+                      "feature": "yellow_cards",
+                      "threshold": 0.5,
+                      "left": {
+                        "type": "split",
+                        "feature": "goals_conceded",
+                        "threshold": 0.5,
+                        "left": {
+                          "type": "split",
+                          "feature": "is_MID",
+                          "threshold": 0.5,
+                          "left": {
+                            "type": "leaf",
+                            "value": 8.980392156862745
+                          },
+                          "right": {
+                            "type": "leaf",
+                            "value": 10.0
+                          }
+                        },
+                        "right": {
+                          "type": "split",
+                          "feature": "points_per_million",
+                          "threshold": 1.3819628953933716,
+                          "left": {
+                            "type": "leaf",
+                            "value": 8.581395348837209
+                          },
+                          "right": {
+                            "type": "leaf",
+                            "value": 9.01530612244898
+                          }
+                        }
+                      },
+                      "right": {
+                        "type": "split",
+                        "feature": "points_per_million",
+                        "threshold": 1.3270440697669983,
+                        "left": {
+                          "type": "leaf",
+                          "value": 7.625
+                        },
+                        "right": {
+                          "type": "leaf",
+                          "value": 8.1875
+                        }
+                      }
+                    },
+                    "right": {
+                      "type": "split",
+                      "feature": "expected_assists",
+                      "threshold": 0.01644499972462654,
+                      "left": {
+                        "type": "split",
+                        "feature": "bps",
+                        "threshold": 27.5,
+                        "left": {
+                          "type": "leaf",
+                          "value": 7.870967741935484
+                        },
+                        "right": {
+                          "type": "leaf",
+                          "value": 8.0
+                        }
+                      },
+                      "right": {
+                        "type": "split",
+                        "feature": "threat_per_90",
+                        "threshold": 44.0,
+                        "left": {
+                          "type": "leaf",
+                          "value": 7.928571428571429
+                        },
+                        "right": {
+                          "type": "leaf",
+                          "value": 7.666666666666667
+                        }
+                      }
+                    }
+                  },
+                  "right": {
+                    "type": "split",
+                    "feature": "is_FWD",
+                    "threshold": 0.5,
+                    "left": {
+                      "type": "split",
+                      "feature": "xP",
+                      "threshold": 4.900000095367432,
+                      "left": {
+                        "type": "split",
+                        "feature": "attempted_passes",
+                        "threshold": 31.5,
+                        "left": {
+                          "type": "split",
+                          "feature": "influence_per_90",
+                          "threshold": 48.79999923706055,
+                          "left": {
+                            "type": "leaf",
+                            "value": 9.191919191919192
+                          },
+                          "right": {
+                            "type": "leaf",
+                            "value": 9.794117647058824
+                          }
+                        },
+                        "right": {
+                          "type": "split",
+                          "feature": "form_5",
+                          "threshold": 5.700000047683716,
+                          "left": {
+                            "type": "leaf",
+                            "value": 9.870967741935484
+                          },
+                          "right": {
+                            "type": "leaf",
+                            "value": 10.375
+                          }
+                        }
+                      },
+                      "right": {
+                        "type": "split",
+                        "feature": "clean_sheets",
+                        "threshold": 0.5,
+                        "left": {
+                          "type": "leaf",
+                          "value": 9.918367346938776
+                        },
+                        "right": {
+                          "type": "leaf",
+                          "value": 10.92
+                        }
+                      }
+                    },
+                    "right": {
+                      "type": "split",
+                      "feature": "points_std_5",
+                      "threshold": 3.2402234077453613,
+                      "left": {
+                        "type": "leaf",
+                        "value": 8.72
+                      },
+                      "right": {
+                        "type": "split",
+                        "feature": "form_per_million",
+                        "threshold": 0.8175415992736816,
+                        "left": {
+                          "type": "leaf",
+                          "value": 9.0
+                        },
+                        "right": {
+                          "type": "leaf",
+                          "value": 8.85
+                        }
+                      }
+                    }
+                  }
+                },
+                "right": {
+                  "type": "leaf",
+                  "value": 11.793103448275861
+                }
+              }
+            }
+          },
+          "right": {
+            "type": "split",
+            "feature": "points_per_million",
+            "threshold": 2.825350761413574,
+            "left": {
+              "type": "split",
+              "feature": "value",
+              "threshold": 48.5,
+              "left": {
+                "type": "split",
+                "feature": "points_per_million",
+                "threshold": 2.2613636255264282,
+                "left": {
+                  "type": "split",
+                  "feature": "points_per_million",
+                  "threshold": 2.067307710647583,
+                  "left": {
+                    "type": "split",
+                    "feature": "value",
+                    "threshold": 43.0,
+                    "left": {
+                      "type": "leaf",
+                      "value": 8.0
+                    },
+                    "right": {
+                      "type": "leaf",
+                      "value": 9.0
+                    }
+                  },
+                  "right": {
+                    "type": "split",
+                    "feature": "value",
+                    "threshold": 44.0,
+                    "left": {
+                      "type": "split",
+                      "feature": "cs_rolling_5",
+                      "threshold": 0.2916666716337204,
+                      "left": {
+                        "type": "leaf",
+                        "value": 8.85
+                      },
+                      "right": {
+                        "type": "leaf",
+                        "value": 9.0
+                      }
+                    },
+                    "right": {
+                      "type": "leaf",
+                      "value": 10.0
+                    }
+                  }
+                },
+                "right": {
+                  "type": "split",
+                  "feature": "points_per_million",
+                  "threshold": 2.386128306388855,
+                  "left": {
+                    "type": "split",
+                    "feature": "bps",
+                    "threshold": 30.5,
+                    "left": {
+                      "type": "leaf",
+                      "value": 10.0
+                    },
+                    "right": {
+                      "type": "leaf",
+                      "value": 10.538461538461538
+                    }
+                  },
+                  "right": {
+                    "type": "split",
+                    "feature": "value",
+                    "threshold": 43.5,
+                    "left": {
+                      "type": "leaf",
+                      "value": 10.8
+                    },
+                    "right": {
+                      "type": "leaf",
+                      "value": 11.28888888888889
+                    }
+                  }
+                }
+              },
+              "right": {
+                "type": "split",
+                "feature": "points_per_million",
+                "threshold": 2.0521541833877563,
+                "left": {
+                  "type": "split",
+                  "feature": "value",
+                  "threshold": 53.5,
+                  "left": {
+                    "type": "leaf",
+                    "value": 10.0
+                  },
+                  "right": {
+                    "type": "split",
+                    "feature": "points_std_5",
+                    "threshold": 4.732675313949585,
+                    "left": {
+                      "type": "leaf",
+                      "value": 11.0
+                    },
+                    "right": {
+                      "type": "leaf",
+                      "value": 11.45
+                    }
+                  }
+                },
+                "right": {
+                  "type": "split",
+                  "feature": "value",
+                  "threshold": 53.5,
+                  "left": {
+                    "type": "split",
+                    "feature": "points_std_5",
+                    "threshold": 4.54419732093811,
+                    "left": {
+                      "type": "leaf",
+                      "value": 11.024390243902438
+                    },
+                    "right": {
+                      "type": "leaf",
+                      "value": 11.869565217391305
+                    }
+                  },
+                  "right": {
+                    "type": "leaf",
+                    "value": 12.88
+                  }
+                }
+              }
+            },
+            "right": {
+              "type": "leaf",
+              "value": 14.518518518518519
+            }
+          }
+        }
+      },
+      "right": {
+        "type": "split",
+        "feature": "points_std_5",
+        "threshold": 5.22015118598938,
+        "left": {
+          "type": "split",
+          "feature": "bps",
+          "threshold": 40.5,
+          "left": {
+            "type": "split",
+            "feature": "points_per_million",
+            "threshold": 1.8624359965324402,
+            "left": {
+              "type": "split",
+              "feature": "value",
+              "threshold": 61.5,
+              "left": {
+                "type": "split",
+                "feature": "points_per_million",
+                "threshold": 1.6345083713531494,
+                "left": {
+                  "type": "split",
+                  "feature": "points_per_million",
+                  "threshold": 1.303885817527771,
+                  "left": {
+                    "type": "leaf",
+                    "value": 6.541666666666667
+                  },
+                  "right": {
+                    "type": "split",
+                    "feature": "value",
+                    "threshold": 55.5,
+                    "left": {
+                      "type": "split",
+                      "feature": "value",
+                      "threshold": 50.5,
+                      "left": {
+                        "type": "leaf",
+                        "value": 7.518518518518518
+                      },
+                      "right": {
+                        "type": "leaf",
+                        "value": 7.935483870967742
+                      }
+                    },
+                    "right": {
+                      "type": "split",
+                      "feature": "points_per_million",
+                      "threshold": 1.4519906640052795,
+                      "left": {
+                        "type": "leaf",
+                        "value": 8.0
+                      },
+                      "right": {
+                        "type": "leaf",
+                        "value": 9.0
+                      }
+                    }
+                  }
+                },
+                "right": {
+                  "type": "split",
+                  "feature": "value",
+                  "threshold": 53.5,
+                  "left": {
+                    "type": "split",
+                    "feature": "value",
+                    "threshold": 49.5,
+                    "left": {
+                      "type": "leaf",
+                      "value": 8.357142857142858
+                    },
+                    "right": {
+                      "type": "leaf",
+                      "value": 9.0
+                    }
+                  },
+                  "right": {
+                    "type": "split",
+                    "feature": "points_per_million",
+                    "threshold": 1.6807909607887268,
+                    "left": {
+                      "type": "leaf",
+                      "value": 9.23076923076923
+                    },
+                    "right": {
+                      "type": "split",
+                      "feature": "form_10",
+                      "threshold": 5.277777910232544,
+                      "left": {
+                        "type": "leaf",
+                        "value": 10.03125
+                      },
+                      "right": {
+                        "type": "leaf",
+                        "value": 10.428571428571429
+                      }
+                    }
+                  }
+                }
+              },
+              "right": {
+                "type": "split",
+                "feature": "assist_efficiency",
+                "threshold": 2.5978407859802246,
+                "left": {
+                  "type": "split",
+                  "feature": "points_per_million",
+                  "threshold": 1.4174107313156128,
+                  "left": {
+                    "type": "split",
+                    "feature": "ict_index",
+                    "threshold": 9.150000095367432,
+                    "left": {
+                      "type": "leaf",
+                      "value": 8.216216216216216
+                    },
+                    "right": {
+                      "type": "split",
+                      "feature": "bonus_per_90",
+                      "threshold": 2.353041648864746,
+                      "left": {
+                        "type": "leaf",
+                        "value": 8.75
+                      },
+                      "right": {
+                        "type": "split",
+                        "feature": "points_std_5",
+                        "threshold": 3.6193658113479614,
+                        "left": {
+                          "type": "leaf",
+                          "value": 9.107142857142858
+                        },
+                        "right": {
+                          "type": "leaf",
+                          "value": 9.911764705882353
+                        }
+                      }
+                    }
+                  },
+                  "right": {
+                    "type": "leaf",
+                    "value": 10.5
+                  }
+                },
+                "right": {
+                  "type": "split",
+                  "feature": "goals_per_90",
+                  "threshold": 0.5,
+                  "left": {
+                    "type": "split",
+                    "feature": "points_per_million",
+                    "threshold": 1.447619080543518,
+                    "left": {
+                      "type": "leaf",
+                      "value": 9.54054054054054
+                    },
+                    "right": {
+                      "type": "leaf",
+                      "value": 11.047619047619047
+                    }
+                  },
+                  "right": {
+                    "type": "split",
+                    "feature": "points_std_5",
+                    "threshold": 4.074291229248047,
+                    "left": {
+                      "type": "leaf",
+                      "value": 10.852941176470589
+                    },
+                    "right": {
+                      "type": "split",
+                      "feature": "target_next_gw_points",
+                      "threshold": 5.5,
+                      "left": {
+                        "type": "leaf",
+                        "value": 11.571428571428571
+                      },
+                      "right": {
+                        "type": "leaf",
+                        "value": 12.380952380952381
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "right": {
+              "type": "split",
+              "feature": "points_std_5",
+              "threshold": 4.483288526535034,
+              "left": {
+                "type": "split",
+                "feature": "points_per_million",
+                "threshold": 2.5227272510528564,
+                "left": {
+                  "type": "split",
+                  "feature": "value",
+                  "threshold": 48.5,
+                  "left": {
+                    "type": "split",
+                    "feature": "points_per_million",
+                    "threshold": 2.2821969985961914,
+                    "left": {
+                      "type": "split",
+                      "feature": "points_per_million",
+                      "threshold": 2.0643938779830933,
+                      "left": {
+                        "type": "leaf",
+                        "value": 8.947368421052632
+                      },
+                      "right": {
+                        "type": "split",
+                        "feature": "points_std_5",
+                        "threshold": 3.8350483179092407,
+                        "left": {
+                          "type": "leaf",
+                          "value": 9.655172413793103
+                        },
+                        "right": {
+                          "type": "leaf",
+                          "value": 10.0
+                        }
+                      }
+                    },
+                    "right": {
+                      "type": "leaf",
+                      "value": 10.722222222222221
+                    }
+                  },
+                  "right": {
+                    "type": "split",
+                    "feature": "value",
+                    "threshold": 54.5,
+                    "left": {
+                      "type": "split",
+                      "feature": "points_per_million",
+                      "threshold": 2.058143973350525,
+                      "left": {
+                        "type": "leaf",
+                        "value": 10.170731707317072
+                      },
+                      "right": {
+                        "type": "leaf",
+                        "value": 11.191489361702128
+                      }
+                    },
+                    "right": {
+                      "type": "leaf",
+                      "value": 11.510204081632653
+                    }
+                  }
+                },
+                "right": {
+                  "type": "leaf",
+                  "value": 12.323529411764707
+                }
+              },
+              "right": {
+                "type": "split",
+                "feature": "goals_scored",
+                "threshold": 0.5,
+                "left": {
+                  "type": "split",
+                  "feature": "points_per_million",
+                  "threshold": 2.57906973361969,
+                  "left": {
+                    "type": "leaf",
+                    "value": 11.204545454545455
+                  },
+                  "right": {
+                    "type": "leaf",
+                    "value": 12.08695652173913
+                  }
+                },
+                "right": {
+                  "type": "split",
+                  "feature": "form_3",
+                  "threshold": 5.5,
+                  "left": {
+                    "type": "leaf",
+                    "value": 11.789473684210526
+                  },
+                  "right": {
+                    "type": "split",
+                    "feature": "selected",
+                    "threshold": 288976.0,
+                    "left": {
+                      "type": "leaf",
+                      "value": 12.542857142857143
+                    },
+                    "right": {
+                      "type": "leaf",
+                      "value": 13.428571428571429
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "right": {
+            "type": "split",
+            "feature": "influence",
+            "threshold": 61.69999885559082,
+            "left": {
+              "type": "split",
+              "feature": "assist_efficiency",
+              "threshold": 1.1699507236480713,
+              "left": {
+                "type": "split",
+                "feature": "points_per_million",
+                "threshold": 2.0204081535339355,
+                "left": {
+                  "type": "split",
+                  "feature": "bonus",
+                  "threshold": 2.5,
+                  "left": {
+                    "type": "leaf",
+                    "value": 8.55
+                  },
+                  "right": {
+                    "type": "split",
+                    "feature": "cs_rolling_5",
+                    "threshold": 0.32500000298023224,
+                    "left": {
+                      "type": "leaf",
+                      "value": 9.757575757575758
+                    },
+                    "right": {
+                      "type": "leaf",
+                      "value": 10.818181818181818
+                    }
+                  }
+                },
+                "right": {
+                  "type": "leaf",
+                  "value": 12.333333333333334
+                }
+              },
+              "right": {
+                "type": "split",
+                "feature": "points_std_5",
+                "threshold": 4.679731369018555,
+                "left": {
+                  "type": "split",
+                  "feature": "bonus_per_90",
+                  "threshold": 2.0809943675994873,
+                  "left": {
+                    "type": "split",
+                    "feature": "form_per_million",
+                    "threshold": 1.0940171480178833,
+                    "left": {
+                      "type": "leaf",
+                      "value": 10.536585365853659
+                    },
+                    "right": {
+                      "type": "leaf",
+                      "value": 11.75
+                    }
+                  },
+                  "right": {
+                    "type": "split",
+                    "feature": "form_5",
+                    "threshold": 4.900000095367432,
+                    "left": {
+                      "type": "leaf",
+                      "value": 11.193548387096774
+                    },
+                    "right": {
+                      "type": "split",
+                      "feature": "finishing_efficiency",
+                      "threshold": 1.3371290564537048,
+                      "left": {
+                        "type": "leaf",
+                        "value": 11.757575757575758
+                      },
+                      "right": {
+                        "type": "leaf",
+                        "value": 12.289473684210526
+                      }
+                    }
+                  }
+                },
+                "right": {
+                  "type": "split",
+                  "feature": "opponent_team",
+                  "threshold": 13.5,
+                  "left": {
+                    "type": "leaf",
+                    "value": 12.571428571428571
+                  },
+                  "right": {
+                    "type": "leaf",
+                    "value": 12.0
+                  }
+                }
+              }
+            },
+            "right": {
+              "type": "split",
+              "feature": "form_3",
+              "threshold": 13.166666507720947,
+              "left": {
+                "type": "split",
+                "feature": "form_5",
+                "threshold": 6.549999952316284,
+                "left": {
+                  "type": "split",
+                  "feature": "points_std_5",
+                  "threshold": 4.483288526535034,
+                  "left": {
+                    "type": "leaf",
+                    "value": 11.55
+                  },
+                  "right": {
+                    "type": "split",
+                    "feature": "form_3",
+                    "threshold": 5.166666746139526,
+                    "left": {
+                      "type": "leaf",
+                      "value": 12.148148148148149
+                    },
+                    "right": {
+                      "type": "split",
+                      "feature": "bonus_per_90",
+                      "threshold": 2.4838218688964844,
+                      "left": {
+                        "type": "leaf",
+                        "value": 12.444444444444445
+                      },
+                      "right": {
+                        "type": "split",
+                        "feature": "points_std_5",
+                        "threshold": 4.883622169494629,
+                        "left": {
+                          "type": "leaf",
+                          "value": 12.878048780487806
+                        },
+                        "right": {
+                          "type": "split",
+                          "feature": "form_5",
+                          "threshold": 4.700000047683716,
+                          "left": {
+                            "type": "leaf",
+                            "value": 12.958333333333334
+                          },
+                          "right": {
+                            "type": "leaf",
+                            "value": 13.481481481481481
+                          }
+                        }
+                      }
+                    }
+                  }
+                },
+                "right": {
+                  "type": "split",
+                  "feature": "influence",
+                  "threshold": 72.29999923706055,
+                  "left": {
+                    "type": "split",
+                    "feature": "transfers_out",
+                    "threshold": 8066.5,
+                    "left": {
+                      "type": "leaf",
+                      "value": 12.285714285714286
+                    },
+                    "right": {
+                      "type": "leaf",
+                      "value": 13.277777777777779
+                    }
+                  },
+                  "right": {
+                    "type": "split",
+                    "feature": "points_std_5",
+                    "threshold": 4.6520562171936035,
+                    "left": {
+                      "type": "leaf",
+                      "value": 13.8
+                    },
+                    "right": {
+                      "type": "leaf",
+                      "value": 14.904761904761905
+                    }
+                  }
+                }
+              },
+              "right": {
+                "type": "leaf",
+                "value": 16.7
+              }
+            }
+          }
+        },
+        "right": {
+          "type": "split",
+          "feature": "influence",
+          "threshold": 79.9000015258789,
+          "left": {
+            "type": "split",
+            "feature": "points_per_million",
+            "threshold": 2.2474502325057983,
+            "left": {
+              "type": "split",
+              "feature": "influence",
+              "threshold": 59.79999923706055,
+              "left": {
+                "type": "split",
+                "feature": "assist_efficiency",
+                "threshold": 1.3117283582687378,
+                "left": {
+                  "type": "split",
+                  "feature": "points_per_million",
+                  "threshold": 1.7694497108459473,
+                  "left": {
+                    "type": "leaf",
+                    "value": 9.48936170212766
+                  },
+                  "right": {
+                    "type": "leaf",
+                    "value": 11.695652173913043
+                  }
+                },
+                "right": {
+                  "type": "split",
+                  "feature": "bonus_per_90",
+                  "threshold": 2.0809943675994873,
+                  "left": {
+                    "type": "leaf",
+                    "value": 10.894736842105264
+                  },
+                  "right": {
+                    "type": "split",
+                    "feature": "creativity_per_90",
+                    "threshold": 46.36606979370117,
+                    "left": {
+                      "type": "split",
+                      "feature": "form_per_million",
+                      "threshold": 0.8633540272712708,
+                      "left": {
+                        "type": "leaf",
+                        "value": 13.233333333333333
+                      },
+                      "right": {
+                        "type": "leaf",
+                        "value": 12.25
+                      }
+                    },
+                    "right": {
+                      "type": "leaf",
+                      "value": 11.5
+                    }
+                  }
+                }
+              },
+              "right": {
+                "type": "split",
+                "feature": "value",
+                "threshold": 62.5,
+                "left": {
+                  "type": "leaf",
+                  "value": 12.095238095238095
+                },
+                "right": {
+                  "type": "split",
+                  "feature": "points_per_million",
+                  "threshold": 1.9154783487319946,
+                  "left": {
+                    "type": "split",
+                    "feature": "influence",
+                    "threshold": 76.39999771118164,
+                    "left": {
+                      "type": "split",
+                      "feature": "value",
+                      "threshold": 74.5,
+                      "left": {
+                        "type": "leaf",
+                        "value": 12.590909090909092
+                      },
+                      "right": {
+                        "type": "split",
+                        "feature": "points_per_million",
+                        "threshold": 1.1913978457450867,
+                        "left": {
+                          "type": "leaf",
+                          "value": 12.590909090909092
+                        },
+                        "right": {
+                          "type": "split",
+                          "feature": "cs_rolling_5",
+                          "threshold": 0.22500000149011612,
+                          "left": {
+                            "type": "leaf",
+                            "value": 13.25
+                          },
+                          "right": {
+                            "type": "leaf",
+                            "value": 14.106382978723405
+                          }
+                        }
+                      }
+                    },
+                    "right": {
+                      "type": "leaf",
+                      "value": 14.571428571428571
+                    }
+                  },
+                  "right": {
+                    "type": "leaf",
+                    "value": 15.05
+                  }
+                }
+              }
+            },
+            "right": {
+              "type": "split",
+              "feature": "points_per_million",
+              "threshold": 3.1311274766921997,
+              "left": {
+                "type": "split",
+                "feature": "value",
+                "threshold": 61.5,
+                "left": {
+                  "type": "split",
+                  "feature": "points_per_million",
+                  "threshold": 2.4544851779937744,
+                  "left": {
+                    "type": "split",
+                    "feature": "value",
+                    "threshold": 53.5,
+                    "left": {
+                      "type": "leaf",
+                      "value": 12.1
+                    },
+                    "right": {
+                      "type": "leaf",
+                      "value": 13.441176470588236
+                    }
+                  },
+                  "right": {
+                    "type": "split",
+                    "feature": "value",
+                    "threshold": 47.5,
+                    "left": {
+                      "type": "leaf",
+                      "value": 13.054054054054054
+                    },
+                    "right": {
+                      "type": "split",
+                      "feature": "points_per_million",
+                      "threshold": 2.7178030014038086,
+                      "left": {
+                        "type": "split",
+                        "feature": "value",
+                        "threshold": 55.5,
+                        "left": {
+                          "type": "leaf",
+                          "value": 13.581395348837209
+                        },
+                        "right": {
+                          "type": "leaf",
+                          "value": 14.966666666666667
+                        }
+                      },
+                      "right": {
+                        "type": "split",
+                        "feature": "value",
+                        "threshold": 51.5,
+                        "left": {
+                          "type": "split",
+                          "feature": "points_per_million",
+                          "threshold": 2.9289215803146362,
+                          "left": {
+                            "type": "leaf",
+                            "value": 14.0
+                          },
+                          "right": {
+                            "type": "leaf",
+                            "value": 15.0
+                          }
+                        },
+                        "right": {
+                          "type": "leaf",
+                          "value": 15.258064516129032
+                        }
+                      }
+                    }
+                  }
+                },
+                "right": {
+                  "type": "leaf",
+                  "value": 16.157894736842106
+                }
+              },
+              "right": {
+                "type": "split",
+                "feature": "value",
+                "threshold": 45.5,
+                "left": {
+                  "type": "split",
+                  "feature": "bps_per_90",
+                  "threshold": 42.5,
+                  "left": {
+                    "type": "leaf",
+                    "value": 14.733333333333333
+                  },
+                  "right": {
+                    "type": "leaf",
+                    "value": 15.35
+                  }
+                },
+                "right": {
+                  "type": "leaf",
+                  "value": 17.47826086956522
+                }
+              }
+            }
+          },
+          "right": {
+            "type": "split",
+            "feature": "influence",
+            "threshold": 121.0999984741211,
+            "left": {
+              "type": "split",
+              "feature": "points_std_5",
+              "threshold": 6.584061622619629,
+              "left": {
+                "type": "split",
+                "feature": "form_3",
+                "threshold": 7.166666746139526,
+                "left": {
+                  "type": "leaf",
+                  "value": 14.975609756097562
+                },
+                "right": {
+                  "type": "split",
+                  "feature": "influence",
+                  "threshold": 87.0999984741211,
+                  "left": {
+                    "type": "leaf",
+                    "value": 15.476190476190476
+                  },
+                  "right": {
+                    "type": "leaf",
+                    "value": 16.945945945945947
+                  }
+                }
+              },
+              "right": {
+                "type": "split",
+                "feature": "influence_per_90",
+                "threshold": 116.89999771118164,
+                "left": {
+                  "type": "split",
+                  "feature": "points_per_million",
+                  "threshold": 3.0322580337524414,
+                  "left": {
+                    "type": "split",
+                    "feature": "assists_per_90",
+                    "threshold": 0.5,
+                    "left": {
+                      "type": "leaf",
+                      "value": 16.692307692307693
+                    },
+                    "right": {
+                      "type": "leaf",
+                      "value": 17.930232558139537
+                    }
+                  },
+                  "right": {
+                    "type": "leaf",
+                    "value": 19.2
+                  }
+                },
+                "right": {
+                  "type": "leaf",
+                  "value": 19.958333333333332
+                }
+              }
+            },
+            "right": {
+              "type": "leaf",
+              "value": 23.0
+            }
+          }
+        }
+      }
+    }
+  }
+}
