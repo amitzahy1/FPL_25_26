@@ -277,8 +277,8 @@ async function initializeDraftMLModel() {
  */
 function predictPlayerPoints(player) {
     if (!globalDraftPredictor) {
-        console.warn('⚠️ Draft ML predictor not ready yet');
-        return 0;
+        // Model not ready yet - return null so script.js knows to wait
+        return null;
     }
     
     try {
@@ -304,13 +304,15 @@ if (typeof window !== 'undefined') {
         if (success) {
             console.log('🎯 Draft FPL ML Model initialized!');
             
-            // Trigger re-render if renderTable exists
-            setTimeout(() => {
-                if (typeof renderTable === 'function') {
-                    console.log('♻️ Re-rendering table with Draft ML predictions...');
-                    renderTable();
-                }
-            }, 100);
+    // Trigger re-calculation and re-render
+    setTimeout(() => {
+        if (typeof calculateAllPredictions === 'function' && typeof renderTable === 'function') {
+            console.log('♻️ Recalculating ML predictions...');
+            calculateAllPredictions();
+            console.log('♻️ Re-rendering table with Draft ML predictions...');
+            renderTable();
+        }
+    }, 100);
         }
     });
 }

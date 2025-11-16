@@ -2071,7 +2071,11 @@ function showVisualization(type) {
     
     document.getElementById('visualizationTitle').textContent = spec.title;
     
-    const players = state.displayedData.filter(p => spec.pos.includes(p.position_name) && p.minutes > 450);
+    // If user filtered data, show all filtered players. Otherwise, filter by minutes
+    const isFiltered = state.displayedData.length < state.allPlayersData[state.currentDataSource].processed.length;
+    const players = isFiltered 
+        ? state.displayedData.filter(p => spec.pos.includes(p.position_name))
+        : state.displayedData.filter(p => spec.pos.includes(p.position_name) && p.minutes > 450);
     if(players.length < 2) {
         showToast('אין מספיק נתונים', `לא נמצאו מספיק שחקנים (${spec.pos.join('/')}) להשוואה`, 'warning', 4000);
         return;
@@ -2168,7 +2172,10 @@ function showPriceVsScoreChart() {
         return;
     }
     document.getElementById('visualizationTitle').textContent = 'תמורה למחיר (ציון דראפט מול מחיר)';
-    const players = state.displayedData.filter(p => p.minutes > 900);
+    
+    // If user filtered data, show all filtered players. Otherwise, filter by minutes
+    const isFiltered = state.displayedData.length < state.allPlayersData[state.currentDataSource].processed.length;
+    const players = isFiltered ? state.displayedData : state.displayedData.filter(p => p.minutes > 900);
     if(players.length < 2) {
         showToast('אין מספיק נתונים', 'לא נמצאו מספיק שחקנים להשוואה', 'warning', 3000);
         return;
@@ -2209,7 +2216,11 @@ function showIctBreakdownChart() {
         showToast('המתן', 'יש להמתין לטעינת הנתונים', 'warning', 3000);
         return;
     }
-    const topPlayers = state.displayedData.filter(p => p.minutes > 900).sort((a,b) => b.ict_index - a.ict_index).slice(0, 15);
+    
+    // If user filtered data, show all filtered players. Otherwise, filter by minutes
+    const isFiltered = state.displayedData.length < state.allPlayersData[state.currentDataSource].processed.length;
+    const filteredPlayers = isFiltered ? state.displayedData : state.displayedData.filter(p => p.minutes > 900);
+    const topPlayers = filteredPlayers.sort((a,b) => b.ict_index - a.ict_index).slice(0, 15);
     if(topPlayers.length < 2) {
         showToast('אין מספיק נתונים', 'לא נמצאו מספיק שחקנים להשוואה', 'warning', 3000);
         return;
@@ -2702,7 +2713,9 @@ function calculateAllPredictions(players) {
         // Calculate ML prediction using the trained model
         if (typeof predictPlayerPoints === 'function') {
             try {
-                p.ml_prediction = predictPlayerPoints(p);
+                const prediction = predictPlayerPoints(p);
+                // If model not ready yet (returns null), keep existing value or 0
+                p.ml_prediction = (prediction !== null && prediction !== undefined) ? prediction : (p.ml_prediction || 0);
             } catch (error) {
                 console.warn('ML prediction failed for player:', p.web_name, error);
                 p.ml_prediction = 0;
