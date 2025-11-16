@@ -2075,7 +2075,7 @@ function showVisualization(type) {
     const isFiltered = state.displayedData.length < state.allPlayersData[state.currentDataSource].processed.length;
     const players = isFiltered 
         ? state.displayedData.filter(p => spec.pos.includes(p.position_name))
-        : state.displayedData.filter(p => spec.pos.includes(p.position_name) && p.minutes > 450);
+        : state.displayedData.filter(p => spec.pos.includes(p.position_name) && p.minutes > 300);
     if(players.length < 2) {
         showToast('אין מספיק נתונים', `לא נמצאו מספיק שחקנים (${spec.pos.join('/')}) להשוואה`, 'warning', 4000);
         return;
@@ -2175,7 +2175,7 @@ function showPriceVsScoreChart() {
     
     // If user filtered data, show all filtered players. Otherwise, filter by minutes
     const isFiltered = state.displayedData.length < state.allPlayersData[state.currentDataSource].processed.length;
-    const players = isFiltered ? state.displayedData : state.displayedData.filter(p => p.minutes > 900);
+    const players = isFiltered ? state.displayedData : state.displayedData.filter(p => p.minutes > 300);
     if(players.length < 2) {
         showToast('אין מספיק נתונים', 'לא נמצאו מספיק שחקנים להשוואה', 'warning', 3000);
         return;
@@ -2219,7 +2219,7 @@ function showIctBreakdownChart() {
     
     // If user filtered data, show all filtered players. Otherwise, filter by minutes
     const isFiltered = state.displayedData.length < state.allPlayersData[state.currentDataSource].processed.length;
-    const filteredPlayers = isFiltered ? state.displayedData : state.displayedData.filter(p => p.minutes > 900);
+    const filteredPlayers = isFiltered ? state.displayedData : state.displayedData.filter(p => p.minutes > 300);
     const topPlayers = filteredPlayers.sort((a,b) => b.ict_index - a.ict_index).slice(0, 15);
     if(topPlayers.length < 2) {
         showToast('אין מספיק נתונים', 'לא נמצאו מספיק שחקנים להשוואה', 'warning', 3000);
