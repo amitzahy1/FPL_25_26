@@ -544,6 +544,7 @@ const state = {
         details: null,
         standings: null,
         rostersByEntryId: new Map(),
+        lineupsByEntryId: new Map(), // { entryId: { starting: [fplId1, ...], bench: [fplId12, ...] } }
         entryIdToTeamName: new Map(),
         allPicks: new Set(),
         ownedElementIds: new Set(),
@@ -2981,15 +2982,22 @@ async function loadDraftDataInBackground() {
                     try {
                         const picksData = await fetchWithCache(picksUrl, picksCacheKey, 30);
                         if (picksData && picksData.picks) {
-                            const draftPlayerIds = picksData.picks.map(pick => pick.element);
+                            // Convert picks to FPL IDs and preserve position info
+                            const picksWithFplIds = picksData.picks.map(pick => ({
+                                fplId: state.draft.draftToFplIdMap.get(pick.element) || pick.element,
+                                position: pick.position
+                            }));
                             
-                            // 🔑 CRITICAL: Convert Draft IDs to FPL IDs for consistent storage
-                            const fplPlayerIds = draftPlayerIds.map(draftId => 
-                                state.draft.draftToFplIdMap.get(draftId) || draftId
-                            );
+                            // Extract all FPL IDs for roster
+                            const fplPlayerIds = picksWithFplIds.map(p => p.fplId);
                             
                             // Store FPL IDs (not Draft IDs!)
                             state.draft.rostersByEntryId.set(entry.id, fplPlayerIds);
+                            
+                            // Store lineup info (starting vs bench)
+                            const starting = picksWithFplIds.filter(p => p.position >= 1 && p.position <= 11).map(p => p.fplId);
+                            const bench = picksWithFplIds.filter(p => p.position >= 12 && p.position <= 15).map(p => p.fplId);
+                            state.draft.lineupsByEntryId.set(entry.id, { starting, bench });
                             
                             // Add to owned set (already FPL IDs)
                             fplPlayerIds.forEach(fplId => {
@@ -3098,17 +3106,31 @@ async function loadDraftLeague() {
                 
                 try {
                     const picksData = await fetchWithCache(url, picksCacheKey, 5);
-                    const draftPlayerIds = (picksData && picksData.picks) ? picksData.picks.map(p => p.element) : [];
-                    
-                    // 🔑 CRITICAL: Convert Draft IDs to FPL IDs
-                    const fplPlayerIds = draftPlayerIds.map(draftId => 
-                        state.draft.draftToFplIdMap.get(draftId) || draftId
-                    );
-                    
-                    state.draft.rostersByEntryId.set(entry.id, fplPlayerIds);
+                    if (picksData && picksData.picks) {
+                        // Convert picks to FPL IDs and preserve position info
+                        const picksWithFplIds = picksData.picks.map(pick => ({
+                            fplId: state.draft.draftToFplIdMap.get(pick.element) || pick.element,
+                            position: pick.position
+                        }));
+                        
+                        // Extract all FPL IDs for roster
+                        const fplPlayerIds = picksWithFplIds.map(p => p.fplId);
+                        
+                        // Store FPL IDs
+                        state.draft.rostersByEntryId.set(entry.id, fplPlayerIds);
+                        
+                        // Store lineup info (starting vs bench)
+                        const starting = picksWithFplIds.filter(p => p.position >= 1 && p.position <= 11).map(p => p.fplId);
+                        const bench = picksWithFplIds.filter(p => p.position >= 12 && p.position <= 15).map(p => p.fplId);
+                        state.draft.lineupsByEntryId.set(entry.id, { starting, bench });
+                    } else {
+                        state.draft.rostersByEntryId.set(entry.id, []);
+                        state.draft.lineupsByEntryId.set(entry.id, { starting: [], bench: [] });
+                    }
                 } catch (err) {
                     console.error(`Failed to fetch final picks for entry ${entry.entry_name} (${entry.entry_id})`, err);
                     state.draft.rostersByEntryId.set(entry.id, []);
+                    state.draft.lineupsByEntryId.set(entry.id, { starting: [], bench: [] });
                 }
             });
 
@@ -3123,6 +3145,7 @@ async function loadDraftLeague() {
             
             console.log("3. Rosters Populated:", state.draft.rostersByEntryId.size, "teams.");
             console.log(`   Mapping size: ${state.draft.draftToFplIdMap.size} Draft→FPL, ${state.draft.fplToDraftIdMap.size} FPL→Draft`);
+            console.log(`   Lineups stored: ${state.draft.lineupsByEntryId.size} teams`);
             
             let totalPlayers = 0;
             const processedById = getProcessedByElementId();
@@ -3280,8 +3303,17 @@ function renderMyLineup(teamId) {
         return;
     }
     
-    const playerIds = state.draft.rostersByEntryId.get(teamId) || [];
-    renderPitch(container, playerIds, true);
+    const lineup = state.draft.lineupsByEntryId.get(teamId);
+    if (lineup && lineup.starting && lineup.starting.length > 0) {
+        // Use actual lineup data (starting 11 + bench)
+        console.log(`📋 Rendering lineup with ${lineup.starting.length} starters, ${lineup.bench.length} bench`);
+        renderPitch(container, lineup.starting, true, lineup.bench);
+    } else {
+        // Fallback: use old method (pick best 11)
+        const playerIds = state.draft.rostersByEntryId.get(teamId) || [];
+        console.log(`⚠️ No lineup data found, using fallback with ${playerIds.length} players`);
+        renderPitch(container, playerIds, true);
+    }
 }
 
 function findFreeAgents() {
@@ -4245,7 +4277,7 @@ function renderDraftComparison(aggregates) {
     container.innerHTML = tableHTML;
 }
 
-function renderPitch(containerEl, playerIds, isMyLineup = false) {
+function renderPitch(containerEl, playerIds, isMyLineup = false, benchIds = null) {
     if (!containerEl) {
         console.error('renderPitch: containerEl is null or undefined');
         return;
@@ -4259,9 +4291,24 @@ function renderPitch(containerEl, playerIds, isMyLineup = false) {
     }
     
     const processedById = getProcessedByElementId();
-    const players = playerIds.map(id => processedById.get(id)).filter(Boolean);
     
-    if (players.length === 0) {
+    let startingXI, benchPlayers;
+    
+    if (benchIds) {
+        // Use provided lineup (starting + bench)
+        startingXI = playerIds.map(id => processedById.get(id)).filter(Boolean);
+        benchPlayers = benchIds.map(id => processedById.get(id)).filter(Boolean);
+        console.log(`🎯 Using actual lineup: ${startingXI.length} starting, ${benchPlayers.length} bench`);
+    } else {
+        // Fallback: auto-select best 11
+        const players = playerIds.map(id => processedById.get(id)).filter(Boolean);
+        const startingXI_ids = pickStartingXI(playerIds);
+        startingXI = startingXI_ids.map(id => processedById.get(id)).filter(Boolean);
+        benchPlayers = players.filter(p => !startingXI_ids.includes(p.id));
+        console.log(`⚙️ Auto-selected lineup: ${startingXI.length} starting, ${benchPlayers.length} bench`);
+    }
+    
+    if (startingXI.length === 0) {
         console.warn(`renderPitch: Could not find any player data for IDs:`, playerIds.slice(0, 5));
         containerEl.innerHTML = '<p style="text-align:center; padding: 20px; color: #e74c3c;">לא נמצאו נתוני שחקנים.</p>';
         return;
@@ -4281,10 +4328,6 @@ function renderPitch(containerEl, playerIds, isMyLineup = false) {
             <div class="goal-bottom"></div>
         </div>
     `;
-
-    const startingXI_ids = pickStartingXI(playerIds);
-    const startingXI = startingXI_ids.map(id => processedById.get(id)).filter(Boolean);
-    const benchPlayers = players.filter(p => !startingXI_ids.includes(p.id));
 
     const byPos = { GKP: [], DEF: [], MID: [], FWD: [] };
     startingXI.forEach(p => byPos[p.position_name].push(p));
