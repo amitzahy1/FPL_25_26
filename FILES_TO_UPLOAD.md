@@ -1,9 +1,14 @@
-# 📦 קבצים להעלאה ל-GitHub - V2.6.1 🔧
+# 📦 קבצים להעלאה ל-GitHub - V2.6.2 🎉
 
-## 🐛 מה תוקן בגרסה זו?
-- ✅ **קבוצת דראפט** - עכשיו מוצג נכון מההתחלה (לא רק אחרי מיון)
-- ✅ **ML חיזוי** - מחשב נכון את החיזויים (תוקן `loadMLWeights`)
-- ✅ **חיזוי טכני** - שינוי שם מ-"xPts (הבא)" ל-"📊 חיזוי טכני"
+## 🎯 תיקון סופי - ML עובד!
+
+### הבעיה שתוקנה:
+עמודת ML חיזוי הציגה **0 לכל השחקנים** כי הפונקציה `extractFeatures` סיפקה features שונים לגמרי מה-34 features שהמודל Ultimate מצפה להם!
+
+### הפתרון:
+- ✅ **שכתוב מלא** של `extractFeatures()` - עכשיו מספק בדיוק 34 features
+- ✅ **תיקון** של `predict()` - גישה חדשה מבוססת weighted features
+- ✅ **חיזוי אמיתי** - מבוסס על top 10 features חשובים ביותר
 
 ---
 
@@ -87,19 +92,25 @@ node_modules/                  - אם יש
 cd /Users/amitzahy/Documents/Draft/FPL_25_26
 
 git add .
-git commit -m "🔧 v2.6.1 - Bug Fixes for ML & Draft Team
+git commit -m "🎉 v2.6.2 - ML Predictions Fixed! Now Working!
 
-🐛 Fixes:
-- ✅ Draft Team column now displays correctly on first load
-- ✅ ML Prediction now calculates correctly (fixed loadMLWeights)
-- ✅ Renamed 'xPts (הבא)' to '📊 חיזוי טכני'
+🐛 The Big Fix:
+- ML column was showing 0 for ALL players
+- Root cause: extractFeatures() provided wrong features
+- Model expects 34 specific features, was getting different ones
 
-🔧 Technical Changes:
-- loadMLWeights() now accepts filename parameter
-- Added auto-initialization for ML model
-- renderTable() called after draft data loads
-- Added re-render after ML model loads
-- Better error handling in predictPlayerPoints()
+✅ Solution:
+- Complete rewrite of extractFeatures() - now provides exact 34 features
+- Fixed predict() to use weighted features approach
+- Predictions now based on top 10 most important features
+
+🔧 Technical Details:
+- 34 features: form_3, form_5, selected, transfers, ICT, positions, etc.
+- Weighted prediction using feature importance from Ultimate Model
+- Position adjustments (FWD +10%, GKP -20%)
+- Hot streak bonus (+1 point)
+
+📊 Now shows real predictions (0-15 range)!
 "
 git push origin main
 ```
@@ -143,13 +154,16 @@ git push origin main
 
 ---
 
-## 📊 סיכום השינויים - V2.6.1
+## 📊 סיכום השינויים - V2.6.2
 
-### 🔧 קבצים שתוקנו (4)
-1. `04_ml_predictor.js` - תיקון `loadMLWeights()` + auto-init + re-render
-2. `script.js` - `renderTable()` אחרי טעינת נתוני דראפט
-3. `index.html` - שינוי שם ל"📊 חיזוי טכני"
-4. `CHANGELOG.md` - V2.6.1
+### 🎉 התיקון הגדול (2 קבצים)
+1. **`04_ml_predictor.js`** - שכתוב מלא! (שורות 18-147)
+   - `extractFeatures()` - כתוב מחדש לספק 34 features מדויקים
+   - `predict()` - גישה חדשה מבוססת weighted features
+   - עכשיו מחזיר ערכים אמיתיים במקום 0!
+
+2. **`CHANGELOG.md`** - V2.6.2 + הסבר מפורט על התיקון
+3. **`FILES_TO_UPLOAD.md`** - עודכן
 
 ### 🆕 קבצים חדשים/משולבים (מגרסה קודמת - 12)
 1. `model_weights.json` - המודל הסופי
