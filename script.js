@@ -882,13 +882,17 @@ function showToast(title, message, type = 'info', duration = 4000) {
 async function init() {
     Chart.register(ChartDataLabels);
     
-    // Load both data sources in parallel
+    // Load data sources in sequence to ensure mapping works
     showLoading();
     try {
-        await Promise.all([
-            fetchAndProcessData(),
-            loadDraftDataInBackground()
-        ]);
+        // 1. First load FPL data
+        await fetchAndProcessData();
+        
+        // 2. Then build the Draft→FPL mapping
+        await buildDraftToFplMapping();
+        
+        // 3. Finally load Draft data (now mapping is ready!)
+        await loadDraftDataInBackground();
         
         showToast('טעינה הושלמה', 'כל הנתונים נטענו בהצלחה!', 'success', 3000);
     } catch (error) {
@@ -2858,7 +2862,18 @@ function getProcessedByElementId() {
     // Otherwise use live or historical data
     const processed = (state.allPlayersData.live && state.allPlayersData.live.processed) || (state.allPlayersData.historical && state.allPlayersData.historical.processed) || [];
     const map = new Map();
-    processed.forEach(p => map.set(p.id, p));
+    
+    // CRITICAL: Add each player twice - once by FPL ID, once by Draft ID (if different)
+    processed.forEach(p => {
+        map.set(p.id, p); // Add by FPL ID (standard)
+        
+        // ALSO add by Draft ID if mapping exists
+        const draftId = state.draft.fplToDraftIdMap.get(p.id);
+        if (draftId && draftId !== p.id) {
+            map.set(draftId, p); // Add by Draft ID for lookup
+        }
+    });
+    
     return map;
 }
 
@@ -3029,6 +3044,14 @@ async function loadDraftLeague() {
         } else if (!state.allPlayersData.live.raw && !state.allPlayersData.historical.raw) {
             await fetchAndProcessData();
         }
+        
+        // CRITICAL: Ensure Draft→FPL mapping is built before processing rosters
+        if (state.draft.draftToFplIdMap.size === 0) {
+            console.log('⚠️ Mapping not found, building now...');
+            await buildDraftToFplMapping();
+        } else {
+            console.log(`✅ Using existing mapping: ${state.draft.draftToFplIdMap.size} players mapped`);
+        }
 
         const detailsCacheKey = `fpl_draft_details_${config.draftLeagueId}`;
         const standingsCacheKey = `fpl_draft_standings_${config.draftLeagueId}`;
@@ -3093,12 +3116,27 @@ async function loadDraftLeague() {
             }
             
             console.log("3. Rosters Populated:", state.draft.rostersByEntryId.size, "teams.");
+            console.log(`   Mapping size: ${state.draft.draftToFplIdMap.size} Draft→FPL, ${state.draft.fplToDraftIdMap.size} FPL→Draft`);
+            
             let totalPlayers = 0;
             const processedById = getProcessedByElementId();
+            console.log(`   ProcessedById map size: ${processedById.size} players`);
             
             state.draft.rostersByEntryId.forEach((roster, teamId) => {
                 const teamName = state.draft.entryIdToTeamName.get(teamId) || `Unknown ID: ${teamId}`;
-                const playerNames = roster.map(id => processedById.get(id)?.web_name || `ID ${id} not found`).join(', ');
+                const playerNames = roster.map(id => {
+                    const player = processedById.get(id);
+                    if (!player) {
+                        // Debug: try to find via mapping
+                        const fplId = state.draft.draftToFplIdMap.get(id);
+                        if (fplId) {
+                            const playerViaMap = processedById.get(fplId);
+                            console.log(`  ⚠️ Draft ID ${id} → FPL ${fplId} → ${playerViaMap ? playerViaMap.web_name : 'NOT FOUND'}`);
+                        }
+                        return `ID ${id} not found`;
+                    }
+                    return player.web_name;
+                }).join(', ');
                 console.log(`  - Team '${teamName}':`, roster.length, "players -> [", playerNames, "]");
                 totalPlayers += roster.length;
             });
