@@ -2858,7 +2858,19 @@ function getProcessedByElementId() {
     // Otherwise use live or historical data
     const processed = (state.allPlayersData.live && state.allPlayersData.live.processed) || (state.allPlayersData.historical && state.allPlayersData.historical.processed) || [];
     const map = new Map();
-    processed.forEach(p => map.set(p.id, p));
+    
+    processed.forEach(p => {
+        // Add by FPL ID (standard)
+        map.set(p.id, p);
+        
+        // ALSO add by Draft ID if mapping exists
+        // This allows lookup by either Draft ID or FPL ID
+        const draftId = state.draft.fplToDraftIdMap.get(p.id);
+        if (draftId && draftId !== p.id) {
+            map.set(draftId, p);
+        }
+    });
+    
     return map;
 }
 
@@ -2943,6 +2955,9 @@ function getTeamColor(name) {
 async function loadDraftDataInBackground() {
     // Load draft data silently in the background without showing loading overlay
     try {
+        // Build Draft to FPL ID mapping first
+        await buildDraftToFplMapping();
+        
         const detailsUrl = `${config.corsProxy}${encodeURIComponent(`https://draft.premierleague.com/api/league/${state.draft.leagueId}/details`)}`;
         const detailsCacheKey = `fpl_draft_details_${state.draft.leagueId}`;
         
@@ -3024,6 +3039,9 @@ async function loadDraftLeague() {
         } else if (!state.allPlayersData.live.raw && !state.allPlayersData.historical.raw) {
             await fetchAndProcessData();
         }
+        
+        // Build Draft to FPL ID mapping before loading rosters
+        await buildDraftToFplMapping();
 
         const detailsCacheKey = `fpl_draft_details_${config.draftLeagueId}`;
         const standingsCacheKey = `fpl_draft_standings_${config.draftLeagueId}`;
