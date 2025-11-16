@@ -601,7 +601,7 @@ async function fetchWithCache(url, cacheKey, cacheDurationMinutes = 120, options
                  localStorage.removeItem(cacheKey);
                  console.log(`⏰ Cache expired for ${cacheKey}`);
             }
-        } catch (e) {
+            } catch (e) {
             console.error('❌ Error parsing cache, removing item:', e);
             localStorage.removeItem(cacheKey);
         }
@@ -1038,13 +1038,13 @@ async function fetchAndProcessData() {
         
         // Show success toast
         showToast('נתונים נטענו בהצלחה', `${state.allPlayersData[state.currentDataSource].processed.length} שחקנים נטענו`, 'success', 3000);
-    } catch (error) {
+} catch (error) {
         console.error('Error in fetchAndProcessData:', error);
         document.getElementById('playersTableBody').innerHTML = `<tr><td colspan="26" style="text-align:center; padding: 20px; color: red;">שגיאה בטעינת נתונים: ${error.message}</td></tr>`;
         showToast('שגיאה בטעינת נתונים', error.message, 'error', 5000);
-    } finally {
-        hideLoading();
-    }
+} finally {
+    hideLoading();
+}
 }
 
 function switchDataSource(source) {
@@ -1147,7 +1147,7 @@ function populateTeamFilter() {
     if (state.draft.details && state.draft.details.league_entries) {
         state.draft.details.league_entries.forEach(entry => {
             if(entry.entry_name) {
-                const option = document.createElement('option');
+        const option = document.createElement('option');
                 option.value = entry.id;
                 option.textContent = entry.entry_name;
                 draftTeamFilter.appendChild(option);
@@ -1240,7 +1240,7 @@ function renderTable() {
             const playerId = parseInt(this.dataset.playerId);
             if (this.checked) {
                 state.selectedForComparison.add(playerId);
-            } else {
+        } else {
                 state.selectedForComparison.delete(playerId);
             }
         });
@@ -2409,7 +2409,7 @@ function getChartConfig(data, xKey, yKey, xLabel, yLabel, quadLabels = {}, color
                         return 'rgba(34, 197, 94, 0.85)'; // Green - Best
                     } else if (point.x < xMedian && point.y < yMedian) {
                         return 'rgba(239, 68, 68, 0.85)'; // Red - Worst
-                    } else {
+        } else {
                         return 'rgba(251, 146, 60, 0.85)'; // Orange - Medium
                     }
                 },
@@ -3676,7 +3676,7 @@ function renderRecommendations() {
                 <div class="rec-header">
                     <h4>${player.web_name}</h4>
                     <p class="rec-subtitle">${posNames[position]} • ציון: ${player.smart_score.toFixed(1)}</p>
-                </div>
+                        </div>
                 <table class="rec-table">
                     <thead>
                         <tr>
@@ -3695,9 +3695,9 @@ function renderRecommendations() {
                                     <div class="rec-player-cell">
                                         <img src="${getPlayerImageUrl(p)}" class="rec-player-img" alt="${p.web_name}">
                                         <div class="rec-player-name">${p.web_name}</div>
-                                    </div>
+                    </div>
                                 </td>
-                            `).join('')}
+            `).join('')}
                         </tr>
                         <tr class="rec-reason-row">
                             <td><strong>סיבה</strong></td>
@@ -4065,9 +4065,9 @@ function renderDraftAnalytics(teamAggregates) {
         const ctx = canvas.getContext('2d');
         state.draft.charts.analytics[dim.key] = new Chart(ctx, {
             type: 'bar',
-            data: {
+        data: {
                 labels,
-                datasets: [{
+            datasets: [{
                     label: dim.label,
                     data: values,
                     borderRadius: 12,
@@ -4095,11 +4095,11 @@ function renderDraftAnalytics(teamAggregates) {
                         const c = colorMap[n];
                         return hexToRgba(c, 0.95);
                     }),
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
                 animation: {
                     duration: 1000,
                     easing: 'easeOutQuart'
@@ -4128,9 +4128,9 @@ function renderDraftAnalytics(teamAggregates) {
                         }
                     }
                 },
-                plugins: {
+            plugins: {
                     legend: { display: false },
-                    tooltip: {
+                tooltip: {
                         enabled: true,
                         backgroundColor: 'rgba(255, 255, 255, 0.98)',
                         titleColor: '#1e293b',
@@ -4149,7 +4149,7 @@ function renderDraftAnalytics(teamAggregates) {
                         cornerRadius: 8,
                         caretSize: 5.5,
                         caretPadding: 6.6,
-                        callbacks: {
+                    callbacks: {
                             title: function(context) {
                                 const teamName = context[0].label;
                                 const value = context[0].parsed.y;
@@ -4160,7 +4160,7 @@ function renderDraftAnalytics(teamAggregates) {
                             beforeBody: function(context) {
                                 return ''; // Remove separator
                             },
-                            label: function(context) {
+                        label: function(context) {
                                 // Get team name and find its players
                                 const teamName = context.label;
                                 const teamEntry = (state.draft.details?.league_entries || []).find(e => e.entry_name === teamName);
@@ -4425,7 +4425,7 @@ function renderPitch(containerEl, playerIds, isMyLineup = false, benchIds = null
         startingXI = playerIds.map(id => processedById.get(id)).filter(Boolean);
         benchPlayers = benchIds.map(id => processedById.get(id)).filter(Boolean);
         console.log(`🎯 Using actual lineup: ${startingXI.length} starting, ${benchPlayers.length} bench`);
-    } else {
+            } else {
         // Fallback: auto-select best 11
         const players = playerIds.map(id => processedById.get(id)).filter(Boolean);
         const startingXI_ids = pickStartingXI(playerIds);
