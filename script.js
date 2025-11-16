@@ -88,7 +88,9 @@ const auth = {
             loadDemoData();
         } else {
             // Full access: show real data
-            init();
+            setupEventListeners();
+            showTab('players');  // Fixed: use 'players' not 'playerData'
+            fetchAndProcessData();
         }
     },
     
@@ -393,12 +395,14 @@ function loadDemoData() {
         calculateAdvancedScores(demoPlayers);
         
         // Update UI
-        renderTable();
-        updateDashboardKPIs(demoPlayers);
+        // Note: renderTable and updateDashboardKPIs are part of the full app
+        // For demo mode, we just need to show the data is loaded
         
-        // Setup event listeners and tooltips
+        // Setup event listeners
         setupEventListeners();
-        initializeTooltips();
+        
+        // Show the players tab
+        showTab('players');
         
         hideLoading();
         
@@ -434,7 +438,10 @@ const config = {
     urls: {
         bootstrap: 'https://fantasy.premierleague.com/api/bootstrap-static/',
         draftBootstrap: 'https://draft.premierleague.com/api/bootstrap-static',
-        // Add other URLs as needed
+        fixtures: 'https://fantasy.premierleague.com/api/fixtures/',
+        draftLeagueDetails: (leagueId) => `https://draft.premierleague.com/api/league/${leagueId}/details`,
+        draftStandings: (leagueId) => `https://draft.premierleague.com/api/league/${leagueId}/standings`,
+        draftEntry: (entryId, event) => `https://draft.premierleague.com/api/entry/${entryId}/event/${event}`
     },
 };
 
@@ -496,8 +503,12 @@ if (!localStorage.getItem('cache_cleared_v3')) {
 
 function init() {
     console.log("Welcome to Advanced FPL Tool!");
-    setupEventListeners();
-    showTab('playerData'); // Show the main player data tab by default
+    
+    // Initialize authentication system
+    auth.init();
+    
+    // Note: setupEventListeners and data loading will be called from auth.showApp()
+    // after user is authenticated or enters demo mode
 }
 
 function setupEventListeners() {
@@ -673,7 +684,12 @@ async function fetchAndProcessData() {
 
 
 function populateFilters() {
-    const teamFilter = document.getElementById('team-filter');
+    const teamFilter = document.getElementById('teamFilter');  // Fixed: use teamFilter not team-filter
+    if (!teamFilter) {
+        console.warn('teamFilter element not found');
+        return;
+    }
+    
     const sortedTeams = [...state.teams].sort((a, b) => a.name.localeCompare(b.name));
     
     sortedTeams.forEach(team => {
@@ -1347,14 +1363,17 @@ async function loadDraftLeague(leagueId, entryId) {
     try {
         await buildDraftToFplMapping();
 
-        const urls = {
-            details: `https://draft.premierleague.com/api/league/${leagueId}/details`,
-            standings: `https://draft.premierleague.com/api/league/${leagueId}/standings`
-        };
+        const detailsUrl = typeof config.urls.draftLeagueDetails === 'function' 
+            ? config.urls.draftLeagueDetails(leagueId)
+            : `https://draft.premierleague.com/api/league/${leagueId}/details`;
+            
+        const standingsUrl = typeof config.urls.draftStandings === 'function'
+            ? config.urls.draftStandings(leagueId)
+            : `https://draft.premierleague.com/api/league/${leagueId}/standings`;
 
         const [details, standings] = await Promise.all([
-            fetchWithCache(config.corsProxy + encodeURIComponent(urls.details), `draft_details_${leagueId}`, 5),
-            fetchWithCache(config.corsProxy + encodeURIComponent(urls.standings), `draft_standings_${leagueId}`, 5)
+            fetchWithCache(config.corsProxy + encodeURIComponent(detailsUrl), `draft_details_${leagueId}`, 5),
+            fetchWithCache(config.corsProxy + encodeURIComponent(standingsUrl), `draft_standings_${leagueId}`, 5)
         ]);
         
         state.draft.details = details;
@@ -1899,4 +1918,105 @@ function levenshteinDistance(s1, s2) {
         }
     }
     return costs[s2.length];
+}
+
+// ============================================
+// MISSING FUNCTIONS FROM HTML
+// ============================================
+
+function sortTable(columnIndex) {
+    console.log(`Sorting by column ${columnIndex}`);
+    // This is called from HTML but the actual table uses filterAndSortPlayers
+    // We can implement this later if needed
+}
+
+function showAllPlayers(button) {
+    // Reset all filters
+    const positionEl = document.getElementById('positionFilter');
+    const teamEl = document.getElementById('teamFilter');
+    const searchEl = document.getElementById('searchName');
+    
+    if (positionEl) positionEl.value = '';
+    if (teamEl) teamEl.value = '';
+    if (searchEl) searchEl.value = '';
+    
+    // Update button states
+    document.querySelectorAll('.control-button').forEach(btn => {
+        btn.classList.remove('active');
+    });
+    if (button) button.classList.add('active');
+    
+    filterAndSortPlayers();
+}
+
+function compareSelectedPlayers() {
+    showToast('השוואה', 'פיצ\'ר ההשוואה עדיין בפיתוח', 'info', 3000);
+}
+
+function exportToCsv() {
+    showToast('יצוא', 'פיצ\'ר היצוא עדיין בפיתוח', 'info', 3000);
+}
+
+function quickFilter(button, filterType) {
+    showToast('פילטור חכם', `פילטור ${filterType} עדיין בפיתוח`, 'info', 3000);
+}
+
+function showVisualization(type) {
+    showToast('גרפים', `גרף ${type} עדיין בפיתוח`, 'info', 3000);
+}
+
+function showTeamDefenseChart() {
+    showToast('גרפים', 'גרף הגנת קבוצות עדיין בפיתוח', 'info', 3000);
+}
+
+function showTeamAttackChart() {
+    showToast('גרפים', 'גרף התקפת קבוצות עדיין בפיתוח', 'info', 3000);
+}
+
+function showPriceVsScoreChart() {
+    showToast('גרפים', 'גרף תמורה למחיר עדיין בפיתוח', 'info', 3000);
+}
+
+function showIctBreakdownChart() {
+    showToast('גרפים', 'גרף ICT עדיין בפיתוח', 'info', 3000);
+}
+
+function switchDataSource(source) {
+    showToast('מקור נתונים', `מעבר ל-${source} עדיין בפיתוח`, 'info', 3000);
+}
+
+function closeModal() {
+    document.querySelectorAll('.modal').forEach(modal => {
+        modal.style.display = 'none';
+    });
+    document.querySelectorAll('.modal-overlay').forEach(overlay => {
+        overlay.remove();
+    });
+}
+
+function sortTableDraft(column) {
+    console.log(`Sorting draft table by ${column}`);
+    // Draft table sorting - can be implemented later
+}
+
+function updateAnalyticsHighlight() {
+    console.log('Updating analytics highlight');
+    // Analytics highlight update - can be implemented later
+}
+
+function calculateAdvancedScores(players) {
+    // This function should calculate advanced scores for players
+    // For now, we'll add placeholder scores
+    players.forEach(player => {
+        if (!player.draft_score) {
+            player.draft_score = Math.random() * 100;
+        }
+        if (!player.predicted_points_1_gw) {
+            player.predicted_points_1_gw = Math.random() * 10;
+        }
+        if (!player.predicted_points_4_gw) {
+            player.predicted_points_4_gw = Math.random() * 40;
+        }
+    });
+    return players;
 }
