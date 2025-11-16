@@ -1184,7 +1184,7 @@ function createPlayerRowHtml(player, index) {
         <td class="name-cell"><span class="player-name-icon">${icons.icons}</span>${player.web_name}</td>
         <td class="bold-cell">${player.draft_score.toFixed(1)}</td>
         <td class="bold-cell stability-cell">${(player.stability_index || 0).toFixed(0)}</td>
-        <td class="bold-cell">${(player.predicted_points_1_gw || 0).toFixed(1)}</td>
+        <td class="bold-cell" title="חיזוי טכני: ${(player.predicted_points_1_gw || 0).toFixed(1)} נקודות">${(player.predicted_points_1_gw || 0).toFixed(1)}</td>
         <td class="bold-cell ${mlClass}" title="חיזוי ML: ${mlPrediction.toFixed(1)} נקודות">${mlPrediction.toFixed(1)}</td>
         <td>${player.team_name}</td>
         <td class="${draftTeamClass}" title="${draftTeamDisplay}">${draftTeamDisplay}</td>
@@ -3175,6 +3175,9 @@ async function loadDraftDataInBackground() {
             
             // Populate team filter with draft teams
             populateTeamFilter();
+            
+            // Re-render table to update draft team column
+            renderTable();
             
             console.log('✅ Draft data loaded in background:', state.draft.ownedElementIds.size, 'players owned');
         }
