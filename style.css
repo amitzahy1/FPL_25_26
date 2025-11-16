@@ -282,6 +282,51 @@ tbody tr:last-child td {
     border-radius: 4px;
 }
 
+/* ML Prediction Styling */
+.ml-high {
+    color: #059669;
+    font-weight: 800;
+    background: linear-gradient(135deg, rgba(16, 185, 129, 0.15), rgba(5, 150, 105, 0.1));
+    padding: 6px 10px;
+    border-radius: 6px;
+    box-shadow: 0 2px 4px rgba(5, 150, 105, 0.2);
+}
+
+.ml-medium {
+    color: #0284c7;
+    font-weight: 700;
+    background: linear-gradient(135deg, rgba(2, 132, 199, 0.12), rgba(3, 105, 161, 0.08));
+    padding: 6px 10px;
+    border-radius: 6px;
+}
+
+.ml-low {
+    color: #6b7280;
+    font-weight: 600;
+    background: rgba(156, 163, 175, 0.08);
+    padding: 6px 10px;
+    border-radius: 6px;
+}
+
+/* Draft Team Styling */
+.draft-owned {
+    color: #0284c7;
+    font-weight: 700;
+    background: linear-gradient(135deg, rgba(2, 132, 199, 0.12), rgba(3, 105, 161, 0.08));
+    padding: 4px 8px;
+    border-radius: 6px;
+    font-size: 0.9em;
+}
+
+.draft-free {
+    color: #10b981;
+    font-weight: 600;
+    background: rgba(16, 185, 129, 0.08);
+    padding: 4px 8px;
+    border-radius: 6px;
+    font-size: 0.9em;
+}
+
 .sort-indicator { 
     display: inline-block; 
     margin-left: 6px;

@@ -440,7 +440,7 @@ const config = {
     draftLeagueId: 689,
     setPieceTakers: {"Arsenal":{"penalties":["Saka","Havertz"],"freekicks":["Ødegaard","Rice","Martinelli"],"corners":["Martinelli","Saka","Ødegaard"]},"Aston Villa":{"penalties":["Watkins","Tielemans"],"freekicks":["Digne","Douglas Luiz","Bailey"],"corners":["Douglas Luiz","McGinn"]},"Bournemouth":{"penalties":["Solanke","Kluivert"],"freekicks":["Tavernier","Scott"],"corners":["Tavernier","Scott"]},"Brentford":{"penalties":["Toney","Mbeumo"],"freekicks":["Jensen","Mbeumo","Damsgaard"],"corners":["Jensen","Mbeumo"]},"Brighton":{"penalties":["João Pedro","Gross"],"freekicks":["Gross","Estupiñán"],"corners":["Gross","March"]},"Chelsea":{"penalties":["Palmer","Nkunku"],"freekicks":["Palmer","James","Enzo"],"corners":["Gallagher","Chilwell","Palmer"]},"Crystal Palace":{"penalties":["Eze","Olise"],"freekicks":["Eze","Olise"],"corners":["Eze","Olise"]},"Everton":{"penalties":["Calvert-Lewin","McNeil"],"freekicks":["McNeil","Garner"],"corners":["McNeil","Garner"]},"Fulham":{"penalties":["Andreas","Jiménez"],"freekicks":["Andreas","Willian","Wilson"],"corners":["Andreas","Willian"]},"Ipswich":{"penalties":["Chaplin","Hirst"],"freekicks":["Davis","Morsy"],"corners":["Davis","Chaplin"]},"Leicester":{"penalties":["Vardy","Dewsbury-Hall"],"freekicks":["Dewsbury-Hall","Fatawu"],"corners":["Dewsbury-Hall","Fatawu"]},"Liverpool":{"penalties":["M.Salah","Szoboszlai"],"freekicks":["Alexander-Arnold","Szoboszlai","Robertson"],"corners":["Alexander-Arnold","Robertson"]},"Man City":{"penalties":["Haaland","Alvarez"],"freekicks":["De Bruyne","Foden","Alvarez"],"corners":["Foden","De Bruyne"]},"Man Utd":{"penalties":["B.Fernandes","Rashford"],"freekicks":["B.Fernandes","Eriksen","Rashford"],"corners":["B.Fernandes","Shaw"]},"Newcastle":{"penalties":["Isak","Wilson"],"freekicks":["Trippier","Gordon"],"corners":["Trippier","Gordon"]},"Nott'm Forest":{"penalties":["Gibbs-White","Wood"],"freekicks":["Gibbs-White","Elanga"],"corners":["Gibbs-White","Elanga"]},"Southampton":{"penalties":["A. Armstrong","Ward-Prowse"],"freekicks":["Ward-Prowse","Smallbone"],"corners":["Ward-Prowse","Aribo"]},"Spurs":{"penalties":["Son","Maddison"],"freekicks":["Maddison","Pedro Porro"],"corners":["Maddison","Pedro Porro","Son"]},"West Ham":{"penalties":["Ward-Prowse","Bowen"],"freekicks":["Ward-Prowse","Emerson"],"corners":["Ward-Prowse","Bowen"]},"Wolves":{"penalties":["Cunha","Hwang"],"freekicks":["Sarabia","Bellegarde"],"corners":["Sarabia","Aït-Nouri"]}},
     tableColumns: [
-        'rank', 'web_name', 'draft_score', 'stability_index', 'predicted_points_1_gw', 'team_name', 
+        'rank', 'web_name', 'draft_score', 'stability_index', 'predicted_points_1_gw', 'ml_prediction', 'team_name', 'draft_team',
         'position_name', 'now_cost', 'total_points', 'points_per_game_90', 'selected_by_percent', 
         'dreamteam_count', 'net_transfers_event', 'def_contrib_per90', 'goals_scored_assists', 
         'expected_goals_assists', 'minutes', 'xDiff', 'ict_index', 'bonus', 'clean_sheets', 
@@ -1168,6 +1168,15 @@ function createPlayerRowHtml(player, index) {
     const icons = generatePlayerIcons(player);
     const fixturesHTML = generateFixturesHTML(player);
     const isChecked = state.selectedForComparison.has(player.id) ? 'checked' : '';
+    
+    // Get ML prediction
+    const mlPrediction = player.ml_prediction || 0;
+    const mlClass = mlPrediction >= 5 ? 'ml-high' : mlPrediction >= 3 ? 'ml-medium' : 'ml-low';
+    
+    // Get draft team
+    const draftTeam = getDraftTeamForPlayer(player.id);
+    const draftTeamDisplay = draftTeam || '🆓 חופשי';
+    const draftTeamClass = draftTeam ? 'draft-owned' : 'draft-free';
 
     return `<tr>
         <td><input type="checkbox" class="player-select" data-player-id="${player.id}" ${isChecked}></td>
@@ -1176,7 +1185,9 @@ function createPlayerRowHtml(player, index) {
         <td class="bold-cell">${player.draft_score.toFixed(1)}</td>
         <td class="bold-cell stability-cell">${(player.stability_index || 0).toFixed(0)}</td>
         <td class="bold-cell">${(player.predicted_points_1_gw || 0).toFixed(1)}</td>
+        <td class="bold-cell ${mlClass}" title="חיזוי ML: ${mlPrediction.toFixed(1)} נקודות">${mlPrediction.toFixed(1)}</td>
         <td>${player.team_name}</td>
+        <td class="${draftTeamClass}" title="${draftTeamDisplay}">${draftTeamDisplay}</td>
         <td>${player.position_name}</td>
         <td>${player.now_cost.toFixed(1)}</td>
         <td>${player.total_points}</td>
@@ -1248,7 +1259,7 @@ function renderTable() {
 
     // Add tooltips to headers
     const headers = document.querySelectorAll('#playersTable thead th');
-    const columnKeys = ['rank', 'web_name', 'draft_score', 'stability_index', 'base_score', 'quality_score', 'predicted_points_4_gw', 'team_name', 'position_name', 'now_cost', 'total_points', 'points_per_game_90', 'selected_by_percent', 'dreamteam_count', 'net_transfers_event', 'def_contrib_per90', 'goals_scored_assists', 'expected_goals_assists', 'minutes', 'xDiff', 'ict_index', 'bonus', 'clean_sheets', 'set_piece_priority.penalty', 'set_piece_priority.corner', 'set_piece_priority.free_kick', 'fixtures'];
+    const columnKeys = ['rank', 'web_name', 'draft_score', 'stability_index', 'predicted_points_1_gw', 'ml_prediction', 'team_name', 'draft_team', 'position_name', 'now_cost', 'total_points', 'points_per_game_90', 'selected_by_percent', 'dreamteam_count', 'net_transfers_event', 'def_contrib_per90', 'goals_scored_assists', 'expected_goals_assists', 'minutes', 'xDiff', 'ict_index', 'bonus', 'clean_sheets', 'set_piece_priority.penalty', 'set_piece_priority.corner', 'set_piece_priority.free_kick', 'fixtures'];
 
     headers.forEach((th, i) => {
         const key = columnKeys[i-1];
@@ -1256,6 +1267,16 @@ function renderTable() {
             th.dataset.tooltip = config.columnTooltips[key];
         }
     });
+}
+
+function getDraftTeamForPlayer(fplId) {
+    // Check if player is owned by any team
+    for (const [entryId, roster] of state.draft.rostersByEntryId.entries()) {
+        if (roster.includes(fplId)) {
+            return state.draft.entryIdToTeamName.get(entryId) || 'Unknown';
+        }
+    }
+    return null; // Free agent
 }
 
 function generatePlayerIcons(p) {
@@ -2646,6 +2667,21 @@ function calculateAllPredictions(players) {
         p.predicted_points_4_gw = next4Fixtures.length > 0
             ? next4Fixtures.reduce((total, fix) => total + predictPointsForFixture(p, fix), 0)
             : 0;
+        
+        // ============================================
+        // 🤖 ML PREDICTION
+        // ============================================
+        // Calculate ML prediction using the trained model
+        if (typeof predictPlayerPoints === 'function') {
+            try {
+                p.ml_prediction = predictPlayerPoints(p);
+            } catch (error) {
+                console.warn('ML prediction failed for player:', p.web_name, error);
+                p.ml_prediction = 0;
+            }
+        } else {
+            p.ml_prediction = 0;
+        }
     });
     
     return players;
