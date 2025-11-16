@@ -1556,6 +1556,7 @@ function generateComparisonTableHTML(players) {
     // Define comprehensive metrics
     const comprehensiveMetrics = [
         { name: 'ציון דראפט', key: 'draft_score', format: v => v.toFixed(1), icon: '⭐', reversed: false },
+        { name: 'יציבות', key: 'stability_index', format: v => v.toFixed(0), icon: '📊', reversed: false },
         { name: 'חיזוי למחזור הבא', key: 'predicted_points_1_gw', format: v => v.toFixed(1), icon: '🔮', reversed: false },
         { name: 'נקודות/90', key: 'points_per_game_90', format: v => v.toFixed(1), icon: '📈', reversed: false },
         { name: 'נקודות כולל', key: 'total_points', format: v => v, icon: '🎯', reversed: false },
