@@ -2858,19 +2858,7 @@ function getProcessedByElementId() {
     // Otherwise use live or historical data
     const processed = (state.allPlayersData.live && state.allPlayersData.live.processed) || (state.allPlayersData.historical && state.allPlayersData.historical.processed) || [];
     const map = new Map();
-    
-    processed.forEach(p => {
-        // Add by FPL ID (standard)
-        map.set(p.id, p);
-        
-        // ALSO add by Draft ID if mapping exists
-        // This allows lookup by either Draft ID or FPL ID
-        const draftId = state.draft.fplToDraftIdMap.get(p.id);
-        if (draftId && draftId !== p.id) {
-            map.set(draftId, p);
-        }
-    });
-    
+    processed.forEach(p => map.set(p.id, p));
     return map;
 }
 
@@ -2955,9 +2943,6 @@ function getTeamColor(name) {
 async function loadDraftDataInBackground() {
     // Load draft data silently in the background without showing loading overlay
     try {
-        // Build Draft to FPL ID mapping first
-        await buildDraftToFplMapping();
-        
         const detailsUrl = `${config.corsProxy}${encodeURIComponent(`https://draft.premierleague.com/api/league/${state.draft.leagueId}/details`)}`;
         const detailsCacheKey = `fpl_draft_details_${state.draft.leagueId}`;
         
@@ -2986,9 +2971,14 @@ async function loadDraftDataInBackground() {
                     try {
                         const picksData = await fetchWithCache(picksUrl, picksCacheKey, 30);
                         if (picksData && picksData.picks) {
-                            const playerIds = picksData.picks.map(pick => pick.element);
-                            state.draft.rostersByEntryId.set(entry.id, playerIds);
-                            playerIds.forEach(id => state.draft.ownedElementIds.add(id));
+                            const draftPlayerIds = picksData.picks.map(pick => pick.element);
+                            state.draft.rostersByEntryId.set(entry.id, draftPlayerIds);
+                            
+                            // Add to owned set - use FPL ID if mapping exists, otherwise Draft ID
+                            draftPlayerIds.forEach(draftId => {
+                                const fplId = state.draft.draftToFplIdMap.get(draftId) || draftId;
+                                state.draft.ownedElementIds.add(fplId);
+                            });
                         }
                     } catch (err) {
                         console.log(`Could not load roster for ${entry.entry_name}`);
@@ -3039,9 +3029,6 @@ async function loadDraftLeague() {
         } else if (!state.allPlayersData.live.raw && !state.allPlayersData.historical.raw) {
             await fetchAndProcessData();
         }
-        
-        // Build Draft to FPL ID mapping before loading rosters
-        await buildDraftToFplMapping();
 
         const detailsCacheKey = `fpl_draft_details_${config.draftLeagueId}`;
         const standingsCacheKey = `fpl_draft_standings_${config.draftLeagueId}`;
@@ -3097,8 +3084,12 @@ async function loadDraftLeague() {
 
             await Promise.all(picksPromises);
 
-            for (const playerIds of state.draft.rostersByEntryId.values()) {
-                playerIds.forEach(id => state.draft.ownedElementIds.add(id));
+            // Convert Draft IDs to FPL IDs when adding to ownedElementIds
+            for (const draftPlayerIds of state.draft.rostersByEntryId.values()) {
+                draftPlayerIds.forEach(draftId => {
+                    const fplId = state.draft.draftToFplIdMap.get(draftId) || draftId;
+                    state.draft.ownedElementIds.add(fplId);
+                });
             }
             
             console.log("3. Rosters Populated:", state.draft.rostersByEntryId.size, "teams.");
@@ -4275,7 +4266,8 @@ function renderPitch(containerEl, playerIds, isMyLineup = false) {
             spot.style.left = `${(i + 1) * 100 / (count + 1)}%`;
             
             spot.innerHTML = `
-                <img class="player-photo" src="${getPlayerImageUrl(p)}" alt="${p.web_name}">
+                <img class="player-photo" src="${getPlayerImageUrl(p)}" alt="${p.web_name}" 
+                     onerror="this.src='${config.urls.missingPlayerImage}'">
                 <div class="player-name">${p.web_name}</div>
             `;
             pitch.appendChild(spot);
@@ -4295,7 +4287,8 @@ function renderPitch(containerEl, playerIds, isMyLineup = false) {
         bench.className = 'bench-strip';
         bench.innerHTML = benchPlayers.map(p => `
             <div class="bench-item">
-                <img src="${getPlayerImageUrl(p)}" alt="${p.web_name}">
+                <img src="${getPlayerImageUrl(p)}" alt="${p.web_name}" 
+                     onerror="this.src='${config.urls.missingPlayerImage}'">
                 <div>${p.web_name}</div>
             </div>
         `).join('');
