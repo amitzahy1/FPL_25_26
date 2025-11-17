@@ -303,9 +303,37 @@ class DraftDecisionTreePredictor {
                 // If diff=1.5 (easy): 0.8 + 0.2 = 1.0 (no change)
                 // If diff=2.0 (very easy): 0.8 + 0.4 = 1.2 (+20%)
                 // If diff=0.5 (hard): 0.8 - 0.2 = 0.6 (-20%)
+                
+                // Apply minutes reliability multiplier
+                // If player plays little, reduce prediction (unreliable sample)
+                let minutesMultiplier = 1.0;
+                if (minutes < 200) {
+                    // Very little minutes - heavily penalize (30-60% of prediction)
+                    minutesMultiplier = 0.3 + (minutes / 200) * 0.3;  // 0.3-0.6 range
+                } else if (minutes < 500) {
+                    // Some minutes but not enough - moderate penalty (60-90% of prediction)
+                    minutesMultiplier = 0.6 + ((minutes - 200) / 300) * 0.3;  // 0.6-0.9 range
+                } else if (minutes < 800) {
+                    // Good minutes but not full - slight penalty (90-100% of prediction)
+                    minutesMultiplier = 0.9 + ((minutes - 500) / 300) * 0.1;  // 0.9-1.0 range
+                }
+                // If minutes >= 800, multiplier = 1.0 (full confidence)
+                
+                heuristicPredPerGame *= minutesMultiplier;
             } else {
                 // Fallback if no form data
                 heuristicPredPerGame = (selected / 20) + 2;
+                
+                // Still apply minutes multiplier for fallback
+                let minutesMultiplier = 1.0;
+                if (minutes < 200) {
+                    minutesMultiplier = 0.3 + (minutes / 200) * 0.3;
+                } else if (minutes < 500) {
+                    minutesMultiplier = 0.6 + ((minutes - 200) / 300) * 0.3;
+                } else if (minutes < 800) {
+                    minutesMultiplier = 0.9 + ((minutes - 500) / 300) * 0.1;
+                }
+                heuristicPredPerGame *= minutesMultiplier;
             }
             
             // Predict for 3 gameweeks
@@ -322,6 +350,16 @@ class DraftDecisionTreePredictor {
             // Round to 1 decimal
             prediction = Math.round(prediction * 10) / 10;
             
+            // Calculate minutes multiplier for logging
+            let minutesMultiplier = 1.0;
+            if (minutes < 200) {
+                minutesMultiplier = 0.3 + (minutes / 200) * 0.3;
+            } else if (minutes < 500) {
+                minutesMultiplier = 0.6 + ((minutes - 200) / 300) * 0.3;
+            } else if (minutes < 800) {
+                minutesMultiplier = 0.9 + ((minutes - 500) / 300) * 0.1;
+            }
+            
             // Debug: Log key features for sample (more detailed)
             if (Math.random() < 0.05) {  // 5% sample for debugging
                 console.log(`🎯 Draft ML (3 GWs) for ${player.web_name}:`, {
@@ -334,6 +372,7 @@ class DraftDecisionTreePredictor {
                     selected: features['selected']?.toFixed(1),
                     transfers_balance: transfersBalance,
                     fixture_difficulty: avgFixtureDifficulty.toFixed(2),
+                    minutes_multiplier: minutesMultiplier.toFixed(2),
                     next_3_fixtures: next3Fixtures.length,
                     minutes: features['minutes'],
                     ict: features['ict_index']?.toFixed(0),
