@@ -435,15 +435,25 @@ if (typeof window !== 'undefined') {
         if (success) {
             console.log('🎯 Draft FPL ML Model initialized!');
             
-    // Trigger re-calculation and re-render
-    setTimeout(() => {
-        if (typeof calculateAllPredictions === 'function' && typeof renderTable === 'function') {
-            console.log('♻️ Recalculating ML predictions...');
-            calculateAllPredictions();
-            console.log('♻️ Re-rendering table with Draft ML predictions...');
-            renderTable();
-        }
-    }, 100);
+            // Trigger re-calculation and re-render
+            setTimeout(() => {
+                // Get players from state
+                let players = null;
+                if (typeof state !== 'undefined' && state.displayedData && state.displayedData.length > 0) {
+                    players = state.displayedData;
+                } else if (window.state && window.state.displayedData && window.state.displayedData.length > 0) {
+                    players = window.state.displayedData;
+                }
+                
+                if (players && typeof calculateAllPredictions === 'function' && typeof renderTable === 'function') {
+                    console.log('♻️ Recalculating ML predictions...');
+                    calculateAllPredictions(players);
+                    console.log('♻️ Re-rendering table with Draft ML predictions...');
+                    renderTable();
+                } else {
+                    console.warn('⚠️ Cannot recalculate: players data not available yet');
+                }
+            }, 100);
         }
     });
 }
