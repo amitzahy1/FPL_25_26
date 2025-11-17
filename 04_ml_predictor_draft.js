@@ -45,10 +45,25 @@ class DraftDecisionTreePredictor {
         features['selected'] = parseFloat(player.selected_by_percent) || 0;
         
         // Form features (IMPORTANT!)
-        features['form_3'] = parseFloat(player.form) * 0.6 || 0;  // Approximate
-        features['form_5'] = parseFloat(player.form) || 0;
-        features['form_10'] = parseFloat(player.form) * 1.5 || 0;  // Approximate
-        features['form_trend'] = 0;  // Not available
+        // FPL's 'form' is already a rolling average, but we need to approximate form_3, form_5, form_10
+        // Use points_per_game_90 as base, which is more accurate than form
+        const baseForm = parseFloat(player.form) || 0;
+        // Calculate points_per_game_90 if not available
+        const pointsPerGame = parseFloat(player.points_per_game_90) || 
+                             (player.minutes > 0 ? (player.total_points / (player.minutes / 90)) : 0) || 
+                             baseForm;
+        
+        // Better approximation: use points_per_game_90 as form_5 (most recent form)
+        // form_3 should be slightly higher (more recent = potentially better)
+        // form_10 should be slightly lower (longer period = more stable)
+        // Add some variance based on recent performance indicators
+        const recentBoost = (player.transfers_in_event > 0) ? 0.1 : 0;  // Slight boost if being transferred in
+        const form5Base = pointsPerGame || baseForm || 0;
+        
+        features['form_5'] = form5Base + recentBoost;
+        features['form_3'] = (form5Base * 1.15) + recentBoost;  // Recent form slightly higher
+        features['form_10'] = (form5Base * 0.85);  // Longer form slightly lower (more stable)
+        features['form_trend'] = features['form_3'] - features['form_5'];  // Calculate trend
         
         // Transfers (IMPORTANT!)
         features['transfers_in'] = player.transfers_in_event || 0;
@@ -123,11 +138,12 @@ class DraftDecisionTreePredictor {
         
         // Additional features (approximations)
         features['minutes_rolling'] = player.minutes || 0;
-        features['minutes_std_5'] = 0;
-        features['points_std_5'] = 0;
-        features['points_cv'] = 0;
+        features['minutes_std_5'] = 0;  // Not available without history
+        features['points_std_5'] = 0;  // Not available without history
+        // Calculate coefficient of variation using form_5
+        features['points_cv'] = features['form_5'] > 0 ? (0.3 / features['form_5']) : 0;  // Approximate CV
         features['xP'] = player.total_points || 0;
-        features['ea_index'] = parseFloat(player.ep_next) || 0;
+        features['ea_index'] = parseFloat(player.ep_next) || parseFloat(player.ep_this) || 0;
         
         // Match-specific
         features['team_h_score'] = 0;
@@ -183,7 +199,8 @@ class DraftDecisionTreePredictor {
     }
     
     /**
-     * Predict next GW points
+     * Predict points for next 3 gameweeks
+     * (Changed from 1 GW to 3 GWs for better draft planning)
      */
     predict(player) {
         try {
@@ -191,23 +208,137 @@ class DraftDecisionTreePredictor {
             const features = this.extractFeatures(player);
             
             // Traverse tree
-            let prediction = this.traverseTree(this.tree, features);
+            let modelPrediction = this.traverseTree(this.tree, features);
             
-            // Cap at realistic range (0-15)
-            prediction = Math.max(0, Math.min(15, prediction));
+            // Since model has negative R² (-0.024), it's not reliable
+            // Create a heuristic-based prediction using key features
+            const form5 = features['form_5'] || 0;
+            const selected = features['selected'] || 0;
+            const minutes = features['minutes'] || 0;
+            const transfersBalance = features['transfers_balance'] || 0;  // Use balance instead of transfers_in
+            const xGI = features['xGI_per_90'] || 0;
+            
+            // Get upcoming fixtures for fixture difficulty calculation
+            // Try multiple ways to access fixtures (depends on how script.js exposes it)
+            let upcomingFixtures = [];
+            if (typeof teamFixtures !== 'undefined' && teamFixtures[player.team]) {
+                upcomingFixtures = teamFixtures[player.team];
+            } else if (window.teamFixtures && window.teamFixtures[player.team]) {
+                upcomingFixtures = window.teamFixtures[player.team];
+            } else if (typeof state !== 'undefined' && state.fixtures) {
+                // Fallback: try to get from state
+                upcomingFixtures = (state.fixtures || []).filter(f => 
+                    f.team_h === player.team || f.team_a === player.team
+                );
+            }
+            const next3Fixtures = upcomingFixtures.slice(0, 3);
+            
+            // Calculate average fixture difficulty for next 3 games
+            let avgFixtureDifficulty = 1.0;  // Default: neutral (1.0 = average difficulty)
+            // Try to get teamStrengthData from various sources
+            let teamStrengthData = null;
+            if (typeof state !== 'undefined' && state.teamStrengthData) {
+                teamStrengthData = state.teamStrengthData;
+            } else if (window.state && window.state.teamStrengthData) {
+                teamStrengthData = window.state.teamStrengthData;
+            }
+            
+            if (next3Fixtures.length > 0 && teamStrengthData) {
+                let totalDifficulty = 0;
+                let count = 0;
+                
+                next3Fixtures.forEach(fixture => {
+                    const isHome = player.team === fixture.team_h;
+                    const opponentTeamId = isHome ? fixture.team_a : fixture.team_h;
+                    const playerTeam = teamStrengthData[player.team];
+                    const opponentTeam = teamStrengthData[opponentTeamId];
+                    
+                    if (playerTeam && opponentTeam) {
+                        const attackScore = isHome ? playerTeam.strength_attack_home : playerTeam.strength_attack_away;
+                        const defenseScore = isHome ? opponentTeam.strength_defence_home : opponentTeam.strength_defence_away;
+                        // Higher ratio = easier fixture (our attack vs their defense)
+                        const difficulty = attackScore / Math.max(defenseScore, 1);
+                        totalDifficulty += difficulty;
+                        count++;
+                    }
+                });
+                
+                if (count > 0) {
+                    avgFixtureDifficulty = totalDifficulty / count;
+                    // Normalize: 1.0 = average, >1.0 = easier, <1.0 = harder
+                    // Typical range: 0.5 (very hard) to 2.0 (very easy)
+                }
+            }
+            
+            // Heuristic prediction for NEXT 3 GAMEWEEKS (not just 1)
+            // Base prediction on form (points per game) × 3 games
+            let heuristicPredPerGame = 0;
+            
+            if (form5 > 0) {
+                // Base prediction on form (points per game)
+                heuristicPredPerGame = form5;
+                
+                // Adjust based on other factors
+                if (selected > 20) heuristicPredPerGame += 0.3;  // Popular players (reduced weight)
+                if (selected > 50) heuristicPredPerGame += 0.4;  // Very popular (reduced weight)
+                
+                // Use transfers_balance instead of transfers_in (better metric!)
+                if (transfersBalance > 5000) heuristicPredPerGame += 0.4;  // Positive balance = good
+                if (transfersBalance > 20000) heuristicPredPerGame += 0.3;  // Very positive = very good
+                if (transfersBalance < -5000) heuristicPredPerGame -= 0.3;  // Negative balance = bad
+                
+                if (minutes < 300) heuristicPredPerGame -= 1.0;  // Not playing much
+                if (xGI > 0.5) heuristicPredPerGame += 0.3;  // Good xGI
+                
+                // ICT Index - not very important (only 1.29% in model), but can help
+                // Only use if very high or very low
+                if (features['ict_index'] > 120) heuristicPredPerGame += 0.2;  // Very high ICT
+                if (features['ict_index'] < 30 && minutes > 500) heuristicPredPerGame -= 0.3;  // Low ICT but playing
+                
+                // Apply fixture difficulty multiplier
+                // Easy fixtures (+20%), Hard fixtures (-20%)
+                heuristicPredPerGame *= (0.8 + (avgFixtureDifficulty - 1.0) * 0.4);
+                // Formula: 0.8 + (diff-1)*0.4
+                // If diff=1.0 (average): 0.8 + 0 = 0.8 (slight penalty for average)
+                // If diff=1.5 (easy): 0.8 + 0.2 = 1.0 (no change)
+                // If diff=2.0 (very easy): 0.8 + 0.4 = 1.2 (+20%)
+                // If diff=0.5 (hard): 0.8 - 0.2 = 0.6 (-20%)
+            } else {
+                // Fallback if no form data
+                heuristicPredPerGame = (selected / 20) + 2;
+            }
+            
+            // Predict for 3 gameweeks
+            let heuristicPred = heuristicPredPerGame * 3;
+            
+            // Blend: Since model R² is negative, weight heuristic more heavily
+            // Model gets 20%, heuristic gets 80%
+            // But model predicts 1 GW, so multiply by 3
+            let prediction = (modelPrediction * 3 * 0.2) + (heuristicPred * 0.8);
+            
+            // Cap at realistic range (0-45 for 3 GWs, ~15 per game)
+            prediction = Math.max(0, Math.min(45, prediction));
             
             // Round to 1 decimal
             prediction = Math.round(prediction * 10) / 10;
             
-            // Debug: Log key features for sample
-            if (Math.random() < 0.02) {  // 2% sample
-                console.log(`🎯 Draft ML for ${player.web_name}:`, {
-                    prediction: prediction.toFixed(1),
-                    form_10: features['form_10']?.toFixed(1),
+            // Debug: Log key features for sample (more detailed)
+            if (Math.random() < 0.05) {  // 5% sample for debugging
+                console.log(`🎯 Draft ML (3 GWs) for ${player.web_name}:`, {
+                    final_prediction_3gw: prediction.toFixed(1),
+                    per_game: (prediction / 3).toFixed(1),
+                    model_pred_1gw: modelPrediction.toFixed(1),
+                    heuristic_pred_3gw: heuristicPred.toFixed(1),
+                    heuristic_per_game: heuristicPredPerGame.toFixed(1),
+                    form_5: features['form_5']?.toFixed(2),
                     selected: features['selected']?.toFixed(1),
-                    transfers_in: features['transfers_in'],
+                    transfers_balance: transfersBalance,
+                    fixture_difficulty: avgFixtureDifficulty.toFixed(2),
+                    next_3_fixtures: next3Fixtures.length,
                     minutes: features['minutes'],
-                    ict: features['ict_index']?.toFixed(0)
+                    ict: features['ict_index']?.toFixed(0),
+                    xGI_per_90: features['xGI_per_90']?.toFixed(2),
+                    points_per_game: player.points_per_game_90?.toFixed(2)
                 });
             }
             
