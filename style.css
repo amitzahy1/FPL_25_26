@@ -620,8 +620,9 @@ tbody tr:last-child td {
 .pitch-lines {
     position: absolute;
     inset: 0;
-    border: 2px solid rgba(255, 255, 255, 0.5);
+    border: 2px solid rgba(255, 255, 255, 0.8);
     border-radius: 8px;
+    pointer-events: none;
 }
 
 /* My lineup specific styles */
@@ -638,37 +639,95 @@ tbody tr:last-child td {
 
 .player-spot {
     position: absolute;
-    transform: translateX(-50%);
+    transform: translate(-50%, -50%);
     text-align: center;
-    width: 60px;
+    width: 90px; /* Increased from 80px */
     display: flex;
     flex-direction: column;
     align-items: center;
+    z-index: 5;
+    pointer-events: none; /* Allow clicks to pass through unless on child */
+}
+
+.player-spot > * {
+    pointer-events: auto;
 }
 
 .player-photo {
-    width: 50px;
-    height: 50px;
+    width: 60px; /* Increased from 50px */
+    height: 60px; /* Increased from 50px */
     border-radius: 50%;
-    background-color: #fff;
-    border: 2px solid #fff;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+    background-color: #f8fafc; /* Fallback color */
+    border: 3px solid #fff; /* Increased border */
+    box-shadow: 0 4px 6px rgba(0,0,0,0.2);
+    object-fit: cover;
+    transition: transform 0.2s;
+    display: block; /* Ensure block display */
 }
 
-.player-name {
-    background-color: rgba(17, 24, 39, 0.8); /* Darker, less transparent */
-    color: white;
-    font-size: 9px; /* Smaller text */
-    font-weight: 600;
-    padding: 2px 5px;
-    max-width: 70px; /* Wider container */
-    border-radius: 4px;
-    margin-top: 2px;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    max-width: 70px;
+.player-spot:hover .player-photo {
+    transform: scale(1.1);
 }
+
+.pitch-container .player-name {
+    background-color: rgba(17, 24, 39, 0.85);
+    color: #ffffff !important; /* Pure white - force override */
+    font-size: 15px !important; /* Increased by 15% from 13px */
+    font-weight: 700;
+    padding: 4px 8px;
+    width: 100%;
+    max-width: 130px;
+    border-radius: 6px;
+    margin-top: 4px;
+    white-space: normal;
+    line-height: 1.2;
+    overflow: hidden;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.15);
+    z-index: 10;
+    text-align: center;
+}
+
+.player-data {
+    background: rgba(255, 255, 255, 0.95);
+    color: #0f172a;
+    font-size: 13px; /* Increased for better readability */
+    font-weight: 700;
+    padding: 3px 8px;
+    border-radius: 6px;
+    margin-top: 3px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    white-space: nowrap;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    width: max-content;
+    min-width: 65px;
+}
+
+.player-points {
+    color: #16a34a;
+    font-weight: 800;
+    font-size: 16px; /* Increased by 15% from 14px */
+}
+
+.player-proj {
+    color: #64748b;
+    font-size: 13px; /* Increased for readability */
+}
+
+.player-opp {
+    font-size: 11px; /* Increased for readability */
+    text-transform: uppercase;
+    color: #475569;
+    font-weight: 800;
+    border-top: 1px solid #e2e8f0;
+    width: 100%;
+    text-align: center;
+    margin-top: 2px;
+    padding-top: 2px;
+}
+
 
 .bench-strip {
     display: flex;
@@ -696,9 +755,7 @@ tbody tr:last-child td {
 .penalty-bottom { position: absolute; left: 12%; right: 12%; bottom: 10px; height: 18%; border: 2px solid rgba(255,255,255,0.85); border-bottom: none; }
 .goal-top { position: absolute; left: 35%; right: 35%; top: 10px; height: 8%; border: 2px solid rgba(255,255,255,0.85); border-top: none; }
 .goal-bottom { position: absolute; left: 35%; right: 35%; bottom: 10px; height: 8%; border: 2px solid rgba(255,255,255,0.85); border-bottom: none; }
-.player-spot { position: absolute; display: flex; flex-direction: column; align-items: center; gap: 4px; transform: translate(-50%, -50%); }
-.player-photo { width: 50px; height: 50px; border-radius: 50%; border: 2px solid #fff; background: #eee; object-fit: cover; }
-.player-name { color: #111827; font-weight: 800; font-size: 0.9em; text-shadow: none; background: rgba(255,255,255,0.9); padding: 2px 6px; border-radius: 6px; }
+/* Removed conflicting player-spot/name styles */
 .position-chip { background: rgba(255,255,255,0.9); color: #2c3e50; font-weight: 700; padding: 1px 6px; border-radius: 12px; font-size: 0.65em; }
 /* Size tweaks */
 #myLineup .pitch-container { height: 480px; width: 75%; max-width: 320px; margin: 0 auto; }
@@ -3656,7 +3713,7 @@ th {
 
 .player-name {
     font-weight: 700;
-    color: #1e293b;
+    color: #ffffff !important; /* Force white for pitch display */
     font-size: 14px;
 }
 
@@ -4793,4 +4850,185 @@ canvas {
     padding: 4px 8px;
     border-radius: 4px;
     border: none;
+}
+
+/* =========================================
+   MOBILE RESPONSIVENESS & FIXES
+   ========================================= */
+
+@media screen and (max-width: 768px) {
+    /* Header adjustments */
+    .header-content {
+        flex-direction: column;
+        gap: 10px;
+        height: auto;
+        padding: 10px;
+    }
+
+    .app-header {
+        height: auto;
+        position: relative; /* Unstick header on mobile if needed, or keep sticky */
+    }
+
+    .brand-section {
+        width: 100%;
+        justify-content: center;
+    }
+
+    .main-nav {
+        width: 100%;
+        justify-content: center;
+    }
+
+    .user-actions {
+        width: 100%;
+        justify-content: center;
+        margin-top: 5px;
+    }
+
+    /* Toolbar adjustments */
+    .controls-toolbar {
+        padding: 12px;
+    }
+
+    .controls-toolbar > div {
+        flex-direction: column;
+        align-items: stretch !important;
+        gap: 12px !important;
+    }
+
+    .toggle-group {
+        justify-content: center;
+        width: 100%;
+    }
+
+    /* Draft Sub-Nav */
+    .draft-sub-nav-container {
+        top: 0;
+        padding: 10px 0;
+    }
+    
+    .draft-sub-nav {
+        justify-content: flex-start; /* Allow scrolling */
+        padding-left: 15px;
+        padding-right: 15px;
+    }
+
+    /* Pitch Container */
+    .pitch-container {
+        max-width: 100%;
+        height: auto;
+        aspect-ratio: 2/3; /* Maintain aspect ratio */
+    }
+
+    .player-spot {
+        width: 60px; /* Smaller spots */
+    }
+    
+    .player-photo {
+        width: 30px;
+        height: 30px;
+    }
+    
+    .player-name {
+        font-size: 8px;
+        max-width: 55px;
+        padding: 1px 3px;
+    }
+    
+    .player-data-row {
+        font-size: 7px;
+        padding: 1px 3px;
+    }
+
+    /* Charts Grid */
+    .charts-dashboard-grid {
+        grid-template-columns: 1fr !important;
+    }
+    
+    .chart-card {
+        min-height: 300px;
+    }
+    
+    /* Stats Cards */
+    .lineup-stats-card {
+        padding: 10px !important;
+    }
+    
+    .stat-box {
+        padding: 8px !important;
+        min-width: 60px !important;
+    }
+    
+    .stat-value {
+        font-size: 16px !important;
+    }
+    
+    .stat-label {
+        font-size: 10px !important;
+    }
+    
+    /* Rival Analysis */
+    .rival-header {
+        padding: 15px !important;
+    }
+    
+    .team-badge {
+        flex-direction: column !important;
+        text-align: center !important;
+    }
+    
+    .team-badge > div:first-child {
+        margin-bottom: 5px;
+    }
+    
+    /* Modal */
+    .modal-content {
+        width: 95%;
+        padding: 10px;
+    }
+    
+    /* Tables */
+    .table-container {
+        overflow-x: auto;
+    }
+    
+    th, td {
+        padding: 8px 4px;
+        font-size: 12px;
+    }
+}
+
+/* Fix for Stats Bar Height */
+.lineup-stats-card {
+    padding: 12px 20px !important;
+    margin-bottom: 15px !important;
+}
+
+.lineup-stats-card .stat-value {
+    font-size: 20px; /* Reduced from likely 24+ */
+}
+
+/* Pitch Size Increase */
+.pitch-lines {
+    /* Make lines more visible - white on dark pitch */
+    border: 2px solid rgba(255,255,255,0.8);
+}
+
+.pitch-container.my-lineup {
+    /* Ensure it takes full available height in container if possible */
+    min-height: 600px; 
+}
+
+/* Fix for Player Name overflowing - REMOVED to allow wrapping */
+
+/* Win Probability Explanation Tooltip */
+.win-prob-explanation {
+    font-size: 11px;
+    color: #64748b;
+    margin-top: 8px;
+    text-align: center;
+    background: #f1f5f9;
+    padding: 8px;
+    border-radius: 6px;
 }

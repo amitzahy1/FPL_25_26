@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>⚽ FPL Pro Analytics Hub</title>
     <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="mobile.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/chartjs-plugin-annotation/2.2.1/chartjs-plugin-annotation.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.0.0"></script>
@@ -184,12 +185,14 @@
         box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);
     }
     .draft-sub-nav {
-        max-width: 1400px; 
+        max-width: 100%; 
         margin: 0 auto; 
         display: flex; 
-        gap: 12px; 
-        overflow-x: auto; 
+        gap: 8px; 
+        overflow-x: visible; 
         padding: 16px 0;
+        flex-wrap: wrap;
+        justify-content: center;
     }
     .draft-nav-btn {
         padding: 10px 20px;
@@ -520,7 +523,7 @@
         <!-- Draft Sub Navigation -->
         <!-- Draft Sub Navigation (Improved Design) -->
         <div id="draftSubNav" class="draft-sub-nav-container" style="background: #ffffff; padding: 16px 0; border-bottom: 1px solid #f1f5f9; margin-bottom: 24px; position: sticky; top: 70px; z-index: 90;">
-            <div class="draft-sub-nav" style="max-width: 1200px; margin: 0 auto; display: flex; justify-content: center; gap: 16px; overflow-x: auto;">
+            <div class="draft-sub-nav" style="max-width: 100%; margin: 0 auto; display: flex; justify-content: center; gap: 8px; overflow-x: visible; flex-wrap: wrap;">
                 <button class="draft-nav-btn active" onclick="switchDraftTab('overview')" style="padding: 12px 24px; border-radius: 12px; border: none; font-weight: 700; font-size: 16px; cursor: pointer; transition: all 0.2s; display: flex; align-items: center; gap: 8px; background: #eff6ff; color: #3b82f6; box-shadow: 0 2px 4px rgba(59,130,246,0.1);">
                     <span style="font-size: 18px;">📊</span> מבט על
                 </button>
@@ -559,9 +562,11 @@
             }
             .draft-sub-nav {
                 display: flex;
-                gap: 12px;
-                overflow-x: auto;
-                padding: 4px 8px; /* Space for focus ring */
+                gap: 8px;
+                overflow-x: visible;
+                padding: 4px 8px;
+                flex-wrap: wrap;
+                justify-content: center;
             }
             .draft-nav-btn {
                 padding: 10px 20px;
