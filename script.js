@@ -3313,16 +3313,66 @@ function getTeamColor(name) {
     return palette[Math.abs(hash) % palette.length];
 }
 
+// 🔧 Helper to fetch transactions and update rosters
+// async function fetchAndApplyTransactions(leagueId, currentGw) { ... } // Removed as API is 404
+
 async function loadDraftDataInBackground() {
     // Load draft data silently in the background without showing loading overlay
     try {
         const detailsUrl = `${config.corsProxy}${encodeURIComponent(`https://draft.premierleague.com/api/league/${state.draft.leagueId}/details`)}`;
         const detailsCacheKey = `fpl_draft_details_${state.draft.leagueId}`;
         
+        // 🔧 SMART GW DETECTION: Find the highest GW with actual draft data available
+        let currentGW = getCurrentEventId(); // Fallback
+        let actualDataGw = null;
+        
+        try {
+            const bootstrapUrl = 'https://fantasy.premierleague.com/api/bootstrap-static/';
+            const bootstrapResponse = await fetch(config.corsProxy + encodeURIComponent(bootstrapUrl));
+            const bootstrapData = await bootstrapResponse.json();
+            
+            if (bootstrapData && bootstrapData.events) {
+                const currentEvent = bootstrapData.events.find(e => e.is_current);
+                const nextEvent = bootstrapData.events.find(e => e.is_next);
+                
+                // 🎯 Try next GW first (latest roster), then current
+                const gwsToTry = [];
+                if (nextEvent) gwsToTry.push(nextEvent.id);
+                if (currentEvent) gwsToTry.push(currentEvent.id);
+                
+                // 🧪 Quick test to find which GW has data
+                for (const testGw of gwsToTry) {
+                    try {
+                        const testUrl = `${config.corsProxy}${encodeURIComponent(`https://draft.premierleague.com/api/league/${state.draft.leagueId}/details`)}`;
+                        const testResponse = await fetch(testUrl);
+                        if (testResponse.ok) {
+                            const testData = await testResponse.json();
+                            if (testData && testData.league_entries && testData.league_entries[0]) {
+                                const testEntryId = testData.league_entries[0].entry_id;
+                                const picksTestUrl = `${config.corsProxy}${encodeURIComponent(`https://draft.premierleague.com/api/entry/${testEntryId}/event/${testGw}`)}`;
+                                const picksResponse = await fetch(picksTestUrl);
+                                if (picksResponse.ok) {
+                                    actualDataGw = testGw;
+                                    console.log(`✅ Background: GW${testGw} has data available`);
+                                    break;
+                                }
+                            }
+                        }
+                    } catch (err) {
+                        console.log(`⚠️ Background: GW${testGw} test failed`);
+                    }
+                }
+                
+                currentGW = actualDataGw || currentEvent?.id || currentGW;
+                console.log(`📅 Background: Using GW${currentGW}`);
+            }
+        } catch (err) {
+            console.warn('⚠️ Background load: Could not fetch bootstrap-static');
+        }
+        
         // Clear old picks cache for background load too
-        const currentGW = getCurrentEventId();
         Object.keys(localStorage).forEach(key => {
-            if (key.startsWith('fpl_draft_picks_') && key.includes(`_gw${currentGW}`)) {
+            if (key.startsWith('fpl_draft_picks_')) {
                 localStorage.removeItem(key);
             }
         });
@@ -3331,9 +3381,6 @@ async function loadDraftDataInBackground() {
         
         if (details && details.league_entries) {
             state.draft.details = details;
-            
-            // Process draft data to get owned players
-            const currentGW = details.league?.current_event || 10;
             
             // Build entryId to team name map
             state.draft.entryIdToTeamName.clear();
@@ -3349,6 +3396,7 @@ async function loadDraftDataInBackground() {
                 .map(async entry => {
                     const picksUrl = `${config.corsProxy}${encodeURIComponent(`https://draft.premierleague.com/api/entry/${entry.entry_id}/event/${currentGW}`)}`;
                     const picksCacheKey = `fpl_draft_picks_bg_${entry.entry_id}_gw${currentGW}`;
+                    
                     try {
                         const picksData = await fetchWithCache(picksUrl, picksCacheKey, 30);
                         if (picksData && picksData.picks) {
@@ -3453,23 +3501,25 @@ async function loadDraftLeague() {
         localStorage.removeItem(detailsCacheKey);
         localStorage.removeItem(standingsCacheKey);
         
-        // 🔧 CRITICAL FIX: Also clear ALL picks cache to ensure fresh roster data
-        console.log("🧹 Clearing old picks cache...");
-        const draftGwForCache = getCurrentEventId(); // Get current GW for cache key
+        // 🔧 CRITICAL FIX: Aggressively clear ALL draft picks cache to ensure fresh roster data
+        console.log("🧹 Clearing ALL old picks cache...");
         Object.keys(localStorage).forEach(key => {
-            if (key.startsWith('fpl_draft_picks_') && key.includes(`_gw${draftGwForCache}`)) {
-                console.log(`   Removing cached picks: ${key}`);
+            if (key.startsWith('fpl_draft_picks_') || key.startsWith('fpl_draft_details_')) {
+                console.log(`   Removing cached data: ${key}`);
                 localStorage.removeItem(key);
             }
         });
         
         // Don't add proxy here - fetchWithCache will handle it with fallbacks
-        const detailsUrl = config.urls.draftLeagueDetails(config.draftLeagueId);
-        const standingsUrl = config.urls.draftLeagueStandings(config.draftLeagueId);
+        // Add timestamp to force fresh fetch from FPL servers
+        const timestamp = new Date().getTime();
+        const detailsUrl = config.urls.draftLeagueDetails(config.draftLeagueId) + `?t=${timestamp}`;
+        const standingsUrl = config.urls.draftLeagueStandings(config.draftLeagueId) + `?t=${timestamp}`;
         
+        // Use 0 cache duration to force fresh fetch
         const [detailsData, standingsData] = await Promise.all([
-            fetchWithCache(config.corsProxy + encodeURIComponent(detailsUrl), detailsCacheKey, 5),
-            fetchWithCache(config.corsProxy + encodeURIComponent(standingsUrl), standingsCacheKey, 5).catch(() => null)
+            fetchWithCache(config.corsProxy + encodeURIComponent(detailsUrl), detailsCacheKey, 0),
+            fetchWithCache(config.corsProxy + encodeURIComponent(standingsUrl), standingsCacheKey, 0).catch(() => null)
         ]);
         
         state.draft.details = detailsData;
@@ -3486,20 +3536,87 @@ async function loadDraftLeague() {
             state.draft.ownedElementIds.clear();
 
             const leagueEntries = state.draft.details?.league_entries || [];
-            const draftGw = state.draft.details?.league?.current_event || getCurrentEventId();
+            
+            // 🔧 SMART GW DETECTION: Find the highest GW with actual draft data available
+            let draftGw = getCurrentEventId(); // Start with fallback
+            let actualDataGw = null;
+            
+            // Try to get the REAL current GW from bootstrap-static and verify which has data
+            try {
+                const bootstrapUrl = 'https://fantasy.premierleague.com/api/bootstrap-static/';
+                const bootstrapResponse = await fetch(config.corsProxy + encodeURIComponent(bootstrapUrl));
+                const bootstrapData = await bootstrapResponse.json();
+                
+                if (bootstrapData && bootstrapData.events) {
+                    const currentEvent = bootstrapData.events.find(e => e.is_current);
+                    const nextEvent = bootstrapData.events.find(e => e.is_next);
+                    
+                    // 🎯 Build priority list: try next GW first (for latest roster), then current
+                    const gwsToTry = [];
+                    if (nextEvent) gwsToTry.push({ id: nextEvent.id, label: 'NEXT' });
+                    if (currentEvent) gwsToTry.push({ id: currentEvent.id, label: 'CURRENT' });
+                    
+                    console.log(`🔍 Testing GW availability (priority order): ${gwsToTry.map(g => `GW${g.id} (${g.label})`).join(', ')}`);
+                    
+                    // 🧪 Test which GW actually has data by trying first team
+                    const testEntry = leagueEntries[0];
+                    if (testEntry && testEntry.entry_id) {
+                        for (const gw of gwsToTry) {
+                            try {
+                                const testUrl = config.urls.draftEntryPicks(testEntry.entry_id, gw.id);
+                                const testResponse = await fetch(config.corsProxy + encodeURIComponent(testUrl));
+                                if (testResponse.ok) {
+                                    actualDataGw = gw.id;
+                                    console.log(`✅ GW${gw.id} (${gw.label}) has data available! Using this for all teams.`);
+                                    break;
+                                } else {
+                                    console.log(`⚠️ GW${gw.id} (${gw.label}) returned ${testResponse.status}, trying next...`);
+                                }
+                            } catch (err) {
+                                console.log(`⚠️ GW${gw.id} (${gw.label}) test failed: ${err.message}`);
+                            }
+                        }
+                    }
+                    
+                    // Use the verified GW, or fallback to current event
+                    draftGw = actualDataGw || currentEvent?.id || draftGw;
+                    console.log(`📅 FINAL DECISION: Using GW${draftGw} (verified with actual Draft API data)`);
+                }
+            } catch (err) {
+                console.warn('⚠️ Could not fetch bootstrap-static, using fallback:', err.message);
+            }
+            
             console.log(`2. Determined Draft GW: ${draftGw}. Found ${leagueEntries.length} league entries.`);
+            console.log(`📅 League current_event from draft API (OUTDATED):`, state.draft.details?.league?.current_event);
+            console.log(`📅 getCurrentEventId() returns:`, getCurrentEventId());
+            console.log(`📅 FINAL GW being used:`, draftGw);
 
             const picksPromises = leagueEntries.map(async (entry) => {
                 if (!entry || !entry.entry_id || !entry.id) return;
                 
-                const url = config.corsProxy + encodeURIComponent(config.urls.draftEntryPicks(entry.entry_id, draftGw));
-                const picksCacheKey = `fpl_draft_picks_final_v4_${entry.entry_id}_gw${draftGw}`;
+                const timestamp = new Date().getTime();
+                const baseUrl = config.urls.draftEntryPicks(entry.entry_id, draftGw);
+                const urlWithTimestamp = `${baseUrl}?_t=${timestamp}`;
+                const url = config.corsProxy + encodeURIComponent(urlWithTimestamp);
+                // Use a unique cache key that includes timestamp to ensure uniqueness
+                const picksCacheKey = `fpl_draft_picks_v4_${entry.entry_id}_gw${draftGw}_${timestamp}`;
                 
                 console.log(`📥 Fetching picks for ${entry.entry_name} (Entry ID: ${entry.entry_id}, GW: ${draftGw})`);
+                console.log(`   🔗 Base URL: ${baseUrl}`);
+                console.log(`   🔗 Full URL with timestamp: ${urlWithTimestamp}`);
+                console.log(`   🔗 Proxied URL: ${url.substring(0, 100)}...`);
                 
                 try {
-                    // 1. Fetch picks
-                    const picksData = await fetchWithCache(url, picksCacheKey, 10); // Short cache to ensure fresh data
+                // 1. Fetch picks - We already verified this GW has data, so no fallback needed
+                console.log(`   ⏳ Fetching from verified GW${draftGw}...`);
+                const response = await fetch(url);
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                const picksData = await response.json();
+                
+                console.log(`   📦 Raw picks data:`, picksData ? `${picksData.picks?.length} picks` : 'NULL'); 
                     
                     if (picksData && picksData.picks) {
                         console.log(`   ✅ Received ${picksData.picks.length} picks for ${entry.entry_name}`);
@@ -3525,12 +3642,15 @@ async function loadDraftLeague() {
                         // Log detailed roster info for user's team (Amit United)
                         if (entry.entry_name && entry.entry_name.includes('Amit')) {
                             console.log(`🏆 AMIT UNITED ROSTER (${fplPlayerIds.length} players):`);
+                            console.log(`   📋 Raw picks from API (first 3):`, picksData.picks.slice(0, 3));
+                            console.log(`   🗺️ Draft→FPL mapping size:`, state.draft.draftToFplIdMap.size);
                             const processedById = getProcessedByElementId();
                             picksWithFplIds.forEach((pick, idx) => {
                                 const player = processedById.get(pick.fplId);
                                 const playerName = player ? player.web_name : 'UNKNOWN';
                                 const teamName = player ? player.team_name : 'UNKNOWN';
-                                console.log(`   ${idx + 1}. ${playerName} (${teamName}) - FPL ID: ${pick.fplId}, Draft ID: ${pick.originalDraftId}, Position: ${pick.position}`);
+                                const mappedFrom = state.draft.draftToFplIdMap.get(pick.originalDraftId);
+                                console.log(`   ${idx + 1}. ${playerName} (${teamName}) - FPL ID: ${pick.fplId}, Draft ID: ${pick.originalDraftId}, Mapped: ${mappedFrom ? 'YES' : 'NO'}, Position: ${pick.position}`);
                             });
                         }
                         
@@ -3554,7 +3674,10 @@ async function loadDraftLeague() {
 
             await Promise.all(picksPromises);
             
-            console.log("3. Rosters Populated:", state.draft.rostersByEntryId.size, "teams.");
+            // 🔧 Apply recent transactions to update rosters manually
+            await fetchAndApplyTransactions(state.draft.leagueId, draftGw);
+            
+            console.log(`3. Rosters Populated: ${state.draft.rostersByEntryId.size} teams.`);
 
         } catch (debugError) {
             console.error("CRITICAL ERROR during roster population:", debugError);
@@ -3565,9 +3688,14 @@ async function loadDraftLeague() {
         
         console.log("4. Starting UI Rendering...");
         
-        // Load historical lineups for analytics (async, don't wait)
-        console.log("4a. Loading historical lineups in background...");
-        loadHistoricalLineups().catch(err => console.error('Failed to load historical lineups:', err));
+        // Load historical lineups for analytics (WAIT for completion - needed for bench points)
+        console.log("4a. Loading historical lineups...");
+        try {
+            await loadHistoricalLineups();
+            console.log("✅ Historical lineups loaded successfully");
+        } catch (err) {
+            console.error('Failed to load historical lineups:', err);
+        }
         
         console.log("4b. Calling renderDraftStandings()...");
         renderDraftStandings();
@@ -3645,6 +3773,39 @@ async function loadDraftLeague() {
  * Load historical lineups for all teams across all gameweeks
  * This is used for accurate analytics calculations
  */
+// New global state for historical points
+state.historicalPoints = {};
+
+/**
+ * Fetch live points data for a specific gameweek
+ * Used for accurate bench points calculation
+ */
+async function getGameweekPoints(gw) {
+    if (state.historicalPoints[gw]) {
+        return state.historicalPoints[gw];
+    }
+    
+    try {
+        const url = `https://fantasy.premierleague.com/api/event/${gw}/live/`;
+        // console.log(`📡 Fetching live points for GW${gw}...`);
+        const data = await fetchWithCache(config.corsProxy + encodeURIComponent(url), `fpl_live_gw${gw}`, 60 * 24 * 7); // Cache for a week
+        
+        // Transform to simple map: elementId -> total_points
+        const pointsMap = new Map();
+        if (data && data.elements) {
+            data.elements.forEach(el => {
+                pointsMap.set(el.id, el.stats.total_points);
+            });
+        }
+        
+        state.historicalPoints[gw] = pointsMap;
+        return pointsMap;
+    } catch (e) {
+        console.error(`Failed to fetch points for GW${gw}`, e);
+        return new Map();
+    }
+}
+
 async function loadHistoricalLineups() {
     console.log('📚 Loading historical lineups for all teams...');
     
@@ -3653,11 +3814,23 @@ async function loadHistoricalLineups() {
         return;
     }
     
+    // 🔧 Clear historical lineup cache for fresh data
+    console.log("🧹 Clearing historical lineup cache...");
+    Object.keys(localStorage).forEach(key => {
+        if (key.startsWith('fpl_draft_picks_historical_')) {
+            localStorage.removeItem(key);
+        }
+    });
+    
     const leagueEntries = state.draft.details.league_entries;
     const currentGW = state.draft.details.league?.current_event || getCurrentEventId();
     
     // Load lineups for GW 1 through current GW
     const gwsToLoad = Array.from({ length: currentGW }, (_, i) => i + 1);
+    
+    // Pre-fetch all historical points data needed (Critical for bench points calculation)
+    console.log("📊 Pre-fetching historical points data for points calculation...");
+    await Promise.all(gwsToLoad.map(gw => getGameweekPoints(gw)));
     
     console.log(`📊 Loading ${gwsToLoad.length} gameweeks for ${leagueEntries.length} teams...`);
     
@@ -3678,24 +3851,37 @@ async function loadHistoricalLineups() {
                 const picksCacheKey = `fpl_draft_picks_historical_${entry.entry_id}_gw${gw}`;
                 
                     // fetchWithCache handles proxy logic internally now
-                const picksData = await fetchWithCache(url, picksCacheKey, 1440); // Cache for 24 hours
+                    // Use shorter cache for historical data to ensure freshness
+                const picksData = await fetchWithCache(url, picksCacheKey, 60); // Cache for 1 hour only
                 
                 if (picksData && picksData.picks) {
+                    // Retrieve pre-fetched points map for this GW
+                    const gwPointsMap = state.historicalPoints[gw];
+                    
                     const picksWithFplIds = picksData.picks.map(pick => {
                         const fplId = state.draft.draftToFplIdMap.size > 0 
                             ? state.draft.draftToFplIdMap.get(pick.element) 
                             : pick.element;
                             
+                        // Get actual points from history map (Best source), fallback to pick.points, fallback to 0
+                        let actualPoints = 0;
+                        if (gwPointsMap && gwPointsMap.has(fplId)) {
+                            actualPoints = gwPointsMap.get(fplId);
+                        } else if (pick.points !== undefined) {
+                            actualPoints = pick.points;
+                        }
+
                         return {
                             fplId: fplId || pick.element,
                             position: pick.position,
-                            originalDraftId: pick.element
+                            originalDraftId: pick.element,
+                            points: actualPoints // Store confirmed actual points
                         };
                     });
                     
                     // Store lineup for this GW
-                    const starting = picksWithFplIds.filter(p => p.position <= 11).map(p => p.fplId);
-                    const bench = picksWithFplIds.filter(p => p.position > 11).map(p => p.fplId);
+                    const starting = picksWithFplIds.filter(p => p.position <= 11);
+                    const bench = picksWithFplIds.filter(p => p.position > 11);
                     
                     teamHistoricalLineups[`gw${gw}`] = { starting, bench };
                 }
@@ -5018,13 +5204,20 @@ function renderPitch(containerEl, playerIds, isMyLineup = false, benchIds = null
             
             // Extra info for my lineup
             let extraInfo = '';
+            let opponentName = '';
             if (isMyLineup) {
                 const points = p.event_points || 0;
                 const proj = (parseFloat(p.predicted_points_1_gw) || 0).toFixed(1);
                 
-                // Use the getNextOpponent helper function
+                // Use the getNextOpponent helper function to get opponent team name
                 const nextOppInfo = getNextOpponent(p);
-                const opp = nextOppInfo || '-';
+                let opp = '-';
+                if (nextOppInfo && nextOppInfo !== '-') {
+                    // Extract team name from string like "vs ARS" or "@ ARS"
+                    const match = nextOppInfo.match(/(?:vs|@)\s*(.+)/);
+                    opp = match ? match[1] : nextOppInfo;
+                    opponentName = opp;
+                }
                 
                 extraInfo = `
                     <div class="player-data">
@@ -5032,27 +5225,53 @@ function renderPitch(containerEl, playerIds, isMyLineup = false, benchIds = null
                         <div class="player-opp">${opp}</div>
                     </div>
                 `;
-            }
-            
-            // Add next opponent info
-            let nextOppInfo = '';
-            if (!isMyLineup) {
+            } else {
+                // For other teams, also get opponent info
                 const nextOpp = getNextOpponent(p);
                 if (nextOpp && nextOpp !== '-') {
-                    nextOppInfo = `<div style="font-size: 9px; color: #94a3b8; margin-top: 2px; font-weight: 600;">${nextOpp}</div>`;
+                    const match = nextOpp.match(/(?:vs|@)\s*(.+)/);
+                    opponentName = match ? match[1] : nextOpp;
                 }
             }
             
-            // Add injury indicator
+            // Add next opponent info below player name (for all lineups)
+            let nextOppInfoHtml = '';
+            if (opponentName && opponentName !== '-') {
+                nextOppInfoHtml = `<div style="font-size: 10px; color: #94a3b8; margin-top: 2px; font-weight: 600; text-transform: uppercase;">${opponentName}</div>`;
+            }
+            
+            // Add injury indicator - ENHANCED DESIGN (Larger & More Visible)
             let injuryBadge = '';
             if (p.chance_of_playing_next_round !== null && p.chance_of_playing_next_round !== undefined) {
                 const chancePercent = parseInt(p.chance_of_playing_next_round);
+                
+                // Styles for injury badge - Much larger and more prominent
+                const badgeStyle = `
+                    position: absolute; 
+                    top: -8px; 
+                    right: -8px; 
+                    width: 32px; 
+                    height: 32px; 
+                    display: flex; 
+                    align-items: center; 
+                    justify-content: center; 
+                    font-size: 18px; 
+                    box-shadow: 0 3px 8px rgba(0,0,0,0.4);
+                    border: 3px solid white;
+                    border-radius: 50%;
+                    z-index: 20;
+                    animation: pulse 2s ease-in-out infinite;
+                `;
+                
                 if (chancePercent === 0 || p.status === 'u') {
                     // Red ambulance for unavailable/0% chance
-                    injuryBadge = '<div style="position: absolute; top: -2px; right: -2px; background: #ef4444; border-radius: 50%; width: 18px; height: 18px; display: flex; align-items: center; justify-content: center; font-size: 10px; box-shadow: 0 2px 4px rgba(0,0,0,0.3);">🚑</div>';
+                    injuryBadge = `<div style="${badgeStyle} background: #dc2626;">🚑</div>`;
                 } else if (chancePercent <= 50 || p.status === 'd') {
                     // Yellow ambulance for doubtful/low chance
-                    injuryBadge = '<div style="position: absolute; top: -2px; right: -2px; background: #fbbf24; border-radius: 50%; width: 18px; height: 18px; display: flex; align-items: center; justify-content: center; font-size: 10px; box-shadow: 0 2px 4px rgba(0,0,0,0.3);">🚑</div>';
+                    injuryBadge = `<div style="${badgeStyle} background: #eab308;">🚑</div>`;
+                } else if (chancePercent === 75) {
+                     // Orange warning for 75% chance
+                     injuryBadge = `<div style="${badgeStyle} background: #ea580c;">⚠️</div>`;
                 }
             }
             
@@ -5062,7 +5281,8 @@ function renderPitch(containerEl, playerIds, isMyLineup = false, benchIds = null
                      onerror="this.src='${config.urls.missingPlayerImage}'">
                     ${injuryBadge}
                 </div>
-                <div class="player-name">${p.web_name}${nextOppInfo}</div>
+                <div class="player-name">${p.web_name}</div>
+                ${nextOppInfoHtml}
                 ${extraInfo}
             `;
             pitch.appendChild(spot);
@@ -6047,8 +6267,15 @@ function calculateAllTeamsBenchPoints(currentGW) {
     const results = [];
     
     entries.forEach(entry => {
+        // Skip null/invalid entries
+        if (!entry || !entry.entry_name || entry.entry_name === 'null' || entry.entry_name.toLowerCase() === 'null') {
+            console.log(`⏭️ Skipping invalid entry:`, entry);
+            return;
+        }
+        
         const historicalLineups = state.draft.historicalLineups.get(entry.id);
-        if (!historicalLineups) {
+        if (!historicalLineups || Object.keys(historicalLineups).length === 0) {
+            console.log(`⚠️ No historical lineups for ${entry.entry_name}`);
             results.push({
                 teamName: entry.entry_name,
                 totalBenchPoints: 0,
@@ -6062,19 +6289,58 @@ function calculateAllTeamsBenchPoints(currentGW) {
         let totalBenchPoints = 0;
         let gwsWithBenchPoints = new Set();
         
+        console.log(`💰 Calculating bench points for ${entry.entry_name}...`);
+        
         for (let gw = 1; gw <= currentGW; gw++) {
             const gwKey = `gw${gw}`;
             const lineup = historicalLineups[gwKey];
-            if (!lineup || !lineup.bench) continue;
+            if (!lineup || !lineup.bench) {
+                console.log(`   ⏭️ GW${gw}: No lineup data`);
+                continue;
+            }
             
-            const benchPlayers = lineup.bench.map(id => processedById.get(id)).filter(Boolean);
+            // Handle new structure (array of objects) or old structure (array of IDs)
+            // Ensure we handle both cases for backward compatibility if data is mixed
+            const benchItems = lineup.bench;
+            const benchPlayers = benchItems.map(item => {
+                // If item is object, use item.fplId and item.points
+                // If item is ID (number/string), fetch player but we won't have points directly
+                const id = (typeof item === 'object' && item !== null) ? item.fplId : item;
+                const player = processedById.get(id);
+                if (!player) return null;
+                
+                // If we have points directly from the pick, use them!
+                if (typeof item === 'object' && item.points !== undefined) {
+                    return { ...player, event_points: item.points };
+                }
+                
+                return player;
+            }).filter(Boolean);
+
+            console.log(`   📋 GW${gw}: ${benchPlayers.length} bench players`);
             
             let gwBenchPoints = 0;
             benchPlayers.forEach(player => {
-                const gwData = player.history?.find(h => h.round === gw);
-                if (gwData && gwData.total_points > 0) {
-                    totalBenchPoints += gwData.total_points;
-                    gwBenchPoints += gwData.total_points;
+                // Priority: 1. Points from Pick (stored in loadHistoricalLineups)
+                //           2. History array (unlikely to exist for all)
+                //           3. 0 as fallback
+                
+                let points = 0;
+                
+                if (player.event_points !== undefined) {
+                    // This comes from the pick object we just mapped
+                    points = player.event_points;
+                } else {
+                    const gwData = player.history?.find(h => h.round === gw);
+                    if (gwData) points = gwData.total_points;
+                }
+                
+                if (points > 0) {
+                    totalBenchPoints += points;
+                    gwBenchPoints += points;
+                    console.log(`      ✅ ${player.web_name}: ${points} pts`);
+                } else {
+                    console.log(`      ⭕ ${player.web_name}: 0 pts`);
                 }
             });
             
@@ -6082,6 +6348,8 @@ function calculateAllTeamsBenchPoints(currentGW) {
                 gwsWithBenchPoints.add(gw);
             }
         }
+        
+        console.log(`   📊 Total: ${totalBenchPoints} pts across ${gwsWithBenchPoints.size} GWs`);
         
         results.push({
             teamName: entry.entry_name,
@@ -6132,7 +6400,7 @@ function renderLineupAnalysisInternal(team) {
         return;
     }
     
-    const historicalLineups = state.draft.historicalLineups.get(myTeam.id);
+    const historicalLineups = state.draft.historicalLineups.get(team.id);
     if (!historicalLineups || Object.keys(historicalLineups).length === 0) {
         container.innerHTML = '<div style="text-align: center; padding: 40px; color: #64748b;">טוען נתונים היסטוריים...</div>';
         return;
@@ -6150,10 +6418,12 @@ function renderLineupAnalysisInternal(team) {
         <option value="${e.id}" ${e.id === team.id ? 'selected' : ''}>${e.entry_name}</option>
     `).join('');
     
+    const teamName = team.entry_name || team.name || 'Unknown Team';
+    
     let html = `
         <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 16px 20px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); margin-bottom: 16px; display: flex; justify-content: space-between; align-items: center;">
             <div>
-                <h2 style="margin: 0 0 4px 0; font-size: 18px; color: #ffffff; font-weight: 900;">🔍 ניתוח החלטות הרכב - ${team.entry_name}</h2>
+                <h2 style="margin: 0 0 4px 0; font-size: 18px; color: #ffffff; font-weight: 900;">🔍 ניתוח החלטות הרכב - ${teamName}</h2>
                 <p style="margin: 0; color: rgba(255,255,255,0.9); font-size: 12px;">כמה נקודות הפסדת בגלל שחקנים שהשארת על הספסל?</p>
             </div>
             <select onchange="renderLineupAnalysisForTeam(this.value)" style="padding: 8px 12px; border-radius: 8px; border: 2px solid rgba(255,255,255,0.3); background: rgba(255,255,255,0.15); color: white; font-weight: 700; font-size: 13px; cursor: pointer;">
@@ -6210,8 +6480,27 @@ function renderLineupAnalysisInternal(team) {
         
         if (!lineup) continue;
         
-        const starters = lineup.starting.map(id => processedById.get(id)).filter(Boolean);
-        const bench = lineup.bench.map(id => processedById.get(id)).filter(Boolean);
+        // Helper to map player and inject historical points
+        const mapPlayer = (item) => {
+            const id = (typeof item === 'object' && item !== null) ? item.fplId : item;
+            const player = processedById.get(id);
+            if (!player) return null;
+            
+            // Inject correct points for this GW
+            let gwPoints = 0;
+            if (typeof item === 'object' && item.points !== undefined) {
+                gwPoints = item.points;
+            } else {
+                // Fallback to history (likely undefined/0)
+                const gwData = player.history?.find(h => h.round === gw);
+                if (gwData) gwPoints = gwData.total_points;
+            }
+            
+            return { ...player, event_points: gwPoints }; // Override event_points with historical
+        };
+
+        const starters = lineup.starting.map(mapPlayer).filter(Boolean);
+        const bench = lineup.bench.map(mapPlayer).filter(Boolean);
         
         const startersPoints = starters.reduce((sum, p) => sum + (p.event_points || 0), 0);
         const benchPoints = bench.reduce((sum, p) => sum + (p.event_points || 0), 0);
@@ -6500,9 +6789,13 @@ function renderMyLineup(teamId) {
         }
         
         container.innerHTML = `
-            <div style="text-align:center; padding: 20px;">
-                <p>לא נמצא סגל לקבוצה זו.</p>
-                <small style="color: #94a3b8;">ייתכן שהנתונים עדיין נטענים או שיש בעיית חיבור לשרת.</small>
+            <div style="text-align:center; padding: 30px;">
+                <div class="mini-loader" style="display: inline-block; margin-bottom: 12px;"></div>
+                <h3 style="color: #64748b; margin: 0 0 8px 0; font-size: 16px;">טוען סגל...</h3>
+                <p style="margin: 0; color: #94a3b8; font-size: 13px;">הנתונים מתעדכנים, אנא המתן.</p>
+                <button onclick="loadDraftDataInBackground().then(() => renderMyLineup(${teamId}))" style="margin-top: 16px; padding: 8px 16px; background: #3b82f6; color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: 600; font-size: 13px;">
+                    🔄 נסה לטעון שוב
+                </button>
             </div>`;
         return;
     }
@@ -6967,6 +7260,13 @@ function renderNextRivalAnalysis(selectedOpponentId = null) {
                     </div>
                 `;
         
+        // Helper function to determine color (green for better, red for worse)
+        const getComparisonColor = (myVal, oppVal, isHigherBetter = true) => {
+            if (myVal > oppVal) return isHigherBetter ? '#10b981' : '#ef4444'; // Green if better, red if worse
+            if (myVal < oppVal) return isHigherBetter ? '#ef4444' : '#10b981'; // Red if worse, green if better
+            return '#64748b'; // Gray if equal
+        };
+        
         // Compact Analysis Grid
         html += `
             <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 20px; max-width: 1000px; margin: 0 auto;">
@@ -6978,17 +7278,17 @@ function renderNextRivalAnalysis(selectedOpponentId = null) {
                 </div>
                     <div style="display: flex; justify-content: space-between; align-items: flex-end;">
                         <div style="text-align: center;">
-                            <div style="font-size: 24px; font-weight: 800; color: #3b82f6;">${myStats.form.toFixed(1)}</div>
+                            <div style="font-size: 24px; font-weight: 800; color: ${getComparisonColor(myStats.form, oppStats.form)};">${myStats.form.toFixed(1)}</div>
                             <div style="font-size: 12px; color: #94a3b8;">שלך</div>
                                     </div>
                         <div style="padding-bottom: 8px; font-size: 12px; color: #cbd5e1;">VS</div>
                         <div style="text-align: center;">
-                            <div style="font-size: 24px; font-weight: 800; color: #ef4444;">${oppStats.form.toFixed(1)}</div>
+                            <div style="font-size: 24px; font-weight: 800; color: ${getComparisonColor(oppStats.form, myStats.form)};">${oppStats.form.toFixed(1)}</div>
                             <div style="font-size: 12px; color: #94a3b8;">יריב</div>
                                 </div>
                             </div>
                     <div style="margin-top: 12px; height: 6px; background: #f1f5f9; border-radius: 3px; overflow: hidden;">
-                        <div style="width: ${(myStats.form / (myStats.form + oppStats.form || 1) * 100)}%; height: 100%; background: #3b82f6;"></div>
+                        <div style="width: ${(myStats.form / (myStats.form + oppStats.form || 1) * 100)}%; height: 100%; background: ${getComparisonColor(myStats.form, oppStats.form)};"></div>
                     </div>
                                     </div>
 
@@ -7000,17 +7300,17 @@ function renderNextRivalAnalysis(selectedOpponentId = null) {
                         </div>
                     <div style="display: flex; justify-content: space-between; align-items: flex-end;">
                         <div style="text-align: center;">
-                            <div style="font-size: 24px; font-weight: 800; color: #8b5cf6;">${myStats.xGI.toFixed(1)}</div>
+                            <div style="font-size: 24px; font-weight: 800; color: ${getComparisonColor(myStats.xGI, oppStats.xGI)};">${myStats.xGI.toFixed(1)}</div>
                             <div style="font-size: 12px; color: #94a3b8;">שלך</div>
                         </div>
                         <div style="padding-bottom: 8px; font-size: 12px; color: #cbd5e1;">VS</div>
                         <div style="text-align: center;">
-                            <div style="font-size: 24px; font-weight: 800; color: #f59e0b;">${oppStats.xGI.toFixed(1)}</div>
+                            <div style="font-size: 24px; font-weight: 800; color: ${getComparisonColor(oppStats.xGI, myStats.xGI)};">${oppStats.xGI.toFixed(1)}</div>
                             <div style="font-size: 12px; color: #94a3b8;">יריב</div>
                         </div>
                     </div>
                     <div style="margin-top: 12px; height: 6px; background: #f1f5f9; border-radius: 3px; overflow: hidden;">
-                        <div style="width: ${(myStats.xGI / (myStats.xGI + oppStats.xGI || 1) * 100)}%; height: 100%; background: #8b5cf6;"></div>
+                        <div style="width: ${(myStats.xGI / (myStats.xGI + oppStats.xGI || 1) * 100)}%; height: 100%; background: ${getComparisonColor(myStats.xGI, oppStats.xGI)};"></div>
                 </div>
                 </div>
 
@@ -7022,17 +7322,17 @@ function renderNextRivalAnalysis(selectedOpponentId = null) {
                     </div>
                     <div style="display: flex; justify-content: space-between; align-items: flex-end;">
                         <div style="text-align: center;">
-                            <div style="font-size: 24px; font-weight: 800; color: #10b981;">${myStats.goals}</div>
+                            <div style="font-size: 24px; font-weight: 800; color: ${getComparisonColor(myStats.goals, oppStats.goals)};">${myStats.goals}</div>
                             <div style="font-size: 12px; color: #94a3b8;">שלך</div>
                         </div>
                         <div style="padding-bottom: 8px; font-size: 12px; color: #cbd5e1;">VS</div>
                         <div style="text-align: center;">
-                            <div style="font-size: 24px; font-weight: 800; color: #ef4444;">${oppStats.goals}</div>
+                            <div style="font-size: 24px; font-weight: 800; color: ${getComparisonColor(oppStats.goals, myStats.goals)};">${oppStats.goals}</div>
                             <div style="font-size: 12px; color: #94a3b8;">יריב</div>
                         </div>
                     </div>
                     <div style="margin-top: 12px; height: 6px; background: #f1f5f9; border-radius: 3px; overflow: hidden;">
-                        <div style="width: ${(myStats.goals / (myStats.goals + oppStats.goals || 1) * 100)}%; height: 100%; background: #10b981;"></div>
+                        <div style="width: ${(myStats.goals / (myStats.goals + oppStats.goals || 1) * 100)}%; height: 100%; background: ${getComparisonColor(myStats.goals, oppStats.goals)};"></div>
                                             </div>
                                         </div>
 
@@ -7044,17 +7344,17 @@ function renderNextRivalAnalysis(selectedOpponentId = null) {
                                     </div>
                     <div style="display: flex; justify-content: space-between; align-items: flex-end;">
                                         <div style="text-align: center;">
-                            <div style="font-size: 24px; font-weight: 800; color: #06b6d4;">${myStats.assists}</div>
+                            <div style="font-size: 24px; font-weight: 800; color: ${getComparisonColor(myStats.assists, oppStats.assists)};">${myStats.assists}</div>
                             <div style="font-size: 12px; color: #94a3b8;">שלך</div>
                                         </div>
                         <div style="padding-bottom: 8px; font-size: 12px; color: #cbd5e1;">VS</div>
                                         <div style="text-align: center;">
-                            <div style="font-size: 24px; font-weight: 800; color: #f97316;">${oppStats.assists}</div>
+                            <div style="font-size: 24px; font-weight: 800; color: ${getComparisonColor(oppStats.assists, myStats.assists)};">${oppStats.assists}</div>
                             <div style="font-size: 12px; color: #94a3b8;">יריב</div>
                                         </div>
                                         </div>
                     <div style="margin-top: 12px; height: 6px; background: #f1f5f9; border-radius: 3px; overflow: hidden;">
-                        <div style="width: ${(myStats.assists / (myStats.assists + oppStats.assists || 1) * 100)}%; height: 100%; background: #06b6d4;"></div>
+                        <div style="width: ${(myStats.assists / (myStats.assists + oppStats.assists || 1) * 100)}%; height: 100%; background: ${getComparisonColor(myStats.assists, oppStats.assists)};"></div>
                                     </div>
                                 </div>
 
@@ -7066,21 +7366,85 @@ function renderNextRivalAnalysis(selectedOpponentId = null) {
                     </div>
                     <div style="display: flex; justify-content: space-between; align-items: flex-end;">
                     <div style="text-align: center;">
-                            <div style="font-size: 24px; font-weight: 800; color: #14b8a6;">${myStats.cleanSheets}</div>
+                            <div style="font-size: 24px; font-weight: 800; color: ${getComparisonColor(myStats.cleanSheets, oppStats.cleanSheets)};">${myStats.cleanSheets}</div>
                             <div style="font-size: 12px; color: #94a3b8;">שלך</div>
                         </div>
                         <div style="padding-bottom: 8px; font-size: 12px; color: #cbd5e1;">VS</div>
                     <div style="text-align: center;">
-                            <div style="font-size: 24px; font-weight: 800; color: #f43f5e;">${oppStats.cleanSheets}</div>
+                            <div style="font-size: 24px; font-weight: 800; color: ${getComparisonColor(oppStats.cleanSheets, myStats.cleanSheets)};">${oppStats.cleanSheets}</div>
                             <div style="font-size: 12px; color: #94a3b8;">יריב</div>
                         </div>
                     </div>
                     <div style="margin-top: 12px; height: 6px; background: #f1f5f9; border-radius: 3px; overflow: hidden;">
-                        <div style="width: ${(myStats.cleanSheets / (myStats.cleanSheets + oppStats.cleanSheets || 1) * 100)}%; height: 100%; background: #14b8a6;"></div>
+                        <div style="width: ${(myStats.cleanSheets / (myStats.cleanSheets + oppStats.cleanSheets || 1) * 100)}%; height: 100%; background: ${getComparisonColor(myStats.cleanSheets, oppStats.cleanSheets)};"></div>
                     </div>
                 </div>
             </div>
         `;
+        
+        // Find players from same Premier League team (overlaps)
+        const teamGroups = {};
+        [...mySquad, ...oppSquad].forEach(p => {
+            if (!teamGroups[p.team]) {
+                teamGroups[p.team] = { my: [], opp: [] };
+            }
+            if (mySquad.find(mp => mp.id === p.id)) {
+                teamGroups[p.team].my.push(p);
+            }
+            if (oppSquad.find(op => op.id === p.id)) {
+                teamGroups[p.team].opp.push(p);
+            }
+        });
+        
+        const overlaps = Object.entries(teamGroups).filter(([teamId, players]) => 
+            players.my.length > 0 && players.opp.length > 0
+        );
+        
+        if (overlaps.length > 0) {
+            html += `
+                <div style="margin-top: 32px; background: white; padding: 24px; border-radius: 16px; border: 1px solid #e2e8f0; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);">
+                    <h3 style="margin: 0 0 20px 0; font-size: 18px; font-weight: 800; color: #0f172a; display: flex; align-items: center; gap: 8px;">
+                        <span>⚔️</span> השוואת שחקנים מאותה קבוצה
+                    </h3>
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px;">
+            `;
+            
+            overlaps.forEach(([teamId, players]) => {
+                const teamName = state.teamsData[teamId]?.name || 'Unknown';
+                const teamShortName = state.teamsData[teamId]?.short_name || '';
+                
+                html += `
+                    <div style="background: #f8fafc; padding: 16px; border-radius: 12px; border: 1px solid #e2e8f0;">
+                        <div style="font-weight: 700; color: #475569; margin-bottom: 12px; font-size: 14px;">${teamName} ${teamShortName ? `(${teamShortName})` : ''}</div>
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+                            <div>
+                                <div style="font-size: 11px; color: #64748b; margin-bottom: 6px; font-weight: 600;">שלך:</div>
+                                ${players.my.map(p => `
+                                    <div style="display: flex; justify-content: space-between; align-items: center; padding: 6px 8px; background: white; border-radius: 6px; margin-bottom: 4px; border-left: 3px solid #3b82f6;">
+                                        <span style="font-size: 12px; font-weight: 600; color: #0f172a;">${p.web_name}</span>
+                                        <span style="font-size: 11px; color: #64748b;">${p.position_name}</span>
+                                    </div>
+                                `).join('')}
+                            </div>
+                            <div>
+                                <div style="font-size: 11px; color: #64748b; margin-bottom: 6px; font-weight: 600;">יריב:</div>
+                                ${players.opp.map(p => `
+                                    <div style="display: flex; justify-content: space-between; align-items: center; padding: 6px 8px; background: white; border-radius: 6px; margin-bottom: 4px; border-left: 3px solid #ef4444;">
+                                        <span style="font-size: 12px; font-weight: 600; color: #0f172a;">${p.web_name}</span>
+                                        <span style="font-size: 11px; color: #64748b;">${p.position_name}</span>
+                                    </div>
+                                `).join('')}
+                            </div>
+                        </div>
+                    </div>
+                `;
+            });
+            
+            html += `
+                    </div>
+                </div>
+            `;
+        }
         
         container.innerHTML = html;
         
