@@ -298,6 +298,15 @@
         <div class="filter-group"><label>🏆 נקודות מינימום:</label><input type="number" id="minPoints" onkeyup="processChange()" placeholder="0"></div>
 
         <div class="filter-group"><label>⏳ דקות מינימום:</label><input type="number" id="minMinutes" onkeyup="processChange()" value="30" placeholder="0"></div>
+        <div class="filter-group">
+            <label>📅 טווח:</label>
+            <select id="statsRange" onchange="processChange()">
+                <option value="all">כל העונה</option>
+                <option value="3">3 מחזורים אחרונים</option>
+                <option value="5">5 מחזורים אחרונים</option>
+                <option value="10">10 מחזורים אחרונים</option>
+            </select>
+        </div>
 
         <div class="filter-group"><label>🎯 טווח xDiff:</label><select id="xDiffFilter" onchange="processChange()"><option value="">כל הטווח</option><option value="positive">חיובי (ביצועי יתר)</option><option value="negative">שלילי (ביצועי חסר)</option></select></div>
 
@@ -346,6 +355,8 @@
                 <button class="quick-filter-btn" onclick="toggleQuickFilter(this, 'underperformers')">📈 חייבים להתפוצץ (xGI)</button>
                 <button class="quick-filter-btn" onclick="toggleQuickFilter(this, 'bonus_magnets')">🌟 מגנט בונוס</button>
                 <button class="quick-filter-btn" onclick="toggleQuickFilter(this, 'form_kings')">🔥 בכושר שיא</button>
+                <button class="quick-filter-btn" onclick="toggleQuickFilter(this, 'trending_underachievers')">📉 טרנדיים מאכזבים</button>
+                <button class="quick-filter-btn" onclick="toggleQuickFilter(this, 'easy_fixtures_ppg')">🗓️ לו"ז קל + PPG</button>
             </div>
         </div>
     </div>

@@ -1287,7 +1287,7 @@ function createPlayerRowHtml(player, index) {
         <td class="transfers-cell" data-tooltip="${config.columnTooltips.net_transfers_event}"><span class="${player.net_transfers_event >= 0 ? 'net-transfers-positive' : 'net-transfers-negative'}">${player.net_transfers_event.toLocaleString()}</span></td>
         <td data-tooltip="${config.columnTooltips.def_contrib_per90}">${player.def_contrib_per90.toFixed(1)}</td>
         <td>${(player.goals_scored || 0) + (player.assists || 0)}</td>
-        <td>${(parseFloat(player.expected_goal_involvements) || 0).toFixed(1)}</td>
+        <td>${(player.xGI_per90 || 0).toFixed(2)}</td>
         <td>${player.minutes}</td>
         <td class="${player.xDiff >= 0 ? 'xdiff-positive' : 'xdiff-negative'}" data-tooltip="${config.columnTooltips.xDiff}">${player.xDiff.toFixed(2)}</td>
         <td>${player.ict_index}</td>
@@ -1407,9 +1407,95 @@ function generateFixturesHTML(player) {
     return teamFixtures;
 }
 
-function processChange() {
+async function processChange() {
     if (!state.allPlayersData[state.currentDataSource].processed) return;
-    // ... filters ...
+    
+    // Range Logic
+    const statsRange = document.getElementById('statsRange') ? document.getElementById('statsRange').value : 'all';
+    
+    let sourceData = state.allPlayersData[state.currentDataSource].processed;
+    
+    if (statsRange !== 'all') {
+        const lastN = parseInt(statsRange);
+        if (!state.aggregatedCache[lastN]) {
+            state.aggregatedCache[lastN] = await calculateAggregatedStats(lastN);
+        }
+        
+        const aggMap = state.aggregatedCache[lastN];
+        // Overlay aggregation on source data (create new objects)
+        sourceData = sourceData.map(p => {
+            const agg = aggMap.get(p.id);
+            // If no data in range (e.g. didn't play), return zeroed stats but keep static info
+            if (!agg) return { 
+                ...p, 
+                total_points: 0, 
+                goals_scored: 0, 
+                assists: 0, 
+                minutes: 0, 
+                clean_sheets: 0, 
+                expected_goal_involvements: 0,
+                transfers_in_event: 0, 
+                transfers_out_event: 0,
+                net_transfers_event: 0,
+                form: '0.0', 
+                points_per_game: 0, 
+                points_per_game_90: 0, 
+                xGI_per90: 0, 
+                xDiff: 0,
+                bonus: 0
+            };
+            
+            return {
+                ...p,
+                total_points: agg.total_points,
+                goals_scored: agg.goals_scored,
+                assists: agg.assists,
+                minutes: agg.minutes,
+                clean_sheets: agg.clean_sheets,
+                goals_conceded: agg.goals_conceded,
+                saves: agg.saves,
+                own_goals: agg.own_goals,
+                penalties_saved: agg.penalties_saved,
+                penalties_missed: agg.penalties_missed,
+                yellow_cards: agg.yellow_cards,
+                red_cards: agg.red_cards,
+                bonus: agg.bonus,
+                bps: agg.bps,
+                influence: agg.influence,
+                creativity: agg.creativity,
+                threat: agg.threat,
+                ict_index: agg.ict_index,
+                
+                expected_goals: agg.expected_goals,
+                expected_assists: agg.expected_assists,
+                expected_goal_involvements: agg.expected_goal_involvements,
+                expected_goals_conceded: agg.expected_goals_conceded,
+                
+                transfers_in_event: agg.transfers_in_event,
+                transfers_out_event: agg.transfers_out_event,
+                net_transfers_event: agg.transfers_in_event - agg.transfers_out_event,
+                
+                form: (agg.total_points / Math.max(1, agg.match_count)).toFixed(1),
+                points_per_game: agg.match_count > 0 ? (agg.total_points / agg.match_count) : 0,
+                
+                // Per 90 Stats
+                points_per_game_90: agg.minutes > 0 ? (agg.total_points / agg.minutes) * 90 : 0,
+                xGI_per90: agg.minutes > 0 ? (agg.expected_goal_involvements / agg.minutes) * 90 : 0,
+                expected_goal_involvements_per_90: agg.minutes > 0 ? (agg.expected_goal_involvements / agg.minutes) * 90 : 0,
+                expected_goals_conceded_per_90: agg.minutes > 0 ? (agg.expected_goals_conceded / agg.minutes) * 90 : 0,
+                
+                // Calculated Metrics
+                xDiff: (agg.goals_scored || 0) - (agg.expected_goals || 0),
+                // Note: def_contrib_per90 is complex and requires interceptions etc. which we lack in live data.
+                // We leave it as static (p.def_contrib_per90) or zero if we want to be strict.
+                // Keeping static allows filtering by "general defensive ability" even when viewing recent form.
+            };
+        });
+    }
+    
+    // Store active range for other functions (like charts)
+    state.activeRange = statsRange;
+
     const nameFilter = document.getElementById('searchName').value.toLowerCase();
     const posFilter = document.getElementById('positionFilter').value;
     const teamFilter = document.getElementById('teamFilter').value;
@@ -1435,7 +1521,7 @@ function processChange() {
     const minPoints = parseInt(pointsInput) || 0;
     const minMinutes = parseInt(minutesInput) || 0;
 
-    let filteredData = state.allPlayersData[state.currentDataSource].processed.filter(p => 
+    let filteredData = sourceData.filter(p => 
         (!nameFilter || p.web_name.toLowerCase().includes(nameFilter)) &&
         (!posFilter || p.position_name === posFilter) &&
         (!teamFilter || p.team_name === teamFilter) &&
@@ -1470,8 +1556,28 @@ function processChange() {
     }
 }
 
+function getNextFixtures(teamId, count = 3) {
+    const fixtures = state.allPlayersData.live.fixtures || state.allPlayersData.historical.fixtures;
+    if (!fixtures) return [];
+    
+    return fixtures
+        .filter(fix => (fix.team_a === teamId || fix.team_h === teamId) && !fix.finished)
+        .sort((a,b) => a.event - b.event)
+        .slice(0, count)
+        .map(fix => {
+            const is_home = fix.team_h === teamId;
+            return {
+                opponentId: is_home ? fix.team_a : fix.team_h,
+                difficulty: is_home ? fix.team_h_difficulty : fix.team_a_difficulty,
+                event: fix.event,
+                is_home
+            };
+        });
+}
+
 function applyQuickFilter(filterName) {
-    const data = state.allPlayersData[state.currentDataSource].processed;
+    // Note: processChange already set state.displayedData based on range & filters
+    // We apply quick filter ON TOP of that
     switch(filterName) {
         case 'set_pieces':
             state.displayedData = state.displayedData.filter(p => p.set_piece_priority.penalty > 0 || p.set_piece_priority.corner > 0 || p.set_piece_priority.free_kick > 0);
@@ -1481,6 +1587,29 @@ function applyQuickFilter(filterName) {
             break;
         case 'differentials':
             state.displayedData = state.displayedData.filter(p => parseFloat(p.selected_by_percent) < 5);
+            break;
+        case 'bonus_magnets':
+            state.displayedData = state.displayedData.sort((a,b) => b.bonus - a.bonus).slice(0, 50);
+            break;
+        case 'form_kings':
+            state.displayedData = state.displayedData.sort((a,b) => parseFloat(b.form) - parseFloat(a.form)).slice(0, 50);
+            break;
+        case 'trending_underachievers': // High transfers IN + Negative xDiff (Unlucky)
+            // Sort by transfers_in desc, take top 100 most transferred in, then filter by negative xDiff
+            state.displayedData = state.displayedData
+                .sort((a,b) => b.transfers_in_event - a.transfers_in_event)
+                .slice(0, 150)
+                .filter(p => p.xDiff < -0.2) // Underperforming xG
+                .sort((a,b) => a.xDiff - b.xDiff); // Most unlucky first (most negative xDiff)
+            break;
+        case 'easy_fixtures_ppg':
+            // Easy fixtures (Avg difficulty < 3) AND Good PPG (> 3.5)
+            state.displayedData = state.displayedData.filter(p => {
+                const fixtures = getNextFixtures(p.team, 3);
+                if (fixtures.length === 0) return false;
+                const avgFDR = fixtures.reduce((sum, f) => sum + f.difficulty, 0) / fixtures.length;
+                return avgFDR <= 2.8 && p.points_per_game > 3.0;
+            }).sort((a,b) => b.points_per_game - a.points_per_game);
             break;
     }
 }
@@ -1671,6 +1800,15 @@ function generateComparisonTableHTML(players) {
                             <div class="quick-stat-content">
                                 <span class="quick-stat-label">כושר</span>
                                 <span class="quick-stat-value">${parseFloat(p.form || 0).toFixed(1)}</span>
+                            </div>
+                        </div>
+                        <div class="quick-stat">
+                            <span class="quick-stat-icon">🔄</span>
+                            <div class="quick-stat-content">
+                                <span class="quick-stat-label">העברות נטו</span>
+                                <span class="quick-stat-value" style="color: ${(p.net_transfers_event || 0) >= 0 ? '#10b981' : '#ef4444'}">
+                                    ${(p.net_transfers_event || 0) >= 0 ? '+' : ''}${(p.net_transfers_event || 0).toLocaleString()}
+                                </span>
                             </div>
                         </div>
                     </div>
@@ -2195,6 +2333,7 @@ function compareSelectedPlayers() {
             { key: 'points_per_game', label: '📊 נק\'/משחק', format: (v) => (typeof v === 'number' ? v.toFixed(1) : v) || '0.0', highlight: 'high' },
             { key: 'total_points', label: '⚽ סה"כ נקודות', format: (v) => v || '0', highlight: 'high' },
             { key: 'form', label: '🔥 כושר (Form)', format: (v) => v || '0.0', highlight: 'high' },
+            { key: 'net_transfers_event', label: '🔄 העברות נטו', format: (v) => (v > 0 ? '+' : '') + (v || '0').toLocaleString(), highlight: 'high' },
             { key: 'now_cost', label: '💰 מחיר', format: (v) => `£${(v / 10).toFixed(1)}m`, highlight: 'low' },
             { key: 'selected_by_percent', label: '👥 % בעלות', format: (v) => `${v}%`, highlight: 'high' },
             { key: 'expected_goal_involvements', label: '🎯 xGI', format: (v) => parseFloat(v || 0).toFixed(2), highlight: 'high' },
@@ -3775,6 +3914,98 @@ async function loadDraftLeague() {
  */
 // New global state for historical points
 state.historicalPoints = {};
+state.aggregatedCache = {}; // Cache for aggregated range stats
+
+/**
+ * Calculate aggregated stats for the last N gameweeks
+ */
+async function calculateAggregatedStats(lastN) {
+    const currentGW = getCurrentEventId();
+    // We want completed gameweeks, or current? User said "Last 3 games".
+    // Usually implies completed. But if current is live, maybe include it?
+    // "Last 3 GWs" usually means current + previous 2.
+    // Let's use currentGW down to (currentGW - lastN + 1).
+    const startGW = Math.max(1, currentGW - lastN + 1);
+    const endGW = currentGW;
+    
+    console.log(`📊 Aggregating stats from GW${startGW} to GW${endGW} (Last ${lastN})`);
+    
+    // Ensure data is loaded
+    const gwsToLoad = [];
+    for (let gw = startGW; gw <= endGW; gw++) {
+        if (!state.historicalPoints[gw]) {
+            gwsToLoad.push(gw);
+        }
+    }
+    
+    if (gwsToLoad.length > 0) {
+        document.getElementById('loadingOverlay').style.display = 'flex';
+        await Promise.all(gwsToLoad.map(gw => getGameweekPoints(gw)));
+        document.getElementById('loadingOverlay').style.display = 'none';
+    }
+    
+    const aggregated = new Map(); // fplId -> stats object
+    
+    for (let gw = startGW; gw <= endGW; gw++) {
+        const gwStats = state.historicalPoints[gw];
+        if (!gwStats) continue;
+        
+        gwStats.forEach((stats, fplId) => {
+            if (!aggregated.has(fplId)) {
+                aggregated.set(fplId, {
+                    total_points: 0,
+                    goals_scored: 0,
+                    assists: 0,
+                    minutes: 0,
+                    clean_sheets: 0,
+                    expected_goals: 0,
+                    expected_assists: 0,
+                    expected_goal_involvements: 0,
+                    transfers_in_event: 0, 
+                    transfers_out_event: 0,
+                    bonus: 0,
+                    bps: 0,
+                    match_count: 0
+                });
+            }
+            
+            const agg = aggregated.get(fplId);
+            agg.total_points += (stats.total_points || 0);
+            agg.goals_scored += (stats.goals_scored || 0);
+            agg.assists += (stats.assists || 0);
+            agg.minutes += (stats.minutes || 0);
+            agg.clean_sheets += (stats.clean_sheets || 0);
+            agg.goals_conceded += (stats.goals_conceded || 0);
+            agg.own_goals += (stats.own_goals || 0);
+            agg.penalties_saved += (stats.penalties_saved || 0);
+            agg.penalties_missed += (stats.penalties_missed || 0);
+            agg.yellow_cards += (stats.yellow_cards || 0);
+            agg.red_cards += (stats.red_cards || 0);
+            agg.saves += (stats.saves || 0);
+            agg.bonus += (stats.bonus || 0);
+            agg.bps += (stats.bps || 0);
+            agg.influence += parseFloat(stats.influence || 0);
+            agg.creativity += parseFloat(stats.creativity || 0);
+            agg.threat += parseFloat(stats.threat || 0);
+            agg.ict_index += parseFloat(stats.ict_index || 0);
+            
+            // FPL Live stats often don't have xG/xA. If missing, we can't aggregate them accurately.
+            // We use 0 to avoid misleading "season total" data.
+            agg.expected_goals += parseFloat(stats.expected_goals || 0);
+            agg.expected_assists += parseFloat(stats.expected_assists || 0);
+            agg.expected_goal_involvements += parseFloat(stats.expected_goal_involvements || 0);
+            agg.expected_goals_conceded += parseFloat(stats.expected_goals_conceded || 0);
+            
+            // transfers_in is typically "for the event".
+            agg.transfers_in_event += (stats.transfers_in || 0); 
+            agg.transfers_out_event += (stats.transfers_out || 0);
+            
+            if (stats.minutes > 0) agg.match_count++;
+        });
+    }
+    
+    return aggregated;
+}
 
 /**
  * Fetch live points data for a specific gameweek
@@ -3790,11 +4021,11 @@ async function getGameweekPoints(gw) {
         // console.log(`📡 Fetching live points for GW${gw}...`);
         const data = await fetchWithCache(config.corsProxy + encodeURIComponent(url), `fpl_live_gw${gw}`, 60 * 24 * 7); // Cache for a week
         
-        // Transform to simple map: elementId -> total_points
+        // Transform to simple map: elementId -> stats object
         const pointsMap = new Map();
         if (data && data.elements) {
             data.elements.forEach(el => {
-                pointsMap.set(el.id, el.stats.total_points);
+                pointsMap.set(el.id, el.stats);
             });
         }
         
@@ -3866,7 +4097,8 @@ async function loadHistoricalLineups() {
                         // Get actual points from history map (Best source), fallback to pick.points, fallback to 0
                         let actualPoints = 0;
                         if (gwPointsMap && gwPointsMap.has(fplId)) {
-                            actualPoints = gwPointsMap.get(fplId);
+                            const stats = gwPointsMap.get(fplId);
+                            actualPoints = stats.total_points;
                         } else if (pick.points !== undefined) {
                             actualPoints = pick.points;
                         }
@@ -5622,7 +5854,15 @@ function renderCharts() {
         const canvas = document.getElementById(canvasId);
         if (!canvas) return;
         
-        const players = data.filter(p => p.position_name === pos && p.minutes > 300);
+        // Determine minute threshold based on range
+        // For 'all' we use 300 (~3-4 games). For 'Last 3' (270 mins max), we use 90 (1 game).
+        // For 'Last 5' (450 max), we use 200 (~2 games).
+        let minMinutes = 300;
+        if (state.activeRange === '3') minMinutes = 90;
+        else if (state.activeRange === '5') minMinutes = 200;
+        else if (state.activeRange === '10') minMinutes = 400;
+        
+        const players = data.filter(p => p.position_name === pos && p.minutes > minMinutes);
         if (players.length < 2) return;
 
         const chartData = players.map(p => ({
@@ -7381,6 +7621,63 @@ function renderNextRivalAnalysis(selectedOpponentId = null) {
                 </div>
             </div>
         `;
+        
+        // 🗓️ FIXTURE & COUNTER-PICK ANALYSIS
+        const easyFixturePlayers = oppSquad.filter(p => {
+             const fixtures = getNextFixtures(p.team, 3);
+             if (fixtures.length === 0) return false;
+             const avgFDR = fixtures.reduce((sum, f) => sum + f.difficulty, 0) / fixtures.length;
+             return avgFDR <= 2.8; // Threshold for easy
+        });
+        
+        if (easyFixturePlayers.length > 0) {
+            html += `
+            <div style="background: white; padding: 20px; border-radius: 16px; border: 1px solid #e2e8f0; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); margin-top: 20px; max-width: 1000px; margin-left: auto; margin-right: auto;">
+                <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 15px; color: #15803d;">
+                    <span style="font-size: 20px;">🗓️</span>
+                    <h3 style="margin: 0; font-size: 15px; font-weight: 700;">ליריב יש משחקים קלים! הנה הזדמנויות נגד:</h3>
+                </div>
+                
+                <div style="display: grid; gap: 12px; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));">
+            `;
+            
+            // Deduplicate players by team to avoid suggesting same free agents multiple times
+            const teamsWithEasyFixtures = [...new Set(easyFixturePlayers.map(p => p.team))];
+            
+            teamsWithEasyFixtures.forEach(teamId => {
+                 const rivalPlayer = easyFixturePlayers.find(p => p.team === teamId);
+                 
+                 // Find counter picks (Free Agents from same team)
+                 const teamFreeAgents = state.allPlayersData[state.currentDataSource].processed
+                    .filter(fa => fa.team === teamId && !state.draft.ownedElementIds.has(fa.id) && fa.minutes > 0)
+                    .sort((a,b) => parseFloat(b.expected_goal_involvements || 0) - parseFloat(a.expected_goal_involvements || 0))
+                    .slice(0, 1);
+                 
+                 const suggestion = teamFreeAgents.length > 0 ? teamFreeAgents[0] : null;
+                 
+                 html += `
+                    <div style="display: flex; flex-direction: column; gap: 8px; background: #f0fdf4; padding: 12px; border-radius: 10px; border: 1px solid #bbf7d0;">
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <div>
+                                <div style="font-weight: 700; color: #166534;">${rivalPlayer.web_name} (ו-${easyFixturePlayers.filter(p => p.team === teamId).length - 1} נוספים)</div>
+                                <div style="font-size: 12px; color: #15803d;">לו"ז קל לקבוצה: ${state.teamsData[teamId]?.short_name || ''}</div>
+                            </div>
+                        </div>
+                        ${suggestion ? `
+                        <div style="display: flex; align-items: center; justify-content: space-between; background: white; padding: 8px 12px; border-radius: 8px; border: 1px solid #dcfce7; box-shadow: 0 2px 4px rgba(0,0,0,0.03); cursor: pointer;" onclick="document.getElementById('searchName').value='${suggestion.web_name}'; processChange(); showTab('players');">
+                            <div>
+                                <div style="font-size: 11px; color: #64748b;">אופציה פנויה מאותה קבוצה:</div>
+                                <div style="font-weight: 700; color: #059669;">${suggestion.web_name}</div>
+                            </div>
+                            <span style="font-size: 11px; background: #ecfdf5; color: #047857; padding: 2px 6px; border-radius: 4px;">xGI ${parseFloat(suggestion.expected_goal_involvements || 0).toFixed(1)}</span>
+                        </div>
+                        ` : '<div style="font-size: 11px; color: #94a3b8; font-style: italic;">אין אופציות התקפיות פנויות</div>'}
+                    </div>
+                 `;
+            });
+            
+            html += `</div></div>`;
+        }
         
         // Find players from same Premier League team (overlaps)
         const teamGroups = {};
