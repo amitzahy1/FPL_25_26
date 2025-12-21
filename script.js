@@ -1290,9 +1290,9 @@ function createPlayerRowHtml(player, index) {
         <td>${(player.xGI_per90 || 0).toFixed(2)}</td>
         <td>${player.minutes}</td>
         <td class="${player.xDiff >= 0 ? 'xdiff-positive' : 'xdiff-negative'}" data-tooltip="${config.columnTooltips.xDiff}">${player.xDiff.toFixed(2)}</td>
-        <td>${player.ict_index}</td>
-        <td>${player.bonus}</td>
-        <td>${player.clean_sheets}</td>
+        <td>${(parseFloat(player.ict_index_per90) || 0).toFixed(1)}</td>
+        <td>${(parseFloat(player.bonus_per90) || 0).toFixed(2)}</td>
+        <td>${(parseFloat(player.clean_sheets_per90) || 0).toFixed(2)}</td>
         <td class="${player.set_piece_priority.penalty === 1 ? 'set-piece-yes' : 'set-piece-no'}">${player.set_piece_priority.penalty === 1 ? '🎯 (1)' : '–'}</td>
         <td class="${player.set_piece_priority.corner > 0 ? 'set-piece-yes' : 'set-piece-no'}">${player.set_piece_priority.corner > 0 ? `(${player.set_piece_priority.corner})` : '–'}</td>
         <td class="${player.set_piece_priority.free_kick > 0 ? 'set-piece-yes' : 'set-piece-no'}">${player.set_piece_priority.free_kick > 0 ? `(${player.set_piece_priority.free_kick})` : '–'}</td>
@@ -1313,9 +1313,18 @@ function renderTable() {
         } else if (state.sortColumn === 15) { // G+A column (goals_scored_assists)
             aValue = (a.goals_scored || 0) + (a.assists || 0);
             bValue = (b.goals_scored || 0) + (b.assists || 0);
-        } else if (state.sortColumn === 16) { // xGI column (expected_goals_assists)
-            aValue = parseFloat(a.expected_goal_involvements || 0);
-            bValue = parseFloat(b.expected_goal_involvements || 0);
+        } else if (state.sortColumn === 16) { // xGI column (xGI_per90)
+            aValue = parseFloat(a.xGI_per90 || 0);
+            bValue = parseFloat(b.xGI_per90 || 0);
+        } else if (state.sortColumn === 19) { // ICT/90
+            aValue = parseFloat(a.ict_index_per90 || 0);
+            bValue = parseFloat(b.ict_index_per90 || 0);
+        } else if (state.sortColumn === 20) { // Bonus/90
+            aValue = parseFloat(a.bonus_per90 || 0);
+            bValue = parseFloat(b.bonus_per90 || 0);
+        } else if (state.sortColumn === 21) { // CS/90
+            aValue = parseFloat(a.clean_sheets_per90 || 0);
+            bValue = parseFloat(b.clean_sheets_per90 || 0);
         } else {
             aValue = getNestedValue(a, field);
             bValue = getNestedValue(b, field);
@@ -1413,86 +1422,6 @@ async function processChange() {
     // Range Logic
     const statsRange = document.getElementById('statsRange') ? document.getElementById('statsRange').value : 'all';
     
-    let sourceData = state.allPlayersData[state.currentDataSource].processed;
-    
-    if (statsRange !== 'all') {
-        const lastN = parseInt(statsRange);
-        if (!state.aggregatedCache[lastN]) {
-            state.aggregatedCache[lastN] = await calculateAggregatedStats(lastN);
-        }
-        
-        const aggMap = state.aggregatedCache[lastN];
-        // Overlay aggregation on source data (create new objects)
-        sourceData = sourceData.map(p => {
-            const agg = aggMap.get(p.id);
-            // If no data in range (e.g. didn't play), return zeroed stats but keep static info
-            if (!agg) return { 
-                ...p, 
-                total_points: 0, 
-                goals_scored: 0, 
-                assists: 0, 
-                minutes: 0, 
-                clean_sheets: 0, 
-                expected_goal_involvements: 0,
-                transfers_in_event: 0, 
-                transfers_out_event: 0,
-                net_transfers_event: 0,
-                form: '0.0', 
-                points_per_game: 0, 
-                points_per_game_90: 0, 
-                xGI_per90: 0, 
-                xDiff: 0,
-                bonus: 0
-            };
-            
-            return {
-                ...p,
-                total_points: agg.total_points,
-                goals_scored: agg.goals_scored,
-                assists: agg.assists,
-                minutes: agg.minutes,
-                clean_sheets: agg.clean_sheets,
-                goals_conceded: agg.goals_conceded,
-                saves: agg.saves,
-                own_goals: agg.own_goals,
-                penalties_saved: agg.penalties_saved,
-                penalties_missed: agg.penalties_missed,
-                yellow_cards: agg.yellow_cards,
-                red_cards: agg.red_cards,
-                bonus: agg.bonus,
-                bps: agg.bps,
-                influence: agg.influence,
-                creativity: agg.creativity,
-                threat: agg.threat,
-                ict_index: agg.ict_index,
-                
-                expected_goals: agg.expected_goals,
-                expected_assists: agg.expected_assists,
-                expected_goal_involvements: agg.expected_goal_involvements,
-                expected_goals_conceded: agg.expected_goals_conceded,
-                
-                transfers_in_event: agg.transfers_in_event,
-                transfers_out_event: agg.transfers_out_event,
-                net_transfers_event: agg.transfers_in_event - agg.transfers_out_event,
-                
-                form: (agg.total_points / Math.max(1, agg.match_count)).toFixed(1),
-                points_per_game: agg.match_count > 0 ? (agg.total_points / agg.match_count) : 0,
-                
-                // Per 90 Stats
-                points_per_game_90: agg.minutes > 0 ? (agg.total_points / agg.minutes) * 90 : 0,
-                xGI_per90: agg.minutes > 0 ? (agg.expected_goal_involvements / agg.minutes) * 90 : 0,
-                expected_goal_involvements_per_90: agg.minutes > 0 ? (agg.expected_goal_involvements / agg.minutes) * 90 : 0,
-                expected_goals_conceded_per_90: agg.minutes > 0 ? (agg.expected_goals_conceded / agg.minutes) * 90 : 0,
-                
-                // Calculated Metrics
-                xDiff: (agg.goals_scored || 0) - (agg.expected_goals || 0),
-                // Note: def_contrib_per90 is complex and requires interceptions etc. which we lack in live data.
-                // We leave it as static (p.def_contrib_per90) or zero if we want to be strict.
-                // Keeping static allows filtering by "general defensive ability" even when viewing recent form.
-            };
-        });
-    }
-    
     // Store active range for other functions (like charts)
     state.activeRange = statsRange;
 
@@ -1520,6 +1449,56 @@ async function processChange() {
 
     const minPoints = parseInt(pointsInput) || 0;
     const minMinutes = parseInt(minutesInput) || 0;
+
+    // Start from clean source
+    let sourceData = state.allPlayersData[state.currentDataSource].processed;
+    
+    if (statsRange !== 'all') {
+        const lastN = parseInt(statsRange);
+        if (!state.aggregatedCache[lastN]) {
+             // Calculate async if missing
+             state.aggregatedCache[lastN] = await calculateAggregatedStats(lastN);
+        }
+        
+        // Merge: Use Aggregated stats for dynamic fields, Original for static.
+        // We create a map of Aggregated Data for fast lookup. 
+        // calculateAggregatedStats now returns an Array, so we can map it.
+        const aggMap = new Map(state.aggregatedCache[lastN].map(p => [p.id, p]));
+        
+        sourceData = sourceData.map(p => {
+            const agg = aggMap.get(p.id);
+            if (!agg) return {
+                ...p,
+                total_points: 0,
+                goals_scored: 0,
+                assists: 0,
+                minutes: 0,
+                clean_sheets: 0,
+                expected_goal_involvements: 0,
+                form: '0.0',
+                points_per_game: 0,
+                points_per_game_90: 0,
+                xGI_per90: 0,
+                xDiff: 0,
+                bonus: 0
+            };
+
+            return {
+                ...p,
+                ...agg, // Overwrite points, goals, etc.
+                // Keep static explicitly to be safe
+                now_cost: p.now_cost,
+                selected_by_percent: p.selected_by_percent,
+                net_transfers_event: p.net_transfers_event,
+                transfers_in_event: p.transfers_in_event,
+                transfers_out_event: p.transfers_out_event,
+                web_name: p.web_name,
+                team_name: p.team_name,
+                position_name: p.position_name,
+                id: p.id
+            };
+        });
+    }
 
     let filteredData = sourceData.filter(p => 
         (!nameFilter || p.web_name.toLowerCase().includes(nameFilter)) &&
@@ -1844,12 +1823,13 @@ function generateComparisonTableHTML(players) {
         { name: 'מחיר', key: 'now_cost', format: v => '£' + v.toFixed(1) + 'M', icon: '💰', reversed: true },
         { name: '% בעלות', key: 'selected_by_percent', format: v => v + '%', icon: '👥', reversed: false },
         { name: 'דקות', key: 'minutes', format: v => v.toLocaleString(), icon: '⏱️', reversed: false },
-        { name: 'בונוס', key: 'bonus', format: v => v, icon: '⭐', reversed: false },
+        { name: 'בונוס/90', key: 'bonus_per90', format: v => v.toFixed(2), icon: '⭐', reversed: false },
         { name: 'דרימטים', key: 'dreamteam_count', format: v => v, icon: '🏆', reversed: false },
-        { name: 'ICT Index', key: 'ict_index', format: v => v.toFixed(1), icon: '🧬', reversed: false },
+        { name: 'ICT/90', key: 'ict_index_per90', format: v => v.toFixed(1), icon: '🧬', reversed: false },
         { name: 'DC/90', key: 'def_contrib_per90', format: v => v.toFixed(1), icon: '🛡️', reversed: false },
         { name: 'xDiff', key: 'xDiff', format: v => (v >= 0 ? '+' : '') + v.toFixed(2), icon: '📉', reversed: false },
-        { name: 'CS', key: 'clean_sheets', format: v => v, icon: '🧤', reversed: false },
+        { name: 'CS/90', key: 'clean_sheets_per90', format: v => v.toFixed(2), icon: '🧤', reversed: false },
+        { name: 'ספיגות/90', key: 'goals_conceded_per90', format: v => v.toFixed(2), icon: '🥅', reversed: true },
     ];
     
     comprehensiveMetrics.forEach((metric, idx) => {
@@ -2706,14 +2686,14 @@ function showIctBreakdownChart() {
         showToast('אין מספיק נתונים', 'לא נמצאו מספיק שחקנים להשוואה', 'warning', 3000);
         return;
     }
-    document.getElementById('visualizationTitle').textContent = 'פרופיל שחקן (פירוק ICT)';
+    document.getElementById('visualizationTitle').textContent = 'פרופיל שחקן (פירוק ICT ל-90 דקות)';
     
     const chartData = {
         labels: topPlayers.map(p => p.web_name),
         datasets: [
-            { label: 'השפעה (Influence)', data: topPlayers.map(p => parseFloat(p.influence)), backgroundColor: 'rgba(54, 162, 235, 0.7)' },
-            { label: 'יצירתיות (Creativity)', data: topPlayers.map(p => parseFloat(p.creativity)), backgroundColor: 'rgba(75, 192, 192, 0.7)' },
-            { label: 'איום (Threat)', data: topPlayers.map(p => parseFloat(p.threat)), backgroundColor: 'rgba(255, 99, 132, 0.7)' }
+            { label: 'השפעה/90 (Influence)', data: topPlayers.map(p => parseFloat(p.influence_per90 || 0)), backgroundColor: 'rgba(54, 162, 235, 0.7)' },
+            { label: 'יצירתיות/90 (Creativity)', data: topPlayers.map(p => parseFloat(p.creativity_per90 || 0)), backgroundColor: 'rgba(75, 192, 192, 0.7)' },
+            { label: 'איום/90 (Threat)', data: topPlayers.map(p => parseFloat(p.threat_per90 || 0)), backgroundColor: 'rgba(255, 99, 132, 0.7)' }
         ]
     };
     
@@ -3920,56 +3900,54 @@ state.aggregatedCache = {}; // Cache for aggregated range stats
  * Calculate aggregated stats for the last N gameweeks
  */
 async function calculateAggregatedStats(lastN) {
-    const currentGW = getCurrentEventId();
-    // We want completed gameweeks, or current? User said "Last 3 games".
-    // Usually implies completed. But if current is live, maybe include it?
-    // "Last 3 GWs" usually means current + previous 2.
-    // Let's use currentGW down to (currentGW - lastN + 1).
-    const startGW = Math.max(1, currentGW - lastN + 1);
-    const endGW = currentGW;
+    const completedGW = getCompletedGWCount();
+    const startGW = Math.max(1, completedGW - lastN + 1);
     
-    console.log(`📊 Aggregating stats from GW${startGW} to GW${endGW} (Last ${lastN})`);
+    const aggregated = new Map(); // fplId -> { total_points, goals, minutes, ... }
     
-    // Ensure data is loaded
-    const gwsToLoad = [];
-    for (let gw = startGW; gw <= endGW; gw++) {
-        if (!state.historicalPoints[gw]) {
-            gwsToLoad.push(gw);
-        }
+    // Initialize map with current processed data to ensure we have all players
+    // We use a clean slate for aggregation values but keep ID refs
+    if (state.allPlayersData[state.currentDataSource].processed) {
+        state.allPlayersData[state.currentDataSource].processed.forEach(p => {
+            aggregated.set(p.id, {
+                id: p.id,
+                total_points: 0,
+                goals_scored: 0,
+                assists: 0,
+                minutes: 0,
+                clean_sheets: 0,
+                goals_conceded: 0,
+                own_goals: 0,
+                penalties_saved: 0,
+                penalties_missed: 0,
+                yellow_cards: 0,
+                red_cards: 0,
+                saves: 0,
+                bonus: 0,
+                bps: 0,
+                influence: 0,
+                creativity: 0,
+                threat: 0,
+                ict_index: 0,
+                expected_goals: 0,
+                expected_assists: 0,
+                expected_goal_involvements: 0,
+                expected_goals_conceded: 0,
+                transfers_in_event: 0,
+                transfers_out_event: 0,
+                match_count: 0
+            });
+        });
     }
-    
-    if (gwsToLoad.length > 0) {
-        document.getElementById('loadingOverlay').style.display = 'flex';
-        await Promise.all(gwsToLoad.map(gw => getGameweekPoints(gw)));
-        document.getElementById('loadingOverlay').style.display = 'none';
-    }
-    
-    const aggregated = new Map(); // fplId -> stats object
-    
-    for (let gw = startGW; gw <= endGW; gw++) {
-        const gwStats = state.historicalPoints[gw];
-        if (!gwStats) continue;
+
+    for (let gw = startGW; gw <= completedGW; gw++) {
+        const gwData = await getGameweekPoints(gw);
+        if (!gwData) continue;
         
-        gwStats.forEach((stats, fplId) => {
-            if (!aggregated.has(fplId)) {
-                aggregated.set(fplId, {
-                    total_points: 0,
-                    goals_scored: 0,
-                    assists: 0,
-                    minutes: 0,
-                    clean_sheets: 0,
-                    expected_goals: 0,
-                    expected_assists: 0,
-                    expected_goal_involvements: 0,
-                    transfers_in_event: 0, 
-                    transfers_out_event: 0,
-                    bonus: 0,
-                    bps: 0,
-                    match_count: 0
-                });
-            }
-            
+        gwData.forEach((stats, fplId) => {
             const agg = aggregated.get(fplId);
+            if (!agg) return; // Ignore players not in main list (unlikely)
+            
             agg.total_points += (stats.total_points || 0);
             agg.goals_scored += (stats.goals_scored || 0);
             agg.assists += (stats.assists || 0);
@@ -3989,14 +3967,11 @@ async function calculateAggregatedStats(lastN) {
             agg.threat += parseFloat(stats.threat || 0);
             agg.ict_index += parseFloat(stats.ict_index || 0);
             
-            // FPL Live stats often don't have xG/xA. If missing, we can't aggregate them accurately.
-            // We use 0 to avoid misleading "season total" data.
             agg.expected_goals += parseFloat(stats.expected_goals || 0);
             agg.expected_assists += parseFloat(stats.expected_assists || 0);
             agg.expected_goal_involvements += parseFloat(stats.expected_goal_involvements || 0);
             agg.expected_goals_conceded += parseFloat(stats.expected_goals_conceded || 0);
             
-            // transfers_in is typically "for the event".
             agg.transfers_in_event += (stats.transfers_in || 0); 
             agg.transfers_out_event += (stats.transfers_out || 0);
             
@@ -4004,7 +3979,34 @@ async function calculateAggregatedStats(lastN) {
         });
     }
     
-    return aggregated;
+    // Finalize: Calculate per 90s
+    return Array.from(aggregated.values()).map(agg => {
+        const mins = agg.minutes;
+        const mins90 = mins / 90;
+        
+        return {
+            ...agg,
+            form: (agg.total_points / Math.max(1, agg.match_count)).toFixed(1),
+            points_per_game: agg.match_count > 0 ? (agg.total_points / agg.match_count) : 0,
+            
+            // Per 90 Stats
+            points_per_game_90: mins > 0 ? (agg.total_points / mins90) : 0,
+            xGI_per90: mins > 0 ? (agg.expected_goal_involvements / mins90) : 0,
+            def_contrib_per90: mins > 0 ? ((agg.clean_sheets*4 + agg.saves/3 - agg.goals_conceded) / mins90) : 0, // Approx formula
+            
+            ict_index_per90: mins > 0 ? (agg.ict_index / mins90) : 0,
+            bonus_per90: mins > 0 ? (agg.bonus / mins90) : 0,
+            influence_per90: mins > 0 ? (agg.influence / mins90) : 0,
+            creativity_per90: mins > 0 ? (agg.creativity / mins90) : 0,
+            threat_per90: mins > 0 ? (agg.threat / mins90) : 0,
+            goals_conceded_per90: mins > 0 ? (agg.goals_conceded / mins90) : 0,
+            clean_sheets_per90: mins > 0 ? (agg.clean_sheets / mins90) : 0,
+            expected_goals_conceded_per_90: mins > 0 ? (agg.expected_goals_conceded / mins90) : 0,
+            
+            xDiff: (agg.goals_scored) - (agg.expected_goals),
+            net_transfers_event: agg.transfers_in_event - agg.transfers_out_event
+        };
+    });
 }
 
 /**
@@ -5855,12 +5857,15 @@ function renderCharts() {
         if (!canvas) return;
         
         // Determine minute threshold based on range
-        // For 'all' we use 300 (~3-4 games). For 'Last 3' (270 mins max), we use 90 (1 game).
-        // For 'Last 5' (450 max), we use 200 (~2 games).
         let minMinutes = 300;
-        if (state.activeRange === '3') minMinutes = 90;
-        else if (state.activeRange === '5') minMinutes = 200;
-        else if (state.activeRange === '10') minMinutes = 400;
+        const range = state.activeRange || 'all';
+        
+        if (range !== 'all') {
+            const lastN = parseInt(range);
+            // Dynamic threshold: e.g. for last 3 games, maybe 90 mins (1 full game) is enough?
+            // Or 40% of max minutes. 
+            minMinutes = lastN * 45; // 45 mins per game on average required
+        }
         
         const players = data.filter(p => p.position_name === pos && p.minutes > minMinutes);
         if (players.length < 2) return;
@@ -5928,8 +5933,12 @@ function renderCharts() {
              const playersCount = type === 'attack' ? 6 : 5; // Approx mids+fwds vs defs+gkp
              const norm = stats.mins > 0 ? (stats.mins/90) / playersCount : 1;
              
+             let minMins = 450;
+             const range = state.activeRange || 'all';
+             if (range !== 'all') minMins = parseInt(range) * 90 * 0.5; // Lower threshold for short ranges
+
              // Avoid division by zero or very small numbers
-             if (stats.mins < 450) return null; // Need meaningful minutes
+             if (stats.mins < minMins) return null; // Need meaningful minutes
 
              return { x: stats.x/norm, y: stats.y/norm, team: team };
         }).filter(d => d !== null && (d.x > 0 || d.y > 0));
@@ -5948,7 +5957,11 @@ function renderCharts() {
         const canvas = document.getElementById('chart-price-score');
         if (!canvas) return;
         
-        const points = data.filter(p => p.minutes > 500).map(p => ({
+        let minMinutes = 500;
+        const range = state.activeRange || 'all';
+        if (range !== 'all') minMinutes = parseInt(range) * 60; 
+
+        const points = data.filter(p => p.minutes > minMinutes).map(p => ({
             x: parseFloat(p.now_cost),
             y: parseFloat(p.total_points),
             player: p.web_name,
@@ -5971,7 +5984,9 @@ function renderCharts() {
         const canvas = document.getElementById('chart-ict');
         if (!canvas) return;
         
-        const topICT = [...data].sort((a,b) => b.ict_index - a.ict_index).slice(0, 15);
+        // Sort by ICT index per 90 or total? 
+        // If range is selected, ict_index is aggregated total.
+        const topICT = [...data].sort((a,b) => (b.ict_index_per90 || b.ict_index) - (a.ict_index_per90 || a.ict_index)).slice(0, 15);
         
         const ctx = canvas.getContext('2d');
         if (charts['chart-ict']) charts['chart-ict'].destroy();
@@ -5981,9 +5996,9 @@ function renderCharts() {
             data: {
                 labels: topICT.map(p => p.web_name),
                 datasets: [
-                    { label: 'Influence', data: topICT.map(p => p.influence), backgroundColor: '#3b82f6' },
-                    { label: 'Creativity', data: topICT.map(p => p.creativity), backgroundColor: '#10b981' },
-                    { label: 'Threat', data: topICT.map(p => p.threat), backgroundColor: '#ef4444' }
+                    { label: 'Influence/90', data: topICT.map(p => p.influence_per90 || 0), backgroundColor: '#3b82f6' },
+                    { label: 'Creativity/90', data: topICT.map(p => p.creativity_per90 || 0), backgroundColor: '#10b981' },
+                    { label: 'Threat/90', data: topICT.map(p => p.threat_per90 || 0), backgroundColor: '#ef4444' }
                 ]
             },
             options: {
@@ -5991,7 +6006,8 @@ function renderCharts() {
                 scales: { x: { stacked: true }, y: { stacked: true } },
                 plugins: {
                     legend: { position: 'bottom' },
-                    datalabels: { display: false } // Disable datalabels for this bar chart to reduce clutter
+                    title: { display: true, text: 'Top 15 ICT Rank (Per 90)' },
+                    datalabels: { display: false }
                 }
             }
         });
