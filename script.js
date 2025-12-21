@@ -1551,7 +1551,7 @@ function showAllPlayers(button) {
         const el = document.getElementById(id);
         if(el) el.value = '';
     });
-    document.getElementById('minMinutes').value='30';
+    document.getElementById('minMinutes').value='90';
     document.getElementById('showEntries').value='all';
     processChange();
     sortTable(2);
