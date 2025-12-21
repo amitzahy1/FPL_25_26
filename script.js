@@ -1709,202 +1709,6 @@ function exportToCsv() {
     link.click();
 }
 
-function generateComparisonTableHTML(players) {
-    // 🎨 ULTIMATE PLAYER COMPARISON - COMPLETE MAKEOVER
-    
-    const photoUrl = (p) => `https://resources.premierleague.com/premierleague/photos/players/110x140/p${p.code}.png`;
-    const fallbackSVG = (name) => `data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%22110%22 height=%22140%22%3E%3Crect fill=%22%2394a3b8%22 width=%22110%22 height=%22140%22/%3E%3Ctext x=%2250%25%22 y=%2250%25%22 text-anchor=%22middle%22 dy=%22.3em%22 fill=%22%23fff%22 font-size=%2248%22 font-weight=%22bold%22%3E${name.charAt(0)}%3C/text%3E%3C/svg%3E`;
-    
-    let html = `
-        <div class="ultimate-comparison-container">
-            <!-- 🏆 HEADER -->
-            <div class="comparison-hero-header">
-                <div class="hero-title-wrapper">
-                    <span class="hero-icon">⚔️</span>
-                    <h2 class="hero-title">השוואת שחקנים</h2>
-                    <span class="hero-badge">${players.length} שחקנים</span>
-                </div>
-                <p class="hero-subtitle">ניתוח מקיף לקבלת החלטה מושכלת</p>
-            </div>
-            
-            <!-- 👥 PLAYER CARDS GRID -->
-            <div class="ultimate-players-grid">
-    `;
-    
-    // Player Cards with enhanced stats
-    players.forEach((p, idx) => {
-        const positionColors = {
-            'GKP': '#f59e0b',
-            'DEF': '#3b82f6',
-            'MID': '#10b981',
-            'FWD': '#ef4444'
-        };
-        const posColor = positionColors[p.position_name] || '#6366f1';
-        
-        html += `
-            <div class="ultimate-player-card" style="animation-delay: ${idx * 0.1}s; border-top: 4px solid ${posColor}">
-                <div class="player-card-photo-wrapper">
-                    <img src="${photoUrl(p)}" alt="${p.web_name}" class="player-card-photo-ultimate" onerror="this.src='${fallbackSVG(p.web_name)}'">
-                    <div class="player-position-badge" style="background: ${posColor}">${p.position_name}</div>
-                </div>
-                <div class="player-card-info">
-                    <h3 class="player-name-ultimate">${p.web_name}</h3>
-                    <p class="player-team-ultimate">${p.team_name}</p>
-                    
-                    <!-- Quick Stats Grid -->
-                    <div class="quick-stats-grid">
-                        <div class="quick-stat">
-                            <span class="quick-stat-icon">💰</span>
-                            <div class="quick-stat-content">
-                                <span class="quick-stat-label">מחיר</span>
-                                <span class="quick-stat-value">£${p.now_cost.toFixed(1)}M</span>
-                            </div>
-                        </div>
-                        <div class="quick-stat">
-                            <span class="quick-stat-icon">⭐</span>
-                            <div class="quick-stat-content">
-                                <span class="quick-stat-label">ציון דראפט</span>
-                                <span class="quick-stat-value">${p.draft_score.toFixed(1)}</span>
-                            </div>
-                        </div>
-                        <div class="quick-stat">
-                            <span class="quick-stat-icon">🎯</span>
-                            <div class="quick-stat-content">
-                                <span class="quick-stat-label">נק' כולל</span>
-                                <span class="quick-stat-value">${p.total_points}</span>
-                            </div>
-                        </div>
-                        <div class="quick-stat">
-                            <span class="quick-stat-icon">🔥</span>
-                            <div class="quick-stat-content">
-                                <span class="quick-stat-label">כושר</span>
-                                <span class="quick-stat-value">${parseFloat(p.form || 0).toFixed(1)}</span>
-                            </div>
-                        </div>
-                        <div class="quick-stat">
-                            <span class="quick-stat-icon">🔄</span>
-                            <div class="quick-stat-content">
-                                <span class="quick-stat-label">העברות נטו</span>
-                                <span class="quick-stat-value" style="color: ${(p.net_transfers_event || 0) >= 0 ? '#10b981' : '#ef4444'}">
-                                    ${(p.net_transfers_event || 0) >= 0 ? '+' : ''}${(p.net_transfers_event || 0).toLocaleString()}
-                                </span>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        `;
-    });
-    
-    html += `
-            </div>
-            
-            <!-- 📊 COMPREHENSIVE METRICS COMPARISON -->
-            <div class="ultimate-metrics-section">
-                <h3 class="metrics-section-title">
-                    <span class="metrics-icon">📊</span>
-                    השוואה מפורטת
-                </h3>
-                
-                <div class="metrics-comparison-table">
-    `;
-    
-    // Define comprehensive metrics (ordered by importance)
-    const comprehensiveMetrics = [
-        { name: 'ציון דראפט', key: 'draft_score', format: v => v.toFixed(1), icon: '⭐', reversed: false },
-        { name: 'העברות נטו', key: 'net_transfers_event', format: v => (v >= 0 ? '+' : '') + v, icon: '🔄', reversed: false },
-        { name: 'חיזוי למחזור הבא', key: 'predicted_points_1_gw', format: v => v.toFixed(1), icon: '🔮', reversed: false },
-        { name: 'כושר', key: 'form', format: v => parseFloat(v || 0).toFixed(1), icon: '🔥', reversed: false },
-        { name: 'נקודות/90', key: 'points_per_game_90', format: v => v.toFixed(1), icon: '📈', reversed: false },
-        { name: 'נקודות כולל', key: 'total_points', format: v => v, icon: '🎯', reversed: false },
-        { name: 'יציבות', key: 'stability_index', format: v => v.toFixed(0), icon: '📊', reversed: false },
-        { name: 'xGI/90', key: 'xGI_per90', format: v => v.toFixed(2), icon: '⚽', reversed: false },
-        { name: 'G+A', key: 'goals_scored_assists', format: v => v, icon: '🎯', reversed: false },
-        { name: 'מחיר', key: 'now_cost', format: v => '£' + v.toFixed(1) + 'M', icon: '💰', reversed: true },
-        { name: '% בעלות', key: 'selected_by_percent', format: v => v + '%', icon: '👥', reversed: false },
-        { name: 'דקות', key: 'minutes', format: v => v.toLocaleString(), icon: '⏱️', reversed: false },
-        { name: 'בונוס/90', key: 'bonus_per90', format: v => v.toFixed(2), icon: '⭐', reversed: false },
-        { name: 'דרימטים', key: 'dreamteam_count', format: v => v, icon: '🏆', reversed: false },
-        { name: 'ICT/90', key: 'ict_index_per90', format: v => v.toFixed(1), icon: '🧬', reversed: false },
-        { name: 'DC/90', key: 'def_contrib_per90', format: v => v.toFixed(1), icon: '🛡️', reversed: false },
-        { name: 'xDiff', key: 'xDiff', format: v => (v >= 0 ? '+' : '') + v.toFixed(2), icon: '📉', reversed: false },
-        { name: 'CS/90', key: 'clean_sheets_per90', format: v => v.toFixed(2), icon: '🧤', reversed: false },
-        { name: 'ספיגות/90', key: 'goals_conceded_per90', format: v => v.toFixed(2), icon: '🥅', reversed: true },
-    ];
-    
-    comprehensiveMetrics.forEach((metric, idx) => {
-        const values = players.map(p => {
-            let val = getNestedValue(p, metric.key);
-            if (metric.key === 'goals_scored_assists') {
-                val = (p.goals_scored || 0) + (p.assists || 0);
-            }
-            return typeof val === 'number' ? val : parseFloat(val) || 0;
-        });
-        
-        const maxVal = Math.max(...values);
-        const minVal = Math.min(...values);
-        
-        html += `
-            <div class="metric-comparison-row" style="animation-delay: ${idx * 0.03}s">
-                <div class="metric-row-label">
-                    <span class="metric-row-icon">${metric.icon}</span>
-                    <span class="metric-row-name">${metric.name}</span>
-                </div>
-                <div class="metric-row-values">
-        `;
-        
-        players.forEach((p, pIdx) => {
-            const value = values[pIdx];
-            const isBest = metric.reversed ? (value === minVal) : (value === maxVal);
-            const isWorst = metric.reversed ? (value === maxVal) : (value === minVal);
-            const percentage = maxVal > minVal ? ((value - minVal) / (maxVal - minVal) * 100) : 50;
-            
-            html += `
-                <div class="metric-value-box ${isBest ? 'best-value' : ''} ${isWorst ? 'worst-value' : ''}">
-                    <div class="metric-value-number">${metric.format(value)}</div>
-                    <div class="metric-value-bar-container">
-                        <div class="metric-value-bar" style="width: ${percentage}%"></div>
-                    </div>
-                    ${isBest ? '<span class="best-badge">🏆</span>' : ''}
-                </div>
-            `;
-        });
-        
-        html += `
-                </div>
-            </div>
-        `;
-    });
-    
-    // Fixtures Row
-    html += `
-            <div class="metric-comparison-row fixtures-comparison-row">
-                <div class="metric-row-label">
-                    <span class="metric-row-icon">📅</span>
-                    <span class="metric-row-name">משחקים קרובים</span>
-                </div>
-                <div class="metric-row-values">
-    `;
-    
-    players.forEach(p => {
-        const fixturesHTML = generateFixturesHTML(p);
-        html += `
-            <div class="metric-value-box fixtures-box">
-                ${fixturesHTML || '<span class="no-fixtures">אין נתונים</span>'}
-            </div>
-        `;
-    });
-    
-    html += `
-                </div>
-            </div>
-        </div>
-    </div>
-</div>
-    `;
-    
-    return html;
-}
 
 // Old compare function removed
 
@@ -2257,180 +2061,6 @@ function getNextOpponent(player) {
     return '-';
 }
 
-function compareSelectedPlayers() {
-    console.log("⚖️ compareSelectedPlayers() called");
-    try {
-    const checkboxes = document.querySelectorAll('.player-select:checked');
-    
-    if (checkboxes.length === 0) {
-        showToast('לא נבחרו שחקנים', 'אנא בחר לפחות שחקן אחד להשוואה', 'warning', 3000);
-        return;
-    }
-    
-    if (checkboxes.length > 5) {
-        showToast('יותר מדי שחקנים', 'ניתן להשוות עד 5 שחקנים בו-זמנית', 'warning', 3000);
-        return;
-    }
-    
-    const playerIds = Array.from(checkboxes).map(cb => parseInt(cb.dataset.playerId));
-    
-        let players = [];
-        if (state.displayedData && state.displayedData.length > 0) {
-            players = playerIds.map(id => state.displayedData.find(p => p.id === id)).filter(Boolean);
-        }
-        
-        if (players.length < playerIds.length) {
-            const allPlayers = state.allPlayersData[state.currentDataSource]?.processed || [];
-            const foundIds = players.map(p => p.id);
-            const missingIds = playerIds.filter(id => !foundIds.includes(id));
-            const foundMissing = missingIds.map(id => allPlayers.find(p => p.id === id)).filter(Boolean);
-            players = [...players, ...foundMissing];
-        }
-    
-    if (players.length === 0) {
-            showToast('שגיאה', 'לא נמצאו נתוני שחקנים. נסה לרענן את הדף.', 'error', 3000);
-        return;
-    }
-    
-        // Remove existing modal
-        const existingModal = document.getElementById('compareModal');
-        if (existingModal) existingModal.remove();
-
-    const modal = document.createElement('div');
-    modal.id = 'compareModal';
-        modal.className = 'modal active'; // Use existing modal class for base styles
-    modal.style.cssText = `
-            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(15, 23, 42, 0.85); backdrop-filter: blur(8px);
-            display: flex; justify-content: center; align-items: center; z-index: 10000;
-            padding: 20px; animation: fadeIn 0.3s ease-out;
-        `;
-        
-        // Metrics definition
-    const metrics = [
-            { key: 'draft_score', label: '🏆 ציון דראפט', format: (v) => v?.toFixed(1) || '0.0', highlight: 'high' },
-            { key: 'predicted_points_1_gw', label: '🔮 חיזוי GW הבא', format: (v) => v?.toFixed(1) || '0.0', highlight: 'high' },
-            { key: 'points_per_game', label: '📊 נק\'/משחק', format: (v) => (typeof v === 'number' ? v.toFixed(1) : v) || '0.0', highlight: 'high' },
-            { key: 'total_points', label: '⚽ סה"כ נקודות', format: (v) => v || '0', highlight: 'high' },
-            { key: 'form', label: '🔥 כושר (Form)', format: (v) => v || '0.0', highlight: 'high' },
-            { key: 'net_transfers_event', label: '🔄 העברות נטו', format: (v) => (v > 0 ? '+' : '') + (v || '0').toLocaleString(), highlight: 'high' },
-            { key: 'now_cost', label: '💰 מחיר', format: (v) => `£${(v / 10).toFixed(1)}m`, highlight: 'low' },
-            { key: 'selected_by_percent', label: '👥 % בעלות', format: (v) => `${v}%`, highlight: 'high' },
-            { key: 'expected_goal_involvements', label: '🎯 xGI', format: (v) => parseFloat(v || 0).toFixed(2), highlight: 'high' },
-            { key: 'goals_scored', label: '⚽ שערים', format: (v) => v || '0', highlight: 'high' },
-            { key: 'assists', label: '🅰️ בישולים', format: (v) => v || '0', highlight: 'high' },
-            { key: 'def_contrib_per90', label: '🛡️ DefCon (הגנה)', format: (v) => (v * 100).toFixed(1) + '%', highlight: 'high' },
-            { key: 'clean_sheets', label: '🧼 שערים נקיים (CS)', format: (v) => v || '0', highlight: 'high', tooltip: 'מספר המשחקים בהם הקבוצה לא ספגה שערים (רלוונטי למגנים ושוערים)' },
-            { key: 'starts', label: '🔛 פתח בהרכב', format: (v) => v || '0', highlight: 'high' },
-            { key: 'goals_conceded', label: '🥅 ספיגות', format: (v) => v || '0', highlight: 'low' },
-            { key: 'threat', label: '🔫 איום (Threat)', format: (v) => parseFloat(v || 0).toFixed(0), highlight: 'high' },
-            { key: 'creativity', label: '🎨 יצירתיות', format: (v) => parseFloat(v || 0).toFixed(0), highlight: 'high' },
-            { key: 'influence', label: '💪 השפעה', format: (v) => parseFloat(v || 0).toFixed(0), highlight: 'high' },
-            { key: 'bonus', label: '⭐ בונוס', format: (v) => v || '0', highlight: 'high' },
-            { key: 'ict_index', label: '📈 ICT Index', format: (v) => v || '0.0', highlight: 'high' }
-        ];
-
-        // Find max values for highlighting
-        const maxValues = {};
-        metrics.forEach(m => {
-            const values = players.map(p => parseFloat(p[m.key]) || 0);
-            maxValues[m.key] = Math.max(...values);
-        });
-
-        const content = `
-            <div style="
-                background: white; width: 100%; max-width: 1100px; max-height: 90vh;
-                border-radius: 24px; overflow: hidden; display: flex; flex-direction: column;
-                box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
-            ">
-                <!-- Header -->
-                <div style="
-                    background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
-                    padding: 24px 32px; display: flex; justify-content: space-between; align-items: center;
-                    border-bottom: 1px solid rgba(255,255,255,0.1);
-                ">
-                    <div>
-                        <h2 style="margin: 0; color: white; font-size: 28px; font-weight: 800; letter-spacing: -0.5px;">⚖️ ראש בראש</h2>
-                        <p style="margin: 4px 0 0 0; color: rgba(255,255,255,0.8); font-size: 14px;">השוואת נתונים מעמיקה</p>
-                </div>
-                    <button onclick="closeModal()" style="
-                        background: rgba(255,255,255,0.15); border: none; color: white;
-                        width: 40px; height: 40px; border-radius: 12px; cursor: pointer;
-                        display: flex; align-items: center; justify-content: center;
-                        font-size: 20px; transition: all 0.2s;
-                    " onmouseover="this.style.background='rgba(255,255,255,0.25)'" onmouseout="this.style.background='rgba(255,255,255,0.15)'">✕</button>
-            </div>
-            
-                <!-- Scrollable Content -->
-                <div style="overflow: auto; flex: 1; padding: 32px; background: #f8fafc;">
-                    <div style="display: grid; grid-template-columns: auto repeat(${players.length}, 1fr); gap: 0; border-radius: 16px; border: 1px solid #e2e8f0; overflow: hidden; background: white; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);">
-                        
-                        <!-- Header Row: Players -->
-                        <div style="padding: 20px; background: #f8fafc; border-bottom: 2px solid #e2e8f0;"></div>
-                                ${players.map(p => `
-                            <div style="padding: 24px 16px; text-align: center; background: #fff; border-bottom: 2px solid #e2e8f0; border-right: 1px solid #f1f5f9;">
-                                <div style="position: relative; display: inline-block; margin-bottom: 12px;">
-                                    <img src="${getPlayerPhotoUrl(p.code)}" 
-                                         onerror="this.src='https://resources.premierleague.com/premierleague/photos/players/110x140/p144485.png'" 
-                                         style="width: 80px; height: 80px; border-radius: 50%; border: 4px solid white; box-shadow: 0 4px 10px rgba(0,0,0,0.1); object-fit: cover;">
-                                    <div style="position: absolute; bottom: 0; right: 0; background: #3b82f6; color: white; font-size: 10px; font-weight: 700; padding: 2px 6px; border-radius: 10px; border: 2px solid white;">${p.position_name}</div>
-                                        </div>
-                                <div style="font-weight: 800; color: #0f172a; font-size: 16px; margin-bottom: 4px;">${p.web_name}</div>
-                                <div style="font-size: 12px; color: #64748b; background: #f1f5f9; padding: 4px 10px; border-radius: 20px; display: inline-block; margin-bottom: 8px;">${p.team_name}</div>
-                                <div style="font-size: 11px; color: #0f172a; font-weight: 700; margin-top: 8px;">
-                                    <span style="color: #10b981;">GW נוכחי:</span> ${p.event_points || 0} נק'
-                                </div>
-                                <div style="font-size: 10px; color: #64748b; margin-top: 4px;">
-                                    <span style="font-weight: 600;">משחק הבא:</span> ${getNextOpponent(p)}
-                                </div>
-                            </div>
-                                `).join('')}
-
-                        <!-- Metrics Rows -->
-                        ${metrics.map((m, i) => `
-                            <div style="
-                                padding: 16px 24px; font-weight: 600; color: #64748b; display: flex; align-items: center;
-                                background: ${i % 2 === 0 ? '#ffffff' : '#fcfcfc'}; border-bottom: 1px solid #f1f5f9;
-                            ">${m.label}</div>
-                ${players.map(p => {
-                                const val = parseFloat(p[m.key]) || 0;
-                                const isMax = m.highlight === 'high' && val === maxValues[m.key] && val > 0;
-                    return `
-                                    <div style="
-                                        padding: 16px; text-align: center; font-weight: ${isMax ? '800' : '500'}; 
-                                        color: ${isMax ? '#15803d' : '#334155'};
-                                        background: ${isMax ? '#dcfce7' : (i % 2 === 0 ? '#ffffff' : '#fcfcfc')};
-                                        border-bottom: 1px solid #f1f5f9; border-right: 1px solid #f1f5f9;
-                                        font-size: 15px; position: relative;
-                                    ">
-                                        ${m.format(p[m.key])}
-                                        ${isMax ? '<span style="position: absolute; top: 50%; right: 10px; transform: translateY(-50%); color: #16a34a; font-size: 10px;">👑</span>' : ''}
-                                    </div>
-                    `;
-                }).join('')}
-                        `).join('')}
-                </div>
-            </div>
-        </div>
-    `;
-    
-        modal.innerHTML = content;
-    
-        // Close on click outside
-    modal.addEventListener('click', (e) => {
-            if (e.target === modal) closeModal();
-    });
-    
-    document.body.appendChild(modal);
-        document.body.style.overflow = 'hidden';
-        
-    } catch (err) {
-        console.error("Error in compareSelectedPlayers:", err);
-        showToast('שגיאה', 'אירעה שגיאה בטעינת ההשוואה', 'error', 3000);
-    }
-}
-
-window.compareSelectedPlayers = compareSelectedPlayers;
 
 
 function closeModal() {
@@ -8069,4 +7699,365 @@ function onDraftDataLoaded() {
 
 // Hook into existing loadDraftLeague (search for where it finishes and call onDraftDataLoaded)
 // Or simply call populateMyTeamSelector inside loadDraftLeague if possible.
+
+
+// ============================================
+// ULTIMATE COMPARISON FIXES
+// ============================================
+
+function generateComparisonTableHTML(players, activeRange = 'all') {
+    // 🎨 ULTIMATE PLAYER COMPARISON - COMPLETE MAKEOVER
+    
+    const photoUrl = (p) => `https://resources.premierleague.com/premierleague/photos/players/110x140/p${p.code}.png`;
+    const fallbackSVG = (name) => `data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%22110%22 height=%22140%22%3E%3Crect fill=%22%2394a3b8%22 width=%22110%22 height=%22140%22/%3E%3Ctext x=%2250%25%22 y=%2250%25%22 text-anchor=%22middle%22 dy=%22.3em%22 fill=%22%23fff%22 font-size=%2248%22 font-weight=%22bold%22%3E${name.charAt(0)}%3C/text%3E%3C/svg%3E`;
+    
+    // Range Filter Buttons HTML
+    const ranges = [
+        { value: '1', label: 'משחק אחרון' },
+        { value: '3', label: '3 אחרונים' },
+        { value: '5', label: '5 אחרונים' },
+        { value: '10', label: '10 אחרונים' },
+        { value: 'all', label: 'כל העונה' }
+    ];
+    
+    const filtersHTML = `
+        <div class="comparison-filters" style="display: flex; justify-content: center; gap: 8px; margin-bottom: 20px; padding: 10px;">
+            ${ranges.map(r => `
+                <button 
+                    onclick="updateComparisonRange('${r.value}')" 
+                    class="range-btn ${activeRange === r.value ? 'active' : ''}"
+                    style="
+                        padding: 8px 16px;
+                        border-radius: 20px;
+                        border: 1px solid ${activeRange === r.value ? '#4f46e5' : '#e2e8f0'};
+                        background: ${activeRange === r.value ? '#4f46e5' : 'white'};
+                        color: ${activeRange === r.value ? 'white' : '#64748b'};
+                        cursor: pointer;
+                        font-weight: 600;
+                        font-size: 14px;
+                        transition: all 0.2s;
+                    "
+                >
+                    ${r.label}
+                </button>
+            `).join('')}
+        </div>
+    `;
+
+    let html = `
+        <div class="ultimate-comparison-container">
+            <!-- 🏆 HEADER -->
+            <div class="comparison-hero-header">
+                <div class="hero-title-wrapper">
+                    <span class="hero-icon">⚔️</span>
+                    <h2 class="hero-title">השוואת שחקנים</h2>
+                    <span class="hero-badge">${players.length} שחקנים</span>
+                </div>
+                <p class="hero-subtitle">ניתוח מקיף לקבלת החלטה מושכלת</p>
+                ${filtersHTML}
+            </div>
+            
+            <!-- 👥 PLAYER CARDS GRID -->
+            <div class="ultimate-players-grid">
+    `;
+    
+    // Player Cards with enhanced stats
+    players.forEach((p, idx) => {
+        const positionColors = {
+            'GKP': '#f59e0b',
+            'DEF': '#3b82f6',
+            'MID': '#10b981',
+            'FWD': '#ef4444'
+        };
+        const posColor = positionColors[p.position_name] || '#6366f1';
+        
+        html += `
+            <div class="ultimate-player-card" style="animation-delay: ${idx * 0.1}s; border-top: 4px solid ${posColor}">
+                <div class="player-card-photo-wrapper">
+                    <img src="${photoUrl(p)}" alt="${p.web_name}" class="player-card-photo-ultimate" onerror="this.src='${fallbackSVG(p.web_name)}'">
+                    <div class="player-position-badge" style="background: ${posColor}">${p.position_name}</div>
+                </div>
+                <div class="player-card-info">
+                    <h3 class="player-name-ultimate">${p.web_name}</h3>
+                    <p class="player-team-ultimate">${p.team_name}</p>
+                    
+                    <!-- Quick Stats Grid -->
+                    <div class="quick-stats-grid">
+                        <div class="quick-stat">
+                            <span class="quick-stat-icon">💰</span>
+                            <div class="quick-stat-content">
+                                <span class="quick-stat-label">מחיר</span>
+                                <span class="quick-stat-value">£${p.now_cost.toFixed(1)}M</span>
+                            </div>
+                        </div>
+                        <div class="quick-stat">
+                            <span class="quick-stat-icon">⭐</span>
+                            <div class="quick-stat-content">
+                                <span class="quick-stat-label">ציון דראפט</span>
+                                <span class="quick-stat-value">${p.draft_score.toFixed(1)}</span>
+                            </div>
+                        </div>
+                        <div class="quick-stat">
+                            <span class="quick-stat-icon">🎯</span>
+                            <div class="quick-stat-content">
+                                <span class="quick-stat-label">נק' (טווח)</span>
+                                <span class="quick-stat-value">${p.total_points}</span>
+                            </div>
+                        </div>
+                        <div class="quick-stat">
+                            <span class="quick-stat-icon">🔥</span>
+                            <div class="quick-stat-content">
+                                <span class="quick-stat-label">כושר</span>
+                                <span class="quick-stat-value">${parseFloat(p.form || 0).toFixed(1)}</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+    });
+    
+    html += `
+            </div>
+            
+            <!-- 📊 COMPREHENSIVE METRICS COMPARISON -->
+            <div class="ultimate-metrics-section">
+                <h3 class="metrics-section-title">
+                    <span class="metrics-icon">📊</span>
+                    השוואה מפורטת (מנורמל ל-90 דקות)
+                </h3>
+                
+                <div class="metrics-comparison-table">
+    `;
+    
+    // Define comprehensive metrics (Updated with Per 90s)
+    const comprehensiveMetrics = [
+        { name: 'ציון דראפט', key: 'draft_score', format: v => v.toFixed(1), icon: '⭐', reversed: false },
+        { name: 'העברות נטו', key: 'net_transfers_event', format: v => (v >= 0 ? '+' : '') + v.toLocaleString(), icon: '🔄', reversed: false },
+        { name: 'חיזוי (GW הבא)', key: 'predicted_points_1_gw', format: v => v.toFixed(1), icon: '🔮', reversed: false },
+        { name: 'כושר', key: 'form', format: v => parseFloat(v || 0).toFixed(1), icon: '🔥', reversed: false },
+        { name: 'נקודות/90', key: 'points_per_game_90', format: v => v.toFixed(1), icon: '📈', reversed: false },
+        { name: 'נקודות (סה"כ)', key: 'total_points', format: v => v, icon: '🎯', reversed: false },
+        { name: 'xGI/90', key: 'xGI_per90', format: v => v.toFixed(2), icon: '⚽', reversed: false },
+        { name: 'G+A (סה"כ)', key: 'goals_scored_assists', format: v => v, icon: '🎯', reversed: false },
+        { name: 'מחיר', key: 'now_cost', format: v => '£' + v.toFixed(1) + 'M', icon: '💰', reversed: true },
+        { name: '% בעלות', key: 'selected_by_percent', format: v => v + '%', icon: '👥', reversed: false },
+        { name: 'דקות (טווח)', key: 'minutes', format: v => v.toLocaleString(), icon: '⏱️', reversed: false },
+        { name: 'בונוס/90', key: 'bonus_per90', format: v => v.toFixed(2), icon: '⭐', reversed: false },
+        { name: 'ICT/90', key: 'ict_index_per90', format: v => v.toFixed(1), icon: '🧬', reversed: false },
+        { name: 'השפעה/90', key: 'influence_per90', format: v => v.toFixed(1), icon: '💪', reversed: false },
+        { name: 'יצירתיות/90', key: 'creativity_per90', format: v => v.toFixed(1), icon: '🎨', reversed: false },
+        { name: 'איום/90', key: 'threat_per90', format: v => v.toFixed(1), icon: '🔫', reversed: false },
+        { name: 'DefCon/90', key: 'def_contrib_per90', format: v => v.toFixed(2), icon: '🛡️', reversed: false },
+        { name: 'xDiff', key: 'xDiff', format: v => (v >= 0 ? '+' : '') + v.toFixed(2), icon: '📉', reversed: false },
+        { name: 'CS/90', key: 'clean_sheets_per90', format: v => v.toFixed(2), icon: '🧤', reversed: false },
+        { name: 'ספיגות/90', key: 'goals_conceded_per90', format: v => v.toFixed(2), icon: '🥅', reversed: true },
+    ];
+    
+    comprehensiveMetrics.forEach((metric, idx) => {
+        const values = players.map(p => {
+            let val = getNestedValue(p, metric.key);
+            if (metric.key === 'goals_scored_assists') {
+                val = (p.goals_scored || 0) + (p.assists || 0);
+            }
+            return typeof val === 'number' ? val : parseFloat(val) || 0;
+        });
+        
+        const maxVal = Math.max(...values);
+        const minVal = Math.min(...values);
+        
+        html += `
+            <div class="metric-comparison-row" style="animation-delay: ${idx * 0.03}s">
+                <div class="metric-row-label">
+                    <span class="metric-row-icon">${metric.icon}</span>
+                    <span class="metric-row-name">${metric.name}</span>
+                </div>
+                <div class="metric-row-values">
+        `;
+        
+        players.forEach((p, pIdx) => {
+            const value = values[pIdx];
+            const isBest = metric.reversed ? (value === minVal) : (value === maxVal);
+            const isWorst = metric.reversed ? (value === maxVal) : (value === minVal);
+            const percentage = (maxVal > minVal && !isNaN(value)) ? ((value - minVal) / (maxVal - minVal) * 100) : (value > 0 ? 100 : 0);
+            
+            html += `
+                <div class="metric-value-box ${isBest ? 'best-value' : ''} ${isWorst ? 'worst-value' : ''}">
+                    <div class="metric-value-number">${metric.format(value)}</div>
+                    <div class="metric-value-bar-container">
+                        <div class="metric-value-bar" style="width: ${percentage}%"></div>
+                    </div>
+                    ${isBest ? '<span class="best-badge">🏆</span>' : ''}
+                </div>
+            `;
+        });
+        
+        html += `
+                </div>
+            </div>
+        `;
+    });
+    
+    // Fixtures Row
+    html += `
+            <div class="metric-comparison-row fixtures-comparison-row">
+                <div class="metric-row-label">
+                    <span class="metric-row-icon">📅</span>
+                    <span class="metric-row-name">משחקים קרובים</span>
+                </div>
+                <div class="metric-row-values">
+    `;
+    
+    players.forEach(p => {
+        const fixturesHTML = generateFixturesHTML(p);
+        html += `
+            <div class="metric-value-box fixtures-box">
+                ${fixturesHTML || '<span class="no-fixtures">אין נתונים</span>'}
+            </div>
+        `;
+    });
+    
+    html += `
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+    `;
+    
+    return html;
+}
+
+window.updateComparisonRange = async function(range) {
+    // Show loading style
+    const container = document.querySelector('.ultimate-comparison-container');
+    if(container) container.style.opacity = '0.5';
+    
+    let playersData;
+    
+    if (range === 'all') {
+        // Use main processed data filtered by selection
+        const allP = state.allPlayersData[state.currentDataSource].processed;
+        playersData = allP.filter(p => state.selectedForComparison.has(p.id));
+    } else {
+        const lastN = parseInt(range);
+        
+        // Check cache or calculate
+        let aggData = state.aggregatedCache[lastN];
+        if (!aggData) {
+            aggData = await calculateAggregatedStats(lastN);
+            state.aggregatedCache[lastN] = aggData;
+        }
+        
+        // Map aggregated data to selected players
+        const allP = state.allPlayersData[state.currentDataSource].processed;
+        const selectedP = allP.filter(p => state.selectedForComparison.has(p.id));
+        
+        // Convert aggregated array to map for fast lookup
+        const aggMap = new Map(aggData.map(p => [p.id, p]));
+        
+        playersData = selectedP.map(p => {
+            const agg = aggMap.get(p.id);
+            if (!agg) return p; 
+            
+            return {
+                ...p,     // Keep original static props
+                ...agg,   // Override with aggregated dynamic props
+                
+                // Explicitly keep static fields that might be zeroed in aggregation
+                now_cost: p.now_cost,
+                selected_by_percent: p.selected_by_percent,
+                net_transfers_event: p.net_transfers_event,
+                web_name: p.web_name,
+                team_name: p.team_name,
+                position_name: p.position_name,
+                draft_score: p.draft_score, // Keep original draft score
+                predicted_points_1_gw: p.predicted_points_1_gw
+            };
+        });
+    }
+    
+    // Re-render
+    const contentDiv = document.getElementById('compareContent');
+    contentDiv.innerHTML = generateComparisonTableHTML(playersData, range);
+    
+    if(container) container.style.opacity = '1';
+};
+
+window.compareSelectedPlayers = function() {
+    console.log('🔍 compareSelectedPlayers called');
+    console.log('📊 Selected players:', state.selectedForComparison);
+    
+    if (state.selectedForComparison.size < 2) {
+        showToast('בחר שחקנים', 'יש לבחור לפחות שני שחקנים להשוואה', 'warning', 3000);
+        return;
+    }
+    
+    if (!state.allPlayersData[state.currentDataSource] || !state.allPlayersData[state.currentDataSource].processed) {
+        showToast('שגיאה', 'לא נמצאו נתוני שחקנים', 'error', 3000);
+        return;
+    }
+    
+    const players = state.allPlayersData[state.currentDataSource].processed.filter(p => state.selectedForComparison.has(p.id));
+    
+    if (players.length < 2) {
+        showToast('שגיאה', 'לא ניתן למצוא את השחקנים שנבחרו', 'error', 3000);
+        return;
+    }
+    
+    // Remove existing modal if any (legacy check)
+    const existingModal = document.getElementById('compareModal');
+    if (existingModal) existingModal.remove();
+
+    // Create new modal structure
+    const modal = document.createElement('div');
+    modal.id = 'compareModal';
+    modal.className = 'modal active';
+    modal.style.cssText = `
+        position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+        background: rgba(15, 23, 42, 0.85); backdrop-filter: blur(8px);
+        display: flex; justify-content: center; align-items: center; z-index: 10000;
+        padding: 20px; animation: fadeIn 0.3s ease-out;
+    `;
+    
+    // Content Container
+    const contentDiv = document.createElement('div');
+    contentDiv.id = 'compareContent';
+    contentDiv.style.cssText = `
+        background: white; width: 100%; max-width: 1200px; max-height: 90vh;
+        border-radius: 24px; overflow: auto; display: flex; flex-direction: column;
+        box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25); position: relative;
+    `;
+    
+    // Close Button (Fixed)
+    const closeBtn = document.createElement('button');
+    closeBtn.innerHTML = '✕';
+    closeBtn.onclick = closeModal;
+    closeBtn.style.cssText = `
+        position: absolute; top: 20px; left: 20px; z-index: 100;
+        background: rgba(255,255,255,0.2); border: none; color: white;
+        width: 36px; height: 36px; border-radius: 50%; cursor: pointer;
+        display: flex; align-items: center; justify-content: center;
+        font-size: 18px; transition: all 0.2s; backdrop-filter: blur(4px);
+    `;
+    closeBtn.onmouseover = () => closeBtn.style.background = 'rgba(255,255,255,0.3)';
+    closeBtn.onmouseout = () => closeBtn.style.background = 'rgba(255,255,255,0.2)';
+    
+    // Generate initial HTML (All Season default)
+    contentDiv.innerHTML = generateComparisonTableHTML(players, 'all');
+    
+    modal.appendChild(contentDiv);
+    
+    // Add external close button for safety
+    const floatingClose = document.createElement('div');
+    floatingClose.innerHTML = '✕';
+    floatingClose.onclick = closeModal;
+    floatingClose.style.cssText = `
+        position: absolute; top: 20px; left: 20px; color: white; font-size: 24px; cursor: pointer; z-index: 10001;
+    `;
+    modal.appendChild(floatingClose);
+
+    document.body.appendChild(modal);
+    document.body.style.overflow = 'hidden';
+};
 
