@@ -5,7 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>⚽ FPL Pro Analytics Hub</title>
     <link rel="stylesheet" href="style.css">
-    <link rel="stylesheet" href="mobile.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/chartjs-plugin-annotation/2.2.1/chartjs-plugin-annotation.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.0.0"></script>
@@ -185,14 +184,12 @@
         box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);
     }
     .draft-sub-nav {
-        max-width: 100%; 
+        max-width: 1400px; 
         margin: 0 auto; 
         display: flex; 
-        gap: 8px; 
-        overflow-x: visible; 
+        gap: 12px; 
+        overflow-x: auto; 
         padding: 16px 0;
-        flex-wrap: wrap;
-        justify-content: center;
     }
     .draft-nav-btn {
         padding: 10px 20px;
@@ -298,17 +295,10 @@
         <div class="filter-group"><label>🏆 נקודות מינימום:</label><input type="number" id="minPoints" onkeyup="processChange()" placeholder="0"></div>
 
         <div class="filter-group"><label>⏳ דקות מינימום:</label><input type="number" id="minMinutes" onkeyup="processChange()" value="30" placeholder="0"></div>
-        <div class="filter-group">
-            <label>📅 טווח:</label>
-            <select id="statsRange" onchange="processChange()">
-                <option value="all">כל העונה</option>
-                <option value="3">3 מחזורים אחרונים</option>
-                <option value="5">5 מחזורים אחרונים</option>
-                <option value="10">10 מחזורים אחרונים</option>
-            </select>
-        </div>
 
         <div class="filter-group"><label>🎯 טווח xDiff:</label><select id="xDiffFilter" onchange="processChange()"><option value="">כל הטווח</option><option value="positive">חיובי (ביצועי יתר)</option><option value="negative">שלילי (ביצועי חסר)</option></select></div>
+
+        <div class="filter-group"><label>📅 טווח נתונים:</label><select id="statsRange" onchange="processChange()"><option value="all">כל העונה</option><option value="3">3 מחזורים אחרונים</option><option value="5">5 מחזורים אחרונים</option><option value="10">10 מחזורים אחרונים</option></select></div>
 
         <div class="filter-group"><label>הצג:</label><select id="showEntries" onchange="processChange()"><option value="50">50</option><option value="100">100</option><option value="200">200</option><option value="all" selected>הכל</option></select></div>
 
@@ -355,8 +345,6 @@
                 <button class="quick-filter-btn" onclick="toggleQuickFilter(this, 'underperformers')">📈 חייבים להתפוצץ (xGI)</button>
                 <button class="quick-filter-btn" onclick="toggleQuickFilter(this, 'bonus_magnets')">🌟 מגנט בונוס</button>
                 <button class="quick-filter-btn" onclick="toggleQuickFilter(this, 'form_kings')">🔥 בכושר שיא</button>
-                <button class="quick-filter-btn" onclick="toggleQuickFilter(this, 'trending_underachievers')">📉 טרנדיים מאכזבים</button>
-                <button class="quick-filter-btn" onclick="toggleQuickFilter(this, 'easy_fixtures_ppg')">🗓️ לו"ז קל + PPG</button>
             </div>
         </div>
     </div>
@@ -386,12 +374,12 @@
                     <th onclick="sortTable(13)">העברות<span class="sort-indicator"></span></th>
                     <th onclick="sortTable(14)">DC/90<span class="sort-indicator"></span></th>
                     <th onclick="sortTable(15)">G+A<span class="sort-indicator"></span></th>
-                    <th onclick="sortTable(16)">xGI<span class="sort-indicator"></span></th>
+                    <th onclick="sortTable(16)">xGI/90<span class="sort-indicator"></span></th>
                     <th onclick="sortTable(17)">דקות<span class="sort-indicator"></span></th>
                     <th onclick="sortTable(18)" title="הפרש מביצועים בפועל">xDiff<span class="sort-indicator"></span></th>
-                    <th onclick="sortTable(19)">ICT<span class="sort-indicator"></span></th>
-                    <th onclick="sortTable(20)">בונוס<span class="sort-indicator"></span></th>
-                    <th onclick="sortTable(21)">CS<span class="sort-indicator"></span></th>
+                    <th onclick="sortTable(19)">ICT/90<span class="sort-indicator"></span></th>
+                    <th onclick="sortTable(20)">בונוס/90<span class="sort-indicator"></span></th>
+                    <th onclick="sortTable(21)">CS/90<span class="sort-indicator"></span></th>
                     <th onclick="sortTable(22)">פנדל<span class="sort-indicator"></span></th>
                     <th onclick="sortTable(23)">קרן<span class="sort-indicator"></span></th>
                     <th onclick="sortTable(24)">חופשית<span class="sort-indicator"></span></th>
@@ -534,7 +522,7 @@
         <!-- Draft Sub Navigation -->
         <!-- Draft Sub Navigation (Improved Design) -->
         <div id="draftSubNav" class="draft-sub-nav-container" style="background: #ffffff; padding: 16px 0; border-bottom: 1px solid #f1f5f9; margin-bottom: 24px; position: sticky; top: 70px; z-index: 90;">
-            <div class="draft-sub-nav" style="max-width: 100%; margin: 0 auto; display: flex; justify-content: center; gap: 8px; overflow-x: visible; flex-wrap: wrap;">
+            <div class="draft-sub-nav" style="max-width: 1200px; margin: 0 auto; display: flex; justify-content: center; gap: 16px; overflow-x: auto;">
                 <button class="draft-nav-btn active" onclick="switchDraftTab('overview')" style="padding: 12px 24px; border-radius: 12px; border: none; font-weight: 700; font-size: 16px; cursor: pointer; transition: all 0.2s; display: flex; align-items: center; gap: 8px; background: #eff6ff; color: #3b82f6; box-shadow: 0 2px 4px rgba(59,130,246,0.1);">
                     <span style="font-size: 18px;">📊</span> מבט על
                 </button>
@@ -573,11 +561,9 @@
             }
             .draft-sub-nav {
                 display: flex;
-                gap: 8px;
-                overflow-x: visible;
-                padding: 4px 8px;
-                flex-wrap: wrap;
-                justify-content: center;
+                gap: 12px;
+                overflow-x: auto;
+                padding: 4px 8px; /* Space for focus ring */
             }
             .draft-nav-btn {
                 padding: 10px 20px;
@@ -741,6 +727,6 @@
 
     </div>
     <!-- REMOVED 04_ml_predictor_draft.js -->
-    <script src="script.js?v=4.0.0" defer></script>
+    <script src="script.js?v=3.3.3" defer></script>
 </body>
 </html>
