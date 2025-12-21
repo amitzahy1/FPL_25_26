@@ -7757,69 +7757,6 @@ function generateComparisonTableHTML(players, activeRange = 'all') {
                 ${filtersHTML}
             </div>
             
-            <!-- 👥 PLAYER CARDS GRID -->
-            <div class="ultimate-players-grid">
-    `;
-    
-    // Player Cards with enhanced stats
-    players.forEach((p, idx) => {
-        const positionColors = {
-            'GKP': '#f59e0b',
-            'DEF': '#3b82f6',
-            'MID': '#10b981',
-            'FWD': '#ef4444'
-        };
-        const posColor = positionColors[p.position_name] || '#6366f1';
-        
-        html += `
-            <div class="ultimate-player-card" style="animation-delay: ${idx * 0.1}s; border-top: 4px solid ${posColor}">
-                <div class="player-card-photo-wrapper">
-                    <img src="${photoUrl(p)}" alt="${p.web_name}" class="player-card-photo-ultimate" onerror="this.src='${fallbackSVG(p.web_name)}'">
-                    <div class="player-position-badge" style="background: ${posColor}">${p.position_name}</div>
-                </div>
-                <div class="player-card-info">
-                    <h3 class="player-name-ultimate">${p.web_name}</h3>
-                    <p class="player-team-ultimate">${p.team_name}</p>
-                    
-                    <!-- Quick Stats Grid -->
-                    <div class="quick-stats-grid">
-                        <div class="quick-stat">
-                            <span class="quick-stat-icon">💰</span>
-                            <div class="quick-stat-content">
-                                <span class="quick-stat-label">מחיר</span>
-                                <span class="quick-stat-value">£${p.now_cost.toFixed(1)}M</span>
-                            </div>
-                        </div>
-                        <div class="quick-stat">
-                            <span class="quick-stat-icon">⭐</span>
-                            <div class="quick-stat-content">
-                                <span class="quick-stat-label">ציון דראפט</span>
-                                <span class="quick-stat-value">${p.draft_score.toFixed(1)}</span>
-                            </div>
-                        </div>
-                        <div class="quick-stat">
-                            <span class="quick-stat-icon">🎯</span>
-                            <div class="quick-stat-content">
-                                <span class="quick-stat-label">נק' (טווח)</span>
-                                <span class="quick-stat-value">${p.total_points}</span>
-                            </div>
-                        </div>
-                        <div class="quick-stat">
-                            <span class="quick-stat-icon">🔥</span>
-                            <div class="quick-stat-content">
-                                <span class="quick-stat-label">כושר</span>
-                                <span class="quick-stat-value">${parseFloat(p.form || 0).toFixed(1)}</span>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        `;
-    });
-    
-    html += `
-            </div>
-            
             <!-- 📊 COMPREHENSIVE METRICS COMPARISON -->
             <div class="ultimate-metrics-section">
                 <h3 class="metrics-section-title">
@@ -7828,6 +7765,19 @@ function generateComparisonTableHTML(players, activeRange = 'all') {
                 </h3>
                 
                 <div class="metrics-comparison-table">
+                    <!-- 🏆 PLAYER HEADER ROW -->
+                    <div class="metric-comparison-row header-row" style="background: #f8fafc; border-bottom: 2px solid #e2e8f0;">
+                        <div class="metric-row-label"></div>
+                        <div class="metric-row-values">
+                            ${players.map(p => `
+                                <div class="player-header-col" style="display: flex; flex-direction: column; align-items: center; padding: 10px;">
+                                    <img src="${photoUrl(p)}" alt="${p.web_name}" style="width: 60px; height: 60px; border-radius: 50%; object-fit: cover; border: 2px solid white; box-shadow: 0 2px 4px rgba(0,0,0,0.1);" onerror="this.src='${fallbackSVG(p.web_name)}'">
+                                    <div style="font-weight: 700; margin-top: 5px; color: #1e293b; font-size: 14px;">${p.web_name}</div>
+                                    <div style="font-size: 12px; color: #64748b;">${p.team_name}</div>
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>
     `;
     
     // Define comprehensive metrics (Updated with Per 90s)
@@ -7938,7 +7888,26 @@ window.updateComparisonRange = async function(range) {
     if (range === 'all') {
         // Use main processed data filtered by selection
         const allP = state.allPlayersData[state.currentDataSource].processed;
-        playersData = allP.filter(p => state.selectedForComparison.has(p.id));
+        const selectedP = allP.filter(p => state.selectedForComparison.has(p.id));
+        
+        // Ensure per-90 metrics exist for 'all' range
+        playersData = selectedP.map(p => {
+            const minutes = p.minutes || 0;
+            const factor = minutes > 0 ? 90 / minutes : 0;
+            
+            return {
+                ...p,
+                ict_index_per90: p.ict_index_per90 ?? ((parseFloat(p.ict_index) || 0) * factor),
+                bonus_per90: p.bonus_per90 ?? ((p.bonus || 0) * factor),
+                influence_per90: p.influence_per90 ?? ((parseFloat(p.influence) || 0) * factor),
+                creativity_per90: p.creativity_per90 ?? ((parseFloat(p.creativity) || 0) * factor),
+                threat_per90: p.threat_per90 ?? ((parseFloat(p.threat) || 0) * factor),
+                clean_sheets_per90: p.clean_sheets_per90 ?? ((p.clean_sheets || 0) * factor),
+                goals_conceded_per90: p.goals_conceded_per90 ?? ((p.goals_conceded || 0) * factor),
+                // Keep def_contrib_per90 as is if it exists, otherwise 0
+                def_contrib_per90: p.def_contrib_per90 || 0
+            };
+        });
     } else {
         const lastN = parseInt(range);
         
@@ -7953,7 +7922,6 @@ window.updateComparisonRange = async function(range) {
         const allP = state.allPlayersData[state.currentDataSource].processed;
         const selectedP = allP.filter(p => state.selectedForComparison.has(p.id));
         
-        // Convert aggregated array to map for fast lookup
         const aggMap = new Map(aggData.map(p => [p.id, p]));
         
         playersData = selectedP.map(p => {
