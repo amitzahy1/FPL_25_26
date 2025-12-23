@@ -5058,3 +5058,14 @@ canvas {
     padding: 8px;
     border-radius: 6px;
 }
+
+/* Player name colors for injured players */
+.player-name-red {
+    color: #ef4444 !important; /* Red for seriously injured (0% chance) */
+    font-weight: bold;
+}
+
+.player-name-yellow {
+    color: #eab308 !important; /* Yellow for doubtful/injured for one game (<=50%) */
+    font-weight: bold;
+}
