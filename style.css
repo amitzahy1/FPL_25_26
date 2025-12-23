@@ -282,6 +282,20 @@ tbody tr:last-child td {
     border-radius: 4px;
 }
 
+/* Percentile-based Comparative Coloring */
+.percentile-high {
+    background-color: rgba(16, 185, 129, 0.15) !important; /* ירוק בהיר */
+    font-weight: 600;
+}
+
+.percentile-middle {
+    background-color: rgba(156, 163, 175, 0.1) !important; /* אפור בהיר */
+}
+
+.percentile-low {
+    background-color: rgba(239, 68, 68, 0.15) !important; /* אדום בהיר */
+}
+
 /* ML Prediction Styling */
 .ml-high {
     color: #059669;
