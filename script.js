@@ -9,9 +9,6 @@ const auth = {
     allowedEmail: 'amitzahy1@gmail.com', // Only this email can access real data
     
     init() {
-        // Render sub-nav buttons initially just to be sure
-        this.renderSubNav();
-
         // Check if user is already logged in (from localStorage)
         const savedUser = localStorage.getItem('fpl_user');
         if (savedUser) {
@@ -27,39 +24,6 @@ const auth = {
             }
         } else {
             this.showLoginScreen();
-        }
-    },
-    
-    renderSubNav() {
-        const subNav = document.querySelector('.draft-sub-nav');
-        if (subNav && !subNav.innerHTML.includes('overview')) {
-             console.log("Restoring Draft Sub-Nav content...");
-             subNav.innerHTML = `
-                <button class="draft-nav-btn active" onclick="switchDraftTab('overview')" style="padding: 12px 24px; border-radius: 12px; border: none; font-weight: 700; font-size: 16px; cursor: pointer; transition: all 0.2s; display: flex; align-items: center; gap: 8px; background: #eff6ff; color: #3b82f6; box-shadow: 0 2px 4px rgba(59,130,246,0.1);">
-                    <span style="font-size: 18px;">📊</span> מבט על
-                </button>
-                <button class="draft-nav-btn" onclick="switchDraftTab('nextround')" style="padding: 12px 24px; border-radius: 12px; border: none; font-weight: 700; font-size: 16px; cursor: pointer; transition: all 0.2s; display: flex; align-items: center; gap: 8px; background: transparent; color: #64748b;">
-                    <span style="font-size: 18px;">⚔️</span> המחזור הבא
-                </button>
-                <button class="draft-nav-btn" onclick="switchDraftTab('standings')" style="padding: 12px 24px; border-radius: 12px; border: none; font-weight: 700; font-size: 16px; cursor: pointer; transition: all 0.2s; display: flex; align-items: center; gap: 8px; background: transparent; color: #64748b;">
-                    <span style="font-size: 18px;">📋</span> טבלה וסגלים
-                </button>
-                <button class="draft-nav-btn" onclick="switchDraftTab('market')" style="padding: 12px 24px; border-radius: 12px; border: none; font-weight: 700; font-size: 16px; cursor: pointer; transition: all 0.2s; display: flex; align-items: center; gap: 8px; background: transparent; color: #64748b;">
-                    <span style="font-size: 18px;">💡</span> שוק והמלצות
-                </button>
-                <button class="draft-nav-btn" onclick="switchDraftTab('analytics')" style="padding: 12px 24px; border-radius: 12px; border: none; font-weight: 700; font-size: 16px; cursor: pointer; transition: all 0.2s; display: flex; align-items: center; gap: 8px; background: transparent; color: #64748b;">
-                    <span style="font-size: 18px;">📈</span> אנליטיקס
-                </button>
-                <button class="draft-nav-btn" onclick="switchDraftTab('rival')" style="padding: 12px 24px; border-radius: 12px; border: none; font-weight: 700; font-size: 16px; cursor: pointer; transition: all 0.2s; display: flex; align-items: center; gap: 8px; background: transparent; color: #64748b;">
-                    <span style="font-size: 18px;">🎯</span> השוואת יריב
-                </button>
-                <button class="draft-nav-btn" onclick="switchDraftTab('h2h')" style="padding: 12px 24px; border-radius: 12px; border: none; font-weight: 700; font-size: 16px; cursor: pointer; transition: all 0.2s; display: flex; align-items: center; gap: 8px; background: transparent; color: #64748b;">
-                    <span style="font-size: 18px;">📜</span> היסטוריית מפגשים
-                </button>
-                <button class="draft-nav-btn" onclick="switchDraftTab('lineup-analysis')" style="padding: 12px 24px; border-radius: 12px; border: none; font-weight: 700; font-size: 16px; cursor: pointer; transition: all 0.2s; display: flex; align-items: center; gap: 8px; background: transparent; color: #64748b;">
-                    <span style="font-size: 18px;">🔍</span> ניתוח החלטות הרכב
-                </button>
-             `;
         }
     },
     
@@ -583,6 +547,8 @@ const state = {
     currentDataSource: 'live',
     teamsData: {},
     teamStrengthData: {},
+    aggregatedCache: {}, // { 3: [...], 5: [...] }
+    historicalPoints: {}, // GW -> Map(elementId -> stats)
     displayedData: [],
     sortColumn: 2,
     sortDirection: 'desc',
@@ -1162,9 +1128,26 @@ function getPositionName(elementTypeId) {
 
 function preprocessPlayerData(players, setPieceTakers) {
     return players.map(p => {
-        p.defensive_contribution_per_90 = p.minutes > 0 ? ((p.interceptions || 0) + (p.tackles || 0) + (p.clearances_blocks_interceptions || 0)) / (p.minutes / 90) : 0;
-        p.xGI_per90 = p.minutes > 0 ? (parseFloat(p.expected_goal_involvements_per_90) || 0) : 0;
-        p.def_contrib_per90 = p.defensive_contribution_per_90 || 0;
+        // Basic calculations
+        const mins = p.minutes || 0;
+        const mins90 = mins / 90;
+        
+        p.defensive_contribution_per_90 = mins > 0 ? ((p.interceptions || 0) + (p.tackles || 0) + (p.clearances_blocks_interceptions || 0)) / mins90 : 0;
+        // xGI from raw data is total. We want per 90.
+        // Usually expected_goal_involvements_per_90 exists, but we can recalc to be sure.
+        p.xGI_per90 = mins > 0 ? (parseFloat(p.expected_goal_involvements) || 0) / mins90 : 0;
+        
+        // Other per 90s requested
+        p.ict_index_per90 = mins > 0 ? (parseFloat(p.ict_index) || 0) / mins90 : 0;
+        p.bonus_per90 = mins > 0 ? (p.bonus || 0) / mins90 : 0;
+        p.influence_per90 = mins > 0 ? (parseFloat(p.influence) || 0) / mins90 : 0;
+        p.creativity_per90 = mins > 0 ? (parseFloat(p.creativity) || 0) / mins90 : 0;
+        p.threat_per90 = mins > 0 ? (parseFloat(p.threat) || 0) / mins90 : 0;
+        p.goals_conceded_per90 = mins > 0 ? (p.goals_conceded || 0) / mins90 : 0;
+        p.clean_sheets_per90 = mins > 0 ? (p.clean_sheets || 0) / mins90 : 0;
+        p.expected_goals_conceded_per_90 = mins > 0 ? (parseFloat(p.expected_goals_conceded) || 0) / mins90 : 0; // if available in raw
+        p.def_contrib_per90 = p.defensive_contribution_per_90 || 0; // Alias for consistent naming
+
         p.net_transfers_event = (p.transfers_in_event || 0) - (p.transfers_out_event || 0);
         p.xDiff = ((p.goals_scored || 0) + (p.assists || 0)) - (parseFloat(p.expected_goal_involvements) || 0);
         p.now_cost = p.now_cost / 10;
@@ -1180,7 +1163,7 @@ function preprocessPlayerData(players, setPieceTakers) {
             corner: teamSetPieces.corners.findIndex(name => normalizedPlayerName.includes(name.toLowerCase())) + 1,
         };
         
-        p.points_per_game_90 = p.minutes > 0 ? (p.total_points / (p.minutes / 90)) : 0;
+        p.points_per_game_90 = p.minutes > 0 ? (p.total_points / mins90) : 0;
         p.goals_scored_assists = (p.goals_scored || 0) + (p.assists || 0);
         p.expected_goals_assists = parseFloat(p.expected_goal_involvements) || 0;
         return p;
@@ -1287,7 +1270,7 @@ function createPlayerRowHtml(player, index) {
         <td class="transfers-cell" data-tooltip="${config.columnTooltips.net_transfers_event}"><span class="${player.net_transfers_event >= 0 ? 'net-transfers-positive' : 'net-transfers-negative'}">${player.net_transfers_event.toLocaleString()}</span></td>
         <td data-tooltip="${config.columnTooltips.def_contrib_per90}">${player.def_contrib_per90.toFixed(1)}</td>
         <td>${(player.goals_scored || 0) + (player.assists || 0)}</td>
-        <td>${(player.xGI_per90 || 0).toFixed(2)}</td>
+        <td>${(parseFloat(player.xGI_per90) || 0).toFixed(2)}</td>
         <td>${player.minutes}</td>
         <td class="${player.xDiff >= 0 ? 'xdiff-positive' : 'xdiff-negative'}" data-tooltip="${config.columnTooltips.xDiff}">${player.xDiff.toFixed(2)}</td>
         <td>${(parseFloat(player.ict_index_per90) || 0).toFixed(1)}</td>
@@ -1313,18 +1296,9 @@ function renderTable() {
         } else if (state.sortColumn === 15) { // G+A column (goals_scored_assists)
             aValue = (a.goals_scored || 0) + (a.assists || 0);
             bValue = (b.goals_scored || 0) + (b.assists || 0);
-        } else if (state.sortColumn === 16) { // xGI column (xGI_per90)
+        } else if (state.sortColumn === 16) { // xGI/90 column (was xGI)
             aValue = parseFloat(a.xGI_per90 || 0);
             bValue = parseFloat(b.xGI_per90 || 0);
-        } else if (state.sortColumn === 19) { // ICT/90
-            aValue = parseFloat(a.ict_index_per90 || 0);
-            bValue = parseFloat(b.ict_index_per90 || 0);
-        } else if (state.sortColumn === 20) { // Bonus/90
-            aValue = parseFloat(a.bonus_per90 || 0);
-            bValue = parseFloat(b.bonus_per90 || 0);
-        } else if (state.sortColumn === 21) { // CS/90
-            aValue = parseFloat(a.clean_sheets_per90 || 0);
-            bValue = parseFloat(b.clean_sheets_per90 || 0);
         } else {
             aValue = getNestedValue(a, field);
             bValue = getNestedValue(b, field);
@@ -1416,15 +1390,9 @@ function generateFixturesHTML(player) {
     return teamFixtures;
 }
 
-async function processChange() {
+function processChange() {
     if (!state.allPlayersData[state.currentDataSource].processed) return;
-    
-    // Range Logic
-    const statsRange = document.getElementById('statsRange') ? document.getElementById('statsRange').value : 'all';
-    
-    // Store active range for other functions (like charts)
-    state.activeRange = statsRange;
-
+    // ... filters ...
     const nameFilter = document.getElementById('searchName').value.toLowerCase();
     const posFilter = document.getElementById('positionFilter').value;
     const teamFilter = document.getElementById('teamFilter').value;
@@ -1449,44 +1417,36 @@ async function processChange() {
 
     const minPoints = parseInt(pointsInput) || 0;
     const minMinutes = parseInt(minutesInput) || 0;
+    const statsRange = document.getElementById('statsRange') ? document.getElementById('statsRange').value : 'all';
 
-    // Start from clean source
+    // CORRECT APPROACH:
+    // Always start from a clean source of truth if possible, OR map carefully.
+    // In v3/Root, state.allPlayersData.processed is the source.
+    // We should create `displaySource` which is either processed (all) or aggregated (range).
+    
     let sourceData = state.allPlayersData[state.currentDataSource].processed;
     
     if (statsRange !== 'all') {
         const lastN = parseInt(statsRange);
         if (!state.aggregatedCache[lastN]) {
-             // Calculate async if missing
-             state.aggregatedCache[lastN] = await calculateAggregatedStats(lastN);
+             calculateAggregatedStats(lastN).then(aggData => {
+                 state.aggregatedCache[lastN] = aggData;
+                 processChange();
+             });
+             return; 
         }
         
         // Merge: Use Aggregated stats for dynamic fields, Original for static.
-        // We create a map of Aggregated Data for fast lookup. 
-        // calculateAggregatedStats now returns an Array, so we can map it.
+        // We create a map of Aggregated Data for fast lookup
         const aggMap = new Map(state.aggregatedCache[lastN].map(p => [p.id, p]));
         
         sourceData = sourceData.map(p => {
             const agg = aggMap.get(p.id);
-            if (!agg) return {
-                ...p,
-                total_points: 0,
-                goals_scored: 0,
-                assists: 0,
-                minutes: 0,
-                clean_sheets: 0,
-                expected_goal_involvements: 0,
-                form: '0.0',
-                points_per_game: 0,
-                points_per_game_90: 0,
-                xGI_per90: 0,
-                xDiff: 0,
-                bonus: 0
-            };
-
+            if (!agg) return p;
             return {
                 ...p,
                 ...agg, // Overwrite points, goals, etc.
-                // Keep static explicitly to be safe
+                // Keep static
                 now_cost: p.now_cost,
                 selected_by_percent: p.selected_by_percent,
                 net_transfers_event: p.net_transfers_event,
@@ -1535,28 +1495,8 @@ async function processChange() {
     }
 }
 
-function getNextFixtures(teamId, count = 3) {
-    const fixtures = state.allPlayersData.live.fixtures || state.allPlayersData.historical.fixtures;
-    if (!fixtures) return [];
-    
-    return fixtures
-        .filter(fix => (fix.team_a === teamId || fix.team_h === teamId) && !fix.finished)
-        .sort((a,b) => a.event - b.event)
-        .slice(0, count)
-        .map(fix => {
-            const is_home = fix.team_h === teamId;
-            return {
-                opponentId: is_home ? fix.team_a : fix.team_h,
-                difficulty: is_home ? fix.team_h_difficulty : fix.team_a_difficulty,
-                event: fix.event,
-                is_home
-            };
-        });
-}
-
 function applyQuickFilter(filterName) {
-    // Note: processChange already set state.displayedData based on range & filters
-    // We apply quick filter ON TOP of that
+    const data = state.allPlayersData[state.currentDataSource].processed;
     switch(filterName) {
         case 'set_pieces':
             state.displayedData = state.displayedData.filter(p => p.set_piece_priority.penalty > 0 || p.set_piece_priority.corner > 0 || p.set_piece_priority.free_kick > 0);
@@ -1566,29 +1506,6 @@ function applyQuickFilter(filterName) {
             break;
         case 'differentials':
             state.displayedData = state.displayedData.filter(p => parseFloat(p.selected_by_percent) < 5);
-            break;
-        case 'bonus_magnets':
-            state.displayedData = state.displayedData.sort((a,b) => b.bonus - a.bonus).slice(0, 50);
-            break;
-        case 'form_kings':
-            state.displayedData = state.displayedData.sort((a,b) => parseFloat(b.form) - parseFloat(a.form)).slice(0, 50);
-            break;
-        case 'trending_underachievers': // High transfers IN + Negative xDiff (Unlucky)
-            // Sort by transfers_in desc, take top 100 most transferred in, then filter by negative xDiff
-            state.displayedData = state.displayedData
-                .sort((a,b) => b.transfers_in_event - a.transfers_in_event)
-                .slice(0, 150)
-                .filter(p => p.xDiff < -0.2) // Underperforming xG
-                .sort((a,b) => a.xDiff - b.xDiff); // Most unlucky first (most negative xDiff)
-            break;
-        case 'easy_fixtures_ppg':
-            // Easy fixtures (Avg difficulty < 3) AND Good PPG (> 3.5)
-            state.displayedData = state.displayedData.filter(p => {
-                const fixtures = getNextFixtures(p.team, 3);
-                if (fixtures.length === 0) return false;
-                const avgFDR = fixtures.reduce((sum, f) => sum + f.difficulty, 0) / fixtures.length;
-                return avgFDR <= 2.8 && p.points_per_game > 3.0;
-            }).sort((a,b) => b.points_per_game - a.points_per_game);
             break;
     }
 }
@@ -1709,8 +1626,245 @@ function exportToCsv() {
     link.click();
 }
 
+function generateComparisonTableHTML(players) {
+    // 🎨 ULTIMATE PLAYER COMPARISON - COMPLETE MAKEOVER
+    
+    const photoUrl = (p) => `https://resources.premierleague.com/premierleague/photos/players/110x140/p${p.code}.png`;
+    const fallbackSVG = (name) => `data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%22110%22 height=%22140%22%3E%3Crect fill=%22%2394a3b8%22 width=%22110%22 height=%22140%22/%3E%3Ctext x=%2250%25%22 y=%2250%25%22 text-anchor=%22middle%22 dy=%22.3em%22 fill=%22%23fff%22 font-size=%2248%22 font-weight=%22bold%22%3E${name.charAt(0)}%3C/text%3E%3C/svg%3E`;
+    
+    let html = `
+        <div class="ultimate-comparison-container">
+            <!-- 🏆 HEADER -->
+            <div class="comparison-hero-header">
+                <div class="hero-title-wrapper">
+                    <span class="hero-icon">⚔️</span>
+                    <h2 class="hero-title">השוואת שחקנים</h2>
+                    <span class="hero-badge">${players.length} שחקנים</span>
+                </div>
+                <p class="hero-subtitle">ניתוח מקיף לקבלת החלטה מושכלת</p>
+            </div>
+            
+            <!-- 👥 PLAYER CARDS GRID -->
+            <div class="ultimate-players-grid">
+    `;
+    
+    // Player Cards with enhanced stats
+    players.forEach((p, idx) => {
+        const positionColors = {
+            'GKP': '#f59e0b',
+            'DEF': '#3b82f6',
+            'MID': '#10b981',
+            'FWD': '#ef4444'
+        };
+        const posColor = positionColors[p.position_name] || '#6366f1';
+        
+        html += `
+            <div class="ultimate-player-card" style="animation-delay: ${idx * 0.1}s; border-top: 4px solid ${posColor}">
+                <div class="player-card-photo-wrapper">
+                    <img src="${photoUrl(p)}" alt="${p.web_name}" class="player-card-photo-ultimate" onerror="this.src='${fallbackSVG(p.web_name)}'">
+                    <div class="player-position-badge" style="background: ${posColor}">${p.position_name}</div>
+                </div>
+                <div class="player-card-info">
+                    <h3 class="player-name-ultimate">${p.web_name}</h3>
+                    <p class="player-team-ultimate">${p.team_name}</p>
+                    
+                    <!-- Quick Stats Grid -->
+                    <div class="quick-stats-grid">
+                        <div class="quick-stat">
+                            <span class="quick-stat-icon">💰</span>
+                            <div class="quick-stat-content">
+                                <span class="quick-stat-label">מחיר</span>
+                                <span class="quick-stat-value">£${p.now_cost.toFixed(1)}M</span>
+                            </div>
+                        </div>
+                        <div class="quick-stat">
+                            <span class="quick-stat-icon">⭐</span>
+                            <div class="quick-stat-content">
+                                <span class="quick-stat-label">ציון דראפט</span>
+                                <span class="quick-stat-value">${p.draft_score.toFixed(1)}</span>
+                            </div>
+                        </div>
+                        <div class="quick-stat">
+                            <span class="quick-stat-icon">🎯</span>
+                            <div class="quick-stat-content">
+                                <span class="quick-stat-label">נק' כולל</span>
+                                <span class="quick-stat-value">${p.total_points}</span>
+                            </div>
+                        </div>
+                        <div class="quick-stat">
+                            <span class="quick-stat-icon">🔥</span>
+                            <div class="quick-stat-content">
+                                <span class="quick-stat-label">כושר</span>
+                                <span class="quick-stat-value">${parseFloat(p.form || 0).toFixed(1)}</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+    });
+    
+    html += `
+            </div>
+            
+            <!-- 📊 COMPREHENSIVE METRICS COMPARISON -->
+            <div class="ultimate-metrics-section">
+                <h3 class="metrics-section-title">
+                    <span class="metrics-icon">📊</span>
+                    השוואה מפורטת
+                </h3>
+                
+                <div class="metrics-comparison-table">
+    `;
+    
+    // Define comprehensive metrics (ordered by importance)
+    const comprehensiveMetrics = [
+        { name: 'ציון דראפט', key: 'draft_score', format: v => v.toFixed(1), icon: '⭐', reversed: false },
+        { name: 'העברות נטו', key: 'net_transfers_event', format: v => (v >= 0 ? '+' : '') + v, icon: '🔄', reversed: false },
+        { name: 'חיזוי למחזור הבא', key: 'predicted_points_1_gw', format: v => v.toFixed(1), icon: '🔮', reversed: false },
+        { name: 'כושר', key: 'form', format: v => parseFloat(v || 0).toFixed(1), icon: '🔥', reversed: false },
+        { name: 'נקודות/90', key: 'points_per_game_90', format: v => v.toFixed(1), icon: '📈', reversed: false },
+        { name: 'נקודות כולל', key: 'total_points', format: v => v, icon: '🎯', reversed: false },
+        { name: 'יציבות', key: 'stability_index', format: v => v.toFixed(0), icon: '📊', reversed: false },
+        { name: 'xGI/90', key: 'xGI_per90', format: v => v.toFixed(2), icon: '⚽', reversed: false },
+        { name: 'G+A', key: 'goals_scored_assists', format: v => v, icon: '🎯', reversed: false },
+        { name: 'מחיר', key: 'now_cost', format: v => '£' + v.toFixed(1) + 'M', icon: '💰', reversed: true },
+        { name: '% בעלות', key: 'selected_by_percent', format: v => v + '%', icon: '👥', reversed: false },
+        { name: 'דקות', key: 'minutes', format: v => v.toLocaleString(), icon: '⏱️', reversed: false },
+        { name: 'בונוס/90', key: 'bonus_per90', format: v => v.toFixed(2), icon: '⭐', reversed: false },
+        { name: 'דרימטים', key: 'dreamteam_count', format: v => v, icon: '🏆', reversed: false },
+        { name: 'ICT/90', key: 'ict_index_per90', format: v => v.toFixed(1), icon: '🧬', reversed: false },
+        { name: 'DC/90', key: 'def_contrib_per90', format: v => v.toFixed(1), icon: '🛡️', reversed: false },
+        { name: 'xDiff', key: 'xDiff', format: v => (v >= 0 ? '+' : '') + v.toFixed(2), icon: '📉', reversed: false },
+        { name: 'CS/90', key: 'clean_sheets_per90', format: v => v.toFixed(2), icon: '🧤', reversed: false },
+        { name: 'ספיגות/90', key: 'goals_conceded_per90', format: v => v.toFixed(2), icon: '🥅', reversed: true },
+    ];
+    
+    comprehensiveMetrics.forEach((metric, idx) => {
+        const values = players.map(p => {
+            let val = getNestedValue(p, metric.key);
+            if (metric.key === 'goals_scored_assists') {
+                val = (p.goals_scored || 0) + (p.assists || 0);
+            }
+            return typeof val === 'number' ? val : parseFloat(val) || 0;
+        });
+        
+        const maxVal = Math.max(...values);
+        const minVal = Math.min(...values);
+        
+        html += `
+            <div class="metric-comparison-row" style="animation-delay: ${idx * 0.03}s">
+                <div class="metric-row-label">
+                    <span class="metric-row-icon">${metric.icon}</span>
+                    <span class="metric-row-name">${metric.name}</span>
+                </div>
+                <div class="metric-row-values">
+        `;
+        
+        players.forEach((p, pIdx) => {
+            const value = values[pIdx];
+            const isBest = metric.reversed ? (value === minVal) : (value === maxVal);
+            const isWorst = metric.reversed ? (value === maxVal) : (value === minVal);
+            const percentage = maxVal > minVal ? ((value - minVal) / (maxVal - minVal) * 100) : 50;
+            
+            html += `
+                <div class="metric-value-box ${isBest ? 'best-value' : ''} ${isWorst ? 'worst-value' : ''}">
+                    <div class="metric-value-number">${metric.format(value)}</div>
+                    <div class="metric-value-bar-container">
+                        <div class="metric-value-bar" style="width: ${percentage}%"></div>
+                    </div>
+                    ${isBest ? '<span class="best-badge">🏆</span>' : ''}
+                </div>
+            `;
+        });
+        
+        html += `
+                </div>
+            </div>
+        `;
+    });
+    
+    // Fixtures Row
+    html += `
+            <div class="metric-comparison-row fixtures-comparison-row">
+                <div class="metric-row-label">
+                    <span class="metric-row-icon">📅</span>
+                    <span class="metric-row-name">משחקים קרובים</span>
+                </div>
+                <div class="metric-row-values">
+    `;
+    
+    players.forEach(p => {
+        const fixturesHTML = generateFixturesHTML(p);
+        html += `
+            <div class="metric-value-box fixtures-box">
+                ${fixturesHTML || '<span class="no-fixtures">אין נתונים</span>'}
+            </div>
+        `;
+    });
+    
+    html += `
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+    `;
+    
+    return html;
+}
 
-// Old compare function removed
+window.compareSelectedPlayers = function() {
+    console.log('🔍 compareSelectedPlayers called');
+    console.log('📊 Selected players:', state.selectedForComparison);
+    console.log('📊 Selected count:', state.selectedForComparison.size);
+    
+    if (state.selectedForComparison.size < 2) {
+        showToast('בחר שחקנים', 'יש לבחור לפחות שני שחקנים להשוואה', 'warning', 3000);
+        console.warn('⚠️ Not enough players selected');
+        return;
+    }
+    
+    console.log('📦 Current data source:', state.currentDataSource);
+    console.log('📦 Available data:', state.allPlayersData[state.currentDataSource] ? 'Yes' : 'No');
+    
+    if (!state.allPlayersData[state.currentDataSource] || !state.allPlayersData[state.currentDataSource].processed) {
+        console.error('❌ No player data available!');
+        showToast('שגיאה', 'לא נמצאו נתוני שחקנים', 'error', 3000);
+        return;
+    }
+    
+    const players = state.allPlayersData[state.currentDataSource].processed.filter(p => state.selectedForComparison.has(p.id));
+    console.log('✅ Players to compare:', players.length, players.map(p => p.web_name));
+    
+    if (players.length < 2) {
+        console.error('❌ Could not find selected players in data!');
+        showToast('שגיאה', 'לא ניתן למצוא את השחקנים שנבחרו', 'error', 3000);
+        return;
+    }
+    
+    const contentDiv = document.getElementById('compareContent');
+    if (!contentDiv) {
+        console.error('❌ compareContent not found!');
+        showToast('שגיאה', 'אלמנט ההשוואה לא נמצא', 'error', 3000);
+        return;
+    }
+    
+    console.log('🎨 Generating comparison table...');
+    const tableHTML = generateComparisonTableHTML(players);
+    contentDiv.innerHTML = tableHTML;
+    
+    const modal = document.getElementById('compareModal');
+    if (!modal) {
+        console.error('❌ compareModal not found!');
+        showToast('שגיאה', 'חלון ההשוואה לא נמצא', 'error', 3000);
+        return;
+    }
+    
+    modal.style.display = 'block';
+    document.body.style.overflow = 'hidden'; // Prevent background scrolling
+    console.log('✅ Modal opened successfully!');
+};
 
 function getMetricValueClass(value, values, reversed) {
     const numericValues = values.filter(v => typeof v === 'number');
@@ -2032,41 +2186,141 @@ function exportToCsv() {
 /**
  * Compare selected players in a modal
  */
-function getNextOpponent(player) {
-    if (!state.teamsData || !player.team) return '-';
+function compareSelectedPlayers() {
+    // Get all checked checkboxes
+    const checkboxes = document.querySelectorAll('.player-select:checked');
     
-    let fixtures = [];
-    if (state.currentDataSource === 'demo') {
-        fixtures = state.allPlayersData.demo?.fixtures || [];
-    } else {
-        fixtures = state.allPlayersData.live?.fixtures || state.allPlayersData.historical?.fixtures || [];
+    if (checkboxes.length === 0) {
+        showToast('לא נבחרו שחקנים', 'אנא בחר לפחות שחקן אחד להשוואה', 'warning', 3000);
+        return;
     }
     
-    const currentGW = state.draft.details?.league?.current_event || 1;
-    const nextGW = currentGW + 1;
-    
-    const nextFixture = fixtures.find(f => 
-        !f.finished && 
-        f.event === nextGW && 
-        (f.team_h === player.team || f.team_a === player.team)
-    );
-    
-    if (nextFixture) {
-        const oppTeamId = nextFixture.team_h === player.team ? nextFixture.team_a : nextFixture.team_h;
-        const oppTeam = state.teamsData[oppTeamId];
-        const isHome = nextFixture.team_h === player.team;
-        return oppTeam ? `${isHome ? 'vs' : '@'} ${oppTeam.short_name}` : '-';
+    if (checkboxes.length > 5) {
+        showToast('יותר מדי שחקנים', 'ניתן להשוות עד 5 שחקנים בו-זמנית', 'warning', 3000);
+        return;
     }
     
-    return '-';
-}
-
-
-
-function closeModal() {
-    const modal = document.getElementById('compareModal');
-    if (modal) modal.remove();
-    document.body.style.overflow = '';
+    // Get player IDs
+    const playerIds = Array.from(checkboxes).map(cb => parseInt(cb.dataset.playerId));
+    
+    // Get player data
+    const players = playerIds
+        .map(id => state.displayedData.find(p => p.id === id))
+        .filter(Boolean);
+    
+    if (players.length === 0) {
+        showToast('שגיאה', 'לא נמצאו נתוני שחקנים', 'error', 3000);
+        return;
+    }
+    
+    // Create modal
+    const modal = document.createElement('div');
+    modal.id = 'compareModal';
+    modal.style.cssText = `
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.7);
+        backdrop-filter: blur(4px);
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        z-index: 10000;
+        padding: 20px;
+    `;
+    
+    // Comparison metrics
+    const metrics = [
+        { key: 'draft_score', label: '🏆 ציון דראפט', format: (v) => v?.toFixed(1) || '0' },
+        { key: 'predicted_points_1_gw', label: '📈 חיזוי GW הבא', format: (v) => v?.toFixed(1) || '0' },
+        { key: 'total_points', label: '⚽ סה"כ נקודות', format: (v) => v || '0' },
+        { key: 'points_per_game_90', label: '📊 נק\'/משחק', format: (v) => v?.toFixed(1) || '0' },
+        { key: 'form', label: '🔥 כושר', format: (v) => v || '0' },
+        { key: 'now_cost', label: '💰 מחיר', format: (v) => `£${(v / 10).toFixed(1)}m` },
+        { key: 'selected_by_percent', label: '👥 נבחר %', format: (v) => `${v}%` },
+        { key: 'expected_goal_involvements', label: '🎯 xGI', format: (v) => parseFloat(v || 0).toFixed(2) },
+        { key: 'goals_scored', label: '⚽ שערים', format: (v) => v || '0' },
+        { key: 'assists', label: '🅰️ בישולים', format: (v) => v || '0' },
+        { key: 'clean_sheets', label: '🛡️ משחקי אפס', format: (v) => v || '0' },
+        { key: 'bonus', label: '⭐ בונוס', format: (v) => v || '0' },
+        { key: 'minutes', label: '⏱️ דקות', format: (v) => v || '0' },
+        { key: 'ict_index', label: '📈 ICT', format: (v) => v || '0' },
+        { key: 'def_contrib_per90', label: '🛡️ DC/90', format: (v) => v?.toFixed(1) || '0' }
+    ];
+    
+    let tableHTML = `
+        <div style="background: white; border-radius: 16px; max-width: 1000px; width: 100%; max-height: 90vh; overflow: auto; box-shadow: 0 20px 60px rgba(0,0,0,0.3);">
+            <div style="position: sticky; top: 0; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 24px; border-radius: 16px 16px 0 0; z-index: 100;">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <h2 style="margin: 0; color: white; font-size: 24px; font-weight: 900;">⚖️ השוואת שחקנים</h2>
+                    <button onclick="document.getElementById('compareModal').remove()" style="background: rgba(255,255,255,0.2); border: none; color: white; font-size: 24px; width: 40px; height: 40px; border-radius: 50%; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.2s;">✕</button>
+                </div>
+            </div>
+            
+            <div style="padding: 24px;">
+                <div style="overflow-x: auto;">
+                    <table style="width: 100%; border-collapse: collapse;">
+                        <thead>
+                            <tr style="background: #f8fafc; border-bottom: 2px solid #e2e8f0;">
+                                <th style="padding: 16px; text-align: right; font-weight: 800; color: #0f172a; position: sticky; right: 0; background: #f8fafc; z-index: 10;">מדד</th>
+                                ${players.map(p => `
+                                    <th style="padding: 16px; text-align: center; min-width: 150px;">
+                                        <div style="display: flex; flex-direction: column; align-items: center; gap: 8px;">
+                                            <img src="${getPlayerImageUrl(p)}" 
+                                                 onerror="this.src='${config.urls.missingPlayerImage}'" 
+                                                 style="width: 60px; height: 60px; border-radius: 50%; border: 3px solid #e2e8f0; object-fit: cover;">
+                                            <div style="font-weight: 800; color: #0f172a; font-size: 14px;">${p.web_name}</div>
+                                            <div style="font-size: 11px; color: #64748b; font-weight: 600;">${p.team_name} • ${p.position_short}</div>
+                                        </div>
+                                    </th>
+                                `).join('')}
+                            </tr>
+                        </thead>
+                        <tbody>
+    `;
+    
+    metrics.forEach((metric, idx) => {
+        const bgColor = idx % 2 === 0 ? '#ffffff' : '#f8fafc';
+        const values = players.map(p => parseFloat(p[metric.key]) || 0);
+        const maxValue = Math.max(...values);
+        
+        tableHTML += `
+            <tr style="background: ${bgColor}; border-bottom: 1px solid #e2e8f0;">
+                <td style="padding: 14px; font-weight: 700; color: #475569; position: sticky; right: 0; background: ${bgColor}; z-index: 10;">${metric.label}</td>
+                ${players.map(p => {
+                    const value = parseFloat(p[metric.key]) || 0;
+                    const isBest = value === maxValue && maxValue > 0;
+                    return `
+                        <td style="padding: 14px; text-align: center; font-weight: ${isBest ? '900' : '600'}; color: ${isBest ? '#10b981' : '#0f172a'}; font-size: 15px; ${isBest ? 'background: linear-gradient(135deg, #d1fae5 0%, #a7f3d0 100%);' : ''}">
+                            ${metric.format(p[metric.key])}
+                            ${isBest ? ' 👑' : ''}
+                        </td>
+                    `;
+                }).join('')}
+            </tr>
+        `;
+    });
+    
+    tableHTML += `
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    modal.innerHTML = tableHTML;
+    
+    // Close on background click
+    modal.addEventListener('click', (e) => {
+        if (e.target === modal) {
+            modal.remove();
+        }
+    });
+    
+    document.body.appendChild(modal);
 }
 
 // ============================================
@@ -2736,12 +2990,7 @@ function predictPointsForFixture(player, fixture) {
     // ============================================
     // 🎲 FINAL PREDICTION
     // ============================================
-    // Reduced baseScore divisor from 10 to 20 to make predictions more realistic (avg ~5.0)
-    // baseScore (0-100) / 20 = 0-5 points from form/xGI/etc.
-    // + 2 (appearance)
-    // + goalValueBonus (xG/xA points)
-    // + cleanSheetBonus
-    const rawPrediction = (baseScore / 20) + cleanSheetBonus + goalValueBonus + bonusPoints + 2; 
+    const rawPrediction = (baseScore / 10) + cleanSheetBonus + goalValueBonus + bonusPoints + 2; // +2 for appearance
     const predictedPoints = rawPrediction * playingTimeFactor;
     
     return Math.max(0, Math.min(predictedPoints, 20)); // Cap at 20 points per game
@@ -3062,66 +3311,16 @@ function getTeamColor(name) {
     return palette[Math.abs(hash) % palette.length];
 }
 
-// 🔧 Helper to fetch transactions and update rosters
-// async function fetchAndApplyTransactions(leagueId, currentGw) { ... } // Removed as API is 404
-
 async function loadDraftDataInBackground() {
     // Load draft data silently in the background without showing loading overlay
     try {
         const detailsUrl = `${config.corsProxy}${encodeURIComponent(`https://draft.premierleague.com/api/league/${state.draft.leagueId}/details`)}`;
         const detailsCacheKey = `fpl_draft_details_${state.draft.leagueId}`;
         
-        // 🔧 SMART GW DETECTION: Find the highest GW with actual draft data available
-        let currentGW = getCurrentEventId(); // Fallback
-        let actualDataGw = null;
-        
-        try {
-            const bootstrapUrl = 'https://fantasy.premierleague.com/api/bootstrap-static/';
-            const bootstrapResponse = await fetch(config.corsProxy + encodeURIComponent(bootstrapUrl));
-            const bootstrapData = await bootstrapResponse.json();
-            
-            if (bootstrapData && bootstrapData.events) {
-                const currentEvent = bootstrapData.events.find(e => e.is_current);
-                const nextEvent = bootstrapData.events.find(e => e.is_next);
-                
-                // 🎯 Try next GW first (latest roster), then current
-                const gwsToTry = [];
-                if (nextEvent) gwsToTry.push(nextEvent.id);
-                if (currentEvent) gwsToTry.push(currentEvent.id);
-                
-                // 🧪 Quick test to find which GW has data
-                for (const testGw of gwsToTry) {
-                    try {
-                        const testUrl = `${config.corsProxy}${encodeURIComponent(`https://draft.premierleague.com/api/league/${state.draft.leagueId}/details`)}`;
-                        const testResponse = await fetch(testUrl);
-                        if (testResponse.ok) {
-                            const testData = await testResponse.json();
-                            if (testData && testData.league_entries && testData.league_entries[0]) {
-                                const testEntryId = testData.league_entries[0].entry_id;
-                                const picksTestUrl = `${config.corsProxy}${encodeURIComponent(`https://draft.premierleague.com/api/entry/${testEntryId}/event/${testGw}`)}`;
-                                const picksResponse = await fetch(picksTestUrl);
-                                if (picksResponse.ok) {
-                                    actualDataGw = testGw;
-                                    console.log(`✅ Background: GW${testGw} has data available`);
-                                    break;
-                                }
-                            }
-                        }
-                    } catch (err) {
-                        console.log(`⚠️ Background: GW${testGw} test failed`);
-                    }
-                }
-                
-                currentGW = actualDataGw || currentEvent?.id || currentGW;
-                console.log(`📅 Background: Using GW${currentGW}`);
-            }
-        } catch (err) {
-            console.warn('⚠️ Background load: Could not fetch bootstrap-static');
-        }
-        
         // Clear old picks cache for background load too
+        const currentGW = getCurrentEventId();
         Object.keys(localStorage).forEach(key => {
-            if (key.startsWith('fpl_draft_picks_')) {
+            if (key.startsWith('fpl_draft_picks_') && key.includes(`_gw${currentGW}`)) {
                 localStorage.removeItem(key);
             }
         });
@@ -3130,6 +3329,9 @@ async function loadDraftDataInBackground() {
         
         if (details && details.league_entries) {
             state.draft.details = details;
+            
+            // Process draft data to get owned players
+            const currentGW = details.league?.current_event || 10;
             
             // Build entryId to team name map
             state.draft.entryIdToTeamName.clear();
@@ -3145,7 +3347,6 @@ async function loadDraftDataInBackground() {
                 .map(async entry => {
                     const picksUrl = `${config.corsProxy}${encodeURIComponent(`https://draft.premierleague.com/api/entry/${entry.entry_id}/event/${currentGW}`)}`;
                     const picksCacheKey = `fpl_draft_picks_bg_${entry.entry_id}_gw${currentGW}`;
-                    
                     try {
                         const picksData = await fetchWithCache(picksUrl, picksCacheKey, 30);
                         if (picksData && picksData.picks) {
@@ -3250,25 +3451,23 @@ async function loadDraftLeague() {
         localStorage.removeItem(detailsCacheKey);
         localStorage.removeItem(standingsCacheKey);
         
-        // 🔧 CRITICAL FIX: Aggressively clear ALL draft picks cache to ensure fresh roster data
-        console.log("🧹 Clearing ALL old picks cache...");
+        // 🔧 CRITICAL FIX: Also clear ALL picks cache to ensure fresh roster data
+        console.log("🧹 Clearing old picks cache...");
+        const draftGwForCache = getCurrentEventId(); // Get current GW for cache key
         Object.keys(localStorage).forEach(key => {
-            if (key.startsWith('fpl_draft_picks_') || key.startsWith('fpl_draft_details_')) {
-                console.log(`   Removing cached data: ${key}`);
+            if (key.startsWith('fpl_draft_picks_') && key.includes(`_gw${draftGwForCache}`)) {
+                console.log(`   Removing cached picks: ${key}`);
                 localStorage.removeItem(key);
             }
         });
         
         // Don't add proxy here - fetchWithCache will handle it with fallbacks
-        // Add timestamp to force fresh fetch from FPL servers
-        const timestamp = new Date().getTime();
-        const detailsUrl = config.urls.draftLeagueDetails(config.draftLeagueId) + `?t=${timestamp}`;
-        const standingsUrl = config.urls.draftLeagueStandings(config.draftLeagueId) + `?t=${timestamp}`;
+        const detailsUrl = config.urls.draftLeagueDetails(config.draftLeagueId);
+        const standingsUrl = config.urls.draftLeagueStandings(config.draftLeagueId);
         
-        // Use 0 cache duration to force fresh fetch
         const [detailsData, standingsData] = await Promise.all([
-            fetchWithCache(config.corsProxy + encodeURIComponent(detailsUrl), detailsCacheKey, 0),
-            fetchWithCache(config.corsProxy + encodeURIComponent(standingsUrl), standingsCacheKey, 0).catch(() => null)
+            fetchWithCache(config.corsProxy + encodeURIComponent(detailsUrl), detailsCacheKey, 5),
+            fetchWithCache(config.corsProxy + encodeURIComponent(standingsUrl), standingsCacheKey, 5).catch(() => null)
         ]);
         
         state.draft.details = detailsData;
@@ -3285,87 +3484,20 @@ async function loadDraftLeague() {
             state.draft.ownedElementIds.clear();
 
             const leagueEntries = state.draft.details?.league_entries || [];
-            
-            // 🔧 SMART GW DETECTION: Find the highest GW with actual draft data available
-            let draftGw = getCurrentEventId(); // Start with fallback
-            let actualDataGw = null;
-            
-            // Try to get the REAL current GW from bootstrap-static and verify which has data
-            try {
-                const bootstrapUrl = 'https://fantasy.premierleague.com/api/bootstrap-static/';
-                const bootstrapResponse = await fetch(config.corsProxy + encodeURIComponent(bootstrapUrl));
-                const bootstrapData = await bootstrapResponse.json();
-                
-                if (bootstrapData && bootstrapData.events) {
-                    const currentEvent = bootstrapData.events.find(e => e.is_current);
-                    const nextEvent = bootstrapData.events.find(e => e.is_next);
-                    
-                    // 🎯 Build priority list: try next GW first (for latest roster), then current
-                    const gwsToTry = [];
-                    if (nextEvent) gwsToTry.push({ id: nextEvent.id, label: 'NEXT' });
-                    if (currentEvent) gwsToTry.push({ id: currentEvent.id, label: 'CURRENT' });
-                    
-                    console.log(`🔍 Testing GW availability (priority order): ${gwsToTry.map(g => `GW${g.id} (${g.label})`).join(', ')}`);
-                    
-                    // 🧪 Test which GW actually has data by trying first team
-                    const testEntry = leagueEntries[0];
-                    if (testEntry && testEntry.entry_id) {
-                        for (const gw of gwsToTry) {
-                            try {
-                                const testUrl = config.urls.draftEntryPicks(testEntry.entry_id, gw.id);
-                                const testResponse = await fetch(config.corsProxy + encodeURIComponent(testUrl));
-                                if (testResponse.ok) {
-                                    actualDataGw = gw.id;
-                                    console.log(`✅ GW${gw.id} (${gw.label}) has data available! Using this for all teams.`);
-                                    break;
-                                } else {
-                                    console.log(`⚠️ GW${gw.id} (${gw.label}) returned ${testResponse.status}, trying next...`);
-                                }
-                            } catch (err) {
-                                console.log(`⚠️ GW${gw.id} (${gw.label}) test failed: ${err.message}`);
-                            }
-                        }
-                    }
-                    
-                    // Use the verified GW, or fallback to current event
-                    draftGw = actualDataGw || currentEvent?.id || draftGw;
-                    console.log(`📅 FINAL DECISION: Using GW${draftGw} (verified with actual Draft API data)`);
-                }
-            } catch (err) {
-                console.warn('⚠️ Could not fetch bootstrap-static, using fallback:', err.message);
-            }
-            
+            const draftGw = state.draft.details?.league?.current_event || getCurrentEventId();
             console.log(`2. Determined Draft GW: ${draftGw}. Found ${leagueEntries.length} league entries.`);
-            console.log(`📅 League current_event from draft API (OUTDATED):`, state.draft.details?.league?.current_event);
-            console.log(`📅 getCurrentEventId() returns:`, getCurrentEventId());
-            console.log(`📅 FINAL GW being used:`, draftGw);
 
             const picksPromises = leagueEntries.map(async (entry) => {
                 if (!entry || !entry.entry_id || !entry.id) return;
                 
-                const timestamp = new Date().getTime();
-                const baseUrl = config.urls.draftEntryPicks(entry.entry_id, draftGw);
-                const urlWithTimestamp = `${baseUrl}?_t=${timestamp}`;
-                const url = config.corsProxy + encodeURIComponent(urlWithTimestamp);
-                // Use a unique cache key that includes timestamp to ensure uniqueness
-                const picksCacheKey = `fpl_draft_picks_v4_${entry.entry_id}_gw${draftGw}_${timestamp}`;
+                const url = config.corsProxy + encodeURIComponent(config.urls.draftEntryPicks(entry.entry_id, draftGw));
+                const picksCacheKey = `fpl_draft_picks_final_v4_${entry.entry_id}_gw${draftGw}`;
                 
                 console.log(`📥 Fetching picks for ${entry.entry_name} (Entry ID: ${entry.entry_id}, GW: ${draftGw})`);
-                console.log(`   🔗 Base URL: ${baseUrl}`);
-                console.log(`   🔗 Full URL with timestamp: ${urlWithTimestamp}`);
-                console.log(`   🔗 Proxied URL: ${url.substring(0, 100)}...`);
                 
                 try {
-                // 1. Fetch picks - We already verified this GW has data, so no fallback needed
-                console.log(`   ⏳ Fetching from verified GW${draftGw}...`);
-                const response = await fetch(url);
-                
-                if (!response.ok) {
-                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-                }
-                const picksData = await response.json();
-                
-                console.log(`   📦 Raw picks data:`, picksData ? `${picksData.picks?.length} picks` : 'NULL'); 
+                    // 1. Fetch picks
+                    const picksData = await fetchWithCache(url, picksCacheKey, 10); // Short cache to ensure fresh data
                     
                     if (picksData && picksData.picks) {
                         console.log(`   ✅ Received ${picksData.picks.length} picks for ${entry.entry_name}`);
@@ -3391,15 +3523,12 @@ async function loadDraftLeague() {
                         // Log detailed roster info for user's team (Amit United)
                         if (entry.entry_name && entry.entry_name.includes('Amit')) {
                             console.log(`🏆 AMIT UNITED ROSTER (${fplPlayerIds.length} players):`);
-                            console.log(`   📋 Raw picks from API (first 3):`, picksData.picks.slice(0, 3));
-                            console.log(`   🗺️ Draft→FPL mapping size:`, state.draft.draftToFplIdMap.size);
                             const processedById = getProcessedByElementId();
                             picksWithFplIds.forEach((pick, idx) => {
                                 const player = processedById.get(pick.fplId);
                                 const playerName = player ? player.web_name : 'UNKNOWN';
                                 const teamName = player ? player.team_name : 'UNKNOWN';
-                                const mappedFrom = state.draft.draftToFplIdMap.get(pick.originalDraftId);
-                                console.log(`   ${idx + 1}. ${playerName} (${teamName}) - FPL ID: ${pick.fplId}, Draft ID: ${pick.originalDraftId}, Mapped: ${mappedFrom ? 'YES' : 'NO'}, Position: ${pick.position}`);
+                                console.log(`   ${idx + 1}. ${playerName} (${teamName}) - FPL ID: ${pick.fplId}, Draft ID: ${pick.originalDraftId}, Position: ${pick.position}`);
                             });
                         }
                         
@@ -3423,10 +3552,7 @@ async function loadDraftLeague() {
 
             await Promise.all(picksPromises);
             
-            // 🔧 Apply recent transactions to update rosters manually
-            await fetchAndApplyTransactions(state.draft.leagueId, draftGw);
-            
-            console.log(`3. Rosters Populated: ${state.draft.rostersByEntryId.size} teams.`);
+            console.log("3. Rosters Populated:", state.draft.rostersByEntryId.size, "teams.");
 
         } catch (debugError) {
             console.error("CRITICAL ERROR during roster population:", debugError);
@@ -3437,14 +3563,9 @@ async function loadDraftLeague() {
         
         console.log("4. Starting UI Rendering...");
         
-        // Load historical lineups for analytics (WAIT for completion - needed for bench points)
-        console.log("4a. Loading historical lineups...");
-        try {
-            await loadHistoricalLineups();
-            console.log("✅ Historical lineups loaded successfully");
-        } catch (err) {
-            console.error('Failed to load historical lineups:', err);
-        }
+        // Load historical lineups for analytics (async, don't wait)
+        console.log("4a. Loading historical lineups in background...");
+        loadHistoricalLineups().catch(err => console.error('Failed to load historical lineups:', err));
         
         console.log("4b. Calling renderDraftStandings()...");
         renderDraftStandings();
@@ -3478,7 +3599,8 @@ async function loadDraftLeague() {
                 console.log("✅ Next fixtures rendered:", fixturesHtml ? 'Yes' : 'No matches');
             }
             
-            renderAllTeamsTrendChart(null, 'cumulative', []);
+            const allIds = (state.draft.details.league_entries || []).map(e => String(e.id));
+            renderAllTeamsTrendChart(null, 'cumulative', allIds);
         }
         
         console.log("4g. Calling renderRecommendations()...");
@@ -3522,13 +3644,47 @@ async function loadDraftLeague() {
  * Load historical lineups for all teams across all gameweeks
  * This is used for accurate analytics calculations
  */
-// New global state for historical points
-state.historicalPoints = {};
-state.aggregatedCache = {}; // Cache for aggregated range stats
 
-/**
- * Calculate aggregated stats for the last N gameweeks
- */
+async function getGameweekPoints(gw) {
+    if (state.historicalPoints[gw]) return state.historicalPoints[gw];
+    
+    // Check local storage
+    const cacheKey = `fpl_gw_${gw}_stats`;
+    const cached = localStorage.getItem(cacheKey);
+    if (cached) {
+        try {
+            const parsed = JSON.parse(cached);
+            state.historicalPoints[gw] = new Map(parsed);
+            return state.historicalPoints[gw];
+        } catch(e) { console.error('Cache parse error', e); }
+    }
+
+    try {
+        const response = await fetchWithCache(
+            `https://fantasy.premierleague.com/api/event/${gw}/live/`,
+            `fpl_event_${gw}_live`,
+            30 // Cache for 30 mins
+        );
+        
+        if (!response || !response.elements) return null;
+        
+        const statsMap = new Map();
+        response.elements.forEach(el => {
+            statsMap.set(el.id, el.stats);
+        });
+        
+        state.historicalPoints[gw] = statsMap;
+        
+        // Persist to local storage (map as array)
+        localStorage.setItem(cacheKey, JSON.stringify(Array.from(statsMap.entries())));
+        
+        return statsMap;
+    } catch (err) {
+        console.error(`Failed to fetch GW ${gw} stats:`, err);
+        return null;
+    }
+}
+
 async function calculateAggregatedStats(lastN) {
     const completedGW = getCompletedGWCount();
     const startGW = Math.max(1, completedGW - lastN + 1);
@@ -3639,36 +3795,6 @@ async function calculateAggregatedStats(lastN) {
     });
 }
 
-/**
- * Fetch live points data for a specific gameweek
- * Used for accurate bench points calculation
- */
-async function getGameweekPoints(gw) {
-    if (state.historicalPoints[gw]) {
-        return state.historicalPoints[gw];
-    }
-    
-    try {
-        const url = `https://fantasy.premierleague.com/api/event/${gw}/live/`;
-        // console.log(`📡 Fetching live points for GW${gw}...`);
-        const data = await fetchWithCache(config.corsProxy + encodeURIComponent(url), `fpl_live_gw${gw}`, 60 * 24 * 7); // Cache for a week
-        
-        // Transform to simple map: elementId -> stats object
-        const pointsMap = new Map();
-        if (data && data.elements) {
-            data.elements.forEach(el => {
-                pointsMap.set(el.id, el.stats);
-            });
-        }
-        
-        state.historicalPoints[gw] = pointsMap;
-        return pointsMap;
-    } catch (e) {
-        console.error(`Failed to fetch points for GW${gw}`, e);
-        return new Map();
-    }
-}
-
 async function loadHistoricalLineups() {
     console.log('📚 Loading historical lineups for all teams...');
     
@@ -3677,90 +3803,53 @@ async function loadHistoricalLineups() {
         return;
     }
     
-    // 🔧 Clear historical lineup cache for fresh data
-    console.log("🧹 Clearing historical lineup cache...");
-    Object.keys(localStorage).forEach(key => {
-        if (key.startsWith('fpl_draft_picks_historical_')) {
-            localStorage.removeItem(key);
-        }
-    });
-    
     const leagueEntries = state.draft.details.league_entries;
     const currentGW = state.draft.details.league?.current_event || getCurrentEventId();
     
     // Load lineups for GW 1 through current GW
     const gwsToLoad = Array.from({ length: currentGW }, (_, i) => i + 1);
     
-    // Pre-fetch all historical points data needed (Critical for bench points calculation)
-    console.log("📊 Pre-fetching historical points data for points calculation...");
-    await Promise.all(gwsToLoad.map(gw => getGameweekPoints(gw)));
-    
     console.log(`📊 Loading ${gwsToLoad.length} gameweeks for ${leagueEntries.length} teams...`);
     
-    // Process teams in parallel (but limit concurrency slightly if needed, though browser handles it)
-    await Promise.all(leagueEntries.map(async (entry) => {
-        if (!entry || !entry.entry_id || !entry.id) return;
+    for (const entry of leagueEntries) {
+        if (!entry || !entry.entry_id || !entry.id) continue;
         
         const teamHistoricalLineups = {};
         
-        // Split GWs into chunks to avoid overwhelming the proxy/API
-        const chunkSize = 5; 
-        for (let i = 0; i < gwsToLoad.length; i += chunkSize) {
-            const chunk = gwsToLoad.slice(i, i + chunkSize);
-            
-            await Promise.all(chunk.map(async (gw) => {
-                try {
-                    const url = config.urls.draftEntryPicks(entry.entry_id, gw);
+        for (const gw of gwsToLoad) {
+            try {
+                const url = config.corsProxy + encodeURIComponent(config.urls.draftEntryPicks(entry.entry_id, gw));
                 const picksCacheKey = `fpl_draft_picks_historical_${entry.entry_id}_gw${gw}`;
                 
-                    // fetchWithCache handles proxy logic internally now
-                    // Use shorter cache for historical data to ensure freshness
-                const picksData = await fetchWithCache(url, picksCacheKey, 60); // Cache for 1 hour only
+                const picksData = await fetchWithCache(url, picksCacheKey, 1440); // Cache for 24 hours
                 
                 if (picksData && picksData.picks) {
-                    // Retrieve pre-fetched points map for this GW
-                    const gwPointsMap = state.historicalPoints[gw];
-                    
                     const picksWithFplIds = picksData.picks.map(pick => {
                         const fplId = state.draft.draftToFplIdMap.size > 0 
                             ? state.draft.draftToFplIdMap.get(pick.element) 
                             : pick.element;
                             
-                        // Get actual points from history map (Best source), fallback to pick.points, fallback to 0
-                        let actualPoints = 0;
-                        if (gwPointsMap && gwPointsMap.has(fplId)) {
-                            const stats = gwPointsMap.get(fplId);
-                            actualPoints = stats.total_points;
-                        } else if (pick.points !== undefined) {
-                            actualPoints = pick.points;
-                        }
-
                         return {
                             fplId: fplId || pick.element,
                             position: pick.position,
-                            originalDraftId: pick.element,
-                            points: actualPoints // Store confirmed actual points
+                            originalDraftId: pick.element
                         };
                     });
                     
                     // Store lineup for this GW
-                    const starting = picksWithFplIds.filter(p => p.position <= 11);
-                    const bench = picksWithFplIds.filter(p => p.position > 11);
+                    const starting = picksWithFplIds.filter(p => p.position <= 11).map(p => p.fplId);
+                    const bench = picksWithFplIds.filter(p => p.position > 11).map(p => p.fplId);
                     
                     teamHistoricalLineups[`gw${gw}`] = { starting, bench };
                 }
             } catch (err) {
                 console.warn(`⚠️ Failed to load GW${gw} for ${entry.entry_name}:`, err.message);
             }
-            }));
-            
-            // Small delay between chunks to be nice to API
-            await new Promise(r => setTimeout(r, 100));
         }
         
         state.draft.historicalLineups.set(entry.id, teamHistoricalLineups);
         console.log(`✅ Loaded ${Object.keys(teamHistoricalLineups).length} GWs for ${entry.entry_name}`);
-    }));
+    }
     
     console.log(`📚 Historical lineups loaded for ${state.draft.historicalLineups.size} teams`);
 }
@@ -4150,7 +4239,7 @@ function renderRecommendations() {
         let tableHTML = `
             <div class="rec-card">
                 <div class="rec-header">
-                    <h4 style="font-size: 18px; font-weight: 800;">${player.web_name} <span style="color: #ef4444; font-size: 15px;">(${posNames[position]})</span></h4>
+                    <h4 style="font-size: 18px; font-weight: 800;">${player.web_name} <span style="color: rgba(158, 174, 255, 1); font-size: 15px;">(${posNames[position]})</span></h4>
                     <p class="rec-subtitle" style="font-size: 13px; font-weight: 600;">⚽ ${posNames[position]} • ציון: ${player.smart_score.toFixed(1)}</p>
                 </div>
                 <table class="rec-table">
@@ -4221,39 +4310,20 @@ function renderRecommendations() {
  */
 function computeDraftTeamAggregates() {
     const processedById = getProcessedByElementId();
-    const myTeam = findMyTeam();
-    const matches = state.draft.details?.matches || [];
+    const currentGW = state.draft.details?.league?.current_event || getCurrentEventId();
     
-    // Verification Log
-    let verificationLog = "📋 Draft Analytics Calculation Log\n";
-        
-    const results = (state.draft.details?.league_entries || []).filter(e => e && e.entry_name).map(e => {
+    return (state.draft.details?.league_entries || []).filter(e => e && e.entry_name).map(e => {
         const teamName = e.entry_name;
+        const historicalLineups = state.draft.historicalLineups.get(e.id);
+        
+        // If no historical data yet, fall back to current roster
+        if (!historicalLineups || Object.keys(historicalLineups).length === 0) {
+            console.warn(`⚠️ No historical lineups for ${teamName}, using current roster`);
         const playerIds = state.draft.rostersByEntryId.get(e.id) || [];
         const players = playerIds.map(id => processedById.get(id)).filter(Boolean);
             
-        // 1. Points and Wins from MATCHES (Actual History)
-        let totalPointsFor = 0;
-        let totalPointsAgainst = 0;
-        let wins = 0;
+            if (!players.length) return { team: teamName, metrics: {} };
         
-        matches.forEach(m => {
-            if (m.finished) {
-                if (String(m.league_entry_1) === String(e.id)) {
-                    totalPointsFor += m.league_entry_1_points;
-                    totalPointsAgainst += m.league_entry_2_points;
-                    if (m.winner === 'league_entry_1') wins++;
-                } else if (String(m.league_entry_2) === String(e.id)) {
-                    totalPointsFor += m.league_entry_2_points;
-                    totalPointsAgainst += m.league_entry_1_points;
-                    if (m.winner === 'league_entry_2') wins++;
-                }
-            }
-        });
-        
-        // 2. Squad Stats from CURRENT ROSTER (Best available proxy without fetching full history)
-        // We sum the season totals of the current squad.
-        // This represents the "Current Power" of the squad.
         const sumDraft = players.reduce((s,p)=>s+p.draft_score,0);
         const sumPred = players.reduce((s,p)=>s+(p.predicted_points_4_gw||0),0);
         const totalPrice = players.reduce((s,p)=>s+p.now_cost,0);
@@ -4263,12 +4333,52 @@ function computeDraftTeamAggregates() {
         const totalXGI = players.reduce((s,p)=>s+(parseFloat(p.expected_goal_involvements)||0),0);
         const totalDefCon = players.reduce((s,p)=>s+(p.def_contrib_per90||0),0);
 
-        if (myTeam && e.id === myTeam.id) {
-            verificationLog += `Team: ${teamName}\n`;
-            verificationLog += `  - Points (History): ${totalPointsFor}\n`;
-            verificationLog += `  - Goals+Assists (Current Squad Season Total): ${gaTotal}\n`;
-            verificationLog += `  - xGI (Current Squad Season Total): ${totalXGI.toFixed(2)}\n`;
+        return { team: teamName, metrics: { sumDraft, sumPred, totalPrice, sumSelectedBy, gaTotal, totalCleanSheets, totalXGI, totalDefCon } };
         }
+        
+        // Calculate metrics from ACTUAL STARTERS across all GWs
+        let sumDraft = 0, sumPred = 0, totalPrice = 0, sumSelectedBy = 0;
+        let gaTotal = 0, totalCleanSheets = 0, totalXGI = 0, totalDefCon = 0;
+        let totalPointsFor = 0, totalPointsAgainst = 0;
+        let starterCount = 0;
+        
+        // Iterate through all gameweeks
+        for (let gw = 1; gw <= currentGW; gw++) {
+            const gwKey = `gw${gw}`;
+            const lineup = historicalLineups[gwKey];
+            
+            if (!lineup || !lineup.starting) continue;
+            
+            // Get only the STARTING 11 players
+            const starters = lineup.starting
+                .map(id => processedById.get(id))
+                .filter(p => p && p.minutes > 0); // Only players who actually played
+            
+            starters.forEach(p => {
+                sumDraft += p.draft_score || 0;
+                sumPred += p.predicted_points_4_gw || 0;
+                totalPrice += p.now_cost || 0;
+                sumSelectedBy += parseFloat(p.selected_by_percent) || 0;
+                gaTotal += (p.goals_scored || 0) + (p.assists || 0);
+                totalCleanSheets += p.clean_sheets || 0;
+                totalXGI += parseFloat(p.expected_goal_involvements) || 0;
+                totalDefCon += p.def_contrib_per90 || 0;
+                totalPointsFor += p.event_points || 0; // Actual points scored in that GW
+                starterCount++;
+            });
+        }
+        
+        // Average out metrics that should be averaged (not summed)
+        const gwCount = Math.max(1, currentGW);
+        sumDraft = sumDraft / gwCount;
+        sumPred = sumPred / gwCount;
+        totalPrice = totalPrice / gwCount;
+        sumSelectedBy = sumSelectedBy / gwCount;
+        
+        // Get table points from standings
+        const standingsEntry = state.draft._standingsData.find(s => s.entry_id === e.id);
+        const tablePoints = standingsEntry ? standingsEntry.total : 0;
+        const wins = standingsEntry ? standingsEntry.matches_won : 0;
         
         return { 
             team: teamName, 
@@ -4281,18 +4391,14 @@ function computeDraftTeamAggregates() {
                 totalCleanSheets, 
                 totalXGI, 
                 totalDefCon,
-                totalPointsFor, // From matches
-                totalPointsAgainst,
-                tablePoints: wins * 3, // Approx
+                totalPointsFor,
+                totalPointsAgainst: 0, // TODO: Calculate from matches
+                tablePoints,
                 wins
             } 
         };
     });
-    
-    console.log(verificationLog);
-    return results;
 }
-
 
 function populateAnalyticsHighlight() {
     const select = document.getElementById('analyticsHighlight');
@@ -4680,17 +4786,17 @@ function renderDraftAnalytics(teamAggregates) {
                         footerColor: '#64748b',
                         borderColor: 'rgba(2, 132, 199, 0.8)',
                         borderWidth: 2,
-                    padding: 14,
+                        padding: 11,
                         displayColors: false,
-                    titleFont: { size: 15, weight: '700' },
-                    bodyFont: { size: 13, family: 'system-ui, -apple-system' },
-                    footerFont: { size: 11, weight: '500' },
-                    bodySpacing: 4,
-                    footerSpacing: 5,
-                    footerMarginTop: 8,
+                        titleFont: { size: 12.1, weight: '700' },
+                        bodyFont: { size: 9.9, family: 'system-ui, -apple-system' },
+                        footerFont: { size: 8.8, weight: '500' },
+                        bodySpacing: 3.3,
+                        footerSpacing: 4.4,
+                        footerMarginTop: 6.6,
                         cornerRadius: 8,
-                    caretSize: 6,
-                    caretPadding: 8,
+                        caretSize: 5.5,
+                        caretPadding: 6.6,
                         callbacks: {
                             title: function(context) {
                                 const teamName = context[0].label;
@@ -4914,16 +5020,12 @@ function renderDraftComparison(aggregates) {
     // Enhanced metrics including standings data with icons
     const enhancedMetrics = [
         { key: 'sumDraft', label: '🏆 ציון דראפט', format: (v) => v.toFixed(1) },
-        { key: 'sumPred', label: '📈 צפי GW הבא', format: (v) => v.toFixed(1) }, // Changed from 4GW to next GW
+        { key: 'sumPred', label: '📈 צפי 4GW', format: (v) => v.toFixed(1) },
         { key: 'totalPoints', label: '⚽ נק\' בעד', format: (v) => v.toFixed(0), source: 'standings' },
         { key: 'pointsAgainst', label: '🛡️ נק\' נגד', format: (v) => v.toFixed(0), source: 'standings' },
         { key: 'tablePoints', label: '🏅 נק\' טבלה', format: (v) => v.toFixed(0), source: 'standings' },
         { key: 'wins', label: '✅ נצחונות', format: (v) => v.toFixed(0), source: 'standings' },
-        { key: 'totalXGI', label: '🎯 xGI', format: (v) => v.toFixed(1) },
-        { key: 'avgPrice', label: '💰 ממוצע מחיר', format: (v) => v.toFixed(1) },
-        { key: 'gaTotal', label: '⚽ שערים+בישולים', format: (v) => v.toFixed(0) },
-        { key: 'csTotal', label: '🧼 משחקי אפס', format: (v) => v.toFixed(0) },
-        { key: 'defTotal', label: '🛡️ תרומה הגנתית', format: (v) => v.toFixed(1) }
+        { key: 'totalXGI', label: '🎯 xGI', format: (v) => v.toFixed(1) }
     ];
     
     let tableHTML = `
@@ -4932,16 +5034,16 @@ function renderDraftComparison(aggregates) {
             <div style="overflow-x: auto; overflow-y: auto; max-height: 600px;">
                 <table class="styled-table draft-comparison-table" style="width: 100%; border-collapse: collapse; background: white; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.08); font-size: 11px;">
                     <thead style="position: sticky; top: 0; z-index: 10;">
-                        <tr style="background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);">
-                            <th style="padding: 10px 8px; text-align: right; color: #0f172a; font-weight: 800; font-size: 11px; border-bottom: 2px solid #e2e8f0; position: sticky; right: 0; background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%); z-index: 11;">מדד</th>`;
+                        <tr style="background: linear-gradient(135deg, #e0e7ff 0%, #ddd6fe 100%);">
+                            <th style="padding: 10px 8px; text-align: right; color: #4338ca; font-weight: 800; font-size: 11px; border-bottom: 2px solid #e2e8f0; position: sticky; right: 0; background: linear-gradient(135deg, #e0e7ff 0%, #ddd6fe 100%); z-index: 11;">מדד</th>`;
     
     aggregates.forEach((agg, idx) => {
         const teamLogo = getTeamLogo(agg.team);
         // Shorten team names
         const shortName = agg.team.replace('Amit United🏆🏆', 'Amit U.').replace('Francis Bodega FC', 'Bodega').replace('Torpedo Eshel', 'Torpedo').replace('Los chicos 🌟', 'Los chicos');
-        tableHTML += `<th style="padding: 8px 4px; text-align: center; color: #0f172a; font-weight: 700; font-size: 11px; border-bottom: 2px solid #e2e8f0; min-width: 70px; background: #ffffff;">
+        tableHTML += `<th style="padding: 8px 4px; text-align: center; color: #4338ca; font-weight: 700; font-size: 12px; border-bottom: 2px solid #e2e8f0; min-width: 70px;">
             <div style="font-size: 16px; margin-bottom: 2px;">${teamLogo}</div>
-            <div style="font-size: 11px; line-height: 1.2; font-weight: 700; color: #475569;">${shortName}</div>
+            <div style="font-size: 10px; line-height: 1.2; font-weight: 700;">${shortName}</div>
         </th>`;
     });
     tableHTML += '</tr></thead><tbody>';
@@ -5066,88 +5168,10 @@ function renderPitch(containerEl, playerIds, isMyLineup = false, benchIds = null
             spot.style.top = `${y}%`;
             spot.style.left = `${(i + 1) * 100 / (count + 1)}%`;
             
-            // Extra info for my lineup
-            let extraInfo = '';
-            let opponentName = '';
-            if (isMyLineup) {
-                const points = p.event_points || 0;
-                const proj = (parseFloat(p.predicted_points_1_gw) || 0).toFixed(1);
-                
-                // Use the getNextOpponent helper function to get opponent team name
-                const nextOppInfo = getNextOpponent(p);
-                let opp = '-';
-                if (nextOppInfo && nextOppInfo !== '-') {
-                    // Extract team name from string like "vs ARS" or "@ ARS"
-                    const match = nextOppInfo.match(/(?:vs|@)\s*(.+)/);
-                    opp = match ? match[1] : nextOppInfo;
-                    opponentName = opp;
-                }
-                
-                extraInfo = `
-                    <div class="player-data">
-                        <div><span class="player-points">${points}</span> <span class="player-proj">(${proj})</span></div>
-                        <div class="player-opp">${opp}</div>
-                    </div>
-                `;
-            } else {
-                // For other teams, also get opponent info
-                const nextOpp = getNextOpponent(p);
-                if (nextOpp && nextOpp !== '-') {
-                    const match = nextOpp.match(/(?:vs|@)\s*(.+)/);
-                    opponentName = match ? match[1] : nextOpp;
-                }
-            }
-            
-            // Add next opponent info below player name (for all lineups)
-            let nextOppInfoHtml = '';
-            if (opponentName && opponentName !== '-') {
-                nextOppInfoHtml = `<div style="font-size: 10px; color: #94a3b8; margin-top: 2px; font-weight: 600; text-transform: uppercase;">${opponentName}</div>`;
-            }
-            
-            // Add injury indicator - ENHANCED DESIGN (Larger & More Visible)
-            let injuryBadge = '';
-            if (p.chance_of_playing_next_round !== null && p.chance_of_playing_next_round !== undefined) {
-                const chancePercent = parseInt(p.chance_of_playing_next_round);
-                
-                // Styles for injury badge - Much larger and more prominent
-                const badgeStyle = `
-                    position: absolute; 
-                    top: -8px; 
-                    right: -8px; 
-                    width: 32px; 
-                    height: 32px; 
-                    display: flex; 
-                    align-items: center; 
-                    justify-content: center; 
-                    font-size: 18px; 
-                    box-shadow: 0 3px 8px rgba(0,0,0,0.4);
-                    border: 3px solid white;
-                    border-radius: 50%;
-                    z-index: 20;
-                    animation: pulse 2s ease-in-out infinite;
-                `;
-                
-                if (chancePercent === 0 || p.status === 'u') {
-                    // Red ambulance for unavailable/0% chance
-                    injuryBadge = `<div style="${badgeStyle} background: #dc2626;">🚑</div>`;
-                } else if (chancePercent <= 50 || p.status === 'd') {
-                    // Yellow ambulance for doubtful/low chance
-                    injuryBadge = `<div style="${badgeStyle} background: #eab308;">🚑</div>`;
-                } else if (chancePercent === 75) {
-                     // Orange warning for 75% chance
-                     injuryBadge = `<div style="${badgeStyle} background: #ea580c;">⚠️</div>`;
-                }
-            }
-            
             spot.innerHTML = `
-                <div style="position: relative; display: inline-block;">
                 <img class="player-photo" src="${getPlayerImageUrl(p)}" alt="${p.web_name}" 
                      onerror="this.src='${config.urls.missingPlayerImage}'">
-                    ${injuryBadge}
-                </div>
                 <div class="player-name">${p.web_name}</div>
-                ${nextOppInfoHtml}
-                ${extraInfo}
             `;
             pitch.appendChild(spot);
         });
@@ -5164,22 +5188,13 @@ function renderPitch(containerEl, playerIds, isMyLineup = false, benchIds = null
     if (benchPlayers.length > 0) {
         const bench = document.createElement('div');
         bench.className = 'bench-strip';
-        bench.innerHTML = benchPlayers.map(p => {
-            let extraInfo = '';
-            if (isMyLineup) {
-                const points = p.event_points || 0;
-                const proj = (parseFloat(p.predicted_points_1_gw) || 0).toFixed(1);
-                extraInfo = `<div style="font-size:9px; color:#cbd5e1;">${points} (${proj})</div>`;
-            }
-            return `
+        bench.innerHTML = benchPlayers.map(p => `
             <div class="bench-item">
                 <img src="${getPlayerImageUrl(p)}" alt="${p.web_name}" 
                      onerror="this.src='${config.urls.missingPlayerImage}'">
                 <div>${p.web_name}</div>
-                ${extraInfo}
             </div>
-            `;
-        }).join('');
+        `).join('');
         containerEl.appendChild(bench);
     }
 }
@@ -5486,17 +5501,13 @@ function renderCharts() {
         const canvas = document.getElementById(canvasId);
         if (!canvas) return;
         
-        // Determine minute threshold based on range
+        const statsRange = document.getElementById('statsRange') ? document.getElementById('statsRange').value : 'all';
         let minMinutes = 300;
-        const range = state.activeRange || 'all';
-        
-        if (range !== 'all') {
-            const lastN = parseInt(range);
-            // Dynamic threshold: e.g. for last 3 games, maybe 90 mins (1 full game) is enough?
-            // Or 40% of max minutes. 
-            minMinutes = lastN * 45; // 45 mins per game on average required
-        }
-        
+        if (statsRange === '3') minMinutes = 90;
+        if (statsRange === '5') minMinutes = 200;
+        if (statsRange === '10') minMinutes = 400;
+        if (statsRange === 'all') minMinutes = 300;
+
         const players = data.filter(p => p.position_name === pos && p.minutes > minMinutes);
         if (players.length < 2) return;
 
@@ -5519,8 +5530,8 @@ function renderCharts() {
         charts[canvasId] = new Chart(ctx, config);
     };
 
-    renderPosMatrix('chart-mid', 'MID', 'expected_goal_involvements_per_90', 'xGI/90', 'קשרים');
-    renderPosMatrix('chart-fwd', 'FWD', 'expected_goal_involvements_per_90', 'xGI/90', 'חלוצים');
+    renderPosMatrix('chart-mid', 'MID', 'xGI_per90', 'xGI/90', 'קשרים');
+    renderPosMatrix('chart-fwd', 'FWD', 'xGI_per90', 'xGI/90', 'חלוצים');
     renderPosMatrix('chart-def', 'DEF', 'def_contrib_per90', 'תרומה הגנתית/90', 'מגנים');
     renderPosMatrix('chart-gkp', 'GKP', 'expected_goals_conceded_per_90', 'xGC/90', 'שוערים');
 
@@ -5532,9 +5543,11 @@ function renderCharts() {
         const teamStats = {};
         data.forEach(p => {
             if (!teamStats[p.team_name]) teamStats[p.team_name] = { x: 0, y: 0, mins: 0 };
-            // For Attack chart, we use 'expected_goal_involvements' (mapped to expected_goals_assists in preprocess)
-            // But raw field is expected_goal_involvements. preprocessPlayerData makes p.expected_goals_assists = parseFloat(p.expected_goal_involvements) || 0;
-            // So we should use the key that works on the processed object.
+            
+            // Fix: Use correct keys for aggregation (always use per 90 or total? Team chart needs total to average, or average per 90)
+            // Original logic summed values. 
+            // If xKey is 'expected_goal_involvements', we use it.
+            // If we are in range mode, 'expected_goal_involvements' should be the aggregated total.
             
             let valX = 0;
             if (xKey === 'expected_goal_involvements') {
@@ -5563,12 +5576,8 @@ function renderCharts() {
              const playersCount = type === 'attack' ? 6 : 5; // Approx mids+fwds vs defs+gkp
              const norm = stats.mins > 0 ? (stats.mins/90) / playersCount : 1;
              
-             let minMins = 450;
-             const range = state.activeRange || 'all';
-             if (range !== 'all') minMins = parseInt(range) * 90 * 0.5; // Lower threshold for short ranges
-
              // Avoid division by zero or very small numbers
-             if (stats.mins < minMins) return null; // Need meaningful minutes
+             if (stats.mins < 450) return null; // Need meaningful minutes
 
              return { x: stats.x/norm, y: stats.y/norm, team: team };
         }).filter(d => d !== null && (d.x > 0 || d.y > 0));
@@ -5587,9 +5596,11 @@ function renderCharts() {
         const canvas = document.getElementById('chart-price-score');
         if (!canvas) return;
         
-        let minMinutes = 500;
-        const range = state.activeRange || 'all';
-        if (range !== 'all') minMinutes = parseInt(range) * 60; 
+        const statsRange = document.getElementById('statsRange') ? document.getElementById('statsRange').value : 'all';
+        let minMinutes = 500; // default for all season
+        if (statsRange === '3') minMinutes = 90;
+        if (statsRange === '5') minMinutes = 200;
+        if (statsRange === '10') minMinutes = 400;
 
         const points = data.filter(p => p.minutes > minMinutes).map(p => ({
             x: parseFloat(p.now_cost),
@@ -5614,9 +5625,9 @@ function renderCharts() {
         const canvas = document.getElementById('chart-ict');
         if (!canvas) return;
         
-        // Sort by ICT index per 90 or total? 
-        // If range is selected, ict_index is aggregated total.
-        const topICT = [...data].sort((a,b) => (b.ict_index_per90 || b.ict_index) - (a.ict_index_per90 || a.ict_index)).slice(0, 15);
+        // Sort by ICT Index (or ict_index_per90 if we want, but usually total is used for "top 15")
+        // If range is active, ict_index should be aggregated total.
+        const topICT = [...data].sort((a,b) => (parseFloat(b.ict_index)||0) - (parseFloat(a.ict_index)||0)).slice(0, 15);
         
         const ctx = canvas.getContext('2d');
         if (charts['chart-ict']) charts['chart-ict'].destroy();
@@ -5626,9 +5637,9 @@ function renderCharts() {
             data: {
                 labels: topICT.map(p => p.web_name),
                 datasets: [
-                    { label: 'Influence/90', data: topICT.map(p => p.influence_per90 || 0), backgroundColor: '#3b82f6' },
-                    { label: 'Creativity/90', data: topICT.map(p => p.creativity_per90 || 0), backgroundColor: '#10b981' },
-                    { label: 'Threat/90', data: topICT.map(p => p.threat_per90 || 0), backgroundColor: '#ef4444' }
+                    { label: 'Influence', data: topICT.map(p => parseFloat(p.influence)||0), backgroundColor: '#3b82f6' },
+                    { label: 'Creativity', data: topICT.map(p => parseFloat(p.creativity)||0), backgroundColor: '#10b981' },
+                    { label: 'Threat', data: topICT.map(p => parseFloat(p.threat)||0), backgroundColor: '#ef4444' }
                 ]
             },
             options: {
@@ -5636,8 +5647,7 @@ function renderCharts() {
                 scales: { x: { stacked: true }, y: { stacked: true } },
                 plugins: {
                     legend: { position: 'bottom' },
-                    title: { display: true, text: 'Top 15 ICT Rank (Per 90)' },
-                    datalabels: { display: false }
+                    datalabels: { display: false } // Disable datalabels for this bar chart to reduce clutter
                 }
             }
         });
@@ -5797,17 +5807,23 @@ function calculateAdvancedWinProbability(team1Id, team2Id, roster1, roster2, pro
     const xPts1 = calculateTeamXPts(roster1, processedById);
     const xPts2 = calculateTeamXPts(roster2, processedById);
     
-    // 2. Form Factor (25% weight) - average of last 5 GWs
+    // 2. Form Factor (20% weight) - average of last 5 GWs
     const form1 = calculateFormFactor(roster1, processedById, team1Id);
     const form2 = calculateFormFactor(roster2, processedById, team2Id);
     
-    // 3. Injury Impact (20% weight)
+    // 3. Head-to-Head History (15% weight)
+    const h2h = calculateH2HHistory(team1Id, team2Id);
+    const totalH2H = h2h.team1Wins + h2h.team2Wins + h2h.draws;
+    const h2hFactor1 = totalH2H > 0 ? h2h.team1Wins / totalH2H : 0.5;
+    const h2hFactor2 = totalH2H > 0 ? h2h.team2Wins / totalH2H : 0.5;
+    
+    // 4. Injury Impact (10% weight)
     const injuryImpact1 = calculateInjuryImpact(roster1, processedById);
     const injuryImpact2 = calculateInjuryImpact(roster2, processedById);
     
-    // Combine all factors with weights (NO H2H HISTORY)
-    const score1 = (xPts1 * 0.55) + (form1 * 0.25) - (injuryImpact1 * 100 * 0.20);
-    const score2 = (xPts2 * 0.55) + (form2 * 0.25) - (injuryImpact2 * 100 * 0.20);
+    // Combine all factors with weights
+    const score1 = (xPts1 * 0.55) + (form1 * 0.20) + (h2hFactor1 * 100 * 0.15) - (injuryImpact1 * 100 * 0.10);
+    const score2 = (xPts2 * 0.55) + (form2 * 0.20) + (h2hFactor2 * 100 * 0.15) - (injuryImpact2 * 100 * 0.10);
     
     // Calculate win probability using sigmoid function
     const diff = score1 - score2;
@@ -5845,15 +5861,6 @@ function renderNextRoundFixtures() {
                 <span style="font-size: 24px;">⚔️</span>
                 <h3 style="margin: 0; font-size: 18px; color: #0f172a; font-weight: 800;">משחקי מחזור ${nextGW}</h3>
             </div>
-            
-            <div style="background: #f0f9ff; border: 1px solid #bae6fd; padding: 12px; border-radius: 8px; margin-bottom: 20px; font-size: 12px; color: #0369a1; line-height: 1.5;">
-                <strong>💡 איך מחושב הסיכוי לניצחון?</strong><br>
-                האלגוריתם משקלל: 
-                <span style="display:inline-block; margin: 0 4px;">• <strong>נקודות צפויות (xPts):</strong> 55%</span>
-                <span style="display:inline-block; margin: 0 4px;">• <strong>כושר (Form):</strong> 25%</span>
-                <span style="display:inline-block; margin: 0 4px;">• <strong>פציעות:</strong> -20%</span>
-            </div>
-
             <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 14px;">
     `;
     
@@ -5920,10 +5927,10 @@ function renderNextRoundFixtures() {
                 
                 <div style="margin-top: 8px;">
                     <div style="display: flex; height: 28px; background: #f1f5f9; border-radius: 14px; overflow: hidden; box-shadow: inset 0 1px 2px rgba(0,0,0,0.08);">
-                        <div style="width: ${winProb1}%; background: linear-gradient(90deg, #3b82f6 0%, #60a5fa 100%); display: flex; align-items: center; justify-content: center; color: white; font-weight: 800; font-size: 12px; transition: width 0.5s ease;" title="סיכוי לניצחון: ${winProb1.toFixed(1)}%">
+                        <div style="width: ${winProb1}%; background: linear-gradient(90deg, #3b82f6 0%, #60a5fa 100%); display: flex; align-items: center; justify-content: center; color: white; font-weight: 800; font-size: 12px; transition: width 0.5s ease;">
                             ${winProb1.toFixed(0)}%
                         </div>
-                        <div style="width: ${winProb2}%; background: linear-gradient(90deg, #f59e0b 0%, #fbbf24 100%); display: flex; align-items: center; justify-content: center; color: white; font-weight: 800; font-size: 12px; transition: width 0.5s ease;" title="סיכוי לניצחון: ${winProb2.toFixed(1)}%">
+                        <div style="width: ${winProb2}%; background: linear-gradient(90deg, #f59e0b 0%, #fbbf24 100%); display: flex; align-items: center; justify-content: center; color: white; font-weight: 800; font-size: 12px; transition: width 0.5s ease;">
                             ${winProb2.toFixed(0)}%
                         </div>
                     </div>
@@ -6143,150 +6150,19 @@ function renderH2HHistory() {
 }
 
 /**
- * Calculate bench points for all teams
- */
-function calculateAllTeamsBenchPoints(currentGW) {
-    const processedById = getProcessedByElementId();
-    const entries = state.draft.details?.league_entries || [];
-    const myTeamId = findMyTeam()?.id;
-    
-    const results = [];
-    
-    entries.forEach(entry => {
-        // Skip null/invalid entries
-        if (!entry || !entry.entry_name || entry.entry_name === 'null' || entry.entry_name.toLowerCase() === 'null') {
-            console.log(`⏭️ Skipping invalid entry:`, entry);
-            return;
-        }
-        
-        const historicalLineups = state.draft.historicalLineups.get(entry.id);
-        if (!historicalLineups || Object.keys(historicalLineups).length === 0) {
-            console.log(`⚠️ No historical lineups for ${entry.entry_name}`);
-            results.push({
-                teamName: entry.entry_name,
-                totalBenchPoints: 0,
-                avgPerGW: 0,
-                gwWithMistakes: 0,
-                isMyTeam: entry.id === myTeamId
-            });
-            return;
-        }
-        
-        let totalBenchPoints = 0;
-        let gwsWithBenchPoints = new Set();
-        
-        console.log(`💰 Calculating bench points for ${entry.entry_name}...`);
-        
-        for (let gw = 1; gw <= currentGW; gw++) {
-            const gwKey = `gw${gw}`;
-            const lineup = historicalLineups[gwKey];
-            if (!lineup || !lineup.bench) {
-                console.log(`   ⏭️ GW${gw}: No lineup data`);
-                continue;
-            }
-            
-            // Handle new structure (array of objects) or old structure (array of IDs)
-            // Ensure we handle both cases for backward compatibility if data is mixed
-            const benchItems = lineup.bench;
-            const benchPlayers = benchItems.map(item => {
-                // If item is object, use item.fplId and item.points
-                // If item is ID (number/string), fetch player but we won't have points directly
-                const id = (typeof item === 'object' && item !== null) ? item.fplId : item;
-                const player = processedById.get(id);
-                if (!player) return null;
-                
-                // If we have points directly from the pick, use them!
-                if (typeof item === 'object' && item.points !== undefined) {
-                    return { ...player, event_points: item.points };
-                }
-                
-                return player;
-            }).filter(Boolean);
-
-            console.log(`   📋 GW${gw}: ${benchPlayers.length} bench players`);
-            
-            let gwBenchPoints = 0;
-            benchPlayers.forEach(player => {
-                // Priority: 1. Points from Pick (stored in loadHistoricalLineups)
-                //           2. History array (unlikely to exist for all)
-                //           3. 0 as fallback
-                
-                let points = 0;
-                
-                if (player.event_points !== undefined) {
-                    // This comes from the pick object we just mapped
-                    points = player.event_points;
-                } else {
-                    const gwData = player.history?.find(h => h.round === gw);
-                    if (gwData) points = gwData.total_points;
-                }
-                
-                if (points > 0) {
-                    totalBenchPoints += points;
-                    gwBenchPoints += points;
-                    console.log(`      ✅ ${player.web_name}: ${points} pts`);
-                } else {
-                    console.log(`      ⭕ ${player.web_name}: 0 pts`);
-                }
-            });
-            
-            if (gwBenchPoints > 0) {
-                gwsWithBenchPoints.add(gw);
-            }
-        }
-        
-        console.log(`   📊 Total: ${totalBenchPoints} pts across ${gwsWithBenchPoints.size} GWs`);
-        
-        results.push({
-            teamName: entry.entry_name,
-            totalBenchPoints,
-            avgPerGW: totalBenchPoints / currentGW,
-            gwWithMistakes: gwsWithBenchPoints.size,
-            isMyTeam: entry.id === myTeamId
-        });
-    });
-    
-    // Sort by total bench points descending (worst first)
-    return results.sort((a, b) => b.totalBenchPoints - a.totalBenchPoints);
-}
-
-/**
- * Render lineup analysis for a specific team
- */
-window.renderLineupAnalysisForTeam = function(teamId) {
-    const selectedTeam = state.draft.details?.league_entries?.find(e => e.id === parseInt(teamId));
-    if (selectedTeam) {
-        renderLineupAnalysisInternal(selectedTeam);
-    }
-};
-
-/**
  * Render lineup decisions analysis - shows points lost due to benching
  */
 function renderLineupAnalysis() {
-    console.log('🔍 renderLineupAnalysis called');
-    const myTeam = findMyTeam();
-    console.log('🔍 myTeam:', myTeam);
-    if (myTeam) {
-        renderLineupAnalysisInternal(myTeam);
-    } else {
-        const container = document.getElementById('lineupAnalysisContainer');
-        if (container) {
-            container.innerHTML = '<div style="text-align: center; padding: 40px; color: #ef4444; background: #fee2e2; border-radius: 12px; border: 2px solid #fca5a5;"><h3 style="margin: 0 0 8px 0;">⚠️ לא נמצאה קבוצה</h3><p style="margin: 0;">אנא בחר את הקבוצה שלך בהגדרות</p></div>';
-        }
-    }
-}
-
-function renderLineupAnalysisInternal(team) {
     const container = document.getElementById('lineupAnalysisContainer');
     if (!container) return;
     
-    if (!team) {
+    const myTeam = findMyTeam();
+    if (!myTeam) {
         container.innerHTML = '<div style="text-align: center; padding: 40px; color: #64748b;">אנא בחר את הקבוצה שלך תחילה</div>';
         return;
     }
     
-    const historicalLineups = state.draft.historicalLineups.get(team.id);
+    const historicalLineups = state.draft.historicalLineups.get(myTeam.id);
     if (!historicalLineups || Object.keys(historicalLineups).length === 0) {
         container.innerHTML = '<div style="text-align: center; padding: 40px; color: #64748b;">טוען נתונים היסטוריים...</div>';
         return;
@@ -6295,65 +6171,10 @@ function renderLineupAnalysisInternal(team) {
     const processedById = getProcessedByElementId();
     const currentGW = state.draft.details?.league?.current_event || getCurrentEventId();
     
-    // Calculate bench points for ALL teams
-    const allTeamsBenchPoints = calculateAllTeamsBenchPoints(currentGW);
-    
-    // Team selector
-    const entries = state.draft.details?.league_entries || [];
-    const teamOptions = entries.map(e => `
-        <option value="${e.id}" ${e.id === team.id ? 'selected' : ''}>${e.entry_name}</option>
-    `).join('');
-    
-    const teamName = team.entry_name || team.name || 'Unknown Team';
-    
     let html = `
-        <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 16px 20px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); margin-bottom: 16px; display: flex; justify-content: space-between; align-items: center;">
-            <div>
-                <h2 style="margin: 0 0 4px 0; font-size: 18px; color: #ffffff; font-weight: 900;">🔍 ניתוח החלטות הרכב - ${teamName}</h2>
-                <p style="margin: 0; color: rgba(255,255,255,0.9); font-size: 12px;">כמה נקודות הפסדת בגלל שחקנים שהשארת על הספסל?</p>
-            </div>
-            <select onchange="renderLineupAnalysisForTeam(this.value)" style="padding: 8px 12px; border-radius: 8px; border: 2px solid rgba(255,255,255,0.3); background: rgba(255,255,255,0.15); color: white; font-weight: 700; font-size: 13px; cursor: pointer;">
-                ${teamOptions}
-            </select>
-        </div>
-        
-        <!-- All Teams Bench Points Table -->
-        <div style="background: white; padding: 20px; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.06); margin-bottom: 20px; border: 1px solid #e2e8f0;">
-            <h3 style="margin: 0 0 16px 0; font-size: 16px; color: #0f172a; font-weight: 800; display: flex; align-items: center; gap: 8px;">
-                <span>📊</span> נקודות שהושארו על הספסל - כל הקבוצות
-            </h3>
-            <div style="overflow-x: auto;">
-                <table style="width: 100%; border-collapse: collapse; font-size: 12px;">
-                    <thead>
-                        <tr style="background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%); border-bottom: 2px solid #e2e8f0;">
-                            <th style="padding: 10px 12px; text-align: right; font-weight: 700; color: #475569;">#</th>
-                            <th style="padding: 10px 12px; text-align: right; font-weight: 700; color: #475569;">קבוצה</th>
-                            <th style="padding: 10px 12px; text-align: center; font-weight: 700; color: #475569;">סה"כ נק' ספסל</th>
-                            <th style="padding: 10px 12px; text-align: center; font-weight: 700; color: #475569;">ממוצע למחזור</th>
-                            <th style="padding: 10px 12px; text-align: center; font-weight: 700; color: #475569;">מחזורים עם טעויות</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        ${allTeamsBenchPoints.map((team, idx) => `
-                            <tr style="border-bottom: 1px solid #f1f5f9; ${team.isMyTeam ? 'background: #eff6ff;' : ''}">
-                                <td style="padding: 10px 12px; font-weight: 600; color: #64748b;">${idx + 1}</td>
-                                <td style="padding: 10px 12px; font-weight: 700; color: ${team.isMyTeam ? '#3b82f6' : '#0f172a'};">
-                                    ${team.isMyTeam ? '🎯 ' : ''}${team.teamName}
-                                </td>
-                                <td style="padding: 10px 12px; text-align: center; font-weight: 800; color: #ef4444; font-size: 14px;">
-                                    ${team.totalBenchPoints.toFixed(1)}
-                                </td>
-                                <td style="padding: 10px 12px; text-align: center; font-weight: 700; color: #64748b;">
-                                    ${team.avgPerGW.toFixed(1)}
-                                </td>
-                                <td style="padding: 10px 12px; text-align: center; font-weight: 700; color: #64748b;">
-                                    ${team.gwWithMistakes} / ${currentGW}
-                                </td>
-                            </tr>
-                        `).join('')}
-                    </tbody>
-                </table>
-            </div>
+        <div style="background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%); padding: 24px; border-radius: 16px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); margin-bottom: 24px; border: 2px solid #e2e8f0; text-align: center;">
+            <h2 style="margin: 0 0 8px 0; font-size: 24px; color: #0f172a; font-weight: 900;">🔍 ניתוח החלטות הרכב</h2>
+            <p style="margin: 0; color: #64748b; font-size: 14px;">כמה נקודות הפסדת בגלל שחקנים שהשארת על הספסל?</p>
         </div>
     `;
     
@@ -6366,27 +6187,8 @@ function renderLineupAnalysisInternal(team) {
         
         if (!lineup) continue;
         
-        // Helper to map player and inject historical points
-        const mapPlayer = (item) => {
-            const id = (typeof item === 'object' && item !== null) ? item.fplId : item;
-            const player = processedById.get(id);
-            if (!player) return null;
-            
-            // Inject correct points for this GW
-            let gwPoints = 0;
-            if (typeof item === 'object' && item.points !== undefined) {
-                gwPoints = item.points;
-            } else {
-                // Fallback to history (likely undefined/0)
-                const gwData = player.history?.find(h => h.round === gw);
-                if (gwData) gwPoints = gwData.total_points;
-            }
-            
-            return { ...player, event_points: gwPoints }; // Override event_points with historical
-        };
-
-        const starters = lineup.starting.map(mapPlayer).filter(Boolean);
-        const bench = lineup.bench.map(mapPlayer).filter(Boolean);
+        const starters = lineup.starting.map(id => processedById.get(id)).filter(Boolean);
+        const bench = lineup.bench.map(id => processedById.get(id)).filter(Boolean);
         
         const startersPoints = starters.reduce((sum, p) => sum + (p.event_points || 0), 0);
         const benchPoints = bench.reduce((sum, p) => sum + (p.event_points || 0), 0);
@@ -6406,23 +6208,23 @@ function renderLineupAnalysisInternal(team) {
         }
     }
     
-    // Summary - COMPACT VERSION
+    // Summary
     html += `
-        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-bottom: 16px;">
-            <div style="background: linear-gradient(135deg, #ef4444 0%, #f87171 100%); padding: 16px; border-radius: 10px; text-align: center; color: white; box-shadow: 0 2px 8px rgba(239, 68, 68, 0.25);">
-                <div style="font-size: 11px; opacity: 0.9; margin-bottom: 6px;">סה"כ נקודות שהפסדת</div>
-                <div style="font-size: 32px; font-weight: 900; margin-bottom: 2px;">${totalPointsLost.toFixed(1)}</div>
-                <div style="font-size: 10px; opacity: 0.8;">החלטות הרכב לא אופטימליות</div>
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 16px; margin-bottom: 24px;">
+            <div style="background: linear-gradient(135deg, #ef4444 0%, #f87171 100%); padding: 24px; border-radius: 12px; text-align: center; color: white; box-shadow: 0 4px 12px rgba(239, 68, 68, 0.3);">
+                <div style="font-size: 14px; opacity: 0.9; margin-bottom: 8px;">סה"כ נקודות שהפסדת</div>
+                <div style="font-size: 48px; font-weight: 900; margin-bottom: 4px;">${totalPointsLost.toFixed(1)}</div>
+                <div style="font-size: 12px; opacity: 0.8;">בגלל החלטות הרכב לא אופטימליות</div>
             </div>
-            <div style="background: linear-gradient(135deg, #f59e0b 0%, #fbbf24 100%); padding: 16px; border-radius: 10px; text-align: center; color: white; box-shadow: 0 2px 8px rgba(245, 158, 11, 0.25);">
-                <div style="font-size: 11px; opacity: 0.9; margin-bottom: 6px;">מחזורים עם טעויות</div>
-                <div style="font-size: 32px; font-weight: 900; margin-bottom: 2px;">${gwAnalysis.length}</div>
-                <div style="font-size: 10px; opacity: 0.8;">מתוך ${currentGW} מחזורים</div>
+            <div style="background: linear-gradient(135deg, #f59e0b 0%, #fbbf24 100%); padding: 24px; border-radius: 12px; text-align: center; color: white; box-shadow: 0 4px 12px rgba(245, 158, 11, 0.3);">
+                <div style="font-size: 14px; opacity: 0.9; margin-bottom: 8px;">מחזורים עם טעויות</div>
+                <div style="font-size: 48px; font-weight: 900; margin-bottom: 4px;">${gwAnalysis.length}</div>
+                <div style="font-size: 12px; opacity: 0.8;">מתוך ${currentGW} מחזורים</div>
             </div>
-            <div style="background: linear-gradient(135deg, #3b82f6 0%, #60a5fa 100%); padding: 16px; border-radius: 10px; text-align: center; color: white; box-shadow: 0 2px 8px rgba(59, 130, 246, 0.25);">
-                <div style="font-size: 11px; opacity: 0.9; margin-bottom: 6px;">ממוצע נקודות לאיבוד</div>
-                <div style="font-size: 32px; font-weight: 900; margin-bottom: 2px;">${gwAnalysis.length > 0 ? (totalPointsLost / gwAnalysis.length).toFixed(1) : '0'}</div>
-                <div style="font-size: 10px; opacity: 0.8;">למחזור עם טעות</div>
+            <div style="background: linear-gradient(135deg, #3b82f6 0%, #60a5fa 100%); padding: 24px; border-radius: 12px; text-align: center; color: white; box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);">
+                <div style="font-size: 14px; opacity: 0.9; margin-bottom: 8px;">ממוצע נקודות לאיבוד</div>
+                <div style="font-size: 48px; font-weight: 900; margin-bottom: 4px;">${gwAnalysis.length > 0 ? (totalPointsLost / gwAnalysis.length).toFixed(1) : '0'}</div>
+                <div style="font-size: 12px; opacity: 0.8;">למחזור עם טעות</div>
             </div>
         </div>
     `;
@@ -6433,13 +6235,13 @@ function renderLineupAnalysisInternal(team) {
         return;
     }
     
-    // Detailed analysis - COMPACT VERSION
+    // Detailed analysis
     html += `
         <div style="background: white; border-radius: 12px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.05); border: 1px solid #e2e8f0;">
-            <div style="background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%); padding: 12px 16px; border-bottom: 2px solid #e2e8f0;">
-                <h3 style="margin: 0; font-size: 16px; color: #0f172a; font-weight: 800;">📊 פירוט לפי מחזור (רק מחזורים עם טעויות)</h3>
+            <div style="background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%); padding: 16px; border-bottom: 2px solid #e2e8f0;">
+                <h3 style="margin: 0; font-size: 18px; color: #0f172a; font-weight: 800;">📊 פירוט לפי מחזור</h3>
             </div>
-            <div style="padding: 12px; max-height: 600px; overflow-y: auto;">
+            <div style="padding: 16px;">
     `;
     
     // Sort by GW ascending (most recent first)
@@ -6466,29 +6268,31 @@ function renderLineupAnalysisInternal(team) {
             .slice(0, benchedHighScorers.length);
         
         html += `
-            <div style="background: ${idx % 2 === 0 ? '#fafafa' : 'white'}; padding: 12px; border-radius: 8px; margin-bottom: 10px; border: 1px solid ${analysis.pointsLost > 5 ? '#fca5a5' : '#e2e8f0'};">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
-                    <span style="background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%); color: white; padding: 4px 12px; border-radius: 8px; font-weight: 800; font-size: 13px;">מחזור ${analysis.gw}</span>
+            <div style="background: ${idx % 2 === 0 ? '#fafafa' : 'white'}; padding: 20px; border-radius: 12px; margin-bottom: 16px; border: 2px solid ${analysis.pointsLost > 5 ? '#fca5a5' : '#e2e8f0'};">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+                    <div>
+                        <span style="background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%); color: white; padding: 6px 16px; border-radius: 10px; font-weight: 800; font-size: 16px; box-shadow: 0 2px 8px rgba(59, 130, 246, 0.3);">מחזור ${analysis.gw}</span>
+                    </div>
                     <div style="text-align: left;">
-                        <span style="font-size: 10px; color: #64748b; font-weight: 600;">💔 הפסד: </span>
-                        <span style="font-size: 20px; font-weight: 900; color: #ef4444;">-${analysis.pointsLost.toFixed(1)}</span>
+                        <div style="font-size: 13px; color: #64748b; margin-bottom: 4px; font-weight: 600;">💔 נקודות שהפסדת</div>
+                        <div style="font-size: 32px; font-weight: 900; color: #ef4444; text-shadow: 0 2px 4px rgba(239, 68, 68, 0.2);">-${analysis.pointsLost.toFixed(1)}</div>
                     </div>
                 </div>
                 
-                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px; padding: 8px; background: #f8fafc; border-radius: 6px;">
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px; padding: 12px; background: #f8fafc; border-radius: 8px;">
                     <div style="text-align: center;">
-                        <div style="font-size: 10px; color: #64748b; margin-bottom: 2px; font-weight: 600;">ההרכב שבחרת</div>
-                        <div style="font-size: 18px; font-weight: 800; color: #475569;">${analysis.startersPoints.toFixed(1)}</div>
+                        <div style="font-size: 12px; color: #64748b; margin-bottom: 4px; font-weight: 600;">ההרכב שבחרת</div>
+                        <div style="font-size: 24px; font-weight: 800; color: #475569;">${analysis.startersPoints.toFixed(1)} נק'</div>
                     </div>
                     <div style="text-align: center;">
-                        <div style="font-size: 10px; color: #10b981; margin-bottom: 2px; font-weight: 600;">הרכב אופטימלי</div>
-                        <div style="font-size: 18px; font-weight: 800; color: #10b981;">${analysis.optimalPoints.toFixed(1)}</div>
+                        <div style="font-size: 12px; color: #10b981; margin-bottom: 4px; font-weight: 600;">הרכב אופטימלי</div>
+                        <div style="font-size: 24px; font-weight: 800; color: #10b981;">${analysis.optimalPoints.toFixed(1)} נק'</div>
                     </div>
                 </div>
                 
                 ${benchedHighScorers.length > 0 ? `
-                    <div style="background: white; padding: 10px; border-radius: 8px; border: 1px solid #e2e8f0;">
-                        <h4 style="margin: 0 0 8px 0; font-size: 12px; color: #0f172a; font-weight: 700;">⚠️ טעויות:</h4>
+                    <div style="background: white; padding: 16px; border-radius: 10px; border: 1px solid #e2e8f0;">
+                        <h4 style="margin: 0 0 12px 0; font-size: 14px; color: #0f172a; font-weight: 700;">⚠️ טעויות הרכב:</h4>
                         ${benchedHighScorers.map((benchPlayer, i) => {
                             const benchGwData = benchPlayer.history?.find(h => h.round === analysis.gw);
                             const benchPoints = benchGwData?.total_points || 0;
@@ -6502,18 +6306,29 @@ function renderLineupAnalysisInternal(team) {
                             const pointsDiff = benchPoints - replacedPoints;
                             
                             return `
-                                <div style="display: flex; justify-content: space-between; align-items: center; padding: 6px 8px; margin-bottom: 6px; background: #fef2f2; border-radius: 6px; border-left: 3px solid #ef4444; font-size: 11px;">
+                                <div style="display: flex; justify-content: space-between; align-items: center; padding: 10px; margin-bottom: 8px; background: #fef2f2; border-radius: 8px; border-left: 4px solid #ef4444;">
                                     <div style="flex: 1;">
-                                        <span style="font-weight: 700; color: #ef4444;">${benchPlayer.web_name}</span>
-                                        <span style="color: #64748b;"> (${benchPoints.toFixed(1)}נק')</span>
+                                        <div style="font-weight: 700; color: #0f172a; font-size: 13px; margin-bottom: 2px;">
+                                            ❌ השארת על הספסל: <span style="color: #ef4444;">${benchPlayer.web_name}</span>
                                         </div>
-                                    <div style="color: #94a3b8; padding: 0 6px;">↔️</div>
+                                        <div style="font-size: 11px; color: #64748b;">
+                                            ${benchPlayer.position_short} • ${benchPoints.toFixed(1)} נק' • ${benchMinutes} דקות
+                                        </div>
+                                    </div>
+                                    <div style="text-align: center; padding: 0 12px;">
+                                        <div style="font-size: 18px; color: #94a3b8;">↔️</div>
+                                    </div>
                                     <div style="flex: 1; text-align: left;">
-                                        <span style="font-weight: 600; color: #64748b;">${replacedPlayer?.web_name || 'N/A'}</span>
-                                        <span style="color: #94a3b8;"> (${replacedPoints.toFixed(1)}נק')</span>
+                                        <div style="font-weight: 700; color: #0f172a; font-size: 13px; margin-bottom: 2px;">
+                                            ✅ במקום: <span style="color: #64748b;">${replacedPlayer?.web_name || 'N/A'}</span>
                                         </div>
-                                    <div style="background: #fee2e2; padding: 4px 8px; border-radius: 6px; margin-right: 8px;">
-                                        <span style="font-size: 14px; font-weight: 900; color: #dc2626;">-${pointsDiff.toFixed(1)}</span>
+                                        <div style="font-size: 11px; color: #64748b;">
+                                            ${replacedPlayer?.position_short || 'N/A'} • ${replacedPoints.toFixed(1)} נק' • ${replacedMinutes} דקות
+                                        </div>
+                                    </div>
+                                    <div style="background: #fee2e2; padding: 8px 12px; border-radius: 8px; margin-right: 12px;">
+                                        <div style="font-size: 11px; color: #991b1b; font-weight: 600;">עלות</div>
+                                        <div style="font-size: 18px; font-weight: 900; color: #dc2626;">-${pointsDiff.toFixed(1)}</div>
                                     </div>
                                 </div>
                             `;
@@ -6675,13 +6490,9 @@ function renderMyLineup(teamId) {
         }
         
         container.innerHTML = `
-            <div style="text-align:center; padding: 30px;">
-                <div class="mini-loader" style="display: inline-block; margin-bottom: 12px;"></div>
-                <h3 style="color: #64748b; margin: 0 0 8px 0; font-size: 16px;">טוען סגל...</h3>
-                <p style="margin: 0; color: #94a3b8; font-size: 13px;">הנתונים מתעדכנים, אנא המתן.</p>
-                <button onclick="loadDraftDataInBackground().then(() => renderMyLineup(${teamId}))" style="margin-top: 16px; padding: 8px 16px; background: #3b82f6; color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: 600; font-size: 13px;">
-                    🔄 נסה לטעון שוב
-                </button>
+            <div style="text-align:center; padding: 20px;">
+                <p>לא נמצא סגל לקבוצה זו.</p>
+                <small style="color: #94a3b8;">ייתכן שהנתונים עדיין נטענים או שיש בעיית חיבור לשרת.</small>
             </div>`;
         return;
     }
@@ -6870,50 +6681,49 @@ function showRecommendedLineup() {
 
 function getNextOpponent(myEntryId) {
     const details = state.draft.details;
-    if (!details || !details.matches) {
-        console.log('❌ getNextOpponent: No details or matches');
-        return null;
-    }
+    if (!details || !details.matches) return null;
+    const currentEvent = details.league.current_event; 
     
-    const currentEvent = details.league?.current_event || 1;
-    console.log('🔍 getNextOpponent: currentEvent =', currentEvent, 'myEntryId =', myEntryId);
-    console.log('🔍 Total matches:', details.matches.length);
-    
-    // First, try to find matches in current or future gameweeks
-    const allMyMatches = details.matches.filter(m => 
+    // Try to find next match (current or future)
+    let nextMatch = details.matches.find(m => 
+        m.event === currentEvent && 
+        !m.finished &&
         (m.league_entry_1 === myEntryId || m.league_entry_2 === myEntryId)
     );
-    console.log('🔍 Matches involving my team:', allMyMatches.length);
     
-    // Find next unfinished match (current or future)
-    const futureMatches = allMyMatches.filter(m => 
-        m.event >= currentEvent && 
-        !m.finished
-    ).sort((a,b) => a.event - b.event);
-    
-    console.log('🔍 Future unfinished matches:', futureMatches.length);
-    if (futureMatches.length > 0) {
-        console.log('✅ Found next match:', futureMatches[0]);
-        const nextMatch = futureMatches[0];
-        const isEntry1 = nextMatch.league_entry_1 === myEntryId;
-        const opponentId = isEntry1 ? nextMatch.league_entry_2 : nextMatch.league_entry_1;
-        return {
-            match: nextMatch,
-            opponentId: opponentId,
-            opponentName: state.draft.entryIdToTeamName.get(opponentId) || 'Unknown',
-            isHome: isEntry1,
-            isLastMatch: false
-        };
+    if (!nextMatch) {
+        // Look for future matches
+        const futureMatches = details.matches.filter(m => 
+            m.event >= currentEvent && 
+            !m.finished &&
+            (m.league_entry_1 === myEntryId || m.league_entry_2 === myEntryId)
+        ).sort((a,b) => a.event - b.event);
+        if (futureMatches.length > 0) nextMatch = futureMatches[0];
     }
     
-    // If no future matches, try to find current week match even if finished (for debugging)
-    const currentWeekMatch = allMyMatches.find(m => m.event === currentEvent);
-    if (currentWeekMatch) {
-        console.log('⚠️ Found current week match (may be finished):', currentWeekMatch);
+    // If no future matches, show the last match
+    if (!nextMatch) {
+        const pastMatches = details.matches.filter(m => 
+            m.finished &&
+            (m.league_entry_1 === myEntryId || m.league_entry_2 === myEntryId)
+        ).sort((a,b) => b.event - a.event);
+        if (pastMatches.length > 0) {
+            nextMatch = pastMatches[0];
+            nextMatch._isLastMatch = true; // Flag to show it's a past match
+        }
     }
     
-    console.log('❌ No future matches found');
-    return null;
+    if (!nextMatch) return null;
+    
+    const isEntry1 = nextMatch.league_entry_1 === myEntryId;
+    const opponentId = isEntry1 ? nextMatch.league_entry_2 : nextMatch.league_entry_1;
+    return {
+        match: nextMatch,
+        opponentId: opponentId,
+        opponentName: state.draft.entryIdToTeamName.get(opponentId) || 'Unknown',
+        isHome: isEntry1,
+        isLastMatch: nextMatch._isLastMatch || false
+    };
 }
 
 // Helper function to get team logo emoji based on team name
@@ -6941,7 +6751,6 @@ function getTeamLogo(teamName) {
 
 // Helper function to get player photo URL
 function getPlayerPhotoUrl(playerCode) {
-    if (!playerCode) return config.urls.missingPlayerImage;
     return `https://resources.premierleague.com/premierleague/photos/players/250x250/p${playerCode}.png`;
 }
 
@@ -6960,7 +6769,6 @@ function renderNextRivalAnalysis(selectedOpponentId = null) {
     const container = document.getElementById('rivalAnalysisContainer');
     if (!container) return;
     container.innerHTML = '<div style="text-align:center; padding:20px; color:#64748b;"><div class="spinner"></div> מחשב סיכויים ומנתח הרכבים...</div>';
-    
     try {
         const myTeam = findMyTeam();
         if (!myTeam) {
@@ -6987,40 +6795,15 @@ function renderNextRivalAnalysis(selectedOpponentId = null) {
         if (!opponentData) {
             opponentData = getNextOpponent(myTeam.id);
         }
-        
         if (!opponentData) {
-            // If no next match found, show all teams for manual selection
-            const entries = state.draft.details?.league_entries || [];
-            const otherTeams = entries.filter(e => e.id !== myTeam.id);
-            
-            if (otherTeams.length > 0) {
-                // Show team selector
-                const teamOptions = otherTeams.map(e => `
-                    <button onclick="renderNextRivalAnalysis(${e.id})" style="padding: 12px 24px; margin: 8px; border-radius: 12px; border: 2px solid #e2e8f0; background: white; color: #475569; font-weight: 700; cursor: pointer; transition: all 0.2s; font-size: 15px;">
-                        ${getTeamLogo(e.entry_name)} ${e.entry_name}
-                    </button>
-                `).join('');
-                
-                container.innerHTML = `
-                    <div style="text-align:center; padding:30px; border: 2px dashed #cbd5e1; border-radius: 12px; background: #f8fafc;">
-                        <div style="font-size:40px; margin-bottom:10px;">🎯</div>
-                        <h3 style="margin:0 0 20px 0; color:#475569;">בחר יריב להשוואה</h3>
-                        <p style="margin:0 0 20px 0; color:#64748b;">לא נמצא משחק מתוכנן. בחר קבוצה להשוואה:</p>
-                        <div style="display: flex; flex-wrap: wrap; justify-content: center; gap: 8px;">
-                            ${teamOptions}
-                        </div>
-                    </div>`;
-            } else {
-                container.innerHTML = `
-                    <div class="alert alert-info" style="text-align:center; padding:30px; border: 2px dashed #cbd5e1; border-radius: 12px; background: #f8fafc;">
-                        <div style="font-size:40px; margin-bottom:10px;">🏖️</div>
-                        <h3 style="margin:0; color:#475569;">אין משחקים קרובים</h3>
-                        <p style="margin:5px 0 0; color:#64748b;">העונה הסתיימה או שאין משחקים מתוכננים בלוח השנה.</p>
-                    </div>`;
-            }
+            container.innerHTML = `
+                <div class="alert alert-info" style="text-align:center; padding:30px; border: 2px dashed #cbd5e1; border-radius: 12px; background: #f8fafc;">
+                    <div style="font-size:40px; margin-bottom:10px;">🏖️</div>
+                    <h3 style="margin:0; color:#475569;">אין משחקים קרובים</h3>
+                    <p style="margin:5px 0 0; color:#64748b;">העונה הסתיימה או שאין משחקים מתוכננים בלוח השנה.</p>
+                </div>`;
             return;
         }
-        
         const myRosterIds = state.draft.rostersByEntryId.get(myTeam.id) || [];
         const oppRosterIds = state.draft.rostersByEntryId.get(opponentData.opponentId) || [];
         const processedById = getProcessedByElementId();
@@ -7029,6 +6812,7 @@ function renderNextRivalAnalysis(selectedOpponentId = null) {
         
         // Calculate stats using only top 11 players for xPts
         const calcStats = (squad) => {
+            // Sort by predicted points and take top 11 for xPts
             const top11 = squad
                 .sort((a, b) => (b.predicted_points_1_gw || 0) - (a.predicted_points_1_gw || 0))
                 .slice(0, 11);
@@ -7036,14 +6820,12 @@ function renderNextRivalAnalysis(selectedOpponentId = null) {
             const totalXPts = top11.reduce((sum, p) => sum + (parseFloat(p.predicted_points_1_gw) || 0), 0);
             const totalXGI = squad.reduce((sum, p) => sum + (parseFloat(p.expected_goal_involvements) || 0), 0);
             const totalForm = squad.reduce((sum, p) => sum + (parseFloat(p.form) || 0), 0);
-            const totalGoals = squad.reduce((sum, p) => sum + (parseInt(p.goals_scored) || 0), 0);
-            const totalAssists = squad.reduce((sum, p) => sum + (parseInt(p.assists) || 0), 0);
-            const totalCleanSheets = squad.reduce((sum, p) => sum + (parseInt(p.clean_sheets) || 0), 0);
-            return { xPts: totalXPts, xGI: totalXGI, form: totalForm, goals: totalGoals, assists: totalAssists, cleanSheets: totalCleanSheets };
+            return { xPts: totalXPts, xGI: totalXGI, form: totalForm };
         };
-        
         const myStats = calcStats(mySquad);
         const oppStats = calcStats(oppSquad);
+        const formTotal = (myStats.form + oppStats.form) || 1;
+        const xgiTotal = (myStats.xGI + oppStats.xGI) || 1;
         
         // Calculate win probability using ADVANCED algorithm
         const winProbResult = calculateAdvancedWinProbability(
@@ -7056,6 +6838,13 @@ function renderNextRivalAnalysis(selectedOpponentId = null) {
         const myWinProb = winProbResult.winProb1;
         const oppWinProb = winProbResult.winProb2;
         
+        // Calculate additional stats
+        const myAvgPrice = mySquad.reduce((sum, p) => sum + (p.now_cost || 0), 0) / (mySquad.length || 1) / 10;
+        const oppAvgPrice = oppSquad.reduce((sum, p) => sum + (p.now_cost || 0), 0) / (oppSquad.length || 1) / 10;
+        
+        const myPPG = mySquad.reduce((sum, p) => sum + (parseFloat(p.points_per_game) || 0), 0) / (mySquad.length || 1);
+        const oppPPG = oppSquad.reduce((sum, p) => sum + (parseFloat(p.points_per_game) || 0), 0) / (oppSquad.length || 1);
+        
         // Get team logos
         const myLogo = getTeamLogo(myTeam.name);
         const oppLogo = getTeamLogo(opponentData.opponentName);
@@ -7063,10 +6852,10 @@ function renderNextRivalAnalysis(selectedOpponentId = null) {
         // Create team selectors
         const entries = state.draft.details?.league_entries || [];
         const opponentSelector = `
-            <div class="rival-selector-container" style="display: flex; justify-content: center; align-items: center; gap: 15px; margin-bottom: 20px; flex-wrap: wrap; background: white; padding: 15px; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); border: 1px solid #e2e8f0;">
-                <div style="display: flex; flex-direction: column; align-items: center; gap: 5px;">
-                    <label style="font-size: 12px; font-weight: 700; color: #3b82f6; text-transform: uppercase; letter-spacing: 0.5px;">הקבוצה שלי</label>
-                    <select id="rivalMyTeamSelect" onchange="updateMyTeamForRival(this.value)" style="padding: 8px 12px; border-radius: 8px; border: 2px solid #e0e7ff; font-size: 14px; font-weight: 600; color: #1e293b; cursor: pointer; background: #f8fafc; min-width: 160px; outline: none;">
+            <div style="display: flex; justify-content: center; align-items: center; gap: 15px; margin-bottom: 15px; flex-wrap: wrap;">
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <label style="font-size: 13px; font-weight: 600; color: #3b82f6;">הקבוצה שלי:</label>
+                    <select id="rivalMyTeamSelect" onchange="updateMyTeamForRival(this.value)" style="padding: 8px 16px; border-radius: 8px; border: 2px solid #3b82f6; font-size: 13px; font-weight: 600; color: #334155; cursor: pointer; background: white;">
                         ${entries.map(e => `
                             <option value="${e.id}" ${String(e.id) === String(myTeam.id) ? 'selected' : ''}>
                                 ${e.entry_name}
@@ -7074,12 +6863,10 @@ function renderNextRivalAnalysis(selectedOpponentId = null) {
                         `).join('')}
                     </select>
                 </div>
-                
-                <div style="font-size: 24px; color: #94a3b8; margin-top: 18px;">⚡</div>
-                
-                <div style="display: flex; flex-direction: column; align-items: center; gap: 5px;">
-                    <label style="font-size: 12px; font-weight: 700; color: #ef4444; text-transform: uppercase; letter-spacing: 0.5px;">היריב</label>
-                    <select id="rivalOpponentSelect" onchange="renderNextRivalAnalysis(this.value)" style="padding: 8px 12px; border-radius: 8px; border: 2px solid #fee2e2; font-size: 14px; font-weight: 600; color: #1e293b; cursor: pointer; background: #fff1f2; min-width: 160px; outline: none;">
+                <span style="font-size: 20px; color: #cbd5e1;">⚔️</span>
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <label style="font-size: 13px; font-weight: 600; color: #ef4444;">היריב:</label>
+                    <select id="rivalOpponentSelect" onchange="renderNextRivalAnalysis(this.value)" style="padding: 8px 16px; border-radius: 8px; border: 2px solid #ef4444; font-size: 13px; font-weight: 600; color: #334155; cursor: pointer; background: white;">
                         ${entries.filter(e => e.id !== myTeam.id).map(e => `
                             <option value="${e.id}" ${String(e.id) === String(opponentData.opponentId) ? 'selected' : ''}>
                                 ${e.entry_name}
@@ -7090,312 +6877,475 @@ function renderNextRivalAnalysis(selectedOpponentId = null) {
             </div>
         `;
         
-        // Match Title
+        // Show different title if it's a past match
         const matchTitle = opponentData.isManual ? 
-            `<div style="text-align: center; margin-bottom: 15px; display: flex; align-items: center; justify-content: center; gap: 8px; color: #6366f1; font-weight: 700; font-size: 14px; background: #e0e7ff; padding: 8px 16px; border-radius: 20px; display: inline-flex;">
-                <span>🔍</span> ניתוח מותאם אישית
-            </div>` :
-            `<div style="text-align: center; margin-bottom: 15px; display: flex; align-items: center; justify-content: center; gap: 8px; color: #0284c7; font-weight: 700; font-size: 14px; background: #e0f2fe; padding: 8px 16px; border-radius: 20px; display: inline-flex;">
-                <span>🔜</span> המשחק הבא שלך (GW${opponentData.match.event})
-            </div>`;
+            `<div style="text-align: center; background: linear-gradient(135deg, #e0e7ff 0%, #c7d2fe 100%); padding: 12px; border-radius: 12px; margin-bottom: 20px; color: #3730a3; font-weight: 700; font-size: 14px; box-shadow: 0 2px 8px rgba(79, 70, 229, 0.2);">🎯 ניתוח מותאם אישית</div>` :
+            opponentData.isLastMatch ? 
+            `<div style="text-align: center; background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%); padding: 12px; border-radius: 12px; margin-bottom: 20px; color: #92400e; font-weight: 700; font-size: 14px; box-shadow: 0 2px 8px rgba(251, 191, 36, 0.2);">📊 המשחק הבא שלך</div>` : 
+            `<div style="text-align: center; background: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%); padding: 12px; border-radius: 12px; margin-bottom: 20px; color: #1e40af; font-weight: 700; font-size: 14px; box-shadow: 0 2px 8px rgba(59, 130, 246, 0.2);">🔜 המשחק הבא שלך</div>`;
         
-        // Main Comparison Card
-        let html = `
-            <div style="text-align: center;">${matchTitle}</div>
-            ${opponentSelector}
-            
-            <div class="rival-header" style="background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%); padding: 30px; border-radius: 24px; box-shadow: 0 10px 25px -5px rgba(79, 70, 229, 0.4); margin-bottom: 24px; color: white; position: relative; overflow: hidden;">
-                <!-- Background Pattern -->
-                <div style="position: absolute; top: 0; left: 0; right: 0; bottom: 0; background-image: radial-gradient(circle at 20% 150%, rgba(255,255,255,0.1) 0%, transparent 50%), radial-gradient(circle at 80% -50%, rgba(255,255,255,0.15) 0%, transparent 50%); pointer-events: none;"></div>
-                
-                <div style="position: relative; z-index: 1;">
-                    <div style="display: flex; justify-content: space-between; align-items: center; max-width: 600px; margin: 0 auto;">
-                        <!-- My Team -->
-                        <div style="text-align: center; flex: 1;">
-                            <div style="font-size: 56px; margin-bottom: 10px; filter: drop-shadow(0 4px 6px rgba(0,0,0,0.2)); transition: transform 0.3s ease;">${myLogo}</div>
-                            <div style="font-weight: 800; font-size: 18px; margin-bottom: 8px; text-shadow: 0 2px 4px rgba(0,0,0,0.2);">${myTeam.name}</div>
-                            <div style="display: inline-block; background: rgba(255,255,255,0.2); backdrop-filter: blur(8px); padding: 6px 12px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.3); font-weight: 700;">
-                                ${myStats.xPts.toFixed(1)} xPts
-                        </div>
-                    </div>
-                    
-                        <!-- VS & Prob -->
-                        <div style="text-align: center; padding: 0 20px; flex: 0 0 180px; display: flex; flex-direction: column; align-items: center; justify-content: center;">
-                            <div style="font-weight: 900; font-size: 32px; margin-bottom: 15px; opacity: 0.9;">VS</div>
-                            
-                            <!-- Win Prob Circle/Bar - INCREASED BY 30% -->
-                            <div style="position: relative; height: 10.4px; background: rgba(0,0,0,0.3); border-radius: 5.2px; overflow: hidden; margin-bottom: 10px; width: 100%;">
-                                <div style="position: absolute; left: 0; top: 0; bottom: 0; width: ${myWinProb}%; background: #34d399; border-radius: 5.2px;"></div>
-                            </div>
-                            <div style="display: flex; justify-content: space-between; font-size: 15.6px; font-weight: 700; color: rgba(255,255,255,0.9); width: 100%;">
-                                <span>${myWinProb.toFixed(0)}%</span>
-                                <span>${oppWinProb.toFixed(0)}%</span>
+        let html = opponentSelector + matchTitle + `
+            <div class="rival-header" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 20px; border-radius: 16px; box-shadow: 0 8px 16px rgba(102, 126, 234, 0.3); margin: 0 auto 20px; max-width: 800px; position: relative; overflow: hidden;">
+                <div style="position: relative; z-index: 1; text-align: center;">
+                    <!-- Teams Row - All in one line -->
+                    <div style="display: flex; justify-content: center; align-items: center; gap: 40px; margin-bottom: 20px;">
+                        <div class="team-badge my-team" style="display: flex; align-items: center; gap: 12px;">
+                            <div style="font-size: 48px; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.2));">${myLogo}</div>
+                            <div>
+                                <div style="font-weight: 800; color: white; font-size: 15px; margin-bottom: 6px; text-shadow: 1px 1px 2px rgba(0,0,0,0.3);">${myTeam.name}</div>
+                                <div style="display: inline-block; background: rgba(255,255,255,0.25); backdrop-filter: blur(10px); color: white; padding: 6px 16px; border-radius: 15px; font-size: 14px; font-weight: 800; border: 1px solid rgba(255,255,255,0.3);">
+                                    ${myStats.xPts.toFixed(1)} נק'
+                                </div>
                             </div>
                         </div>
                         
-                        <!-- Opponent -->
-                        <div style="text-align: center; flex: 1;">
-                            <div style="font-size: 56px; margin-bottom: 10px; filter: drop-shadow(0 4px 6px rgba(0,0,0,0.2)); transition: transform 0.3s ease;">${oppLogo}</div>
-                            <div style="font-weight: 800; font-size: 18px; margin-bottom: 8px; text-shadow: 0 2px 4px rgba(0,0,0,0.2);">${opponentData.opponentName}</div>
-                            <div style="display: inline-block; background: rgba(255,255,255,0.2); backdrop-filter: blur(8px); padding: 6px 12px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.3); font-weight: 700;">
-                                ${oppStats.xPts.toFixed(1)} xPts
+                        <div class="versus-badge" style="text-align: center;">
+                            <div style="font-weight: 900; font-size: 28px; color: white; text-shadow: 2px 2px 4px rgba(0,0,0,0.3); margin-bottom: 6px;">VS</div>
+                            <div style="font-size: 12px; background: rgba(255,255,255,0.25); backdrop-filter: blur(10px); padding: 4px 12px; border-radius: 12px; color: white; font-weight: 700; border: 1px solid rgba(255,255,255,0.3);">
+                                GW ${opponentData.match.event || '?'}
                             </div>
                         </div>
+                        
+                        <div class="team-badge opp-team" style="display: flex; align-items: center; gap: 12px; flex-direction: row-reverse;">
+                            <div style="font-size: 48px; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.2));">${oppLogo}</div>
+                            <div style="text-align: right;">
+                                <div style="font-weight: 800; color: white; font-size: 15px; margin-bottom: 6px; text-shadow: 1px 1px 2px rgba(0,0,0,0.3);">${opponentData.opponentName}</div>
+                                <div style="display: inline-block; background: rgba(255,255,255,0.25); backdrop-filter: blur(10px); color: white; padding: 6px 16px; border-radius: 15px; font-size: 14px; font-weight: 800; border: 1px solid rgba(255,255,255,0.3);">
+                                    ${oppStats.xPts.toFixed(1)} נק'
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Win Probability Bar - Compact -->
+                    <div>
+                        <div style="text-align: center; font-size: 13px; color: white; font-weight: 800; margin-bottom: 10px; text-shadow: 1px 1px 2px rgba(0,0,0,0.3);">🎯 סיכוי לניצחון</div>
+                        <div style="display: flex; height: 45px; background: rgba(0,0,0,0.25); border-radius: 22px; overflow: hidden; box-shadow: inset 0 2px 4px rgba(0,0,0,0.3); border: 2px solid rgba(255,255,255,0.25);">
+                            <div style="width: ${myWinProb}%; background: linear-gradient(90deg, #10b981 0%, #34d399 100%); display: flex; align-items: center; justify-content: center; color: white; font-weight: 900; font-size: 22px; transition: width 0.5s ease; text-shadow: 1px 1px 2px rgba(0,0,0,0.3);">
+                                ${myWinProb.toFixed(0)}%
+                            </div>
+                            <div style="width: ${oppWinProb}%; background: linear-gradient(90deg, #f59e0b 0%, #fbbf24 100%); display: flex; align-items: center; justify-content: center; color: white; font-weight: 900; font-size: 22px; transition: width 0.5s ease; text-shadow: 1px 1px 2px rgba(0,0,0,0.3);">
+                                ${oppWinProb.toFixed(0)}%
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+        const analyzeSquadComposition = (squad) => {
+            const composition = {};
+            squad.forEach(p => {
+                const key = `${p.team_name} ${p.position_name}`;
+                if (!composition[key]) {
+                    composition[key] = { count: 0, players: [] };
+                }
+                composition[key].count++;
+                composition[key].players.push(p.web_name);
+            });
+            return composition;
+        };
+        const myComp = analyzeSquadComposition(mySquad);
+        const oppComp = analyzeSquadComposition(oppSquad);
+        let overlapsHtml = '';
+        const allKeys = new Set([...Object.keys(myComp), ...Object.keys(oppComp)]);
+        allKeys.forEach(key => {
+            const myData = myComp[key];
+            const oppData = oppComp[key];
+            if (myData && oppData) {
+                const myCount = myData.count;
+                const oppCount = oppData.count;
+                const total = myCount + oppCount;
+                const myPercent = (myCount / total * 100).toFixed(0);
+                const oppPercent = (oppCount / total * 100).toFixed(0);
+                // Get player objects for photos
+                const myPlayers = myData.players.map(name => mySquad.find(p => p.web_name === name)).filter(Boolean);
+                const oppPlayers = oppData.players.map(name => oppSquad.find(p => p.web_name === name)).filter(Boolean);
+                
+                overlapsHtml += `
+                    <div class="overlap-item" style="padding: 18px; background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%); border-radius: 12px; margin-bottom: 12px; border: 2px solid #e2e8f0; box-shadow: 0 2px 6px rgba(0,0,0,0.08);">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                            <div class="overlap-label" style="font-weight: 800; font-size: 15px; color: #0f172a;">${key}</div>
+                            <div class="overlap-values" style="font-family: monospace; font-weight: 900; font-size: 18px;">
+                                <span style="color:#3b82f6">${myCount}</span>
+                                <span style="color:#94a3b8; font-size: 16px; margin: 0 10px;">⚔️</span>
+                                <span style="color:#ef4444">${oppCount}</span>
+                            </div>
+                        </div>
+                        <div style="display: grid; grid-template-columns: 1fr auto 1fr; gap: 15px; margin-bottom: 12px; align-items: center;">
+                            <div style="display: flex; flex-direction: column; gap: 8px; align-items: flex-end;">
+                                ${myPlayers.map(p => `
+                                    <div style="display: flex; align-items: center; gap: 8px; justify-content: flex-end;">
+                                        <span style="color: #3b82f6; font-weight: 700; font-size: 13px;">${p.web_name}</span>
+                                        <img src="${p.code ? getPlayerPhotoUrl(p.code) : ''}" 
+                                             onerror="this.src='data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%2235%22 height=%2235%22 viewBox=%220 0 35 35%22%3E%3Ccircle cx=%2217.5%22 cy=%2217.5%22 r=%2217.5%22 fill=%22%23dbeafe%22/%3E%3Ctext x=%2250%25%22 y=%2250%25%22 text-anchor=%22middle%22 dy=%22.3em%22 font-size=%2214%22 fill=%22%233b82f6%22 font-weight=%22700%22%3E${p.web_name.charAt(0)}%3C/text%3E%3C/svg%3E'" 
+                                             style="width: 35px; height: 35px; border-radius: 50%; object-fit: cover; border: 2px solid #3b82f6; background: #f8fafc;">
                                     </div>
+                                `).join('')}
+                            </div>
+                            <div style="color: #cbd5e1; font-weight: 700; font-size: 14px;">VS</div>
+                            <div style="display: flex; flex-direction: column; gap: 8px; align-items: flex-start;">
+                                ${oppPlayers.map(p => `
+                                    <div style="display: flex; align-items: center; gap: 8px;">
+                                        <img src="${p.code ? getPlayerPhotoUrl(p.code) : ''}" 
+                                             onerror="this.src='data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%2235%22 height=%2235%22 viewBox=%220 0 35 35%22%3E%3Ccircle cx=%2217.5%22 cy=%2217.5%22 r=%2217.5%22 fill=%22%23fee2e2%22/%3E%3Ctext x=%2250%25%22 y=%2250%25%22 text-anchor=%22middle%22 dy=%22.3em%22 font-size=%2214%22 fill=%22%23ef4444%22 font-weight=%22700%22%3E${p.web_name.charAt(0)}%3C/text%3E%3C/svg%3E'" 
+                                             style="width: 35px; height: 35px; border-radius: 50%; object-fit: cover; border: 2px solid #ef4444; background: #f8fafc;">
+                                        <span style="color: #ef4444; font-weight: 700; font-size: 13px;">${p.web_name}</span>
+                                    </div>
+                                `).join('')}
+                            </div>
+                        </div>
+                        <div style="display: flex; height: 10px; background: #f1f5f9; border-radius: 5px; overflow: hidden; box-shadow: inset 0 2px 4px rgba(0,0,0,0.1);">
+                            <div style="width: ${myPercent}%; background: linear-gradient(90deg, #3b82f6 0%, #60a5fa 100%);"></div>
+                            <div style="width: ${oppPercent}%; background: linear-gradient(90deg, #fca5a5 0%, #ef4444 100%);"></div>
                         </div>
                     </div>
                 `;
+            }
+        });
+        if (overlapsHtml) {
+            html += `
+                <div class="overlap-section" style="background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%); padding: 20px; border-radius: 12px; border: 2px solid #e2e8f0; box-shadow: 0 4px 12px rgba(0,0,0,0.05);">
+                    <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 15px;">
+                        <span style="font-size: 24px;">🤝</span>
+                        <h3 style="margin: 0; font-size: 16px; color: #0f172a; font-weight: 800;">חפיפות ונטרולים</h3>
+                    </div>
+                    <div class="overlap-grid" style="background: white; padding: 20px; border-radius: 8px; border: 1px solid #e2e8f0; max-width: 800px; margin: 0 auto;">${overlapsHtml}</div>
+                    <div style="margin-top: 12px; padding: 10px; background: #fef3c7; border-radius: 8px; font-size: 12px; color: #92400e; text-align: center; font-weight: 600;">
+                        💡 שחקנים מאותה קבוצה ואותה עמדה מנטרלים זה את זה
+                    </div>
+                </div>
+            `;
+        } else {
+            html += `
+                <div class="overlap-section" style="background: linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%); padding: 20px; border-radius: 12px; border: 2px solid #86efac; text-align: center;">
+                    <div style="font-size: 48px; margin-bottom: 10px;">✨</div>
+                    <h3 style="margin: 0 0 8px; font-size: 16px; color: #065f46; font-weight: 800;">אין חפיפות!</h3>
+                    <p style="margin: 0; font-size: 13px; color: #047857;">שני הסגלים שונים לחלוטין - כל נקודה תספור!</p>
+                </div>
+            `;
+        }
         
-        // Helper function to determine color (green for better, red for worse)
-        const getComparisonColor = (myVal, oppVal, isHigherBetter = true) => {
-            if (myVal > oppVal) return isHigherBetter ? '#10b981' : '#ef4444'; // Green if better, red if worse
-            if (myVal < oppVal) return isHigherBetter ? '#ef4444' : '#10b981'; // Red if worse, green if better
-            return '#64748b'; // Gray if equal
-        };
+        // Top Players Comparison
+        const myTop3 = [...mySquad].sort((a, b) => (parseFloat(b.predicted_points_1_gw) || 0) - (parseFloat(a.predicted_points_1_gw) || 0)).slice(0, 3);
+        const oppTop3 = [...oppSquad].sort((a, b) => (parseFloat(b.predicted_points_1_gw) || 0) - (parseFloat(a.predicted_points_1_gw) || 0)).slice(0, 3);
         
-        // Compact Analysis Grid
         html += `
-            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 20px; max-width: 1000px; margin: 0 auto;">
-                <!-- Form Comparison -->
-                <div style="background: white; padding: 20px; border-radius: 16px; border: 1px solid #e2e8f0; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);">
-                    <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 15px; color: #64748b;">
-                        <span style="font-size: 20px;">🔥</span>
-                        <h3 style="margin: 0; font-size: 15px; font-weight: 700;">כושר נוכחי (Form)</h3>
+            <div class="top-players-section" style="background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%); padding: 20px; border-radius: 12px; border: 2px solid #e2e8f0; box-shadow: 0 4px 12px rgba(0,0,0,0.05); margin-top: 20px;">
+                <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 15px;">
+                    <span style="font-size: 24px;">⭐</span>
+                    <h3 style="margin: 0; font-size: 16px; color: #0f172a; font-weight: 800;">שחקנים מובילים (צפי GW הבא)</h3>
                 </div>
-                    <div style="display: flex; justify-content: space-between; align-items: flex-end;">
-                        <div style="text-align: center;">
-                            <div style="font-size: 24px; font-weight: 800; color: ${getComparisonColor(myStats.form, oppStats.form)};">${myStats.form.toFixed(1)}</div>
-                            <div style="font-size: 12px; color: #94a3b8;">שלך</div>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+                    <div>
+                        <div style="text-align: center; font-weight: 700; color: #3b82f6; margin-bottom: 10px; font-size: 14px;">הסגל שלך</div>
+                        ${myTop3.map((p, idx) => `
+                            <div style="display: flex; justify-content: space-between; align-items: center; padding: 10px; background: ${idx === 0 ? 'linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%)' : 'white'}; border-radius: 8px; margin-bottom: 8px; border: 1px solid ${idx === 0 ? '#3b82f6' : '#e2e8f0'};">
+                                <div style="display: flex; align-items: center; gap: 10px;">
+                                    <img src="${getPlayerPhotoUrl(p.code)}" 
+                                         onerror="this.style.display='none'" 
+                                         style="width: 40px; height: 40px; border-radius: 50%; object-fit: cover; border: 2px solid ${idx === 0 ? '#3b82f6' : '#e2e8f0'}; background: #f8fafc;">
+                                    <div>
+                                        <div style="font-weight: 700; color: #0f172a; font-size: 13px;">${idx + 1}. ${p.web_name}</div>
+                                        <div style="font-size: 11px; color: #64748b;">${p.team_name} • ${p.position_name}</div>
                                     </div>
-                        <div style="padding-bottom: 8px; font-size: 12px; color: #cbd5e1;">VS</div>
-                        <div style="text-align: center;">
-                            <div style="font-size: 24px; font-weight: 800; color: ${getComparisonColor(oppStats.form, myStats.form)};">${oppStats.form.toFixed(1)}</div>
-                            <div style="font-size: 12px; color: #94a3b8;">יריב</div>
                                 </div>
+                                <div style="font-weight: 800; color: #3b82f6; font-size: 16px;">${(parseFloat(p.predicted_points_1_gw) || 0).toFixed(1)}</div>
                             </div>
-                    <div style="margin-top: 12px; height: 6px; background: #f1f5f9; border-radius: 3px; overflow: hidden;">
-                        <div style="width: ${(myStats.form / (myStats.form + oppStats.form || 1) * 100)}%; height: 100%; background: ${getComparisonColor(myStats.form, oppStats.form)};"></div>
+                        `).join('')}
                     </div>
-                                    </div>
-
-                <!-- Attack Potential (xGI) -->
-                <div style="background: white; padding: 20px; border-radius: 16px; border: 1px solid #e2e8f0; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);">
-                    <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 15px; color: #64748b;">
-                        <span style="font-size: 20px;">⚡</span>
-                        <h3 style="margin: 0; font-size: 15px; font-weight: 700;">פוטנציאל התקפי (xGI)</h3>
-                        </div>
-                    <div style="display: flex; justify-content: space-between; align-items: flex-end;">
-                        <div style="text-align: center;">
-                            <div style="font-size: 24px; font-weight: 800; color: ${getComparisonColor(myStats.xGI, oppStats.xGI)};">${myStats.xGI.toFixed(1)}</div>
-                            <div style="font-size: 12px; color: #94a3b8;">שלך</div>
-                        </div>
-                        <div style="padding-bottom: 8px; font-size: 12px; color: #cbd5e1;">VS</div>
-                        <div style="text-align: center;">
-                            <div style="font-size: 24px; font-weight: 800; color: ${getComparisonColor(oppStats.xGI, myStats.xGI)};">${oppStats.xGI.toFixed(1)}</div>
-                            <div style="font-size: 12px; color: #94a3b8;">יריב</div>
-                        </div>
-                    </div>
-                    <div style="margin-top: 12px; height: 6px; background: #f1f5f9; border-radius: 3px; overflow: hidden;">
-                        <div style="width: ${(myStats.xGI / (myStats.xGI + oppStats.xGI || 1) * 100)}%; height: 100%; background: ${getComparisonColor(myStats.xGI, oppStats.xGI)};"></div>
-                </div>
-                </div>
-
-                <!-- Goals -->
-                <div style="background: white; padding: 20px; border-radius: 16px; border: 1px solid #e2e8f0; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);">
-                    <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 15px; color: #64748b;">
-                        <span style="font-size: 20px;">⚽</span>
-                        <h3 style="margin: 0; font-size: 15px; font-weight: 700;">שערים</h3>
-                    </div>
-                    <div style="display: flex; justify-content: space-between; align-items: flex-end;">
-                        <div style="text-align: center;">
-                            <div style="font-size: 24px; font-weight: 800; color: ${getComparisonColor(myStats.goals, oppStats.goals)};">${myStats.goals}</div>
-                            <div style="font-size: 12px; color: #94a3b8;">שלך</div>
-                        </div>
-                        <div style="padding-bottom: 8px; font-size: 12px; color: #cbd5e1;">VS</div>
-                        <div style="text-align: center;">
-                            <div style="font-size: 24px; font-weight: 800; color: ${getComparisonColor(oppStats.goals, myStats.goals)};">${oppStats.goals}</div>
-                            <div style="font-size: 12px; color: #94a3b8;">יריב</div>
-                        </div>
-                    </div>
-                    <div style="margin-top: 12px; height: 6px; background: #f1f5f9; border-radius: 3px; overflow: hidden;">
-                        <div style="width: ${(myStats.goals / (myStats.goals + oppStats.goals || 1) * 100)}%; height: 100%; background: ${getComparisonColor(myStats.goals, oppStats.goals)};"></div>
-                                            </div>
-                                        </div>
-
-                <!-- Assists -->
-                <div style="background: white; padding: 20px; border-radius: 16px; border: 1px solid #e2e8f0; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);">
-                    <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 15px; color: #64748b;">
-                        <span style="font-size: 20px;">🎯</span>
-                        <h3 style="margin: 0; font-size: 15px; font-weight: 700;">בישולים</h3>
-                                    </div>
-                    <div style="display: flex; justify-content: space-between; align-items: flex-end;">
-                                        <div style="text-align: center;">
-                            <div style="font-size: 24px; font-weight: 800; color: ${getComparisonColor(myStats.assists, oppStats.assists)};">${myStats.assists}</div>
-                            <div style="font-size: 12px; color: #94a3b8;">שלך</div>
-                                        </div>
-                        <div style="padding-bottom: 8px; font-size: 12px; color: #cbd5e1;">VS</div>
-                                        <div style="text-align: center;">
-                            <div style="font-size: 24px; font-weight: 800; color: ${getComparisonColor(oppStats.assists, myStats.assists)};">${oppStats.assists}</div>
-                            <div style="font-size: 12px; color: #94a3b8;">יריב</div>
-                                        </div>
-                                        </div>
-                    <div style="margin-top: 12px; height: 6px; background: #f1f5f9; border-radius: 3px; overflow: hidden;">
-                        <div style="width: ${(myStats.assists / (myStats.assists + oppStats.assists || 1) * 100)}%; height: 100%; background: ${getComparisonColor(myStats.assists, oppStats.assists)};"></div>
+                    <div>
+                        <div style="text-align: center; font-weight: 700; color: #ef4444; margin-bottom: 10px; font-size: 14px;">הסגל של היריב</div>
+                        ${oppTop3.map((p, idx) => `
+                            <div style="display: flex; justify-content: space-between; align-items: center; padding: 10px; background: ${idx === 0 ? 'linear-gradient(135deg, #fee2e2 0%, #fecaca 100%)' : 'white'}; border-radius: 8px; margin-bottom: 8px; border: 1px solid ${idx === 0 ? '#ef4444' : '#e2e8f0'};">
+                                <div style="display: flex; align-items: center; gap: 10px;">
+                                    <img src="${getPlayerPhotoUrl(p.code)}" 
+                                         onerror="this.style.display='none'" 
+                                         style="width: 40px; height: 40px; border-radius: 50%; object-fit: cover; border: 2px solid ${idx === 0 ? '#ef4444' : '#e2e8f0'}; background: #f8fafc;">
+                                    <div>
+                                        <div style="font-weight: 700; color: #0f172a; font-size: 13px;">${idx + 1}. ${p.web_name}</div>
+                                        <div style="font-size: 11px; color: #64748b;">${p.team_name} • ${p.position_name}</div>
                                     </div>
                                 </div>
-
-                <!-- Clean Sheets -->
-                <div style="background: white; padding: 20px; border-radius: 16px; border: 1px solid #e2e8f0; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);">
-                    <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 15px; color: #64748b;">
-                        <span style="font-size: 20px;">🧼</span>
-                        <h3 style="margin: 0; font-size: 15px; font-weight: 700;">שערים נקיים</h3>
-                    </div>
-                    <div style="display: flex; justify-content: space-between; align-items: flex-end;">
-                    <div style="text-align: center;">
-                            <div style="font-size: 24px; font-weight: 800; color: ${getComparisonColor(myStats.cleanSheets, oppStats.cleanSheets)};">${myStats.cleanSheets}</div>
-                            <div style="font-size: 12px; color: #94a3b8;">שלך</div>
-                        </div>
-                        <div style="padding-bottom: 8px; font-size: 12px; color: #cbd5e1;">VS</div>
-                    <div style="text-align: center;">
-                            <div style="font-size: 24px; font-weight: 800; color: ${getComparisonColor(oppStats.cleanSheets, myStats.cleanSheets)};">${oppStats.cleanSheets}</div>
-                            <div style="font-size: 12px; color: #94a3b8;">יריב</div>
-                        </div>
-                    </div>
-                    <div style="margin-top: 12px; height: 6px; background: #f1f5f9; border-radius: 3px; overflow: hidden;">
-                        <div style="width: ${(myStats.cleanSheets / (myStats.cleanSheets + oppStats.cleanSheets || 1) * 100)}%; height: 100%; background: ${getComparisonColor(myStats.cleanSheets, oppStats.cleanSheets)};"></div>
+                                <div style="font-weight: 800; color: #ef4444; font-size: 16px;">${(parseFloat(p.predicted_points_1_gw) || 0).toFixed(1)}</div>
+                            </div>
+                        `).join('')}
                     </div>
                 </div>
             </div>
         `;
         
-        // 🗓️ FIXTURE & COUNTER-PICK ANALYSIS
-        const easyFixturePlayers = oppSquad.filter(p => {
-             const fixtures = getNextFixtures(p.team, 3);
-             if (fixtures.length === 0) return false;
-             const avgFDR = fixtures.reduce((sum, f) => sum + f.difficulty, 0) / fixtures.length;
-             return avgFDR <= 2.8; // Threshold for easy
-        });
-        
-        if (easyFixturePlayers.length > 0) {
-            html += `
-            <div style="background: white; padding: 20px; border-radius: 16px; border: 1px solid #e2e8f0; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); margin-top: 20px; max-width: 1000px; margin-left: auto; margin-right: auto;">
-                <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 15px; color: #15803d;">
-                    <span style="font-size: 20px;">🗓️</span>
-                    <h3 style="margin: 0; font-size: 15px; font-weight: 700;">ליריב יש משחקים קלים! הנה הזדמנויות נגד:</h3>
-                </div>
-                
-                <div style="display: grid; gap: 12px; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));">
-            `;
-            
-            // Deduplicate players by team to avoid suggesting same free agents multiple times
-            const teamsWithEasyFixtures = [...new Set(easyFixturePlayers.map(p => p.team))];
-            
-            teamsWithEasyFixtures.forEach(teamId => {
-                 const rivalPlayer = easyFixturePlayers.find(p => p.team === teamId);
-                 
-                 // Find counter picks (Free Agents from same team)
-                 const teamFreeAgents = state.allPlayersData[state.currentDataSource].processed
-                    .filter(fa => fa.team === teamId && !state.draft.ownedElementIds.has(fa.id) && fa.minutes > 0)
-                    .sort((a,b) => parseFloat(b.expected_goal_involvements || 0) - parseFloat(a.expected_goal_involvements || 0))
-                    .slice(0, 1);
-                 
-                 const suggestion = teamFreeAgents.length > 0 ? teamFreeAgents[0] : null;
-                 
-                 html += `
-                    <div style="display: flex; flex-direction: column; gap: 8px; background: #f0fdf4; padding: 12px; border-radius: 10px; border: 1px solid #bbf7d0;">
-                        <div style="display: flex; justify-content: space-between; align-items: center;">
-                            <div>
-                                <div style="font-weight: 700; color: #166534;">${rivalPlayer.web_name} (ו-${easyFixturePlayers.filter(p => p.team === teamId).length - 1} נוספים)</div>
-                                <div style="font-size: 12px; color: #15803d;">לו"ז קל לקבוצה: ${state.teamsData[teamId]?.short_name || ''}</div>
-                            </div>
-                        </div>
-                        ${suggestion ? `
-                        <div style="display: flex; align-items: center; justify-content: space-between; background: white; padding: 8px 12px; border-radius: 8px; border: 1px solid #dcfce7; box-shadow: 0 2px 4px rgba(0,0,0,0.03); cursor: pointer;" onclick="document.getElementById('searchName').value='${suggestion.web_name}'; processChange(); showTab('players');">
-                            <div>
-                                <div style="font-size: 11px; color: #64748b;">אופציה פנויה מאותה קבוצה:</div>
-                                <div style="font-weight: 700; color: #059669;">${suggestion.web_name}</div>
-                            </div>
-                            <span style="font-size: 11px; background: #ecfdf5; color: #047857; padding: 2px 6px; border-radius: 4px;">xGI ${parseFloat(suggestion.expected_goal_involvements || 0).toFixed(1)}</span>
-                        </div>
-                        ` : '<div style="font-size: 11px; color: #94a3b8; font-style: italic;">אין אופציות התקפיות פנויות</div>'}
-                    </div>
-                 `;
+        // ============================================
+        // POSITION-BY-POSITION ANALYSIS
+        // ============================================
+        const analyzeByPosition = (squad) => {
+            const positions = { GKP: [], DEF: [], MID: [], FWD: [] };
+            squad.forEach(p => {
+                const pos = p.element_type === 1 ? 'GKP' : p.element_type === 2 ? 'DEF' : p.element_type === 3 ? 'MID' : 'FWD';
+                positions[pos].push(p);
             });
+            return positions;
+        };
+        
+        const myPositions = analyzeByPosition(mySquad);
+        const oppPositions = analyzeByPosition(oppSquad);
+        
+        const positionNames = { GKP: 'שוערים', DEF: 'מגנים', MID: 'קשרים', FWD: 'חלוצים' };
+        const positionIcons = { GKP: '🧤', DEF: '🛡️', MID: '⚽', FWD: '🎯' };
+        
+        let positionAnalysisHtml = '';
+        ['GKP', 'DEF', 'MID', 'FWD'].forEach(pos => {
+            const myPlayers = myPositions[pos];
+            const oppPlayers = oppPositions[pos];
             
-            html += `</div></div>`;
-        }
-        
-        // Find players from same Premier League team (overlaps)
-        const teamGroups = {};
-        [...mySquad, ...oppSquad].forEach(p => {
-            if (!teamGroups[p.team]) {
-                teamGroups[p.team] = { my: [], opp: [] };
-            }
-            if (mySquad.find(mp => mp.id === p.id)) {
-                teamGroups[p.team].my.push(p);
-            }
-            if (oppSquad.find(op => op.id === p.id)) {
-                teamGroups[p.team].opp.push(p);
-            }
-        });
-        
-        const overlaps = Object.entries(teamGroups).filter(([teamId, players]) => 
-            players.my.length > 0 && players.opp.length > 0
-        );
-        
-        if (overlaps.length > 0) {
-            html += `
-                <div style="margin-top: 32px; background: white; padding: 24px; border-radius: 16px; border: 1px solid #e2e8f0; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);">
-                    <h3 style="margin: 0 0 20px 0; font-size: 18px; font-weight: 800; color: #0f172a; display: flex; align-items: center; gap: 8px;">
-                        <span>⚔️</span> השוואת שחקנים מאותה קבוצה
-                    </h3>
-                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px;">
-            `;
+            const myAvgXPts = myPlayers.length > 0 ? myPlayers.reduce((sum, p) => sum + (parseFloat(p.predicted_points_1_gw) || 0), 0) / myPlayers.length : 0;
+            const oppAvgXPts = oppPlayers.length > 0 ? oppPlayers.reduce((sum, p) => sum + (parseFloat(p.predicted_points_1_gw) || 0), 0) / oppPlayers.length : 0;
             
-            overlaps.forEach(([teamId, players]) => {
-                const teamName = state.teamsData[teamId]?.name || 'Unknown';
-                const teamShortName = state.teamsData[teamId]?.short_name || '';
-                
-                html += `
-                    <div style="background: #f8fafc; padding: 16px; border-radius: 12px; border: 1px solid #e2e8f0;">
-                        <div style="font-weight: 700; color: #475569; margin-bottom: 12px; font-size: 14px;">${teamName} ${teamShortName ? `(${teamShortName})` : ''}</div>
-                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
-                            <div>
-                                <div style="font-size: 11px; color: #64748b; margin-bottom: 6px; font-weight: 600;">שלך:</div>
-                                ${players.my.map(p => `
-                                    <div style="display: flex; justify-content: space-between; align-items: center; padding: 6px 8px; background: white; border-radius: 6px; margin-bottom: 4px; border-left: 3px solid #3b82f6;">
-                                        <span style="font-size: 12px; font-weight: 600; color: #0f172a;">${p.web_name}</span>
-                                        <span style="font-size: 11px; color: #64748b;">${p.position_name}</span>
-                                    </div>
-                                `).join('')}
-                            </div>
-                            <div>
-                                <div style="font-size: 11px; color: #64748b; margin-bottom: 6px; font-weight: 600;">יריב:</div>
-                                ${players.opp.map(p => `
-                                    <div style="display: flex; justify-content: space-between; align-items: center; padding: 6px 8px; background: white; border-radius: 6px; margin-bottom: 4px; border-left: 3px solid #ef4444;">
-                                        <span style="font-size: 12px; font-weight: 600; color: #0f172a;">${p.web_name}</span>
-                                        <span style="font-size: 11px; color: #64748b;">${p.position_name}</span>
-                                    </div>
-                                `).join('')}
-                            </div>
+            const myAvgForm = myPlayers.length > 0 ? myPlayers.reduce((sum, p) => sum + (parseFloat(p.form) || 0), 0) / myPlayers.length : 0;
+            const oppAvgForm = oppPlayers.length > 0 ? oppPlayers.reduce((sum, p) => sum + (parseFloat(p.form) || 0), 0) / oppPlayers.length : 0;
+            
+            const advantage = myAvgXPts > oppAvgXPts ? 'you' : oppAvgXPts > myAvgXPts ? 'opp' : 'equal';
+            const advantageColor = advantage === 'you' ? '#10b981' : advantage === 'opp' ? '#ef4444' : '#94a3b8';
+            const advantageText = advantage === 'you' ? '✓ יתרון לך' : advantage === 'opp' ? '✗ יתרון ליריב' : '= שווה';
+            
+            positionAnalysisHtml += `
+                <div style="background: white; padding: 15px; border-radius: 10px; border: 2px solid ${advantageColor}20; box-shadow: 0 2px 8px rgba(0,0,0,0.05);">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <span style="font-size: 24px;">${positionIcons[pos]}</span>
+                            <h4 style="margin: 0; font-size: 15px; color: #0f172a; font-weight: 800;">${positionNames[pos]}</h4>
+                        </div>
+                        <div style="font-size: 12px; font-weight: 700; color: ${advantageColor}; background: ${advantageColor}15; padding: 4px 10px; border-radius: 12px;">
+                            ${advantageText}
                         </div>
                     </div>
-                `;
-            });
-            
-            html += `
+                    <div style="display: grid; grid-template-columns: 1fr auto 1fr; gap: 10px; align-items: center;">
+                        <div style="text-align: center;">
+                            <div style="font-size: 20px; font-weight: 800; color: #3b82f6;">${myAvgXPts.toFixed(1)}</div>
+                            <div style="font-size: 11px; color: #64748b;">ממוצע צפי</div>
+                            <div style="font-size: 12px; font-weight: 600; color: #64748b; margin-top: 4px;">Form: ${myAvgForm.toFixed(1)}</div>
+                        </div>
+                        <div style="font-size: 18px; color: #cbd5e0;">vs</div>
+                        <div style="text-align: center;">
+                            <div style="font-size: 20px; font-weight: 800; color: #ef4444;">${oppAvgXPts.toFixed(1)}</div>
+                            <div style="font-size: 11px; color: #64748b;">ממוצע צפי</div>
+                            <div style="font-size: 12px; font-weight: 600; color: #64748b; margin-top: 4px;">Form: ${oppAvgForm.toFixed(1)}</div>
+                        </div>
                     </div>
                 </div>
             `;
+        });
+        
+        html += `
+            <div class="position-analysis-section" style="background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%); padding: 20px; border-radius: 12px; border: 2px solid #e2e8f0; box-shadow: 0 4px 12px rgba(0,0,0,0.05); margin-top: 20px;">
+                <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 15px;">
+                    <span style="font-size: 24px;">🎯</span>
+                    <h3 style="margin: 0; font-size: 16px; color: #0f172a; font-weight: 800;">ניתוח לפי עמדות - איפה היתרון?</h3>
+                </div>
+                <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 15px;">
+                    ${positionAnalysisHtml}
+                </div>
+            </div>
+        `;
+        
+        // ============================================
+        // STRATEGIC RECOMMENDATIONS
+        // ============================================
+        const allAvailablePlayers = Array.from(processedById.values())
+            .filter(p => !state.draft.ownedElementIds.has(p.id)); // Only free agents
+        
+        // Find weak positions
+        const weakPositions = [];
+        ['GKP', 'DEF', 'MID', 'FWD'].forEach(pos => {
+            const myPlayers = myPositions[pos];
+            const oppPlayers = oppPositions[pos];
+            const myAvg = myPlayers.length > 0 ? myPlayers.reduce((sum, p) => sum + (parseFloat(p.predicted_points_1_gw) || 0), 0) / myPlayers.length : 0;
+            const oppAvg = oppPlayers.length > 0 ? oppPlayers.reduce((sum, p) => sum + (parseFloat(p.predicted_points_1_gw) || 0), 0) / oppPlayers.length : 0;
+            
+            if (oppAvg > myAvg) {
+                weakPositions.push({ pos, gap: oppAvg - myAvg, posName: positionNames[pos] });
+            }
+        });
+        weakPositions.sort((a, b) => b.gap - a.gap);
+        
+        // Get recommendations for weakest position
+        let recommendationsHtml = '';
+        if (weakPositions.length > 0 && allAvailablePlayers.length > 0) {
+            const weakestPos = weakPositions[0];
+            const posType = weakestPos.pos === 'GKP' ? 1 : weakestPos.pos === 'DEF' ? 2 : weakestPos.pos === 'MID' ? 3 : 4;
+            
+            const topAvailable = allAvailablePlayers
+                .filter(p => p.element_type === posType)
+                .sort((a, b) => (parseFloat(b.predicted_points_1_gw) || 0) - (parseFloat(a.predicted_points_1_gw) || 0))
+                .slice(0, 5);
+            
+            recommendationsHtml = `
+                <div class="recommendations-section" style="background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%); padding: 20px; border-radius: 12px; border: 2px solid #fbbf24; box-shadow: 0 4px 12px rgba(251, 191, 36, 0.2); margin-top: 20px;">
+                    <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 15px;">
+                        <span style="font-size: 24px;">💡</span>
+                        <h3 style="margin: 0; font-size: 16px; color: #92400e; font-weight: 800;">המלצות אסטרטגיות - חזק את ${weakestPos.posName}</h3>
+                    </div>
+                    <div style="background: white; padding: 15px; border-radius: 10px; margin-bottom: 15px;">
+                        <div style="font-size: 13px; color: #92400e; font-weight: 600; margin-bottom: 10px;">
+                            🎯 זיהינו פער של ${weakestPos.gap.toFixed(1)} נקודות ב${weakestPos.posName} - זה המקום החלש ביותר שלך!
+                        </div>
+                        <div style="font-size: 12px; color: #78350f;">
+                            שחקנים זמינים מומלצים (לא בבעלות):
+                        </div>
+                    </div>
+                    <div style="display: grid; gap: 10px;">
+                        ${topAvailable.map((p, idx) => {
+                            const xPts = parseFloat(p.predicted_points_1_gw) || 0;
+                            const form = parseFloat(p.form) || 0;
+                            const price = (p.now_cost || 0) / 10;
+                            return `
+                                <div style="display: flex; justify-content: space-between; align-items: center; background: white; padding: 12px; border-radius: 10px; border: 2px solid ${idx === 0 ? '#fbbf24' : '#e2e8f0'}; box-shadow: ${idx === 0 ? '0 4px 12px rgba(251, 191, 36, 0.3)' : '0 2px 4px rgba(0,0,0,0.05)'};">
+                                    <div style="flex: 1;">
+                                        <div style="display: flex; align-items: center; gap: 10px;">
+                                            ${idx === 0 ? '<span style="font-size: 20px;">🌟</span>' : `<span style="font-size: 16px; color: #94a3b8; font-weight: 700;">${idx + 1}</span>`}
+                                            <img src="${p.code ? getPlayerPhotoUrl(p.code) : ''}" 
+                                                 onerror="this.src='data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%2245%22 height=%2245%22 viewBox=%220 0 45 45%22%3E%3Ccircle cx=%2222.5%22 cy=%2222.5%22 r=%2222.5%22 fill=%22%23f1f5f9%22/%3E%3Ctext x=%2250%25%22 y=%2250%25%22 text-anchor=%22middle%22 dy=%22.3em%22 font-size=%2218%22 fill=%22%2394a3b8%22%3E${p.web_name.charAt(0)}%3C/text%3E%3C/svg%3E'" 
+                                                 style="width: 45px; height: 45px; border-radius: 50%; object-fit: cover; border: 2px solid ${idx === 0 ? '#fbbf24' : '#e2e8f0'}; background: #f8fafc;">
+                                            <div>
+                                                <div style="font-weight: 800; color: #0f172a; font-size: 16px;">${p.web_name} <span style="font-size: 13px; color: #8b5cf6; font-weight: 700;">(${p.position_name})</span></div>
+                                                <div style="font-size: 12px; color: #64748b; font-weight: 600;">${p.team_name}</div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div style="display: flex; gap: 18px; align-items: center;">
+                                        <div style="text-align: center;">
+                                            <div style="font-size: 18px; font-weight: 900; color: #10b981;">${xPts.toFixed(1)}</div>
+                                            <div style="font-size: 11px; color: #64748b; font-weight: 600;">צפי</div>
+                                        </div>
+                                        <div style="text-align: center;">
+                                            <div style="font-size: 16px; font-weight: 800; color: #f59e0b;">${form.toFixed(1)}</div>
+                                            <div style="font-size: 11px; color: #64748b; font-weight: 600;">Form</div>
+                                        </div>
+                                        <div style="text-align: center;">
+                                            <div style="font-size: 16px; font-weight: 800; color: #3b82f6;">£${price.toFixed(1)}</div>
+                                            <div style="font-size: 11px; color: #64748b; font-weight: 600;">מחיר</div>
+                                        </div>
+                                    </div>
+                                </div>
+                            `;
+                        }).join('')}
+                    </div>
+                </div>
+            `;
         }
+        
+        // Only show recommendations for authorized users
+        if (auth.user && auth.user.email === auth.allowedEmail) {
+            html += recommendationsHtml;
+        }
+        
+        // ============================================
+        // KEY INSIGHTS SUMMARY
+        // ============================================
+        const insights = [];
+        
+        // Win probability insight
+        if (myWinProb > 60) {
+            insights.push({ icon: '🎯', text: `סיכוי גבוה לניצחון (${myWinProb.toFixed(0)}%)`, type: 'success' });
+        } else if (myWinProb < 40) {
+            insights.push({ icon: '⚠️', text: `סיכוי נמוך לניצחון (${myWinProb.toFixed(0)}%)`, type: 'warning' });
+        }
+        
+        // Form insight
+        if (myStats.form > oppStats.form * 1.15) {
+            insights.push({ icon: '🔥', text: 'הכושר שלך מצוין - השחקנים שלך בפורמה!', type: 'success' });
+        } else if (oppStats.form > myStats.form * 1.15) {
+            insights.push({ icon: '❄️', text: 'הכושר של היריב טוב יותר - שחקניו בפורמה', type: 'warning' });
+        }
+        
+        // xGI insight
+        if (myStats.xGI > oppStats.xGI * 1.2) {
+            insights.push({ icon: '⚡', text: 'יש לך פוטנציאל התקפי גבוה משמעותית!', type: 'success' });
+        } else if (oppStats.xGI > myStats.xGI * 1.2) {
+            insights.push({ icon: '🛡️', text: 'ליריב יש פוטנציאל התקפי גבוה - היזהר!', type: 'warning' });
+        }
+        
+        
+        // Position weakness insight
+        if (weakPositions.length > 0) {
+            insights.push({ icon: '🎯', text: `נקודה חלשה: ${weakPositions[0].posName} (פער של ${weakPositions[0].gap.toFixed(1)} נק')`, type: 'info' });
+        }
+        
+        if (insights.length > 0) {
+            html += `
+                <div class="insights-summary-section" style="background: linear-gradient(135deg, #ede9fe 0%, #ddd6fe 100%); padding: 20px; border-radius: 12px; border: 2px solid #8b5cf6; box-shadow: 0 4px 12px rgba(139, 92, 246, 0.2); margin-top: 20px;">
+                    <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 15px;">
+                        <span style="font-size: 24px;">🧠</span>
+                        <h3 style="margin: 0; font-size: 16px; color: #5b21b6; font-weight: 800;">תובנות מפתח - מה חשוב לדעת</h3>
+                    </div>
+                    <div style="display: grid; gap: 10px;">
+                        ${insights.map(insight => {
+                            const bgColor = insight.type === 'success' ? '#d1fae5' : insight.type === 'warning' ? '#fee2e2' : '#dbeafe';
+                            const borderColor = insight.type === 'success' ? '#10b981' : insight.type === 'warning' ? '#ef4444' : '#3b82f6';
+                            const textColor = insight.type === 'success' ? '#065f46' : insight.type === 'warning' ? '#991b1b' : '#1e40af';
+                            return `
+                                <div style="display: flex; align-items: center; gap: 12px; background: ${bgColor}; padding: 12px 15px; border-radius: 10px; border: 2px solid ${borderColor};">
+                                    <span style="font-size: 24px;">${insight.icon}</span>
+                                    <div style="font-size: 13px; font-weight: 700; color: ${textColor};">${insight.text}</div>
+                                </div>
+                            `;
+                        }).join('')}
+                    </div>
+                </div>
+            `;
+        }
+        
+        // Add compact stats at the bottom
+        const squadSize = mySquad.length;
+        const oppSquadSize = oppSquad.length;
+        const myTopScorer = mySquad.reduce((max, p) => (parseFloat(p.total_points) || 0) > (parseFloat(max.total_points) || 0) ? p : max, mySquad[0]);
+        const oppTopScorer = oppSquad.reduce((max, p) => (parseFloat(p.total_points) || 0) > (parseFloat(max.total_points) || 0) ? p : max, oppSquad[0]);
+        
+        html += `
+            <div class="compact-stats-footer" style="background: linear-gradient(135deg, #f8fafc 0%, #ffffff 100%); padding: 20px 25px; border-radius: 12px; border: 2px solid #e2e8f0; margin-top: 20px; box-shadow: 0 4px 12px rgba(0,0,0,0.05);">
+                <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 20px; font-size: 13px;">
+                    <div style="text-align: center;">
+                        <div style="color: #64748b; margin-bottom: 6px; font-weight: 600; font-size: 12px;">🔥 כושר</div>
+                        <div style="display: flex; justify-content: center; gap: 10px; align-items: center;">
+                            <span style="font-weight: 900; color: #3b82f6; font-size: 18px;">${myStats.form.toFixed(1)}</span>
+                            <span style="color: #cbd5e1; font-size: 14px;">vs</span>
+                            <span style="font-weight: 900; color: #ef4444; font-size: 18px;">${oppStats.form.toFixed(1)}</span>
+                        </div>
+                    </div>
+                    <div style="text-align: center;">
+                        <div style="color: #64748b; margin-bottom: 6px; font-weight: 600; font-size: 12px;">⚡ xGI</div>
+                        <div style="display: flex; justify-content: center; gap: 10px; align-items: center;">
+                            <span style="font-weight: 900; color: #3b82f6; font-size: 18px;">${myStats.xGI.toFixed(1)}</span>
+                            <span style="color: #cbd5e1; font-size: 14px;">vs</span>
+                            <span style="font-weight: 900; color: #ef4444; font-size: 18px;">${oppStats.xGI.toFixed(1)}</span>
+                        </div>
+                    </div>
+                    <div style="text-align: center;">
+                        <div style="color: #64748b; margin-bottom: 6px; font-weight: 600; font-size: 12px;">👥 גודל סגל</div>
+                        <div style="display: flex; justify-content: center; gap: 10px; align-items: center;">
+                            <span style="font-weight: 900; color: #3b82f6; font-size: 18px;">${squadSize}</span>
+                            <span style="color: #cbd5e1; font-size: 14px;">vs</span>
+                            <span style="font-weight: 900; color: #ef4444; font-size: 18px;">${oppSquadSize}</span>
+                        </div>
+                    </div>
+                    <div style="text-align: center;">
+                        <div style="color: #64748b; margin-bottom: 6px; font-weight: 600; font-size: 12px;">⭐ מלך השערים</div>
+                        <div style="display: flex; justify-content: center; gap: 10px; align-items: center; font-size: 11px;">
+                            <span style="font-weight: 800; color: #3b82f6;">${myTopScorer?.web_name || '-'}</span>
+                            <span style="color: #cbd5e1; font-size: 12px;">vs</span>
+                            <span style="font-weight: 800; color: #ef4444;">${oppTopScorer?.web_name || '-'}</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
         
         container.innerHTML = html;
-        
     } catch (err) {
         console.error('CRITICAL ERROR in renderNextRivalAnalysis:', err);
         container.innerHTML = `<div class="alert alert-danger">
             <strong>שגיאה בטעינת הנתונים:</strong><br>
             ${err.message}
+            <br><small>בדוק את הקונסול לפרטים נוספים.</small>
         </div>`;
     }
 }
@@ -7470,19 +7420,34 @@ window.renderAllTeamsTrendChart = function(teamAggregates, mode = 'cumulative', 
 
     // Get current metric from state or select element or default to table_points
     let currentMetric = window.currentTrendState?.metric || document.getElementById('trendMetricSelect')?.value || 'table_points';
+    const currentSpeed = window.trendAnimationSpeed || 800;
 
     container.innerHTML = `
-        <div class="chart-controls-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; flex-wrap: wrap; gap: 10px;">
-            <div style="display: flex; align-items: center; gap: 10px;">
-                <div class="chart-toggles" style="display: flex; background: #f1f5f9; border-radius: 8px; padding: 2px;">
-                    <button onclick="updateTrendChartMode('cumulative')" class="${mode === 'cumulative' ? 'active' : ''}" style="padding: 6px 12px; border: none; background: ${mode === 'cumulative' ? 'white' : 'transparent'}; color: ${mode === 'cumulative' ? '#3b82f6' : '#64748b'}; font-weight: 600; border-radius: 6px; cursor: pointer;">מצטבר</button>
-                    <button onclick="updateTrendChartMode('weekly')" class="${mode === 'weekly' ? 'active' : ''}" style="padding: 6px 12px; border: none; background: ${mode === 'weekly' ? 'white' : 'transparent'}; color: ${mode === 'weekly' ? '#3b82f6' : '#64748b'}; font-weight: 600; border-radius: 6px; cursor: pointer;">מחזורי</button>
-                </div>
+        <div class="chart-controls-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; flex-wrap: wrap; gap: 15px; background: #f8fafc; padding: 15px; border-radius: 12px; border: 1px solid #e2e8f0;">
+            <div style="display: flex; align-items: center; gap: 15px; flex-wrap: wrap;">
+                <span style="font-weight: 700; color: #475569; font-size: 14px;">מצב מצטבר:</span>
                 
-                <select id="trendMetricSelect" onchange="updateTrendChartMetric(this.value)" style="padding: 6px 12px; border-radius: 8px; border: 1px solid #cbd5e1; font-size: 13px;">
-                    <option value="points" ${currentMetric === 'points' ? 'selected' : ''}>נקודות</option>
-                    <option value="table_points" ${currentMetric === 'table_points' ? 'selected' : ''}>נקודות בטבלה (נצחונות)</option>
-                </select>
+                <div class="chart-toggles" style="display: flex; background: white; border-radius: 8px; padding: 3px; border: 2px solid #e2e8f0;">
+                    <button onclick="updateTrendChartMetric('table_points')" style="padding: 7px 14px; border: none; background: ${currentMetric === 'table_points' ? 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)' : 'transparent'}; color: ${currentMetric === 'table_points' ? 'white' : '#64748b'}; font-weight: 700; border-radius: 6px; cursor: pointer; font-size: 12px; transition: all 0.2s;">נקודות בטבלה</button>
+                    <button onclick="updateTrendChartMetric('points')" style="padding: 7px 14px; border: none; background: ${currentMetric === 'points' ? 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)' : 'transparent'}; color: ${currentMetric === 'points' ? 'white' : '#64748b'}; font-weight: 700; border-radius: 6px; cursor: pointer; font-size: 12px; transition: all 0.2s;">נקודות בעד</button>
+                </div>
+
+                <div style="display: flex; gap: 5px; background: white; padding: 3px; border-radius: 8px; border: 1px solid #e2e8f0;">
+                    <button onclick="setTrendSpeed(1500)" style="padding: 5px 10px; font-size: 11px; border: none; border-radius: 6px; background: ${currentSpeed === 1500 ? '#dbeafe' : 'transparent'}; color: ${currentSpeed === 1500 ? '#1e40af' : '#64748b'}; cursor: pointer; font-weight: 600;">⏱️ איטי</button>
+                    <button onclick="setTrendSpeed(800)" style="padding: 5px 10px; font-size: 11px; border: none; border-radius: 6px; background: ${currentSpeed === 800 ? '#dbeafe' : 'transparent'}; color: ${currentSpeed === 800 ? '#1e40af' : '#64748b'}; cursor: pointer; font-weight: 600;">⏱️ רגיל</button>
+                    <button onclick="setTrendSpeed(300)" style="padding: 5px 10px; font-size: 11px; border: none; border-radius: 6px; background: ${currentSpeed === 300 ? '#dbeafe' : 'transparent'}; color: ${currentSpeed === 300 ? '#1e40af' : '#64748b'}; cursor: pointer; font-weight: 600;">⚡ מהיר</button>
+                </div>
+            </div>
+
+            <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+                <button onclick="selectTopTeams()" style="padding: 8px 14px; background: linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%); color: #059669; border: 2px solid #10b981; border-radius: 10px; font-size: 13px; font-weight: 800; cursor: pointer; transition: all 0.2s; box-shadow: 0 2px 4px rgba(16, 185, 129, 0.15);">🔝 צמרת (4)</button>
+                <button onclick="selectBottomTeams()" style="padding: 8px 14px; background: linear-gradient(135deg, #fff1f2 0%, #ffe4e6 100%); color: #e11d48; border: 2px solid #f43f5e; border-radius: 10px; font-size: 13px; font-weight: 800; cursor: pointer; transition: all 0.2s; box-shadow: 0 2px 4px rgba(225, 29, 72, 0.15);">📉 תחתית (4)</button>
+                
+                <div style="width: 2px; height: 28px; background: #cbd5e1; margin: 0 5px;"></div>
+
+                <button id="playTrendBtn" onclick="playTrendProgression()" style="padding: 10px 18px; background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%); color: white; border: none; border-radius: 10px; cursor: pointer; font-weight: 800; display: flex; align-items: center; gap: 8px; box-shadow: 0 4px 8px rgba(37, 99, 235, 0.3); transition: all 0.2s; font-size: 13px;">
+                    <span id="playIcon">▶️</span> <span id="playText">נגן התקדמות</span>
+                </button>
             </div>
         </div>
 
@@ -7558,6 +7523,9 @@ window.renderAllTeamsTrendChart = function(teamAggregates, mode = 'cumulative', 
 
     historyMap.forEach((data, id) => { let sum = 0; data.points.forEach(p => { sum += p; data.cumulative.push(sum); }); });
 
+    // Add significant offsets to separate lines visually (especially for 'points' metric)
+    const useOffset = currentMetric === 'points';
+    
     const datasets = Array.from(historyMap.entries())
         .filter(([entryId, team]) => highlightTeamIds.includes(entryId))
         .map(([entryId, team], index) => {
@@ -7577,21 +7545,26 @@ window.renderAllTeamsTrendChart = function(teamAggregates, mode = 'cumulative', 
             
             // Find the correct color index based on the entry's position in the full entries list
             const fullIndex = entries.findIndex(e => String(e.id) === entryId);
-            const color = isMyTeam ? '#0f172a' : chartColors[fullIndex % chartColors.length];
+            const color = isMyTeam ? '#9333ea' : chartColors[fullIndex % chartColors.length]; // Purple for my team instead of black
             
-            // Make lines thicker and more visible
-            const lineWidth = isMyTeam ? 5 : 3.5;
-            const pointSize = isMyTeam ? 6 : 4.5;
+            // Make lines varied for better visibility
+            const lineWidth = isMyTeam ? 5.5 : 4;
+            const pointSize = isMyTeam ? 7 : 5.5;
+            
+            // Add LARGER offset for visual separation - create clear vertical spacing
+            const offset = useOffset ? index * 8 : 0;
+            const dataWithOffset = team.cumulative.map(v => v + offset);
         
         return {
                 label: team.name,
-            data: mode === 'cumulative' ? team.cumulative : team.points,
+            data: dataWithOffset,
             borderColor: color,
             backgroundColor: color,
                 borderWidth: lineWidth,
                 pointRadius: pointSize,
-                pointHoverRadius: pointSize + 2,
-                tension: 0.35, // Smooth curves for all modes
+                pointHoverRadius: pointSize + 3,
+                tension: 0.4,
+                spanGaps: false,  // Don't connect null points
             fill: false,
                 order: isMyTeam ? 100 : 1
         };
@@ -7601,17 +7574,80 @@ window.renderAllTeamsTrendChart = function(teamAggregates, mode = 'cumulative', 
     const canvas = document.getElementById('trendCanvas');
     if (window.trendChartInstance) window.trendChartInstance.destroy();
     
-    // Calculate max value for better Y-axis scaling
+    // Calculate max value for better Y-axis scaling with more space
     const allValues = datasets.flatMap(d => d.data);
     const maxValue = Math.max(...allValues);
-    const suggestedMax = Math.ceil(maxValue * 1.15); // Add 15% padding at top
+    const minValue = Math.min(...allValues.filter(v => v !== null && v !== undefined));
+    
+    // Add padding: 10% below min, 25% above max for better visibility and label space
+    const range = maxValue - minValue;
+    const suggestedMin = Math.max(0, Math.floor(minValue - range * 0.1));
+    const suggestedMax = Math.ceil(maxValue + range * 0.25);
+    
+    // Custom plugin to draw team names at end of lines
+    const endLabelsPlugin = {
+        id: 'endLabels',
+        afterDatasetsDraw(chart) {
+            const ctx = chart.ctx;
+            const meta = chart.getDatasetMeta(0);
+            if (!meta) return;
+            
+            chart.data.datasets.forEach((dataset, i) => {
+                const meta = chart.getDatasetMeta(i);
+                if (!meta.data || meta.data.length === 0) return;
+                
+                // Find last non-null point
+                let lastIndex = -1;
+                for (let j = dataset.data.length - 1; j >= 0; j--) {
+                    if (dataset.data[j] !== null && dataset.data[j] !== undefined) {
+                        lastIndex = j;
+                        break;
+                    }
+                }
+                
+                if (lastIndex === -1) return;
+                
+                const point = meta.data[lastIndex];
+                if (!point) return;
+                
+                const x = point.x;
+                const y = point.y;
+                
+                // Draw team name
+                ctx.save();
+                ctx.font = 'bold 11px Arial';
+                ctx.fillStyle = dataset.borderColor;
+                ctx.textAlign = 'left';
+                ctx.textBaseline = 'middle';
+                
+                // Add background for better readability
+                const text = dataset.label;
+                const textWidth = ctx.measureText(text).width;
+                ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+                ctx.fillRect(x + 8, y - 8, textWidth + 8, 16);
+                
+                ctx.fillStyle = dataset.borderColor;
+                ctx.fillText(text, x + 12, y);
+                ctx.restore();
+            });
+        }
+    };
 
     window.trendChartInstance = new Chart(canvas, {
         type: 'line',
         data: { labels: labels, datasets: datasets },
+        plugins: [endLabelsPlugin],
         options: {
             responsive: true,
             maintainAspectRatio: false,
+            animation: {
+                duration: 0  // Disable default animations
+            },
+            layout: {
+                padding: {
+                    right: 80  // Add space for team name labels
+                }
+            },
             plugins: {
                 legend: { 
                     position: 'top', 
@@ -7636,8 +7672,9 @@ window.renderAllTeamsTrendChart = function(teamAggregates, mode = 'cumulative', 
             },
             scales: {
                 y: {
-                    beginAtZero: true,
-                    suggestedMax: suggestedMax,
+                    beginAtZero: false,
+                    min: suggestedMin,
+                    max: suggestedMax,
                     grid: { color: '#f1f5f9' },
                     ticks: {
                         font: { size: 12, weight: '600' },
@@ -7656,12 +7693,12 @@ window.renderAllTeamsTrendChart = function(teamAggregates, mode = 'cumulative', 
             interaction: { mode: 'nearest', axis: 'x', intersect: false }
         }
     });
-    window.currentTrendState = { mode, highlightTeamIds, metric: currentMetric };
+    window.currentTrendState = { mode: 'cumulative', highlightTeamIds, metric: currentMetric };
 }
 
 window.updateTrendChartMode = (mode) => {
     const current = window.currentTrendState || {};
-    renderAllTeamsTrendChart(null, mode, current.highlightTeamIds);
+    renderAllTeamsTrendChart(null, 'cumulative', current.highlightTeamIds);
 }
 window.updateTrendChartMetric = (metric) => {
     const current = window.currentTrendState || {};
@@ -7669,7 +7706,7 @@ window.updateTrendChartMetric = (metric) => {
     const container = document.getElementById('chart-progress');
     if (container) {
         window.currentTrendState = { ...current, metric };
-        renderAllTeamsTrendChart(null, current.mode || 'cumulative', current.highlightTeamIds);
+        renderAllTeamsTrendChart(null, 'cumulative', current.highlightTeamIds);
     }
 }
 window.toggleTrendTeam = (teamId) => {
@@ -7677,359 +7714,125 @@ window.toggleTrendTeam = (teamId) => {
     let ids = current.highlightTeamIds || [];
     if (ids.includes(String(teamId))) ids = ids.filter(id => id !== String(teamId));
     else ids.push(String(teamId));
-    renderAllTeamsTrendChart(null, current.mode, ids);
+    renderAllTeamsTrendChart(null, 'cumulative', ids);
 }
 window.selectAllTrendTeams = () => {
     const ids = (state.draft.details?.league_entries || []).map(e => String(e.id));
-    renderAllTeamsTrendChart(null, window.currentTrendState?.mode, ids);
+    renderAllTeamsTrendChart(null, 'cumulative', ids);
 }
 window.clearAllTrendTeams = () => {
     const ids = state.draft.myTeamId ? [String(state.draft.myTeamId)] : [];
-    renderAllTeamsTrendChart(null, window.currentTrendState?.mode, ids);
+    renderAllTeamsTrendChart(null, 'cumulative', ids);
+}
+
+window.setTrendSpeed = (ms) => {
+    window.trendAnimationSpeed = ms;
+    // Re-render to update button states
+    renderAllTeamsTrendChart(null, 'cumulative', window.currentTrendState?.highlightTeamIds);
+}
+
+window.selectTopTeams = () => {
+    const standings = state.draft._standingsData || [];
+    const entries = state.draft.details?.league_entries || [];
+    const top4Names = standings.slice(0, 4).map(s => s.team);
+    const ids = entries.filter(e => top4Names.includes(e.entry_name)).map(e => String(e.id));
+    renderAllTeamsTrendChart(null, 'cumulative', ids);
+}
+
+window.selectBottomTeams = () => {
+    const standings = state.draft._standingsData || [];
+    const entries = state.draft.details?.league_entries || [];
+    const bottom4Names = standings.slice(-4).map(s => s.team);
+    const ids = entries.filter(e => bottom4Names.includes(e.entry_name)).map(e => String(e.id));
+    renderAllTeamsTrendChart(null, 'cumulative', ids);
+}
+
+let isTrendAnimating = false;
+let animationTimeout = null;
+
+window.playTrendProgression = async () => {
+    const btn = document.getElementById('playTrendBtn');
+    const icon = document.getElementById('playIcon');
+    const text = document.getElementById('playText');
+
+    if (isTrendAnimating) {
+        stopTrendAnimation();
+        return;
+    }
+
+    if (!window.trendChartInstance) return;
+
+    // Save full data and labels
+    const fullLabels = [...window.trendChartInstance.data.labels];
+    const fullDatasets = window.trendChartInstance.data.datasets.map(ds => ({
+        ...ds,
+        fullData: [...ds.data]
+    }));
+
+    if (fullLabels.length === 0) return;
+
+    isTrendAnimating = true;
+    if (icon) icon.innerText = '⏹️';
+    if (text) text.innerText = 'עצור';
+    if (btn) btn.style.background = 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)';
+
+    // Initialize with all labels but empty data points (null)
+    window.trendChartInstance.data.labels = fullLabels;
+    window.trendChartInstance.data.datasets.forEach((ds, idx) => {
+        ds.data = new Array(fullLabels.length).fill(null);
+    });
+    window.trendChartInstance.update('none');
+
+    const speed = window.trendAnimationSpeed || 800;
+
+    // Animate step by step - add one point at a time with smooth drawing effect
+    for (let i = 0; i < fullLabels.length; i++) {
+        if (!isTrendAnimating) break;
+
+        window.trendChartInstance.data.datasets.forEach((ds, idx) => {
+            ds.data[i] = fullDatasets[idx].fullData[i];
+        });
+
+        // Smooth, gradual animation - longer duration for smoother effect
+        window.trendChartInstance.update({
+            duration: Math.min(speed * 0.7, 500),
+            easing: 'easeOutCubic'  // Smooth deceleration
+        });
+
+        // Shorter delay between steps so animation overlaps for fluid motion
+        await new Promise(resolve => {
+            animationTimeout = setTimeout(resolve, Math.max(speed * 0.4, 200));
+        });
+    }
+
+    if (isTrendAnimating) stopTrendAnimation();
+};
+
+function stopTrendAnimation() {
+    isTrendAnimating = false;
+    if (animationTimeout) clearTimeout(animationTimeout);
+    
+    const btn = document.getElementById('playTrendBtn');
+    const icon = document.getElementById('playIcon');
+    const text = document.getElementById('playText');
+    
+    if (btn) {
+        if (icon) icon.innerText = '▶️';
+        if (text) text.innerText = 'נגן התקדמות';
+        btn.style.background = 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)';
+    }
 }
 
 // Helper to call when draft data is loaded
 function onDraftDataLoaded() {
     populateMyTeamSelector();
     const myTeam = findMyTeam();
-    if(myTeam && state.draft.details) {
-        renderAllTeamsTrendChart(null, 'cumulative', [String(myTeam.id)]);
+    if(state.draft.details) {
+        const allIds = (state.draft.details.league_entries || []).map(e => String(e.id));
+        renderAllTeamsTrendChart(null, 'cumulative', allIds);
     }
 }
 
 // Hook into existing loadDraftLeague (search for where it finishes and call onDraftDataLoaded)
 // Or simply call populateMyTeamSelector inside loadDraftLeague if possible.
-
-
-// ============================================
-// ULTIMATE COMPARISON FIXES
-// ============================================
-
-function generateComparisonTableHTML(players, activeRange = 'all') {
-    const photoUrl = (p) => `https://resources.premierleague.com/premierleague/photos/players/110x140/p${p.code}.png`;
-    const fallbackSVG = (name) => `data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%22110%22 height=%22140%22%3E%3Crect fill=%22%2394a3b8%22 width=%22110%22 height=%22140%22/%3E%3Ctext x=%2250%25%22 y=%2250%25%22 text-anchor=%22middle%22 dy=%22.3em%22 fill=%22%23fff%22 font-size=%2248%22 font-weight=%22bold%22%3E${name.charAt(0)}%3C/text%3E%3C/svg%3E`;
-    
-    // כפתורי סינון טווח
-    const ranges = [
-        { value: '1', label: 'מחזור אחרון' },
-        { value: '3', label: '3 אחרונים' },
-        { value: '5', label: '5 אחרונים' },
-        { value: '10', label: '10 אחרונים' },
-        { value: 'all', label: 'כל העונה' }
-    ];
-    
-    const filtersHTML = `
-        <div class="comparison-filters" style="display: flex; justify-content: center; gap: 8px; margin-bottom: 20px; padding: 10px;">
-            ${ranges.map(r => `
-                <button 
-                    onclick="updateComparisonRange('${r.value}')" 
-                    class="range-btn ${activeRange === r.value ? 'active' : ''}"
-                    style="
-                        padding: 6px 16px;
-                        border-radius: 20px;
-                        border: 1px solid ${activeRange === r.value ? '#4f46e5' : '#e2e8f0'};
-                        background: ${activeRange === r.value ? '#4f46e5' : 'white'};
-                        color: ${activeRange === r.value ? 'white' : '#64748b'};
-                        cursor: pointer;
-                        font-weight: 600;
-                        font-size: 13px;
-                        transition: all 0.2s;
-                    "
-                >
-                    ${r.label}
-                </button>
-            `).join('')}
-        </div>
-    `;
-
-    // הזרקת CSS ייעודי לטבלה כדי להבטיח יישור מושלם
-    const styleOverride = `
-        <style>
-            .ultimate-comparison-container { font-family: inherit; }
-            .metrics-comparison-table { display: flex; flex-direction: column; border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden; }
-            .metric-comparison-row { display: grid; grid-template-columns: 220px 1fr; border-bottom: 1px solid #f1f5f9; background: white; }
-            .metric-comparison-row:last-child { border-bottom: none; }
-            .metric-comparison-row:hover { background: #f8fafc; }
-            
-            .metric-row-label { 
-                padding: 12px 16px; 
-                background: #f8fafc; 
-                display: flex; 
-                align-items: center; 
-                gap: 8px; 
-                font-weight: 600; 
-                color: #334155; 
-                border-left: 1px solid #e2e8f0;
-            }
-            
-            .metric-row-values { 
-                display: grid; 
-                grid-template-columns: repeat(${players.length}, 1fr); 
-            }
-            
-            .metric-value-box { 
-                padding: 12px; 
-                display: flex; 
-                flex-direction: column; 
-                justify-content: center; 
-                align-items: center; 
-                text-align: center;
-                border-left: 1px solid #f1f5f9;
-                position: relative;
-            }
-            .metric-value-box:last-child { border-left: none; }
-            
-            .player-header-col {
-                padding: 16px;
-                display: flex;
-                flex-direction: column;
-                align-items: center;
-                gap: 8px;
-                background: white;
-                border-left: 1px solid #f1f5f9;
-            }
-            .player-header-col:last-child { border-left: none; }
-            .player-header-img { width: 50px; height: 50px; border-radius: 50%; object-fit: cover; border: 2px solid white; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
-            .player-header-name { font-weight: 700; font-size: 14px; color: #0f172a; }
-            .player-header-team { font-size: 12px; color: #64748b; background: #f1f5f9; padding: 2px 8px; border-radius: 10px; }
-            
-            .metric-value-number { font-weight: 700; color: #1e293b; font-size: 14px; }
-            .best-value { background: #ecfdf5; color: #059669; }
-            .worst-value { background: #fef2f2; color: #dc2626; }
-            .best-badge { font-size: 10px; margin-top: 2px; }
-        </style>
-    `;
-
-    let html = `
-        <div class="ultimate-comparison-container">
-            ${styleOverride}
-            
-            <div class="comparison-hero-header" style="text-align: center; padding: 20px 0;">
-                <h2 style="margin: 0; font-size: 24px; color: #1e293b;">השוואת שחקנים</h2>
-                ${filtersHTML}
-            </div>
-            
-            <div class="ultimate-metrics-section">
-                <div class="metrics-comparison-table">
-                    <!-- שורת כותרת עם השחקנים -->
-                    <div class="metric-comparison-row header-row" style="background: #fff; border-bottom: 2px solid #e2e8f0;">
-                        <div class="metric-row-label" style="background: white; border-left: 1px solid #e2e8f0;">
-                            <span style="font-size: 14px; color: #64748b;">מדד / שחקן</span>
-                        </div>
-                        <div class="metric-row-values">
-                            ${players.map(p => `
-                                <div class="player-header-col">
-                                    <img src="${photoUrl(p)}" class="player-header-img" onerror="this.src='${fallbackSVG(p.web_name)}'">
-                                    <div class="player-header-name">${p.web_name}</div>
-                                    <div class="player-header-team">${p.team_name}</div>
-                                </div>
-                            `).join('')}
-                        </div>
-                    </div>
-    `;
-    
-    const comprehensiveMetrics = [
-        { name: 'ציון דראפט', key: 'draft_score', format: v => v.toFixed(1), icon: '⭐', reversed: false },
-        { name: 'העברות נטו', key: 'net_transfers_event', format: v => (v >= 0 ? '+' : '') + v.toLocaleString(), icon: '🔄', reversed: false },
-        { name: 'חיזוי (GW הבא)', key: 'predicted_points_1_gw', format: v => v.toFixed(1), icon: '🔮', reversed: false },
-        { name: 'כושר', key: 'form', format: v => parseFloat(v || 0).toFixed(1), icon: '🔥', reversed: false },
-        { name: 'נקודות/90', key: 'points_per_game_90', format: v => v.toFixed(1), icon: '📈', reversed: false },
-        { name: 'נקודות (סה"כ)', key: 'total_points', format: v => v, icon: '🎯', reversed: false },
-        { name: 'xGI/90', key: 'xGI_per90', format: v => v.toFixed(2), icon: '⚽', reversed: false },
-        { name: 'G+A (סה"כ)', key: 'goals_scored_assists', format: v => v, icon: '🎯', reversed: false },
-        { name: 'מחיר', key: 'now_cost', format: v => '£' + v.toFixed(1) + 'M', icon: '💰', reversed: true },
-        { name: '% בעלות', key: 'selected_by_percent', format: v => v + '%', icon: '👥', reversed: false },
-        { name: 'דקות (טווח)', key: 'minutes', format: v => v.toLocaleString(), icon: '⏱️', reversed: false },
-        { name: 'בונוס/90', key: 'bonus_per90', format: v => v.toFixed(2), icon: '⭐', reversed: false },
-        { name: 'ICT/90', key: 'ict_index_per90', format: v => v.toFixed(1), icon: '🧬', reversed: false },
-        { name: 'השפעה/90', key: 'influence_per90', format: v => v.toFixed(1), icon: '💪', reversed: false },
-        { name: 'יצירתיות/90', key: 'creativity_per90', format: v => v.toFixed(1), icon: '🎨', reversed: false },
-        { name: 'איום/90', key: 'threat_per90', format: v => v.toFixed(1), icon: '🔫', reversed: false },
-        { name: 'DefCon/90', key: 'def_contrib_per90', format: v => v.toFixed(2), icon: '🛡️', reversed: false },
-        { name: 'xDiff', key: 'xDiff', format: v => (v >= 0 ? '+' : '') + v.toFixed(2), icon: '📉', reversed: false },
-        { name: 'CS/90', key: 'clean_sheets_per90', format: v => v.toFixed(2), icon: '🧤', reversed: false },
-        { name: 'ספיגות/90', key: 'goals_conceded_per90', format: v => v.toFixed(2), icon: '🥅', reversed: true },
-    ];
-    
-    comprehensiveMetrics.forEach((metric) => {
-        const values = players.map(p => {
-            let val = getNestedValue(p, metric.key);
-            if (metric.key === 'goals_scored_assists') {
-                val = (p.goals_scored || 0) + (p.assists || 0);
-            }
-            return typeof val === 'number' ? val : parseFloat(val) || 0;
-        });
-        
-        const maxVal = Math.max(...values);
-        const minVal = Math.min(...values);
-        const hasData = values.some(v => v !== 0);
-        
-        if (!hasData) return; // דלג על שורות ריקות לגמרי
-
-        html += `
-            <div class="metric-comparison-row">
-                <div class="metric-row-label">
-                    <span class="metric-row-icon">${metric.icon}</span>
-                    <span class="metric-row-name">${metric.name}</span>
-                </div>
-                <div class="metric-row-values">
-        `;
-        
-        players.forEach((p, pIdx) => {
-            const value = values[pIdx];
-            const isBest = metric.reversed ? (value === minVal) : (value === maxVal);
-            const isWorst = metric.reversed ? (value === maxVal) : (value === minVal);
-            
-            // הצג רק אם יש ערך משמעותי או אם זה לא 0 במקרה של מדדים חשובים
-            const displayValue = metric.format(value);
-            
-            html += `
-                <div class="metric-value-box ${isBest && values.length > 1 && value !== 0 ? 'best-value' : ''}">
-                    <div class="metric-value-number">${displayValue}</div>
-                    ${isBest && values.length > 1 && value !== 0 ? '<span class="best-badge">🏆</span>' : ''}
-                </div>
-            `;
-        });
-        
-        html += `</div></div>`;
-    });
-    
-    html += `
-                </div>
-            </div>
-        </div>
-    `;
-    
-    return html;
-}
-
-window.updateComparisonRange = async function(range) {
-    // Show loading style
-    const container = document.querySelector('.ultimate-comparison-container');
-    if(container) container.style.opacity = '0.5';
-    
-    let playersData;
-    
-    if (range === 'all') {
-        // Use main processed data filtered by selection
-        const allP = state.allPlayersData[state.currentDataSource].processed;
-        const selectedP = allP.filter(p => state.selectedForComparison.has(p.id));
-        
-        // Ensure per-90 metrics exist for 'all' range
-        playersData = selectedP.map(p => {
-            const minutes = p.minutes || 0;
-            const factor = minutes > 0 ? 90 / minutes : 0;
-            
-            return {
-                ...p,
-                ict_index_per90: p.ict_index_per90 ?? ((parseFloat(p.ict_index) || 0) * factor),
-                bonus_per90: p.bonus_per90 ?? ((p.bonus || 0) * factor),
-                influence_per90: p.influence_per90 ?? ((parseFloat(p.influence) || 0) * factor),
-                creativity_per90: p.creativity_per90 ?? ((parseFloat(p.creativity) || 0) * factor),
-                threat_per90: p.threat_per90 ?? ((parseFloat(p.threat) || 0) * factor),
-                clean_sheets_per90: p.clean_sheets_per90 ?? ((p.clean_sheets || 0) * factor),
-                goals_conceded_per90: p.goals_conceded_per90 ?? ((p.goals_conceded || 0) * factor),
-                // Keep def_contrib_per90 as is if it exists, otherwise 0
-                def_contrib_per90: p.def_contrib_per90 || 0
-            };
-        });
-    } else {
-        const lastN = parseInt(range);
-        
-        // Check cache or calculate
-        let aggData = state.aggregatedCache[lastN];
-        if (!aggData) {
-            aggData = await calculateAggregatedStats(lastN);
-            state.aggregatedCache[lastN] = aggData;
-        }
-        
-        // Map aggregated data to selected players
-        const allP = state.allPlayersData[state.currentDataSource].processed;
-        const selectedP = allP.filter(p => state.selectedForComparison.has(p.id));
-        
-        const aggMap = new Map(aggData.map(p => [p.id, p]));
-        
-        playersData = selectedP.map(p => {
-            const agg = aggMap.get(p.id);
-            if (!agg) return p; 
-            
-            return {
-                ...p,     // Keep original static props
-                ...agg,   // Override with aggregated dynamic props
-                
-                // Explicitly keep static fields that might be zeroed in aggregation
-                now_cost: p.now_cost,
-                selected_by_percent: p.selected_by_percent,
-                net_transfers_event: p.net_transfers_event,
-                web_name: p.web_name,
-                team_name: p.team_name,
-                position_name: p.position_name,
-                draft_score: p.draft_score, // Keep original draft score
-                predicted_points_1_gw: p.predicted_points_1_gw
-            };
-        });
-    }
-    
-    // Re-render
-    const contentDiv = document.getElementById('compareContent');
-    contentDiv.innerHTML = generateComparisonTableHTML(playersData, range);
-    
-    if(container) container.style.opacity = '1';
-};
-
-window.compareSelectedPlayers = function() {
-    console.log('🔍 compareSelectedPlayers called');
-    
-    if (state.selectedForComparison.size < 2) {
-        showToast('בחר שחקנים', 'יש לבחור לפחות שני שחקנים להשוואה', 'warning', 3000);
-        return;
-    }
-    
-    // הסרת מודל קיים
-    const existingModal = document.getElementById('compareModal');
-    if (existingModal) existingModal.remove();
-
-    // יצירת מודל חדש
-    const modal = document.createElement('div');
-    modal.id = 'compareModal';
-    modal.className = 'modal active';
-    modal.style.cssText = `
-        position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-        background: rgba(15, 23, 42, 0.85); backdrop-filter: blur(8px);
-        display: flex; justify-content: center; align-items: center; z-index: 10000;
-        padding: 20px; animation: fadeIn 0.3s ease-out;
-    `;
-    
-    // קונטיינר לתוכן
-    const contentDiv = document.createElement('div');
-    contentDiv.id = 'compareContent';
-    contentDiv.style.cssText = `
-        background: white; width: 100%; max-width: 1200px; max-height: 90vh;
-        border-radius: 24px; overflow: auto; display: flex; flex-direction: column;
-        box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25); position: relative;
-    `;
-    
-    modal.appendChild(contentDiv);
-    
-    // כפתור סגירה חיצוני
-    const floatingClose = document.createElement('div');
-    floatingClose.innerHTML = '✕';
-    floatingClose.onclick = closeModal;
-    floatingClose.style.cssText = `
-        position: absolute; top: 20px; left: 20px; color: white; font-size: 24px; cursor: pointer; z-index: 10001;
-    `;
-    modal.appendChild(floatingClose);
-
-    document.body.appendChild(modal);
-    document.body.style.overflow = 'hidden';
-    
-    // טעינת הנתונים הראשונית (כל העונה) דרך פונקציית העדכון שמבצעת את כל החישובים הנדרשים
-    if (window.updateComparisonRange) {
-        window.updateComparisonRange('all');
-    } else {
-        // Fallback למקרה חירום
-        const players = state.allPlayersData[state.currentDataSource].processed.filter(p => state.selectedForComparison.has(p.id));
-        contentDiv.innerHTML = generateComparisonTableHTML(players, 'all');
-    }
-};
 
