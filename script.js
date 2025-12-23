@@ -492,7 +492,8 @@ const config = {
         'rank', 'web_name', 'draft_score', 'stability_index', 'predicted_points_1_gw', 'team_name', 'draft_team',
         'position_name', 'now_cost', 'total_points', 'points_per_game_90', 'selected_by_percent', 
         'dreamteam_count', 'net_transfers_event', 'defensive_contribution_per_90', 'goals_scored_assists', 
-        'expected_goals_assists', 'minutes', 'xDiff', 'ict_index', 'bonus', 'clean_sheets', 
+        'expected_goals_assists', 'minutes', 'chance_of_playing_this_round', 'fixture_difficulty', 'xDiff', 
+        'ict_index_per90', 'bonus_per90', 'influence_per90', 'creativity_per90', 'threat_per90', 'clean_sheets_per90', 'goals_conceded_per90',
         'set_piece_priority.penalty', 'set_piece_priority.corner', 'set_piece_priority.free_kick', 'fixtures'
     ],
     comparisonMetrics: {
@@ -1184,6 +1185,20 @@ function preprocessPlayerData(players, setPieceTakers) {
         p.points_per_game_90 = p.minutes > 0 ? (p.total_points / (p.minutes / 90)) : 0;
         p.goals_scored_assists = (p.goals_scored || 0) + (p.assists || 0);
         p.expected_goals_assists = parseFloat(p.expected_goal_involvements) || 0;
+        
+        // Calculate per90 metrics if not already calculated
+        const mins90 = p.minutes > 0 ? (p.minutes / 90) : 0;
+        p.influence_per90 = mins90 > 0 ? (parseFloat(p.influence || 0) / mins90) : 0;
+        p.creativity_per90 = mins90 > 0 ? (parseFloat(p.creativity || 0) / mins90) : 0;
+        p.threat_per90 = mins90 > 0 ? (parseFloat(p.threat || 0) / mins90) : 0;
+        p.ict_index_per90 = mins90 > 0 ? (parseFloat(p.ict_index || 0) / mins90) : 0;
+        p.bonus_per90 = mins90 > 0 ? (parseFloat(p.bonus || 0) / mins90) : 0;
+        p.clean_sheets_per90 = mins90 > 0 ? (parseFloat(p.clean_sheets || 0) / mins90) : 0;
+        p.goals_conceded_per90 = mins90 > 0 ? (parseFloat(p.goals_conceded || 0) / mins90) : 0;
+        
+        // Calculate fixture difficulty for next 4 games
+        p.fixture_difficulty = calculateFixtureDifficulty(p, 4);
+        
         return p;
     });
 }
@@ -1288,8 +1303,9 @@ function calculatePercentilesForDisplay(players) {
         'total_points', 'goals_scored', 'assists', 'expected_goals',
         'expected_assists', 'xGI_per90', 'bonus_per90', 
         'ict_index_per90', 'def_contrib_per90', 'defensive_contribution_per_90',
-        'minutes', 'points_per_game_90', 'selected_by_percent',
-        'clean_sheets', 'saves', 'goals_conceded'
+        'minutes', 'points_per_game_90', 'selected_by_percent', 'dreamteam_count',
+        'clean_sheets', 'saves', 'goals_conceded', 'influence_per90', 'creativity_per90', 
+        'threat_per90', 'clean_sheets_per90', 'goals_conceded_per90'
     ];
     
     const percentiles = {};
@@ -1340,15 +1356,19 @@ function createPlayerRowHtml(player, index, percentileData = {}) {
     const icons = generatePlayerIcons(player);
     const fixturesHTML = generateFixturesHTML(player);
     const isChecked = state.selectedForComparison.has(player.id) ? 'checked' : '';
+    const injuryIcon = generateInjuryIcon(player);
 
     const draftTeam = getDraftTeamForPlayer(player.id);
     const draftTeamDisplay = draftTeam || '🆓 חופשי';
     const draftTeamClass = draftTeam ? 'draft-owned' : 'draft-free';
 
+    // Determine player name color based on injury status
+    const nameColorClass = getPlayerNameColorClass(player.chance_of_playing_this_round);
+
     return `<tr>
         <td><input type="checkbox" class="player-select" data-player-id="${player.id}" ${isChecked}></td>
         <td>${index + 1}</td>
-        <td class="name-cell"><span class="player-name-icon">${icons.icons}</span>${player.web_name}</td>
+        <td class="name-cell"><span class="player-name-icon">${icons.icons}</span><span class="${nameColorClass}">${player.web_name}</span>${injuryIcon}</td>
         <td class="bold-cell ${getPercentileClass(player.draft_score, percentileData.draft_score)}">${player.draft_score.toFixed(1)}</td>
         <td class="bold-cell stability-cell ${getPercentileClass(player.stability_index || 0, percentileData.stability_index)}">${(player.stability_index || 0).toFixed(0)}</td>
         <td class="bold-cell ${getPercentileClass(player.predicted_points_1_gw, percentileData.predicted_points_1_gw)}" title="חיזוי טכני: ${(player.predicted_points_1_gw || 0).toFixed(1)} נקודות">${(player.predicted_points_1_gw || 0).toFixed(1)}</td>
@@ -1359,16 +1379,22 @@ function createPlayerRowHtml(player, index, percentileData = {}) {
         <td class="${getPercentileClass(player.total_points, percentileData.total_points)}">${player.total_points}</td>
         <td class="${getPercentileClass(player.points_per_game_90, percentileData.points_per_game_90)}">${player.points_per_game_90.toFixed(1)}</td>
         <td class="${getPercentileClass(parseFloat(player.selected_by_percent), percentileData.selected_by_percent)}">${player.selected_by_percent}%</td>
-        <td class="${getPercentileClass(player.dreamteam_count, percentileData.draft_score)}">${player.dreamteam_count}</td>
+        <td class="${getPercentileClass(player.dreamteam_count, percentileData.dreamteam_count)}">${player.dreamteam_count}</td>
         <td class="transfers-cell" data-tooltip="${config.columnTooltips.net_transfers_event}"><span class="${player.net_transfers_event >= 0 ? 'net-transfers-positive' : 'net-transfers-negative'}">${player.net_transfers_event.toLocaleString()}</span></td>
         <td class="${getPercentileClass(player.def_contrib_per90, percentileData.def_contrib_per90)}" data-tooltip="${config.columnTooltips.def_contrib_per90}">${player.def_contrib_per90.toFixed(1)}</td>
         <td class="${getPercentileClass((player.goals_scored || 0) + (player.assists || 0), percentileData.goals_scored)}">${(player.goals_scored || 0) + (player.assists || 0)}</td>
         <td class="${getPercentileClass(parseFloat(player.xGI_per90) || 0, percentileData.xGI_per90)}">${(parseFloat(player.xGI_per90) || 0).toFixed(2)}</td>
         <td class="${getPercentileClass(player.minutes, percentileData.minutes)}">${player.minutes}</td>
+        <td class="${getInjuryStatusClass(player.chance_of_playing_this_round)}" title="${getInjuryStatusTooltip(player.chance_of_playing_this_round)}">${getInjuryStatusPercentDisplay(player.chance_of_playing_this_round)}</td>
+        <td class="${getFixtureDifficultyClass(player)}" title="${getFixtureDifficultyTooltip(player.fixture_difficulty)}">${getFixtureDifficultyDisplay(player)}</td>
         <td class="${player.xDiff >= 0 ? 'xdiff-positive' : 'xdiff-negative'}" data-tooltip="${config.columnTooltips.xDiff}">${player.xDiff.toFixed(2)}</td>
         <td class="${getPercentileClass(parseFloat(player.ict_index_per90) || 0, percentileData.ict_index_per90)}">${(parseFloat(player.ict_index_per90) || 0).toFixed(1)}</td>
         <td class="${getPercentileClass(parseFloat(player.bonus_per90) || 0, percentileData.bonus_per90)}">${(parseFloat(player.bonus_per90) || 0).toFixed(2)}</td>
-        <td class="${getPercentileClass(parseFloat(player.clean_sheets_per90) || 0, percentileData.clean_sheets)}">${(parseFloat(player.clean_sheets_per90) || 0).toFixed(2)}</td>
+        <td class="${getPercentileClass(parseFloat(player.influence_per90) || 0, percentileData.influence_per90)}">${(parseFloat(player.influence_per90) || 0).toFixed(1)}</td>
+        <td class="${getPercentileClass(parseFloat(player.creativity_per90) || 0, percentileData.creativity_per90)}">${(parseFloat(player.creativity_per90) || 0).toFixed(1)}</td>
+        <td class="${getPercentileClass(parseFloat(player.threat_per90) || 0, percentileData.threat_per90)}">${(parseFloat(player.threat_per90) || 0).toFixed(1)}</td>
+        <td class="${getPercentileClass(parseFloat(player.clean_sheets_per90) || 0, percentileData.clean_sheets_per90)}">${(parseFloat(player.clean_sheets_per90) || 0).toFixed(2)}</td>
+        <td class="${getPercentileClass(parseFloat(player.goals_conceded_per90) || 0, percentileData.goals_conceded_per90, true)}">${(parseFloat(player.goals_conceded_per90) || 0).toFixed(2)}</td>
         <td class="${player.set_piece_priority.penalty === 1 ? 'set-piece-yes' : 'set-piece-no'}">${player.set_piece_priority.penalty === 1 ? '🎯 (1)' : '–'}</td>
         <td class="${player.set_piece_priority.corner > 0 ? 'set-piece-yes' : 'set-piece-no'}">${player.set_piece_priority.corner > 0 ? `(${player.set_piece_priority.corner})` : '–'}</td>
         <td class="${player.set_piece_priority.free_kick > 0 ? 'set-piece-yes' : 'set-piece-no'}">${player.set_piece_priority.free_kick > 0 ? `(${player.set_piece_priority.free_kick})` : '–'}</td>
@@ -1436,6 +1462,126 @@ function generatePlayerIcons(p) {
         icons: i.map(e => `<span class='player-name-icon'>${e}</span>`).join(""),
         tooltip: i.join(' ')
     };
+}
+
+function generateInjuryIcon(player) {
+    const chance = player.chance_of_playing_this_round;
+    
+    // null means 100% fit
+    if (chance === null || chance === undefined || chance === 100) {
+        return '';
+    }
+    
+    // Determine color and emoji based on injury severity
+    let color, emoji, tooltip;
+    
+    if (chance === 0) {
+        color = '#ef4444'; // red - definitely out
+        emoji = '🚑';
+        tooltip = 'לא ישחק - פצוע';
+    } else if (chance <= 25) {
+        color = '#f97316'; // orange - doubtful
+        emoji = '⚠️';
+        tooltip = `ספק גדול - ${chance}% סיכוי`;
+    } else if (chance <= 50) {
+        color = '#eab308'; // yellow - 50-50
+        emoji = '⚠️';
+        tooltip = `50-50 - ${chance}% סיכוי`;
+    } else if (chance <= 75) {
+        color = '#a3e635'; // light green - probable
+        emoji = '⚠️';
+        tooltip = `סביר - ${chance}% סיכוי`;
+    } else {
+        color = '#84cc16'; // green - likely to play
+        emoji = '⚠️';
+        tooltip = `כמעט בריא - ${chance}% סיכוי`;
+    }
+    
+    return `<span style="color: ${color}; font-weight: bold; margin-left: 4px; font-size: 16px;" title="${tooltip}">${emoji}</span>`;
+}
+
+function getInjuryStatusClass(chance) {
+    if (chance === null || chance === undefined || chance === 100) {
+        return 'percentile-high'; // green - fit
+    }
+    if (chance === 0) {
+        return 'percentile-low'; // red - out
+    }
+    if (chance < 75) {
+        return 'percentile-middle'; // gray - doubtful
+    }
+    return 'percentile-high'; // green - likely fit
+}
+
+/**
+ * Get CSS class for player name color based on injury status
+ * @param {number|null} chance - chance_of_playing_this_round (0-100 or null)
+ * @returns {string} CSS class name
+ */
+function getPlayerNameColorClass(chance) {
+    if (chance === null || chance === undefined || chance >= 75) return ''; // No special color for healthy
+    if (chance === 0) return 'player-name-red'; // Seriously injured - red
+    if (chance <= 50) return 'player-name-yellow'; // Injured for one game - yellow
+    return ''; // 75% chance is considered playable
+}
+
+function getInjuryStatusTooltip(chance) {
+    if (chance === null || chance === undefined) {
+        return 'בריא - 100% סיכוי למשחק';
+    }
+    if (chance === 0) {
+        return 'לא ישחק - פצוע';
+    }
+    if (chance <= 25) {
+        return `ספק גדול - ${chance}% סיכוי למשחק`;
+    }
+    if (chance <= 50) {
+        return `50-50 - ${chance}% סיכוי למשחק`;
+    }
+    if (chance <= 75) {
+        return `סביר שישחק - ${chance}% סיכוי`;
+    }
+    return `כמעט בריא - ${chance}% סיכוי למשחק`;
+}
+
+function getInjuryStatusDisplay(chance) {
+    if (chance === null || chance === undefined) {
+        return '✅ 100%';
+    }
+    if (chance === 0) {
+        return '🚑 0%';
+    }
+    if (chance <= 25) {
+        return `⚠️ ${chance}%`;
+    }
+    if (chance <= 50) {
+        return `⚠️ ${chance}%`;
+    }
+    if (chance <= 75) {
+        return `⚠️ ${chance}%`;
+    }
+    return `✅ ${chance}%`;
+}
+
+function getInjuryStatusPercentDisplay(chance) {
+    if (chance === null || chance === undefined) {
+        return '100%';
+    }
+    return `${chance}%`;
+}
+
+function getFixtureDifficultyClass(player) {
+    if (!player.fixture_difficulty || player.fixture_difficulty.average === 0) {
+        return 'percentile-middle';
+    }
+    return player.fixture_difficulty.color || 'percentile-middle';
+}
+
+function getFixtureDifficultyDisplay(player) {
+    if (!player.fixture_difficulty || player.fixture_difficulty.average === 0) {
+        return '-';
+    }
+    return player.fixture_difficulty.average.toFixed(1);
 }
 
 function generateFixturesHTML(player) {
@@ -1630,6 +1776,85 @@ function getNextFixtures(teamId, count = 3) {
                 is_home
             };
         });
+}
+
+function calculateFixtureDifficulty(player, nextGames = 4) {
+    const fixtures = getNextFixtures(player.team, nextGames);
+    if (fixtures.length === 0) return { average: 0, details: [], color: 'gray', emoji: '-' };
+    
+    const teams = state.allPlayersData.live.teams || state.allPlayersData.historical.teams;
+    if (!teams) return { average: 0, details: [], color: 'gray', emoji: '-' };
+    
+    let totalDifficulty = 0;
+    let details = [];
+    
+    fixtures.forEach(fixture => {
+        const opponentTeam = teams.find(t => t.id === fixture.opponentId);
+        if (!opponentTeam) return;
+        
+        // Calculate difficulty based on player position and opponent strength
+        let difficulty;
+        const position = player.position_name || player.element_type;
+        
+        if (position === 'FWD' || position === 'MID' || position === 3 || position === 4) {
+            // Attackers - depends on opponent's defense strength
+            difficulty = fixture.is_home ? 
+                (opponentTeam.strength_defence_away || opponentTeam.strength || 3) : 
+                (opponentTeam.strength_defence_home || opponentTeam.strength || 3);
+        } else if (position === 'DEF' || position === 'GKP' || position === 1 || position === 2) {
+            // Defenders/GKs - depends on opponent's attack strength
+            difficulty = fixture.is_home ? 
+                (opponentTeam.strength_attack_away || opponentTeam.strength || 3) : 
+                (opponentTeam.strength_attack_home || opponentTeam.strength || 3);
+        } else {
+            // Fallback to overall strength
+            difficulty = opponentTeam.strength || 3;
+        }
+        
+        totalDifficulty += difficulty;
+        details.push({
+            opponent: opponentTeam.short_name || opponentTeam.name,
+            home: fixture.is_home,
+            difficulty: difficulty,
+            event: fixture.event
+        });
+    });
+    
+    const average = fixtures.length > 0 ? totalDifficulty / fixtures.length : 0;
+    
+    // Determine color: 1-2.5 = green (easy), 2.5-3.5 = gray (medium), 3.5-5 = red (hard)
+    let color, emoji;
+    if (average <= 2.5) {
+        color = 'percentile-high'; // green - easy
+        emoji = '🟢';
+    } else if (average <= 3.5) {
+        color = 'percentile-middle'; // gray - medium
+        emoji = '🟡';
+    } else {
+        color = 'percentile-low'; // red - hard
+        emoji = '🔴';
+    }
+    
+    return {
+        average: average,
+        details: details,
+        color: color,
+        emoji: emoji
+    };
+}
+
+function getFixtureDifficultyTooltip(fixtureDiff) {
+    if (!fixtureDiff || !fixtureDiff.details || fixtureDiff.details.length === 0) {
+        return 'אין משחקים קרובים';
+    }
+    
+    let tooltip = `משחקים קרובים (ממוצע קושי: ${fixtureDiff.average.toFixed(1)}):\n`;
+    fixtureDiff.details.forEach(f => {
+        const location = f.home ? '(H)' : '(A)';
+        tooltip += `GW${f.event}: ${f.opponent} ${location} - ${f.difficulty.toFixed(1)}\n`;
+    });
+    
+    return tooltip;
 }
 
 function applyQuickFilter(filterName) {
@@ -4034,40 +4259,67 @@ function getRecommendationData() {
         if (!p) return 0;
         
         // Base metrics (normalized to 0-100 scale)
-        const xPts1GW = (p.predicted_points_1_gw || 0) * 10; // Weight: 0.30
-        const draftScore = (p.draft_score || 0); // Weight: 0.25
+        const xPts1GW = (p.predicted_points_1_gw || 0) * 10; // Weight: 0.25
+        const draftScore = (p.draft_score || 0); // Weight: 0.20
         const form = parseFloat(p.form || 0) * 10; // Weight: 0.15
         
         // Transfers balance (difference between transfers_in and transfers_out)
         const transfersIn = parseInt(p.transfers_in_event || 0);
         const transfersOut = parseInt(p.transfers_out_event || 0);
         const transfersBalance = transfersIn - transfersOut;
-        const transfersScore = Math.max(0, Math.min(100, transfersBalance * 2 + 50)); // Weight: 0.20
+        const transfersScore = Math.max(0, Math.min(100, transfersBalance * 2 + 50)); // Weight: 0.15
         
         // Ownership percentage (higher is better for comeback players)
         const ownership = parseFloat(p.selected_by_percent || 0);
-        const ownershipScore = Math.min(100, ownership * 2); // Weight: 0.10
+        const ownershipScore = Math.min(100, ownership * 2); // Weight: 0.08
+        
+        // Fixture Difficulty: Lower difficulty = easier games = better score (inverted scale)
+        // Range: 1-5, where 1 = easiest, 5 = hardest
+        let fixtureScore = 50; // Default neutral score
+        if (p.fixture_difficulty && p.fixture_difficulty.average > 0) {
+            // Invert: 1 → 100, 5 → 0
+            fixtureScore = (5 - p.fixture_difficulty.average) * 25;
+        }
+        // Weight: 0.12 (important for short-term value)
+        
+        // Injury Risk: Penalize players unlikely to play
+        let injuryPenalty = 0;
+        const chanceToPlay = p.chance_of_playing_this_round;
+        if (chanceToPlay !== null && chanceToPlay !== undefined && chanceToPlay < 100) {
+            if (chanceToPlay === 0) {
+                injuryPenalty = -50; // Major penalty - definitely out
+            } else if (chanceToPlay < 50) {
+                injuryPenalty = -20; // Significant penalty - doubtful
+            } else if (chanceToPlay < 75) {
+                injuryPenalty = -10; // Moderate penalty - uncertain
+            } else {
+                injuryPenalty = -5; // Small penalty - minor concern
+            }
+        }
+        // Weight: Applied as penalty
         
         // Comeback bonus: High ownership but low minutes = returning from injury
         let comebackBonus = 0;
         const minutes = p.minutes || 0;
-        if (minutes < 270 && ownership > 30 && draftScore > 70) {
-            comebackBonus = 20; // Significant bonus for comeback players
-        } else if (minutes < 180 && ownership > 20 && draftScore > 60) {
+        if (minutes < 270 && ownership > 30 && draftScore > 70 && chanceToPlay >= 75) {
+            comebackBonus = 20; // Significant bonus for comeback players (if fit)
+        } else if (minutes < 180 && ownership > 20 && draftScore > 60 && chanceToPlay >= 75) {
             comebackBonus = 10; // Moderate bonus
         }
         
         // Calculate weighted smart score
         const smartScore = (
-            (xPts1GW * 0.30) +
-            (draftScore * 0.25) +
+            (xPts1GW * 0.25) +
+            (draftScore * 0.20) +
             (form * 0.15) +
-            (transfersScore * 0.20) +
-            (ownershipScore * 0.10) +
-            comebackBonus
+            (transfersScore * 0.15) +
+            (ownershipScore * 0.08) +
+            (fixtureScore * 0.12) +
+            comebackBonus +
+            injuryPenalty
         );
         
-        return smartScore;
+        return Math.max(0, smartScore); // Ensure non-negative
     };
 
     // Add smart_score and transfers_balance to all players for display
@@ -7568,7 +7820,7 @@ window.renderAllTeamsTrendChart = function(teamAggregates, mode = 'cumulative', 
                     <button onclick="updateTrendChartMetric('table_points')" style="padding: 7px 14px; border: none; background: ${currentMetric === 'table_points' ? 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)' : 'transparent'}; color: ${currentMetric === 'table_points' ? 'white' : '#64748b'}; font-weight: 700; border-radius: 6px; cursor: pointer; font-size: 12px; transition: all 0.2s;">נקודות בטבלה</button>
                     <button onclick="updateTrendChartMetric('points')" style="padding: 7px 14px; border: none; background: ${currentMetric === 'points' ? 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)' : 'transparent'}; color: ${currentMetric === 'points' ? 'white' : '#64748b'}; font-weight: 700; border-radius: 6px; cursor: pointer; font-size: 12px; transition: all 0.2s;">נקודות בעד</button>
                 </div>
-
+                
                 <div style="display: flex; gap: 5px; background: white; padding: 3px; border-radius: 8px; border: 1px solid #e2e8f0;">
                     <button onclick="setTrendSpeed(1500)" style="padding: 5px 10px; font-size: 11px; border: none; border-radius: 6px; background: ${currentSpeed === 1500 ? '#dbeafe' : 'transparent'}; color: ${currentSpeed === 1500 ? '#1e40af' : '#64748b'}; cursor: pointer; font-weight: 600;">⏱️ איטי</button>
                     <button onclick="setTrendSpeed(800)" style="padding: 5px 10px; font-size: 11px; border: none; border-radius: 6px; background: ${currentSpeed === 800 ? '#dbeafe' : 'transparent'}; color: ${currentSpeed === 800 ? '#1e40af' : '#64748b'}; cursor: pointer; font-weight: 600;">⏱️ רגיל</button>
@@ -7584,7 +7836,7 @@ window.renderAllTeamsTrendChart = function(teamAggregates, mode = 'cumulative', 
 
                 <button id="playTrendBtn" onclick="playTrendProgression()" style="padding: 10px 18px; background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%); color: white; border: none; border-radius: 10px; cursor: pointer; font-weight: 800; display: flex; align-items: center; gap: 8px; box-shadow: 0 4px 8px rgba(37, 99, 235, 0.3); transition: all 0.2s; font-size: 13px;">
                     <span id="playIcon">▶️</span> <span id="playText">נגן התקדמות</span>
-                </button>
+                    </button>
             </div>
         </div>
 
@@ -7662,7 +7914,7 @@ window.renderAllTeamsTrendChart = function(teamAggregates, mode = 'cumulative', 
 
     // Add significant offsets to separate lines visually (especially for 'points' metric)
     const useOffset = currentMetric === 'points';
-    
+
     const datasets = Array.from(historyMap.entries())
         .filter(([entryId, team]) => highlightTeamIds.includes(entryId))
         .map(([entryId, team], index) => {
@@ -8172,6 +8424,8 @@ function generateComparisonTableHTML(players, activeRange = 'all') {
     
     const comprehensiveMetrics = [
         { name: 'ציון דראפט', key: 'draft_score', format: v => v.toFixed(1), icon: '⭐', reversed: false },
+        { name: 'סיכוי למשחק', key: 'chance_of_playing_this_round', format: v => (v === null || v === undefined ? '100%' : v + '%'), icon: '🏥', reversed: false },
+        { name: 'קושי משחקים', key: 'fixture_difficulty.average', format: v => v.toFixed(1), icon: '📅', reversed: true },
         { name: 'העברות נטו', key: 'net_transfers_event', format: v => (v >= 0 ? '+' : '') + v.toLocaleString(), icon: '🔄', reversed: false },
         { name: 'חיזוי (GW הבא)', key: 'predicted_points_1_gw', format: v => v.toFixed(1), icon: '🔮', reversed: false },
         { name: 'כושר', key: 'form', format: v => parseFloat(v || 0).toFixed(1), icon: '🔥', reversed: false },
