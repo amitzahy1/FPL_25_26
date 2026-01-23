@@ -245,16 +245,6 @@ tbody tr:last-child td {
     text-align: right; 
     overflow: visible; 
     white-space: normal;
-}
-
-.draft-team-cell {
-    max-width: 80px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    font-size: 0.85em;
-    color: var(--text-secondary);
-    text-align: center;
     font-weight: 600;
 }
 
@@ -1933,19 +1923,19 @@ tbody tr:last-child td {
 .player-card-photo-wrapper {
     position: relative;
     background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
-    padding: 20px;
+    padding: 12px;
     text-align: center;
-    height: 180px;
+    height: 100px;
     display: flex;
     align-items: center;
     justify-content: center;
 }
 
 .player-card-photo-ultimate {
-    max-width: 110px;
-    max-height: 140px;
+    max-width: 55px;
+    max-height: 70px;
     object-fit: contain;
-    filter: drop-shadow(0 4px 8px rgba(0,0,0,0.15));
+    filter: drop-shadow(0 2px 4px rgba(0,0,0,0.15));
 }
 
 .player-position-badge {
@@ -1967,16 +1957,16 @@ tbody tr:last-child td {
 }
 
 .player-name-ultimate {
-    font-size: 22px;
+    font-size: 16px;
     font-weight: 700;
     color: #1e293b;
-    margin: 0 0 4px 0;
+    margin: 0 0 2px 0;
 }
 
 .player-team-ultimate {
-    font-size: 14px;
+    font-size: 12px;
     color: #64748b;
-    margin: 0 0 16px 0;
+    margin: 0 0 10px 0;
     font-weight: 500;
 }
 

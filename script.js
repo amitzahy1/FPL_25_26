@@ -436,11 +436,11 @@ const config = {
         playerImage: (code) => `https://resources.premierleague.com/premierleague/photos/players/110x140/p${code}.png`,
         missingPlayerImage: 'https://resources.premierleague.com/premierleague/photos/players/110x140/Photo-Missing.png'
     },
-    vercelApi: 'https://fpl-25-26.vercel.app/api',
+    corsProxy: 'https://corsproxy.io/?',
     draftLeagueId: 689,
     setPieceTakers: {"Arsenal":{"penalties":["Saka","Havertz"],"freekicks":["Ødegaard","Rice","Martinelli"],"corners":["Martinelli","Saka","Ødegaard"]},"Aston Villa":{"penalties":["Watkins","Tielemans"],"freekicks":["Digne","Douglas Luiz","Bailey"],"corners":["Douglas Luiz","McGinn"]},"Bournemouth":{"penalties":["Solanke","Kluivert"],"freekicks":["Tavernier","Scott"],"corners":["Tavernier","Scott"]},"Brentford":{"penalties":["Toney","Mbeumo"],"freekicks":["Jensen","Mbeumo","Damsgaard"],"corners":["Jensen","Mbeumo"]},"Brighton":{"penalties":["João Pedro","Gross"],"freekicks":["Gross","Estupiñán"],"corners":["Gross","March"]},"Chelsea":{"penalties":["Palmer","Nkunku"],"freekicks":["Palmer","James","Enzo"],"corners":["Gallagher","Chilwell","Palmer"]},"Crystal Palace":{"penalties":["Eze","Olise"],"freekicks":["Eze","Olise"],"corners":["Eze","Olise"]},"Everton":{"penalties":["Calvert-Lewin","McNeil"],"freekicks":["McNeil","Garner"],"corners":["McNeil","Garner"]},"Fulham":{"penalties":["Andreas","Jiménez"],"freekicks":["Andreas","Willian","Wilson"],"corners":["Andreas","Willian"]},"Ipswich":{"penalties":["Chaplin","Hirst"],"freekicks":["Davis","Morsy"],"corners":["Davis","Chaplin"]},"Leicester":{"penalties":["Vardy","Dewsbury-Hall"],"freekicks":["Dewsbury-Hall","Fatawu"],"corners":["Dewsbury-Hall","Fatawu"]},"Liverpool":{"penalties":["M.Salah","Szoboszlai"],"freekicks":["Alexander-Arnold","Szoboszlai","Robertson"],"corners":["Alexander-Arnold","Robertson"]},"Man City":{"penalties":["Haaland","Alvarez"],"freekicks":["De Bruyne","Foden","Alvarez"],"corners":["Foden","De Bruyne"]},"Man Utd":{"penalties":["B.Fernandes","Rashford"],"freekicks":["B.Fernandes","Eriksen","Rashford"],"corners":["B.Fernandes","Shaw"]},"Newcastle":{"penalties":["Isak","Wilson"],"freekicks":["Trippier","Gordon"],"corners":["Trippier","Gordon"]},"Nott'm Forest":{"penalties":["Gibbs-White","Wood"],"freekicks":["Gibbs-White","Elanga"],"corners":["Gibbs-White","Elanga"]},"Southampton":{"penalties":["A. Armstrong","Ward-Prowse"],"freekicks":["Ward-Prowse","Smallbone"],"corners":["Ward-Prowse","Aribo"]},"Spurs":{"penalties":["Son","Maddison"],"freekicks":["Maddison","Pedro Porro"],"corners":["Maddison","Pedro Porro","Son"]},"West Ham":{"penalties":["Ward-Prowse","Bowen"],"freekicks":["Ward-Prowse","Emerson"],"corners":["Ward-Prowse","Bowen"]},"Wolves":{"penalties":["Cunha","Hwang"],"freekicks":["Sarabia","Bellegarde"],"corners":["Sarabia","Aït-Nouri"]}},
     tableColumns: [
-        'rank', 'web_name', 'draft_score', 'predicted_points_1_gw', 'team_name', 'draft_team',
+        'rank', 'web_name', 'draft_score', 'stability_index', 'predicted_points_1_gw', 'ml_prediction', 'team_name', 'draft_team',
         'position_name', 'now_cost', 'total_points', 'points_per_game_90', 'selected_by_percent', 
         'dreamteam_count', 'net_transfers_event', 'def_contrib_per90', 'goals_scored_assists', 
         'expected_goals_assists', 'minutes', 'xDiff', 'ict_index', 'bonus', 'clean_sheets', 
@@ -468,6 +468,10 @@ const config = {
         'ציון חכם': { key: 'smart_score', format: v => {
             const val = parseFloat(v) || 0;
             return val.toFixed(1);
+        }},
+        'יציבות': { key: 'stability_index', format: v => {
+            const val = parseFloat(v) || 0;
+            return val.toFixed(0);
         }},
         'xPts (הבא)': { key: 'predicted_points_1_gw', format: v => {
             const val = parseFloat(v) || 0;
@@ -514,6 +518,7 @@ const config = {
         'draft_score': 'ציון דראפט מושלם: 35% נקודות בפועל, 15% תרומה הגנתית, 12% G+A למשחק, 12% xG למשחק, 10% איכות משחק, 8% אחוז בעלות, 8% בונוס. מחושב לפי עמדה!',
         'predicted_points_1_gw': 'חיזוי נקודות למחזור הבא - מודל מתקדם: 17% מומנטום העברות 🔥, 28% כושר 📈, 25% xGI/90 ⚽, 20% קושי יריבות 🎯, 10% חוזק קבוצה 💪',
         'predicted_points_4_gw': 'צפי נקודות ממוצע ל-4 המחזורים הקרובים (לשימוש פנימי).',
+        'stability_index': 'מדד יציבות (0-100) 📊 - מודד עקביות השחקן: 40% כושר אחרון 📈, 30% דיוק xG ⚽, 20% זמן משחק קבוע ⏱️, 10% שונות נקודות 📉. ככל שגבוה יותר = שחקן יציב ויותר צפוי ✅',
         'def_contrib_per90': 'תרומה הגנתית ל-90 דקות (תיקולים, חטיפות, חילוצים).',
         'xDiff': 'ההפרש בין שערים+בישולים בפועל לצפי (xGI). ערך חיובי מעיד על מימוש יתר.',
         'net_transfers_event': 'סה"כ העברות נכנסות פחות יוצאות במחזור הנוכחי - מדד למומנטום ביקוש לשחקן.'
@@ -544,14 +549,17 @@ const state = {
         details: null,
         standings: null,
         rostersByEntryId: new Map(),
+        lineupsByEntryId: new Map(), // { entryId: { starting: [fplId1, ...], bench: [fplId12, ...] } }
         entryIdToTeamName: new Map(),
-        playerIdToTeamId: new Map(), // ✅ NEW: Maps player ID to team ID
         allPicks: new Set(),
         ownedElementIds: new Set(),
         teamAggregates: [],
         _standingsData: [],
         _standingsSort: null,
         charts: { analytics: {}, matrix: null, progress: null },
+        // Player ID mapping between Draft API and Fantasy API
+        draftToFplIdMap: new Map(), // Draft ID -> Fantasy ID
+        fplToDraftIdMap: new Map(), // Fantasy ID -> Draft ID
     }
 };
 
@@ -560,7 +568,27 @@ const charts = {
     comparisonRadar: null
 };
 
-async function fetchWithCache(url, cacheKey, cacheDurationMinutes = 120) {
+/**
+ * Fetch with cache, retry logic, and rate limiting
+ * 
+ * Features:
+ * - Cache with configurable duration
+ * - Retry on failure with exponential backoff
+ * - Rate limiting detection (429 status)
+ * - Network error handling
+ * 
+ * @param {string} url - URL to fetch
+ * @param {string} cacheKey - Cache key for localStorage
+ * @param {number} cacheDurationMinutes - Cache validity duration
+ * @param {Object} options - Fetch options
+ * @param {number} options.maxRetries - Maximum retry attempts (default: 3)
+ * @param {number} options.retryDelay - Initial retry delay in ms (default: 1000)
+ * @returns {Promise<Object>} - Fetched data
+ */
+async function fetchWithCache(url, cacheKey, cacheDurationMinutes = 120, options = {}) {
+    const { maxRetries = 3, retryDelay = 1000 } = options;
+    
+    // Try cache first
     const cachedItem = localStorage.getItem(cacheKey);
     if (cachedItem) {
         try {
@@ -571,106 +599,259 @@ async function fetchWithCache(url, cacheKey, cacheDurationMinutes = 120) {
                 return data;
             } else {
                  localStorage.removeItem(cacheKey);
+                 console.log(`⏰ Cache expired for ${cacheKey}`);
             }
-        } catch (e) {
-            console.error('Error parsing cache, removing item.', e);
+            } catch (e) {
+            console.error('❌ Error parsing cache, removing item:', e);
             localStorage.removeItem(cacheKey);
         }
     }
 
-    console.log(`🔄 Fetching fresh data for ${cacheKey}`);
+    // Fetch with retry logic
+    console.log(`🌐 Fetching fresh data for ${cacheKey}`);
     
-    // URL is already the Vercel API endpoint
-    try {
-        console.log(`📡 Calling Vercel API: ${url}`);
-        
-        const response = await fetch(url, {
-            method: 'GET',
-            headers: {
-                'Accept': 'application/json'
-            }
-        });
-        
-        if (!response.ok) {
-            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-        }
-        
-        const data = await response.json();
-        
-        // Cache successful response
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
         try {
-            localStorage.setItem(cacheKey, JSON.stringify({ timestamp: new Date().getTime(), data }));
-        } catch(e) {
-            console.error("Failed to write to localStorage. Cache might be full.", e);
+            const response = await fetch(url);
+            
+            // Handle rate limiting (429)
+            if (response.status === 429) {
+                const waitTime = retryDelay * Math.pow(2, attempt - 1); // Exponential backoff
+                console.warn(`⚠️ Rate limited (429), waiting ${waitTime}ms before retry ${attempt}/${maxRetries}...`);
+                await new Promise(resolve => setTimeout(resolve, waitTime));
+                continue; // Retry
+            }
+            
+            // Handle other HTTP errors
+            if (!response.ok) {
+                if (attempt === maxRetries) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                console.warn(`⚠️ HTTP ${response.status}, retry ${attempt}/${maxRetries}...`);
+                await new Promise(resolve => setTimeout(resolve, retryDelay));
+                continue;
+            }
+            
+            // Success - parse and cache
+            const data = await response.json();
+            
+            // Save to cache
+            try {
+                localStorage.setItem(cacheKey, JSON.stringify({ timestamp: new Date().getTime(), data }));
+                console.log(`💾 Cached data for ${cacheKey}`);
+            } catch(e) {
+                console.error("⚠️ Failed to write to localStorage. Cache might be full.", e);
+            }
+            
+            return data;
+            
+        } catch (error) {
+            // Network error or JSON parse error
+            if (attempt === maxRetries) {
+                console.error(`❌ Failed after ${maxRetries} attempts:`, error);
+                throw error;
+            }
+            
+            console.warn(`⚠️ Attempt ${attempt}/${maxRetries} failed: ${error.message}`);
+            await new Promise(resolve => setTimeout(resolve, retryDelay));
         }
-        
-        console.log(`✅ Successfully fetched data from Vercel API`);
-        return data;
-        
-    } catch (error) {
-        console.error(`❌ Vercel API failed:`, error.message);
-        showErrorModal(url, error);
-        throw new Error(`Failed to fetch ${url}: ${error.message}`);
     }
+    
+    throw new Error(`Failed to fetch ${url} after ${maxRetries} attempts`);
 }
 
-function showErrorModal(url, error) {
-    const modal = document.getElementById('errorModal');
-    const content = document.getElementById('errorModalContent');
+// ============================================
+// DRAFT TO FPL PLAYER ID MAPPING
+// ============================================
+
+/**
+ * Normalize player name for comparison
+ * Removes accents, converts to lowercase, removes extra spaces
+ */
+function normalizePlayerName(player) {
+    const fullName = `${player.first_name} ${player.second_name}`.toLowerCase();
+    // Remove accents and special characters
+    return fullName
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/[^a-z0-9\s]/g, '')
+        .trim();
+}
+
+/**
+ * Check if two player names match (either first or second name)
+ */
+function namesMatch(player1, player2) {
+    const name1Lower = player1.second_name.toLowerCase();
+    const name2Lower = player2.second_name.toLowerCase();
     
-    const isBootstrap = url.includes('bootstrap-static');
-    const isDraft = url.includes('draft.premierleague.com');
+    // Exact match on second name
+    if (name1Lower === name2Lower) return true;
     
-    let title = '❌ שגיאה בטעינת נתונים';
-    let message = 'לא ניתן להתחבר לשרתי FPL';
-    let suggestions = '';
+    // Check if one contains the other (for hyphenated names)
+    if (name1Lower.includes(name2Lower) || name2Lower.includes(name1Lower)) return true;
     
-    if (isBootstrap) {
-        title = '❌ שגיאת חיבור ל-FPL API';
-        message = 'לא ניתן לטעון את נתוני השחקנים מהשרת';
-        suggestions = `
-            <div style="background: #e3f2fd; padding: 15px; border-radius: 8px; margin: 15px 0; border-right: 4px solid #2196f3;">
-                <strong style="color: #1976d2;">💡 פתרון מהיר:</strong>
-                <p style="margin: 10px 0; color: #424242;">השתמש בנתונים היסטוריים במקום נתונים חיים:</p>
-                <button onclick="switchDataSource('historical'); document.getElementById('errorModal').style.display='none'" 
-                        style="background: #2196f3; color: white; border: none; padding: 10px 20px; border-radius: 6px; cursor: pointer; font-weight: bold;">
-                    📊 עבור לנתונים היסטוריים
-                </button>
-            </div>
-        `;
-    } else if (isDraft) {
-        title = '❌ שגיאת חיבור ל-Draft API';
-        message = 'לא ניתן לטעון את נתוני ליגת הדראפט';
+    return false;
+}
+
+/**
+ * Calculate Levenshtein distance between two strings
+ */
+function levenshteinDistance(str1, str2) {
+    const matrix = [];
+    
+    for (let i = 0; i <= str2.length; i++) {
+        matrix[i] = [i];
     }
     
-    content.innerHTML = `
-        <div style="text-align: center; padding: 20px;">
-            <h2 style="color: #dc3545; margin-bottom: 15px;">${title}</h2>
-            <p style="font-size: 16px; color: #666; margin-bottom: 20px;">${message}</p>
-            ${suggestions}
-            <div style="background: #fff3cd; padding: 15px; border-radius: 8px; margin: 20px 0; border-right: 4px solid #ffc107; text-align: right;">
-                <strong style="color: #856404;">⚠️ פתרונות נוספים:</strong>
-                <ul style="margin: 10px 0; padding-right: 25px; text-align: right; line-height: 1.8; color: #856404;">
-                    <li>בדוק את החיבור לאינטרנט</li>
-                    <li>נסה לרענן את הדף (F5)</li>
-                    <li>נקה את ה-Cache (Ctrl+Shift+Del)</li>
-                    <li>נסה שוב בעוד כמה דקות</li>
-                </ul>
-            </div>
-            <div style="margin-top: 20px;">
-                <button onclick="location.reload()" 
-                        style="background: #28a745; color: white; border: none; padding: 12px 24px; border-radius: 6px; cursor: pointer; font-size: 15px; font-weight: bold; margin-left: 10px;">
-                    🔄 רענן דף
-                </button>
-                <button onclick="document.getElementById('errorModal').style.display='none'" 
-                        style="background: #6c757d; color: white; border: none; padding: 12px 24px; border-radius: 6px; cursor: pointer; font-size: 15px; font-weight: bold;">
-                    ✖️ סגור
-                </button>
-            </div>
-        </div>
-    `;
+    for (let j = 0; j <= str1.length; j++) {
+        matrix[0][j] = j;
+    }
     
-    modal.style.display = 'block';
+    for (let i = 1; i <= str2.length; i++) {
+        for (let j = 1; j <= str1.length; j++) {
+            if (str2.charAt(i - 1) === str1.charAt(j - 1)) {
+                matrix[i][j] = matrix[i - 1][j - 1];
+            } else {
+                matrix[i][j] = Math.min(
+                    matrix[i - 1][j - 1] + 1, // substitution
+                    matrix[i][j - 1] + 1,     // insertion
+                    matrix[i - 1][j] + 1      // deletion
+                );
+            }
+        }
+    }
+    
+    return matrix[str2.length][str1.length];
+}
+
+/**
+ * Find fuzzy match for a player using Levenshtein distance
+ */
+function findFuzzyMatch(draftPlayer, fplPlayers) {
+    const draftName = normalizePlayerName(draftPlayer);
+    const draftPos = draftPlayer.element_type;
+    
+    let bestMatch = null;
+    let bestSimilarity = 0;
+    
+    for (const fplPlayer of fplPlayers) {
+        // Only compare players in the same position
+        if (fplPlayer.element_type !== draftPos) continue;
+        
+        const fplName = normalizePlayerName(fplPlayer);
+        const distance = levenshteinDistance(draftName, fplName);
+        const maxLength = Math.max(draftName.length, fplName.length);
+        const similarity = 1 - (distance / maxLength);
+        
+        if (similarity > bestSimilarity && similarity > 0.8) {
+            bestSimilarity = similarity;
+            bestMatch = fplPlayer;
+        }
+    }
+    
+    return bestMatch ? { player: bestMatch, similarity: bestSimilarity } : null;
+}
+
+/**
+ * Build mapping between Draft API player IDs and Fantasy API player IDs
+ * This solves the problem where IDs don't match between the two APIs
+ */
+async function buildDraftToFplMapping() {
+    console.log('🔄 Building Draft to FPL ID mapping...');
+    
+    try {
+        const fplUrl = config.corsProxy + encodeURIComponent(config.urls.bootstrap);
+        const draftUrl = config.corsProxy + encodeURIComponent('https://draft.premierleague.com/api/bootstrap-static');
+        
+        const [fplData, draftData] = await Promise.all([
+            fetchWithCache(fplUrl, 'fpl_bootstrap_mapping', 60),
+            fetchWithCache(draftUrl, 'draft_bootstrap_mapping', 60)
+        ]);
+        
+        // Create lookup maps
+        const fplById = new Map(fplData.elements.map(p => [p.id, p]));
+        const fplByName = new Map();
+        
+        // Build name-based lookup for FPL players
+        for (const p of fplData.elements) {
+            const key = normalizePlayerName(p);
+            fplByName.set(key, p);
+        }
+        
+        // Clear existing mappings
+        state.draft.draftToFplIdMap.clear();
+        state.draft.fplToDraftIdMap.clear();
+        
+        let exactMatches = 0;
+        let nameMatches = 0;
+        let fuzzyMatches = 0;
+        let unmapped = 0;
+        
+        console.log('📋 Starting player mapping...');
+        
+        for (const draftPlayer of draftData.elements) {
+            let fplPlayer = null;
+            let matchType = null;
+            
+            // Step 1: Try exact ID match + name verification
+            const candidate = fplById.get(draftPlayer.id);
+            if (candidate && namesMatch(candidate, draftPlayer)) {
+                fplPlayer = candidate;
+                matchType = 'exact_id';
+                exactMatches++;
+            }
+            
+            // Step 2: Try name-based matching
+            if (!fplPlayer) {
+                const nameKey = normalizePlayerName(draftPlayer);
+                fplPlayer = fplByName.get(nameKey);
+                if (fplPlayer) {
+                    matchType = 'name';
+                    nameMatches++;
+                    if (draftPlayer.id !== fplPlayer.id) {
+                        console.log(`  🔗 Name match: ${draftPlayer.web_name} - Draft:${draftPlayer.id} → FPL:${fplPlayer.id}`);
+                    }
+                }
+            }
+            
+            // Step 3: Try fuzzy matching (for name variations)
+            if (!fplPlayer) {
+                const fuzzyMatch = findFuzzyMatch(draftPlayer, fplData.elements);
+                if (fuzzyMatch && fuzzyMatch.similarity > 0.85) {
+                    fplPlayer = fuzzyMatch.player;
+                    matchType = 'fuzzy';
+                    fuzzyMatches++;
+                    console.log(`  🔍 Fuzzy match: ${draftPlayer.web_name} → ${fplPlayer.web_name} (${(fuzzyMatch.similarity * 100).toFixed(0)}% similar, Draft:${draftPlayer.id} → FPL:${fplPlayer.id})`);
+                }
+            }
+            
+            if (fplPlayer) {
+                state.draft.draftToFplIdMap.set(draftPlayer.id, fplPlayer.id);
+                state.draft.fplToDraftIdMap.set(fplPlayer.id, draftPlayer.id);
+            } else {
+                unmapped++;
+                console.warn(`  ❌ No match found for: ${draftPlayer.web_name} (Draft ID: ${draftPlayer.id}, Position: ${draftPlayer.element_type})`);
+            }
+        }
+        
+        console.log('✅ Mapping complete:');
+        console.log(`  - Exact ID matches: ${exactMatches}`);
+        console.log(`  - Name matches: ${nameMatches}`);
+        console.log(`  - Fuzzy matches: ${fuzzyMatches}`);
+        console.log(`  - Unmapped: ${unmapped}`);
+        console.log(`  - Total mapped: ${state.draft.draftToFplIdMap.size} / ${draftData.elements.length}`);
+        
+        return {
+            success: true,
+            mapped: state.draft.draftToFplIdMap.size,
+            unmapped: unmapped
+        };
+        
+    } catch (error) {
+        console.error('❌ Failed to build Draft→FPL mapping:', error);
+        return { success: false, error: error.message };
+    }
 }
 
 function showLoading(message = 'טוען נתונים...') {
@@ -767,13 +948,17 @@ function showToast(title, message, type = 'info', duration = 4000) {
 async function init() {
     Chart.register(ChartDataLabels);
     
-    // Load both data sources in parallel
+    // Load data sources in sequence to ensure mapping works
     showLoading();
     try {
-        await Promise.all([
-            fetchAndProcessData(),
-            loadDraftDataInBackground()
-        ]);
+        // 1. First load FPL data
+        await fetchAndProcessData();
+        
+        // 2. Then build the Draft→FPL mapping
+        await buildDraftToFplMapping();
+        
+        // 3. Finally load Draft data (now mapping is ready!)
+        await loadDraftDataInBackground();
         
         showToast('טעינה הושלמה', 'כל הנתונים נטענו בהצלחה!', 'success', 3000);
     } catch (error) {
@@ -804,11 +989,11 @@ async function fetchAndProcessData() {
 
         if (needsData || needsFixtures) {
             const dataUrl = state.currentDataSource === 'live'
-                ? `${config.vercelApi}/bootstrap`
+                ? config.corsProxy + encodeURIComponent(config.urls.bootstrap)
                 : 'FPL_Bootstrap_static.json';
             const dataCacheKey = `fpl_bootstrap_${state.currentDataSource}`;
             
-            const fixturesUrl = `${config.vercelApi}/fixtures`;
+            const fixturesUrl = config.corsProxy + encodeURIComponent(config.urls.fixtures);
             const fixturesCacheKey = 'fpl_fixtures';
 
             if (needsData) {
@@ -853,47 +1038,13 @@ async function fetchAndProcessData() {
         
         // Show success toast
         showToast('נתונים נטענו בהצלחה', `${state.allPlayersData[state.currentDataSource].processed.length} שחקנים נטענו`, 'success', 3000);
-    } catch (error) {
+} catch (error) {
         console.error('Error in fetchAndProcessData:', error);
-        
-        // Friendly error message with suggestions
-        let errorMessage = error.message;
-        let suggestions = '';
-        
-        if (error.message.includes('All proxies failed') || error.message.includes('Failed to fetch')) {
-            errorMessage = 'לא ניתן להתחבר לשרתי FPL';
-            suggestions = `
-                <div style="margin-top: 15px; text-align: right; background: #fff3cd; padding: 15px; border-radius: 8px; border-right: 4px solid #ffc107;">
-                    <strong>💡 פתרונות אפשריים:</strong>
-                    <ul style="margin: 10px 0; padding-right: 20px; text-align: right;">
-                        <li>בדוק את החיבור לאינטרנט שלך</li>
-                        <li>נסה לרענן את הדף (F5)</li>
-                        <li>נקה את ה-Cache של הדפדפן (Ctrl+Shift+Del)</li>
-                        <li>נסה שוב בעוד כמה דקות</li>
-                        <li>השתמש במצב דמו (לחץ על "מצב דמו" למעלה)</li>
-                    </ul>
-                    <button onclick="location.reload()" style="background: #28a745; color: white; border: none; padding: 10px 20px; border-radius: 6px; cursor: pointer; font-size: 14px; font-weight: bold;">
-                        🔄 רענן דף
-                    </button>
-                </div>
-            `;
-        }
-        
-        document.getElementById('playersTableBody').innerHTML = `
-            <tr>
-                <td colspan="26" style="text-align:center; padding: 30px;">
-                    <div style="color: #dc3545; font-size: 18px; font-weight: bold; margin-bottom: 10px;">
-                        ❌ ${errorMessage}
-                    </div>
-                    ${suggestions}
-                </td>
-            </tr>
-        `;
-        
-        showToast('שגיאה בטעינת נתונים', errorMessage, 'error', 8000);
-    } finally {
-        hideLoading();
-    }
+        document.getElementById('playersTableBody').innerHTML = `<tr><td colspan="26" style="text-align:center; padding: 20px; color: red;">שגיאה בטעינת נתונים: ${error.message}</td></tr>`;
+        showToast('שגיאה בטעינת נתונים', error.message, 'error', 5000);
+} finally {
+    hideLoading();
+}
 }
 
 function switchDataSource(source) {
@@ -996,7 +1147,7 @@ function populateTeamFilter() {
     if (state.draft.details && state.draft.details.league_entries) {
         state.draft.details.league_entries.forEach(entry => {
             if(entry.entry_name) {
-                const option = document.createElement('option');
+        const option = document.createElement('option');
                 option.value = entry.id;
                 option.textContent = entry.entry_name;
                 draftTeamFilter.appendChild(option);
@@ -1018,21 +1169,25 @@ function createPlayerRowHtml(player, index) {
     const fixturesHTML = generateFixturesHTML(player);
     const isChecked = state.selectedForComparison.has(player.id) ? 'checked' : '';
     
-    // Get draft team name for this player
-    let draftTeamName = '–';
-    if (state.draft.playerIdToTeamId && state.draft.playerIdToTeamId.has(player.id)) {
-        const teamId = state.draft.playerIdToTeamId.get(player.id);
-        draftTeamName = state.draft.entryIdToTeamName.get(teamId) || '–';
-    }
+    // Get ML prediction
+    const mlPrediction = player.ml_prediction || 0;
+    const mlClass = mlPrediction >= 5 ? 'ml-high' : mlPrediction >= 3 ? 'ml-medium' : 'ml-low';
+    
+    // Get draft team
+    const draftTeam = getDraftTeamForPlayer(player.id);
+    const draftTeamDisplay = draftTeam || '🆓 חופשי';
+    const draftTeamClass = draftTeam ? 'draft-owned' : 'draft-free';
 
     return `<tr>
         <td><input type="checkbox" class="player-select" data-player-id="${player.id}" ${isChecked}></td>
         <td>${index + 1}</td>
         <td class="name-cell"><span class="player-name-icon">${icons.icons}</span>${player.web_name}</td>
         <td class="bold-cell">${player.draft_score.toFixed(1)}</td>
-        <td class="bold-cell">${(player.predicted_points_1_gw || 0).toFixed(1)}</td>
+        <td class="bold-cell stability-cell">${(player.stability_index || 0).toFixed(0)}</td>
+        <td class="bold-cell" title="חיזוי טכני: ${(player.predicted_points_1_gw || 0).toFixed(1)} נקודות">${(player.predicted_points_1_gw || 0).toFixed(1)}</td>
+        <td class="bold-cell ${mlClass}" title="חיזוי ML: ${mlPrediction.toFixed(1)} נקודות">${mlPrediction.toFixed(1)}</td>
         <td>${player.team_name}</td>
-        <td class="draft-team-cell" title="${draftTeamName}">${draftTeamName}</td>
+        <td class="${draftTeamClass}" title="${draftTeamDisplay}">${draftTeamDisplay}</td>
         <td>${player.position_name}</td>
         <td>${player.now_cost.toFixed(1)}</td>
         <td>${player.total_points}</td>
@@ -1062,15 +1217,10 @@ function renderTable() {
         let aValue, bValue;
         const field = columnMapping[state.sortColumn];
 
-        if (state.sortColumn === 5) { // Draft Team column
-            const aTeamId = state.draft.playerIdToTeamId.get(a.id);
-            const bTeamId = state.draft.playerIdToTeamId.get(b.id);
-            aValue = aTeamId ? state.draft.entryIdToTeamName.get(aTeamId) || '–' : '–';
-            bValue = bTeamId ? state.draft.entryIdToTeamName.get(bTeamId) || '–' : '–';
-        } else if (state.sortColumn === 14) { // G+A column (shifted by 1)
+        if (state.sortColumn === 13) { // G+A column
             aValue = (a.goals_scored || 0) + (a.assists || 0);
             bValue = (b.goals_scored || 0) + (b.assists || 0);
-        } else if (state.sortColumn === 15) { // xGI column (shifted by 1)
+        } else if (state.sortColumn === 14) { // xGI column
             aValue = parseFloat(a.expected_goal_involvements || 0);
             bValue = parseFloat(b.expected_goal_involvements || 0);
         } else {
@@ -1101,7 +1251,7 @@ function renderTable() {
             const playerId = parseInt(this.dataset.playerId);
             if (this.checked) {
                 state.selectedForComparison.add(playerId);
-            } else {
+        } else {
                 state.selectedForComparison.delete(playerId);
             }
         });
@@ -1109,7 +1259,7 @@ function renderTable() {
 
     // Add tooltips to headers
     const headers = document.querySelectorAll('#playersTable thead th');
-    const columnKeys = ['rank', 'web_name', 'draft_score', 'base_score', 'quality_score', 'predicted_points_4_gw', 'team_name', 'position_name', 'now_cost', 'total_points', 'points_per_game_90', 'selected_by_percent', 'dreamteam_count', 'net_transfers_event', 'def_contrib_per90', 'goals_scored_assists', 'expected_goals_assists', 'minutes', 'xDiff', 'ict_index', 'bonus', 'clean_sheets', 'set_piece_priority.penalty', 'set_piece_priority.corner', 'set_piece_priority.free_kick', 'fixtures'];
+    const columnKeys = ['rank', 'web_name', 'draft_score', 'stability_index', 'predicted_points_1_gw', 'ml_prediction', 'team_name', 'draft_team', 'position_name', 'now_cost', 'total_points', 'points_per_game_90', 'selected_by_percent', 'dreamteam_count', 'net_transfers_event', 'def_contrib_per90', 'goals_scored_assists', 'expected_goals_assists', 'minutes', 'xDiff', 'ict_index', 'bonus', 'clean_sheets', 'set_piece_priority.penalty', 'set_piece_priority.corner', 'set_piece_priority.free_kick', 'fixtures'];
 
     headers.forEach((th, i) => {
         const key = columnKeys[i-1];
@@ -1117,6 +1267,16 @@ function renderTable() {
             th.dataset.tooltip = config.columnTooltips[key];
         }
     });
+}
+
+function getDraftTeamForPlayer(fplId) {
+    // Check if player is owned by any team
+    for (const [entryId, roster] of state.draft.rostersByEntryId.entries()) {
+        if (roster.includes(fplId)) {
+            return state.draft.entryIdToTeamName.get(entryId) || 'Unknown';
+        }
+    }
+    return null; // Free agent
 }
 
 function generatePlayerIcons(p) {
@@ -1281,7 +1441,7 @@ function quickFilter(button, filterName) {
 }
 
 function exportToCsv() {
-    const headers = ['Rank','Player','Draft Score','Prediction Score','Quality Score','xPts (4GW)','Team','Pos','Price','Pts','PPG','Sel %','DreamTeam','Net TF (GW)','DC/90','G+A','xGI','Mins','xDiff','ICT','Bonus','CS','Pen','Cor','FK'];
+    const headers = ['Rank','Player','Draft Score','Stability','Prediction Score','Quality Score','xPts (4GW)','Team','Pos','Price','Pts','PPG','Sel %','DreamTeam','Net TF (GW)','DC/90','G+A','xGI','Mins','xDiff','ICT','Bonus','CS','Pen','Cor','FK'];
     let csvContent = headers.join(',') + '\n';
     
     state.displayedData.forEach((p, i) => {
@@ -1289,6 +1449,7 @@ function exportToCsv() {
             i + 1,
             p.web_name.replace(/,/g, ''),
             p.draft_score.toFixed(2),
+            (p.stability_index || 0).toFixed(0),
             p.base_score.toFixed(2),
             p.quality_score.toFixed(2),
             (p.predicted_points_4_gw || 0).toFixed(2),
@@ -1413,25 +1574,25 @@ function generateComparisonTableHTML(players) {
                 <div class="metrics-comparison-table">
     `;
     
-    // Define comprehensive metrics
+    // Define comprehensive metrics (ordered by importance)
     const comprehensiveMetrics = [
         { name: 'ציון דראפט', key: 'draft_score', format: v => v.toFixed(1), icon: '⭐', reversed: false },
+        { name: 'העברות נטו', key: 'net_transfers_event', format: v => (v >= 0 ? '+' : '') + v, icon: '🔄', reversed: false },
         { name: 'חיזוי למחזור הבא', key: 'predicted_points_1_gw', format: v => v.toFixed(1), icon: '🔮', reversed: false },
+        { name: 'כושר', key: 'form', format: v => parseFloat(v || 0).toFixed(1), icon: '🔥', reversed: false },
         { name: 'נקודות/90', key: 'points_per_game_90', format: v => v.toFixed(1), icon: '📈', reversed: false },
         { name: 'נקודות כולל', key: 'total_points', format: v => v, icon: '🎯', reversed: false },
-        { name: 'כושר', key: 'form', format: v => parseFloat(v || 0).toFixed(1), icon: '🔥', reversed: false },
+        { name: 'יציבות', key: 'stability_index', format: v => v.toFixed(0), icon: '📊', reversed: false },
         { name: 'xGI/90', key: 'xGI_per90', format: v => v.toFixed(2), icon: '⚽', reversed: false },
         { name: 'G+A', key: 'goals_scored_assists', format: v => v, icon: '🎯', reversed: false },
-        { name: 'xGI כולל', key: 'expected_goal_involvements', format: v => parseFloat(v || 0).toFixed(1), icon: '📊', reversed: false },
-        { name: 'xDiff', key: 'xDiff', format: v => (v >= 0 ? '+' : '') + v.toFixed(2), icon: '📉', reversed: false },
-        { name: 'DC/90', key: 'def_contrib_per90', format: v => v.toFixed(1), icon: '🛡️', reversed: false },
-        { name: 'ICT Index', key: 'ict_index', format: v => v.toFixed(1), icon: '🧬', reversed: false },
-        { name: 'בונוס', key: 'bonus', format: v => v, icon: '⭐', reversed: false },
-        { name: 'דקות', key: 'minutes', format: v => v.toLocaleString(), icon: '⏱️', reversed: false },
-        { name: 'דרימטים', key: 'dreamteam_count', format: v => v, icon: '🏆', reversed: false },
-        { name: 'העברות נטו', key: 'net_transfers_event', format: v => (v >= 0 ? '+' : '') + v, icon: '🔄', reversed: false },
-        { name: '% בעלות', key: 'selected_by_percent', format: v => v + '%', icon: '👥', reversed: false },
         { name: 'מחיר', key: 'now_cost', format: v => '£' + v.toFixed(1) + 'M', icon: '💰', reversed: true },
+        { name: '% בעלות', key: 'selected_by_percent', format: v => v + '%', icon: '👥', reversed: false },
+        { name: 'דקות', key: 'minutes', format: v => v.toLocaleString(), icon: '⏱️', reversed: false },
+        { name: 'בונוס', key: 'bonus', format: v => v, icon: '⭐', reversed: false },
+        { name: 'דרימטים', key: 'dreamteam_count', format: v => v, icon: '🏆', reversed: false },
+        { name: 'ICT Index', key: 'ict_index', format: v => v.toFixed(1), icon: '🧬', reversed: false },
+        { name: 'DC/90', key: 'def_contrib_per90', format: v => v.toFixed(1), icon: '🛡️', reversed: false },
+        { name: 'xDiff', key: 'xDiff', format: v => (v >= 0 ? '+' : '') + v.toFixed(2), icon: '📉', reversed: false },
         { name: 'CS', key: 'clean_sheets', format: v => v, icon: '🧤', reversed: false },
     ];
     
@@ -1727,23 +1888,33 @@ function exportToCsv() {
         return;
     }
     
-    // Define columns to export
+    // Define columns to export (all table columns)
     const columns = [
         { key: 'web_name', header: 'שם' },
+        { key: 'draft_score', header: 'ציון דראפט' },
+        { key: 'stability_index', header: 'יציבות' },
+        { key: 'predicted_points_1_gw', header: 'חיזוי טכני' },
+        { key: 'ml_prediction', header: 'ML חיזוי' },
         { key: 'team_name', header: 'קבוצה' },
+        { key: 'draft_team', header: 'קבוצת דראפט', format: (player) => getDraftTeamForPlayer(player.id) || 'חופשי' },
         { key: 'position_name', header: 'עמדה' },
         { key: 'now_cost', header: 'מחיר' },
-        { key: 'selected_by_percent', header: 'בחירה %' },
-        { key: 'draft_score', header: 'ציון דראפט' },
-        { key: 'predicted_points_4_gw', header: 'xPts(4GW)' },
         { key: 'total_points', header: 'נקודות' },
-        { key: 'goals_scored', header: 'שערים' },
-        { key: 'assists', header: 'בישולים' },
-        { key: 'clean_sheets', header: 'CS' },
-        { key: 'minutes', header: 'דקות' },
-        { key: 'xGI_per90', header: 'xGI/90' },
+        { key: 'points_per_game_90', header: 'נק/משחק' },
+        { key: 'selected_by_percent', header: 'בחירה %' },
+        { key: 'dreamteam_count', header: 'DreamTeam' },
+        { key: 'net_transfers_event', header: 'העברות' },
         { key: 'def_contrib_per90', header: 'DC/90' },
-        { key: 'ict_index', header: 'ICT' }
+        { key: 'goals_scored_assists', header: 'G+A', format: (player) => (player.goals_scored || 0) + (player.assists || 0) },
+        { key: 'expected_goals_assists', header: 'xG+xA', format: (player) => parseFloat(player.expected_goal_involvements || 0).toFixed(2) },
+        { key: 'minutes', header: 'דקות' },
+        { key: 'xDiff', header: 'xDiff' },
+        { key: 'ict_index', header: 'ICT' },
+        { key: 'bonus', header: 'Bonus' },
+        { key: 'clean_sheets', header: 'CS' },
+        { key: 'penalty_priority', header: 'פנדל', format: (player) => player.set_piece_priority?.penalty === 1 ? 'כן' : 'לא' },
+        { key: 'corner_priority', header: 'קרן', format: (player) => player.set_piece_priority?.corner || 0 },
+        { key: 'free_kick_priority', header: 'בעיטה חופשית', format: (player) => player.set_piece_priority?.free_kick || 0 }
     ];
     
     // Create CSV header
@@ -1752,22 +1923,34 @@ function exportToCsv() {
     // Create CSV rows
     const csvRows = data.map(player => {
         return columns.map(col => {
-            let value = player[col.key];
+            // Use custom format function if provided
+            let value;
+            if (col.format && typeof col.format === 'function') {
+                value = col.format(player);
+            } else {
+                value = player[col.key];
+            }
             
             // Format numbers
             if (typeof value === 'number') {
                 value = value.toFixed(2);
             }
             
-            // Escape commas and quotes
-            if (typeof value === 'string') {
-                value = value.replace(/"/g, '""');
-                if (value.includes(',') || value.includes('"') || value.includes('\n')) {
-                    value = `"${value}"`;
-                }
+            // Handle undefined/null
+            if (value === undefined || value === null) {
+                value = '';
             }
             
-            return value || '';
+            // Convert to string
+            value = String(value);
+            
+            // Escape commas and quotes
+            value = value.replace(/"/g, '""');
+            if (value.includes(',') || value.includes('"') || value.includes('\n')) {
+                value = `"${value}"`;
+            }
+            
+            return value;
         }).join(',');
     });
     
@@ -1888,7 +2071,11 @@ function showVisualization(type) {
     
     document.getElementById('visualizationTitle').textContent = spec.title;
     
-    const players = state.displayedData.filter(p => spec.pos.includes(p.position_name) && p.minutes > 450);
+    // If user filtered data, show all filtered players. Otherwise, filter by minutes
+    const isFiltered = state.displayedData.length < state.allPlayersData[state.currentDataSource].processed.length;
+    const players = isFiltered 
+        ? state.displayedData.filter(p => spec.pos.includes(p.position_name))
+        : state.displayedData.filter(p => spec.pos.includes(p.position_name) && p.minutes > 300);
     if(players.length < 2) {
         showToast('אין מספיק נתונים', `לא נמצאו מספיק שחקנים (${spec.pos.join('/')}) להשוואה`, 'warning', 4000);
         return;
@@ -1908,8 +2095,11 @@ function showTeamDefenseChart() {
     }
     document.getElementById('visualizationTitle').textContent = 'הגנת קבוצות (צפוי ספיגות מול ספיגות בפועל)';
     
+    // Use filtered data if available, otherwise use all data
+    const dataToUse = state.displayedData || state.allPlayersData[state.currentDataSource].processed;
+    
     const teamStats = {};
-    state.allPlayersData[state.currentDataSource].processed.forEach(p => {
+    dataToUse.forEach(p => {
         if (!teamStats[p.team_name]) teamStats[p.team_name] = { xGC: 0, GC: 0, minutes: 0 };
         teamStats[p.team_name].xGC += parseFloat(p.expected_goals_conceded) || 0;
         teamStats[p.team_name].GC += p.goals_conceded || 0;
@@ -1944,8 +2134,11 @@ function showTeamAttackChart() {
     }
     document.getElementById('visualizationTitle').textContent = 'התקפת קבוצות (צפי מעורבות בשערים מול מעורבות בפועל)';
     
+    // Use filtered data if available, otherwise use all data
+    const dataToUse = state.displayedData || state.allPlayersData[state.currentDataSource].processed;
+    
     const teamStats = {};
-     state.allPlayersData[state.currentDataSource].processed.forEach(p => {
+    dataToUse.forEach(p => {
         if (!teamStats[p.team_name]) teamStats[p.team_name] = { xGI: 0, GI: 0, minutes: 0 };
         teamStats[p.team_name].xGI += parseFloat(p.expected_goal_involvements) || 0;
         teamStats[p.team_name].GI += (p.goals_scored || 0) + (p.assists || 0);
@@ -1979,7 +2172,10 @@ function showPriceVsScoreChart() {
         return;
     }
     document.getElementById('visualizationTitle').textContent = 'תמורה למחיר (ציון דראפט מול מחיר)';
-    const players = state.displayedData.filter(p => p.minutes > 900);
+    
+    // If user filtered data, show all filtered players. Otherwise, filter by minutes
+    const isFiltered = state.displayedData.length < state.allPlayersData[state.currentDataSource].processed.length;
+    const players = isFiltered ? state.displayedData : state.displayedData.filter(p => p.minutes > 300);
     if(players.length < 2) {
         showToast('אין מספיק נתונים', 'לא נמצאו מספיק שחקנים להשוואה', 'warning', 3000);
         return;
@@ -2020,7 +2216,11 @@ function showIctBreakdownChart() {
         showToast('המתן', 'יש להמתין לטעינת הנתונים', 'warning', 3000);
         return;
     }
-    const topPlayers = state.displayedData.filter(p => p.minutes > 900).sort((a,b) => b.ict_index - a.ict_index).slice(0, 15);
+    
+    // If user filtered data, show all filtered players. Otherwise, filter by minutes
+    const isFiltered = state.displayedData.length < state.allPlayersData[state.currentDataSource].processed.length;
+    const filteredPlayers = isFiltered ? state.displayedData : state.displayedData.filter(p => p.minutes > 300);
+    const topPlayers = filteredPlayers.sort((a,b) => b.ict_index - a.ict_index).slice(0, 15);
     if(topPlayers.length < 2) {
         showToast('אין מספיק נתונים', 'לא נמצאו מספיק שחקנים להשוואה', 'warning', 3000);
         return;
@@ -2269,7 +2469,7 @@ function getChartConfig(data, xKey, yKey, xLabel, yLabel, quadLabels = {}, color
                         return 'rgba(34, 197, 94, 0.85)'; // Green - Best
                     } else if (point.x < xMedian && point.y < yMedian) {
                         return 'rgba(239, 68, 68, 0.85)'; // Red - Worst
-                    } else {
+        } else {
                         return 'rgba(251, 146, 60, 0.85)'; // Orange - Medium
                     }
                 },
@@ -2506,6 +2706,23 @@ function calculateAllPredictions(players) {
         p.predicted_points_4_gw = next4Fixtures.length > 0
             ? next4Fixtures.reduce((total, fix) => total + predictPointsForFixture(p, fix), 0)
             : 0;
+        
+        // ============================================
+        // 🤖 ML PREDICTION
+        // ============================================
+        // Calculate ML prediction using the trained model
+        if (typeof predictPlayerPoints === 'function') {
+            try {
+                const prediction = predictPlayerPoints(p);
+                // If model not ready yet (returns null), keep existing value or 0
+                p.ml_prediction = (prediction !== null && prediction !== undefined) ? prediction : (p.ml_prediction || 0);
+            } catch (error) {
+                console.warn('ML prediction failed for player:', p.web_name, error);
+                p.ml_prediction = 0;
+            }
+        } else {
+            p.ml_prediction = 0;
+        }
     });
     
     return players;
@@ -2609,6 +2826,59 @@ function predictPointsForFixture(player, fixture) {
     return Math.max(0, Math.min(predictedPoints, 20)); // Cap at 20 points per game
 }
 
+/**
+ * Calculate Stability Index for a player
+ * Measures consistency/reliability (0-100, higher = more stable)
+ * 
+ * Based on:
+ * 1. Form consistency (40%) - Higher form = more stable
+ * 2. xG accuracy (30%) - xG close to actual goals = predictable
+ * 3. Minutes consistency (20%) - Playing regularly = reliable
+ * 4. Points variance (10%) - Points per game variation
+ */
+function calculateStabilityIndex(player) {
+    const gamesPlayed = Math.max((player.minutes || 0) / 90, 0.1);
+    
+    // 1. Form Factor (40%) - Higher form = more stable recent performance
+    const form = parseFloat(player.form) || 0;
+    const formStability = Math.min(form * 10, 100); // 10 form = 100 stability
+    
+    // 2. xG Accuracy (30%) - How predictable are the player's returns?
+    const actualGoals = player.goals_scored || 0;
+    const expectedGoals = parseFloat(player.expected_goals) || 0;
+    const goalsPerGame = actualGoals / gamesPlayed;
+    const xGPerGame = expectedGoals / gamesPlayed;
+    
+    // Calculate how close actual is to expected (lower diff = more stable)
+    const xGDiff = Math.abs(goalsPerGame - xGPerGame);
+    const xGAccuracy = Math.max(0, 100 - (xGDiff * 100)); // Perfect match = 100
+    
+    // 3. Minutes Stability (20%) - Playing regularly
+    const minutesPlayed = player.minutes || 0;
+    const appearancesEstimate = Math.max((player.appearances || gamesPlayed), 1);
+    const minutesPerAppearance = minutesPlayed / appearancesEstimate;
+    const minutesStability = Math.min((minutesPerAppearance / 90) * 100, 100); // 90 min/game = 100
+    
+    // 4. Points Variance (10%) - Using coefficient of variation approach
+    const totalPoints = player.total_points || 0;
+    const pointsPerGame = totalPoints / gamesPlayed;
+    
+    // Estimate variance using form as proxy (form is avg last 5 GW)
+    // If form is close to PPG, variance is low (stable)
+    const formVsPPG = Math.abs(form - pointsPerGame);
+    const pointsStability = Math.max(0, 100 - (formVsPPG * 20)); // Small diff = stable
+    
+    // Calculate weighted stability index
+    const stabilityIndex = (
+        formStability * 0.40 +      // 40% Form
+        xGAccuracy * 0.30 +          // 30% xG Accuracy
+        minutesStability * 0.20 +    // 20% Minutes
+        pointsStability * 0.10       // 10% Points Variance
+    );
+    
+    return Math.round(Math.max(0, Math.min(stabilityIndex, 100)));
+}
+
 function calculateAdvancedScores(players) {
     // Filter out players with less than 180 minutes (2 full games)
     const activePlayers = players.filter(p => (p.minutes || 0) >= 180);
@@ -2694,6 +2964,12 @@ function calculateAdvancedScores(players) {
         p.performance_score = pointsScore;
         p.ga_per_game = gaPerGame;
         p.xgi_per_game = xgiPerGame;
+        
+        // ============================================
+        // 📊 STABILITY INDEX - New!
+        // ============================================
+        // Measures player consistency (0-100, higher = more stable)
+        p.stability_index = calculateStabilityIndex(p);
         
         // Calculate predictions for future reference
         p = calculateAllPredictions([p])[0];
@@ -2788,9 +3064,15 @@ function getProcessedByElementId() {
     }
     
     // Otherwise use live or historical data
+    // Since rostersByEntryId now stores FPL IDs (not Draft IDs), 
+    // we only need to map by FPL ID
     const processed = (state.allPlayersData.live && state.allPlayersData.live.processed) || (state.allPlayersData.historical && state.allPlayersData.historical.processed) || [];
     const map = new Map();
-    processed.forEach(p => map.set(p.id, p));
+    
+    processed.forEach(p => {
+        map.set(p.id, p); // Map by FPL ID only
+    });
+    
     return map;
 }
 
@@ -2875,7 +3157,7 @@ function getTeamColor(name) {
 async function loadDraftDataInBackground() {
     // Load draft data silently in the background without showing loading overlay
     try {
-        const detailsUrl = `${config.vercelApi}/draft/${state.draft.leagueId}/details`;
+        const detailsUrl = `${config.corsProxy}${encodeURIComponent(`https://draft.premierleague.com/api/league/${state.draft.leagueId}/details`)}`;
         const detailsCacheKey = `fpl_draft_details_${state.draft.leagueId}`;
         
         const details = await fetchWithCache(detailsUrl, detailsCacheKey, 30);
@@ -2894,23 +3176,35 @@ async function loadDraftDataInBackground() {
                 }
             });
             
-            // Build a map to track which player belongs to which team
-            const playerIdToTeamId = new Map();
-            
             // Fetch all team rosters
             const rosterPromises = details.league_entries
                 .filter(e => e && e.id && e.entry_id)
                 .map(async entry => {
-                    const picksUrl = `${config.vercelApi}/draft/entry/${entry.entry_id}/picks`;
+                    const picksUrl = `${config.corsProxy}${encodeURIComponent(`https://draft.premierleague.com/api/entry/${entry.entry_id}/event/${currentGW}`)}`;
                     const picksCacheKey = `fpl_draft_picks_bg_${entry.entry_id}_gw${currentGW}`;
                     try {
                         const picksData = await fetchWithCache(picksUrl, picksCacheKey, 30);
                         if (picksData && picksData.picks) {
-                            const playerIds = picksData.picks.map(pick => pick.element);
-                            state.draft.rostersByEntryId.set(entry.id, playerIds);
-                            playerIds.forEach(id => {
-                                state.draft.ownedElementIds.add(id);
-                                playerIdToTeamId.set(id, entry.id);
+                            // Convert picks to FPL IDs and preserve position info
+                            const picksWithFplIds = picksData.picks.map(pick => ({
+                                fplId: state.draft.draftToFplIdMap.get(pick.element) || pick.element,
+                                position: pick.position
+                            }));
+                            
+                            // Extract all FPL IDs for roster
+                            const fplPlayerIds = picksWithFplIds.map(p => p.fplId);
+                            
+                            // Store FPL IDs (not Draft IDs!)
+                            state.draft.rostersByEntryId.set(entry.id, fplPlayerIds);
+                            
+                            // Store lineup info (starting vs bench)
+                            const starting = picksWithFplIds.filter(p => p.position >= 1 && p.position <= 11).map(p => p.fplId);
+                            const bench = picksWithFplIds.filter(p => p.position >= 12 && p.position <= 15).map(p => p.fplId);
+                            state.draft.lineupsByEntryId.set(entry.id, { starting, bench });
+                            
+                            // Add to owned set (already FPL IDs)
+                            fplPlayerIds.forEach(fplId => {
+                                state.draft.ownedElementIds.add(fplId);
                             });
                         }
                     } catch (err) {
@@ -2920,55 +3214,11 @@ async function loadDraftDataInBackground() {
             
             await Promise.all(rosterPromises);
             
-            // ✅ FIX: Check for missing players and fetch them from live bootstrap
-            const processedById = getProcessedByElementId();
-            const missingPlayerIds = Array.from(state.draft.ownedElementIds).filter(id => !processedById.has(id));
-            
-            if (missingPlayerIds.length > 0) {
-                console.log(`⚠️ Found ${missingPlayerIds.length} missing players in processed data:`, missingPlayerIds);
-                console.log(`🔄 Fetching missing players from live bootstrap...`);
-                
-                try {
-                    // Fetch fresh bootstrap data to get missing players
-                    const bootstrapUrl = `${config.vercelApi}/bootstrap`;
-                    const bootstrapData = await fetchWithCache(bootstrapUrl, 'fpl_bootstrap_live_missing', 5); // Short cache
-                    
-                    if (bootstrapData && bootstrapData.elements) {
-                        const missingPlayers = bootstrapData.elements.filter(p => missingPlayerIds.includes(p.id));
-                        
-                        if (missingPlayers.length > 0) {
-                            console.log(`✅ Found ${missingPlayers.length} missing players in bootstrap:`, missingPlayers.map(p => p.web_name));
-                            
-                            // Process missing players and add them to the processed data
-                            const setPieceTakers = config.setPieceTakers;
-                            let processedMissing = preprocessPlayerData(missingPlayers, setPieceTakers);
-                            processedMissing = calculateAdvancedScores(processedMissing);
-                            
-                            // Add to the current data source
-                            if (state.currentDataSource === 'live' && state.allPlayersData.live.processed) {
-                                state.allPlayersData.live.processed.push(...processedMissing);
-                                console.log(`✅ Added ${processedMissing.length} missing players to live processed data`);
-                            } else if (state.currentDataSource === 'historical' && state.allPlayersData.historical.processed) {
-                                state.allPlayersData.historical.processed.push(...processedMissing);
-                                console.log(`✅ Added ${processedMissing.length} missing players to historical processed data`);
-                            }
-                            
-                            // Refresh the table if we're on the players tab
-                            if (document.getElementById('playersTab').style.display === 'block') {
-                                processChange();
-                            }
-                        }
-                    }
-                } catch (fetchError) {
-                    console.error('❌ Failed to fetch missing players:', fetchError);
-                }
-            }
-            
-            // Store player-to-team mapping for later use
-            state.draft.playerIdToTeamId = playerIdToTeamId;
-            
             // Populate team filter with draft teams
             populateTeamFilter();
+            
+            // Re-render table to update draft team column
+            renderTable();
             
             console.log('✅ Draft data loaded in background:', state.draft.ownedElementIds.size, 'players owned');
         }
@@ -3009,18 +3259,26 @@ async function loadDraftLeague() {
         } else if (!state.allPlayersData.live.raw && !state.allPlayersData.historical.raw) {
             await fetchAndProcessData();
         }
+        
+        // CRITICAL: Ensure Draft→FPL mapping is built before processing rosters
+        if (state.draft.draftToFplIdMap.size === 0) {
+            console.log('⚠️ Mapping not found, building now...');
+            await buildDraftToFplMapping();
+        } else {
+            console.log(`✅ Using existing mapping: ${state.draft.draftToFplIdMap.size} players mapped`);
+        }
 
         const detailsCacheKey = `fpl_draft_details_${config.draftLeagueId}`;
         const standingsCacheKey = `fpl_draft_standings_${config.draftLeagueId}`;
         localStorage.removeItem(detailsCacheKey);
         localStorage.removeItem(standingsCacheKey);
         
-        const detailsUrl = `${config.vercelApi}/draft/${config.draftLeagueId}/details`;
-        const standingsUrl = `${config.vercelApi}/draft/${config.draftLeagueId}/standings`;
+        const encodedDetails = config.corsProxy + encodeURIComponent(config.urls.draftLeagueDetails(config.draftLeagueId));
+        const encodedStandings = config.corsProxy + encodeURIComponent(config.urls.draftLeagueStandings(config.draftLeagueId));
 
         const [detailsData, standingsData] = await Promise.all([
-            fetchWithCache(detailsUrl, detailsCacheKey, 5),
-            fetchWithCache(standingsUrl, standingsCacheKey, 5).catch(() => null)
+            fetchWithCache(encodedDetails, detailsCacheKey, 5),
+            fetchWithCache(encodedStandings, standingsCacheKey, 5).catch(() => null)
         ]);
         
         state.draft.details = detailsData;
@@ -3047,34 +3305,69 @@ async function loadDraftLeague() {
                     return;
                 }
                 
-                const url = `${config.vercelApi}/draft/entry/${entry.entry_id}/picks`;
+                const url = config.corsProxy + encodeURIComponent(config.urls.draftEntryPicks(entry.entry_id, draftGw));
                 const picksCacheKey = `fpl_draft_picks_final_v4_${entry.entry_id}_gw${draftGw}`;
                 
                 localStorage.removeItem(picksCacheKey); 
                 
                 try {
                     const picksData = await fetchWithCache(url, picksCacheKey, 5);
-                    const playerElements = (picksData && picksData.picks) ? picksData.picks.map(p => p.element) : [];
-                    state.draft.rostersByEntryId.set(entry.id, playerElements);
+                    if (picksData && picksData.picks) {
+                        // Convert picks to FPL IDs and preserve position info
+                        const picksWithFplIds = picksData.picks.map(pick => ({
+                            fplId: state.draft.draftToFplIdMap.get(pick.element) || pick.element,
+                            position: pick.position
+                        }));
+                        
+                        // Extract all FPL IDs for roster
+                        const fplPlayerIds = picksWithFplIds.map(p => p.fplId);
+                        
+                        // Store FPL IDs
+                        state.draft.rostersByEntryId.set(entry.id, fplPlayerIds);
+                        
+                        // Store lineup info (starting vs bench)
+                        const starting = picksWithFplIds.filter(p => p.position >= 1 && p.position <= 11).map(p => p.fplId);
+                        const bench = picksWithFplIds.filter(p => p.position >= 12 && p.position <= 15).map(p => p.fplId);
+                        state.draft.lineupsByEntryId.set(entry.id, { starting, bench });
+                    } else {
+                        state.draft.rostersByEntryId.set(entry.id, []);
+                        state.draft.lineupsByEntryId.set(entry.id, { starting: [], bench: [] });
+                    }
                 } catch (err) {
                     console.error(`Failed to fetch final picks for entry ${entry.entry_name} (${entry.entry_id})`, err);
                     state.draft.rostersByEntryId.set(entry.id, []);
+                    state.draft.lineupsByEntryId.set(entry.id, { starting: [], bench: [] });
                 }
             });
 
             await Promise.all(picksPromises);
 
-            for (const playerIds of state.draft.rostersByEntryId.values()) {
-                playerIds.forEach(id => state.draft.ownedElementIds.add(id));
+            // Add all roster players to ownedElementIds (already FPL IDs!)
+            for (const fplPlayerIds of state.draft.rostersByEntryId.values()) {
+                fplPlayerIds.forEach(fplId => {
+                    state.draft.ownedElementIds.add(fplId);
+                });
             }
             
             console.log("3. Rosters Populated:", state.draft.rostersByEntryId.size, "teams.");
+            console.log(`   Mapping size: ${state.draft.draftToFplIdMap.size} Draft→FPL, ${state.draft.fplToDraftIdMap.size} FPL→Draft`);
+            console.log(`   Lineups stored: ${state.draft.lineupsByEntryId.size} teams`);
+            
             let totalPlayers = 0;
             const processedById = getProcessedByElementId();
+            console.log(`   ProcessedById map size: ${processedById.size} players`);
             
             state.draft.rostersByEntryId.forEach((roster, teamId) => {
                 const teamName = state.draft.entryIdToTeamName.get(teamId) || `Unknown ID: ${teamId}`;
-                const playerNames = roster.map(id => processedById.get(id)?.web_name || `ID ${id} not found`).join(', ');
+                // roster now contains FPL IDs (already converted), so lookup is straightforward
+                const playerNames = roster.map(fplId => {
+                    const player = processedById.get(fplId);
+                    if (!player) {
+                        console.warn(`  ⚠️ FPL ID ${fplId} not found in processed players`);
+                        return `ID ${fplId} not found`;
+                    }
+                    return player.web_name;
+                }).join(', ');
                 console.log(`  - Team '${teamName}':`, roster.length, "players -> [", playerNames, "]");
                 totalPlayers += roster.length;
             });
@@ -3090,10 +3383,14 @@ async function loadDraftLeague() {
         
         renderDraftStandings();
         
+        populateMyTeamSelector(); // Populate My Team Selector
         const myTeam = findMyTeam();
 
         if (myTeam) {
             renderMyLineup(myTeam.id);
+            renderNextRivalAnalysis(); // Update Rival Analysis
+        } else {
+             renderMyLineup(null); // Show empty state
         }
         
         renderRecommendations();
@@ -3104,6 +3401,7 @@ async function loadDraftLeague() {
         renderDraftComparison(aggregates);
         renderDraftRosters();
         renderDraftMatrices(aggregates);
+        renderAllTeamsTrendChart(aggregates); // Render the race chart
         populateTeamFilter(); // Repopulate with draft teams
         
         // Show success toast
@@ -3112,40 +3410,8 @@ async function loadDraftLeague() {
         showToast('ליגת דראפט נטענה בהצלחה', `${totalTeams} קבוצות, ${totalPlayers} שחקנים`, 'success', 3000);
     } catch (e) {
         console.error('loadDraftLeague error', e);
-        
-        // Friendly error message with suggestions
-        let errorMessage = e.message;
-        let suggestions = '';
-        
-        if (e.message.includes('All proxies failed') || e.message.includes('Failed to fetch')) {
-            errorMessage = 'לא ניתן להתחבר לשרתי FPL Draft';
-            suggestions = `
-                <div style="margin-top: 20px; text-align: right; background: #fff3cd; padding: 20px; border-radius: 8px; border-right: 4px solid #ffc107; max-width: 600px; margin: 20px auto;">
-                    <strong style="font-size: 16px;">💡 פתרונות אפשריים:</strong>
-                    <ul style="margin: 15px 0; padding-right: 25px; text-align: right; line-height: 1.8;">
-                        <li>בדוק את החיבור לאינטרנט שלך</li>
-                        <li>נסה לרענן את הדף (F5)</li>
-                        <li>נקה את ה-Cache של הדפדפן (Ctrl+Shift+Del)</li>
-                        <li>נסה שוב בעוד כמה דקות</li>
-                        <li>ודא שה-League ID נכון (689)</li>
-                    </ul>
-                    <button onclick="location.reload()" style="background: #28a745; color: white; border: none; padding: 12px 24px; border-radius: 6px; cursor: pointer; font-size: 15px; font-weight: bold; margin-top: 10px;">
-                        🔄 רענן דף
-                    </button>
-                </div>
-            `;
-        }
-        
-        draftContainer.innerHTML = `
-            <div style="text-align:center; padding: 40px;">
-                <div style="color: #dc3545; font-size: 20px; font-weight: bold; margin-bottom: 15px;">
-                    ❌ ${errorMessage}
-                </div>
-                ${suggestions}
-            </div>
-        `;
-        
-        showToast('שגיאה בטעינת הליגה', errorMessage, 'error', 8000);
+        draftContainer.innerHTML = `<div style="text-align:center; padding: 20px; color: red;">שגיאה בטעינת נתוני הליגה: ${e.message}</div>`;
+        showToast('שגיאה בטעינת הליגה', e.message, 'error', 5000);
     } finally {
         hideLoading();
     }
@@ -3239,6 +3505,95 @@ function renderDraftStandings() {
     }
 }
 
+function renderLineupStats(stats, diffs = null) {
+    const renderBox = (label, value, colorClass, diffVal) => {
+        let diffHtml = '';
+        if (diffs && diffVal !== undefined) {
+            const isPos = diffVal >= 0;
+            const sign = isPos ? '+' : '';
+            const displayVal = typeof diffVal === 'number' ? diffVal.toFixed(1) : diffVal;
+            diffHtml = `<div style="font-size: 10px; color: ${isPos ? '#10b981' : '#ef4444'}; font-weight: 700; margin-top: 2px;">
+                ${sign}${displayVal}
+            </div>`;
+        }
+        return `
+            <div style="text-align: center; padding: 10px; background: #fff; border-radius: 12px; border: 1px solid #f1f5f9; box-shadow: 0 2px 4px rgba(0,0,0,0.02); display: flex; flex-direction: column; align-items: center; justify-content: center;">
+                <div style="font-size: 11px; color: #64748b; font-weight: 700; margin-bottom: 4px;">${label}</div>
+                <div style="font-size: 20px; font-weight: 800; color: ${colorClass}; line-height: 1;">${typeof value === 'number' ? value.toFixed(1) : value}</div>
+                ${diffHtml}
+            </div>
+        `;
+    };
+
+    return `
+        <div class="lineup-stats-card" style="margin-bottom: 20px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 16px; padding: 12px;">
+            <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px;">
+                ${renderBox('צפי (GW הבא)', stats.predicted, '#3b82f6', diffs?.predicted)}
+                ${renderBox('נקודות (GW אחרון)', stats.lastGw, '#10b981', diffs?.lastGw)}
+                ${renderBox('PPG/90', stats.ppg90, '#f59e0b', diffs?.ppg90)}
+                ${renderBox('כושר (Form)', stats.form, '#8b5cf6', diffs?.form)}
+            </div>
+        </div>
+    `;
+}
+
+function showRecommendedLineup() {
+    const myTeamId = state.draft.myTeamId;
+    if (!myTeamId) return;
+    
+    const rosterIds = state.draft.rostersByEntryId.get(parseInt(myTeamId));
+    if (!rosterIds) return;
+
+    const processedById = getProcessedByElementId();
+    const roster = rosterIds.map(id => processedById.get(id)).filter(Boolean);
+
+    const gks = roster.filter(p => p.element_type === 1).sort((a,b) => (b.predicted_points_1_gw||0) - (a.predicted_points_1_gw||0));
+    const others = roster.filter(p => p.element_type !== 1).sort((a,b) => (b.predicted_points_1_gw||0) - (a.predicted_points_1_gw||0));
+    
+    const selectedGK = gks[0];
+    const benchGK = gks.slice(1);
+    
+    const selectedOutfield = others.slice(0, 10);
+    const benchOutfield = others.slice(10);
+    
+    let starters = [selectedGK, ...selectedOutfield];
+    let bench = [...benchGK, ...benchOutfield];
+
+    const container = document.getElementById('myLineupContainer');
+    if (container) {
+        const btnMy = document.getElementById('btnShowMyLineup');
+        const btnRec = document.getElementById('btnShowRecLineup');
+        if(btnMy) { btnMy.classList.remove('active'); btnMy.style.background='white'; btnMy.style.color='#64748b'; btnMy.style.border='1px solid #cbd5e1'; }
+        if(btnRec) { btnRec.classList.add('active'); btnRec.style.background='#3b82f6'; btnRec.style.color='white'; btnRec.style.border='none'; }
+        
+        const controls = container.querySelector('.draft-lineup-controls');
+        container.innerHTML = '';
+        container.appendChild(controls);
+        
+        const calculateStats = (players) => {
+            return {
+                predicted: players.reduce((sum, p) => sum + (parseFloat(p.predicted_points_1_gw) || 0), 0),
+                lastGw: players.reduce((sum, p) => sum + (p.total_points || 0), 0), 
+                ppg90: players.reduce((sum, p) => sum + (parseFloat(p.points_per_game_90) || 0), 0) / (players.length || 1),
+                form: players.reduce((sum, p) => sum + (parseFloat(p.form) || 0), 0) / (players.length || 1)
+            };
+        };
+        const stats = calculateStats(starters);
+        
+        const statsDiv = document.createElement('div');
+        statsDiv.innerHTML = renderLineupStats(stats);
+        container.appendChild(statsDiv);
+
+        const pitchWrapper = document.createElement('div');
+        pitchWrapper.className = 'pitch-wrapper';
+        container.appendChild(pitchWrapper);
+
+        renderPitch(pitchWrapper, starters.map(p => p.id), true, bench.map(p => p.id));
+        
+        showToast('הרכב אופטימלי', 'ההרכב מחושב לפי צפי נקודות למחזור הקרוב', 'success');
+    }
+}
+
 function renderMyLineup(teamId) {
     const container = document.getElementById('myLineupContainer');
     if (!container) return;
@@ -3247,9 +3602,59 @@ function renderMyLineup(teamId) {
         container.innerHTML = '<p style="text-align:center; padding: 20px;">לא נמצאה קבוצה</p>';
         return;
     }
+
+    const rosterIds = state.draft.rostersByEntryId.get(parseInt(teamId)) || [];
+    if (!rosterIds.length) {
+        container.innerHTML = '<p style="text-align:center; padding: 20px;">אין סגל להצגה</p>';
+        return;
+    }
+
+    let starters = [];
+    let bench = [];
     
-    const playerIds = state.draft.rostersByEntryId.get(teamId) || [];
-    renderPitch(container, playerIds, true);
+    const lineupData = state.draft.lineupsByEntryId ? state.draft.lineupsByEntryId.get(parseInt(teamId)) : null;
+    const processedById = getProcessedByElementId();
+
+    if (lineupData && lineupData.starting && lineupData.starting.length > 0) {
+        starters = lineupData.starting.map(id => processedById.get(id)).filter(Boolean);
+        bench = lineupData.bench.map(id => processedById.get(id)).filter(Boolean);
+    } else {
+        const roster = rosterIds.map(id => processedById.get(id)).filter(Boolean);
+        starters = roster.slice(0, 11);
+        bench = roster.slice(11);
+    }
+
+    const calculateStats = (players) => {
+        return {
+            predicted: players.reduce((sum, p) => sum + (parseFloat(p.predicted_points_1_gw) || 0), 0),
+            lastGw: players.reduce((sum, p) => sum + (p.total_points || 0), 0), 
+            ppg90: players.reduce((sum, p) => sum + (parseFloat(p.points_per_game_90) || 0), 0) / (players.length || 1),
+            form: players.reduce((sum, p) => sum + (parseFloat(p.form) || 0), 0) / (players.length || 1)
+        };
+    };
+
+    const stats = calculateStats(starters);
+    
+    container.innerHTML = '';
+    
+    const controls = document.createElement('div');
+    controls.className = 'draft-lineup-controls';
+    controls.style.cssText = 'display: flex; justify-content: center; gap: 10px; margin-bottom: 15px;';
+    controls.innerHTML = `
+        <button id="btnShowMyLineup" class="lineup-toggle active" style="padding: 8px 16px; border-radius: 8px; border: none; background: #3b82f6; color: white; font-weight: 600; cursor: pointer;" onclick="renderMyLineup('${teamId}')">הרכב נוכחי</button>
+        <button id="btnShowRecLineup" class="lineup-toggle" style="padding: 8px 16px; border-radius: 8px; border: 1px solid #cbd5e1; background: white; color: #64748b; font-weight: 600; cursor: pointer;" onclick="showRecommendedLineup()">הרכב אופטימלי</button>
+    `;
+    container.appendChild(controls);
+
+    const statsDiv = document.createElement('div');
+    statsDiv.innerHTML = renderLineupStats(stats);
+    container.appendChild(statsDiv);
+
+    const pitchWrapper = document.createElement('div');
+    pitchWrapper.className = 'pitch-wrapper';
+    container.appendChild(pitchWrapper);
+
+    renderPitch(pitchWrapper, starters.map(p => p.id), true, bench.map(p => p.id));
 }
 
 function findFreeAgents() {
@@ -3486,7 +3891,7 @@ function renderRecommendations() {
                 <div class="rec-header">
                     <h4>${player.web_name}</h4>
                     <p class="rec-subtitle">${posNames[position]} • ציון: ${player.smart_score.toFixed(1)}</p>
-                </div>
+                        </div>
                 <table class="rec-table">
                     <thead>
                         <tr>
@@ -3505,9 +3910,9 @@ function renderRecommendations() {
                                     <div class="rec-player-cell">
                                         <img src="${getPlayerImageUrl(p)}" class="rec-player-img" alt="${p.web_name}">
                                         <div class="rec-player-name">${p.web_name}</div>
-                                    </div>
+                    </div>
                                 </td>
-                            `).join('')}
+            `).join('')}
                         </tr>
                         <tr class="rec-reason-row">
                             <td><strong>סיבה</strong></td>
@@ -3875,9 +4280,9 @@ function renderDraftAnalytics(teamAggregates) {
         const ctx = canvas.getContext('2d');
         state.draft.charts.analytics[dim.key] = new Chart(ctx, {
             type: 'bar',
-            data: {
+        data: {
                 labels,
-                datasets: [{
+            datasets: [{
                     label: dim.label,
                     data: values,
                     borderRadius: 12,
@@ -3905,11 +4310,11 @@ function renderDraftAnalytics(teamAggregates) {
                         const c = colorMap[n];
                         return hexToRgba(c, 0.95);
                     }),
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
                 animation: {
                     duration: 1000,
                     easing: 'easeOutQuart'
@@ -3938,9 +4343,9 @@ function renderDraftAnalytics(teamAggregates) {
                         }
                     }
                 },
-                plugins: {
+            plugins: {
                     legend: { display: false },
-                    tooltip: {
+                tooltip: {
                         enabled: true,
                         backgroundColor: 'rgba(255, 255, 255, 0.98)',
                         titleColor: '#1e293b',
@@ -3959,7 +4364,7 @@ function renderDraftAnalytics(teamAggregates) {
                         cornerRadius: 8,
                         caretSize: 5.5,
                         caretPadding: 6.6,
-                        callbacks: {
+                    callbacks: {
                             title: function(context) {
                                 const teamName = context[0].label;
                                 const value = context[0].parsed.y;
@@ -3970,7 +4375,7 @@ function renderDraftAnalytics(teamAggregates) {
                             beforeBody: function(context) {
                                 return ''; // Remove separator
                             },
-                            label: function(context) {
+                        label: function(context) {
                                 // Get team name and find its players
                                 const teamName = context.label;
                                 const teamEntry = (state.draft.details?.league_entries || []).find(e => e.entry_name === teamName);
@@ -4213,7 +4618,7 @@ function renderDraftComparison(aggregates) {
     container.innerHTML = tableHTML;
 }
 
-function renderPitch(containerEl, playerIds, isMyLineup = false) {
+function renderPitch(containerEl, playerIds, isMyLineup = false, benchIds = null) {
     if (!containerEl) {
         console.error('renderPitch: containerEl is null or undefined');
         return;
@@ -4227,9 +4632,24 @@ function renderPitch(containerEl, playerIds, isMyLineup = false) {
     }
     
     const processedById = getProcessedByElementId();
-    const players = playerIds.map(id => processedById.get(id)).filter(Boolean);
     
-    if (players.length === 0) {
+    let startingXI, benchPlayers;
+    
+    if (benchIds) {
+        // Use provided lineup (starting + bench)
+        startingXI = playerIds.map(id => processedById.get(id)).filter(Boolean);
+        benchPlayers = benchIds.map(id => processedById.get(id)).filter(Boolean);
+        console.log(`🎯 Using actual lineup: ${startingXI.length} starting, ${benchPlayers.length} bench`);
+            } else {
+        // Fallback: auto-select best 11
+        const players = playerIds.map(id => processedById.get(id)).filter(Boolean);
+        const startingXI_ids = pickStartingXI(playerIds);
+        startingXI = startingXI_ids.map(id => processedById.get(id)).filter(Boolean);
+        benchPlayers = players.filter(p => !startingXI_ids.includes(p.id));
+        console.log(`⚙️ Auto-selected lineup: ${startingXI.length} starting, ${benchPlayers.length} bench`);
+    }
+    
+    if (startingXI.length === 0) {
         console.warn(`renderPitch: Could not find any player data for IDs:`, playerIds.slice(0, 5));
         containerEl.innerHTML = '<p style="text-align:center; padding: 20px; color: #e74c3c;">לא נמצאו נתוני שחקנים.</p>';
         return;
@@ -4249,10 +4669,6 @@ function renderPitch(containerEl, playerIds, isMyLineup = false) {
             <div class="goal-bottom"></div>
         </div>
     `;
-
-    const startingXI_ids = pickStartingXI(playerIds);
-    const startingXI = startingXI_ids.map(id => processedById.get(id)).filter(Boolean);
-    const benchPlayers = players.filter(p => !startingXI_ids.includes(p.id));
 
     const byPos = { GKP: [], DEF: [], MID: [], FWD: [] };
     startingXI.forEach(p => byPos[p.position_name].push(p));
@@ -4274,7 +4690,8 @@ function renderPitch(containerEl, playerIds, isMyLineup = false) {
             spot.style.left = `${(i + 1) * 100 / (count + 1)}%`;
             
             spot.innerHTML = `
-                <img class="player-photo" src="${getPlayerImageUrl(p)}" alt="${p.web_name}">
+                <img class="player-photo" src="${getPlayerImageUrl(p)}" alt="${p.web_name}" 
+                     onerror="this.src='${config.urls.missingPlayerImage}'">
                 <div class="player-name">${p.web_name}</div>
             `;
             pitch.appendChild(spot);
@@ -4294,7 +4711,8 @@ function renderPitch(containerEl, playerIds, isMyLineup = false) {
         bench.className = 'bench-strip';
         bench.innerHTML = benchPlayers.map(p => `
             <div class="bench-item">
-                <img src="${getPlayerImageUrl(p)}" alt="${p.web_name}">
+                <img src="${getPlayerImageUrl(p)}" alt="${p.web_name}" 
+                     onerror="this.src='${config.urls.missingPlayerImage}'">
                 <div>${p.web_name}</div>
             </div>
         `).join('');
@@ -4348,3 +4766,459 @@ function renderDraftRosters() {
         container.innerHTML = '<p style="text-align:center; padding: 40px; color: #666;">לא נמצאו סגלים להצגה.</p>';
     }
 }
+
+// ============================================
+// MY TEAM SELECTOR (Added)
+// ============================================
+function populateMyTeamSelector() {
+    const select = document.getElementById('myTeamSelect');
+    if (!select) return;
+    
+    // Clear existing
+    select.innerHTML = '<option value="">-- בחר קבוצה --</option>';
+    
+    // Get league entries
+    const entries = state.draft.details?.league_entries || [];
+    
+    entries.forEach(entry => {
+        if (!entry.entry_name) return;
+        const option = document.createElement('option');
+        option.value = entry.id;
+        option.textContent = `${entry.player_first_name} ${entry.player_last_name} (${entry.entry_name})`;
+        select.appendChild(option);
+    });
+    
+    // Set current value if exists
+    if (state.draft.myTeamId) {
+        select.value = state.draft.myTeamId;
+    }
+}
+
+function setMyTeam(teamId) {
+    if (!teamId) return;
+    
+    state.draft.myTeamId = parseInt(teamId);
+    
+    // Save to local storage for persistence
+    localStorage.setItem('draft_my_team_id', teamId);
+    
+    // Update UI components that depend on My Team
+    renderMyLineup(teamId);
+    renderRecommendations();
+    renderNextRivalAnalysis(); // Update Rival Analysis
+    
+    // Update Chart Highlight
+    renderAllTeamsTrendChart(null, 'cumulative', teamId);
+    
+    showToast('הקבוצה עודכנה', 'הנתונים וההמלצות עודכנו בהתאם לקבוצה שנבחרה', 'success');
+}
+
+// ============================================
+// RIVAL ANALYSIS & SQUAD COMPARISON
+// ============================================
+function getNextOpponent(myEntryId) {
+    const details = state.draft.details;
+    if (!details || !details.matches) return null;
+
+    const currentEvent = details.league.current_event; 
+    
+    // 1. Try Current Event Match (Exact Match)
+    let nextMatch = details.matches.find(m => 
+        m.event === currentEvent && 
+        (m.league_entry_1 === myEntryId || m.league_entry_2 === myEntryId)
+    );
+
+    // 2. If not found, try Next Event Match (Current + 1)
+    if (!nextMatch) {
+        nextMatch = details.matches.find(m => 
+            m.event === currentEvent + 1 && 
+            (m.league_entry_1 === myEntryId || m.league_entry_2 === myEntryId)
+        );
+    }
+    
+    // 3. Fallback: Find first unfinished/future match (Event >= Current)
+    if (!nextMatch) {
+         const futureMatches = details.matches.filter(m => 
+            m.event >= currentEvent && 
+            (m.league_entry_1 === myEntryId || m.league_entry_2 === myEntryId)
+         ).sort((a,b) => a.event - b.event);
+         
+         if (futureMatches.length > 0) nextMatch = futureMatches[0];
+    }
+
+    if (!nextMatch) return null;
+
+    const isEntry1 = nextMatch.league_entry_1 === myEntryId;
+    const opponentId = isEntry1 ? nextMatch.league_entry_2 : nextMatch.league_entry_1;
+    
+    return {
+        match: nextMatch,
+        opponentId: opponentId,
+        opponentName: state.draft.entryIdToTeamName.get(opponentId) || 'Unknown',
+        isHome: isEntry1 
+    };
+}
+
+function renderNextRivalAnalysis() {
+    const container = document.getElementById('rivalAnalysisContainer');
+    if (!container) return;
+    
+    // Initial Loading State
+    container.innerHTML = '<div style="text-align:center; padding:20px; color:#64748b;"><div class="spinner"></div> מחשב סיכויים ומנתח הרכבים...</div>';
+
+    try {
+        const myTeam = findMyTeam();
+        if (!myTeam) {
+            container.innerHTML = '<div class="alert alert-warning">לא נבחרה קבוצה. אנא בחר את הקבוצה שלך בתפריט ההגדרות.</div>';
+            return;
+        }
+
+        const opponentData = getNextOpponent(myTeam.id);
+        
+        // Handle "No Match Found" cleanly
+        if (!opponentData) {
+            container.innerHTML = `
+                <div class="alert alert-info" style="text-align:center; padding:30px; border: 2px dashed #cbd5e1; border-radius: 12px; background: #f8fafc;">
+                    <div style="font-size:40px; margin-bottom:10px;">🏖️</div>
+                    <h3 style="margin:0; color:#475569;">אין משחקים קרובים</h3>
+                    <p style="margin:5px 0 0; color:#64748b;">העונה הסתיימה או שאין משחקים מתוכננים בלוח השנה.</p>
+                </div>`;
+            return;
+        }
+
+        // Get Squads
+        const myRosterIds = state.draft.rostersByEntryId.get(myTeam.id) || [];
+        const oppRosterIds = state.draft.rostersByEntryId.get(opponentData.opponentId) || [];
+        
+        const processedById = getProcessedByElementId();
+        const mySquad = myRosterIds.map(id => processedById.get(id)).filter(Boolean);
+        const oppSquad = oppRosterIds.map(id => processedById.get(id)).filter(Boolean);
+
+        // Helper: Calculate Stats
+        const calcStats = (squad) => {
+            const totalXPts = squad.reduce((sum, p) => sum + (parseFloat(p.predicted_points_1_gw) || 0), 0);
+            const totalXGI = squad.reduce((sum, p) => sum + (parseFloat(p.expected_goal_involvements) || 0), 0);
+            const totalForm = squad.reduce((sum, p) => sum + (parseFloat(p.form) || 0), 0);
+            return { xPts: totalXPts, xGI: totalXGI, form: totalForm };
+        };
+
+        const myStats = calcStats(mySquad);
+        const oppStats = calcStats(oppSquad);
+        
+        // Prevent division by zero for charts
+        const formTotal = (myStats.form + oppStats.form) || 1;
+        const xgiTotal = (myStats.xGI + oppStats.xGI) || 1;
+
+        // Build HTML
+        let html = `
+            <div class="rival-header" style="display: flex; justify-content: space-between; align-items: center; background: #fff; padding: 15px; border-radius: 12px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); margin-bottom: 20px;">
+                <div class="team-badge my-team" style="text-align: center;">
+                    <div style="font-size: 24px;">🦁</div>
+                    <div style="font-weight: 800; color: #0f172a;">${myTeam.name}</div>
+                    <div style="font-size: 12px; color: #3b82f6; font-weight: 700;">xPts: ${myStats.xPts.toFixed(1)}</div>
+                </div>
+                
+                <div class="versus-badge" style="text-align: center;">
+                    <span style="display: block; font-weight: 900; font-size: 18px; color: #94a3b8;">VS</span>
+                    <span style="display: block; font-size: 11px; background: #f1f5f9; padding: 2px 8px; border-radius: 10px; color: #64748b;">GW${opponentData.match.event || '?'}</span>
+                </div>
+                
+                <div class="team-badge opp-team" style="text-align: center;">
+                    <div style="font-size: 24px;">🛡️</div>
+                    <div style="font-weight: 800; color: #0f172a;">${opponentData.opponentName}</div>
+                    <div style="font-size: 12px; color: #ef4444; font-weight: 700;">xPts: ${oppStats.xPts.toFixed(1)}</div>
+                </div>
+            </div>
+
+            <div class="rival-stats-grid" style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 20px;">
+                <div class="stat-box" style="background: #fff; padding: 15px; border-radius: 12px; border: 1px solid #e2e8f0;">
+                    <h4 style="margin: 0 0 10px; font-size: 13px; color: #64748b;">כושר נוכחי (Form)</h4>
+                    <div class="stat-bar-container" style="display: flex; height: 8px; background: #f1f5f9; border-radius: 4px; overflow: hidden; margin-bottom: 5px;">
+                        <div class="stat-bar my-bar" style="width: ${(myStats.form / formTotal * 100)}%; background: #3b82f6;"></div>
+                        <div class="stat-bar opp-bar" style="width: ${(oppStats.form / formTotal * 100)}%; background: #ef4444;"></div>
+                    </div>
+                    <div class="stat-values" style="display: flex; justify-content: space-between; font-size: 14px; font-weight: 700;">
+                        <span style="color:#3b82f6">${myStats.form.toFixed(1)}</span>
+                        <span style="color:#ef4444">${oppStats.form.toFixed(1)}</span>
+                    </div>
+                </div>
+
+                <div class="stat-box" style="background: #fff; padding: 15px; border-radius: 12px; border: 1px solid #e2e8f0;">
+                    <h4 style="margin: 0 0 10px; font-size: 13px; color: #64748b;">פוטנציאל התקפי (xGI)</h4>
+                    <div class="stat-bar-container" style="display: flex; height: 8px; background: #f1f5f9; border-radius: 4px; overflow: hidden; margin-bottom: 5px;">
+                        <div class="stat-bar my-bar" style="width: ${(myStats.xGI / xgiTotal * 100)}%; background: #3b82f6;"></div>
+                        <div class="stat-bar opp-bar" style="width: ${(oppStats.xGI / xgiTotal * 100)}%; background: #ef4444;"></div>
+                    </div>
+                    <div class="stat-values" style="display: flex; justify-content: space-between; font-size: 14px; font-weight: 700;">
+                        <span style="color:#3b82f6">${myStats.xGI.toFixed(2)}</span>
+                        <span style="color:#ef4444">${oppStats.xGI.toFixed(2)}</span>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        // === SQUAD OVERLAPS LOGIC ===
+        const analyzeSquadComposition = (squad) => {
+            const composition = {};
+            squad.forEach(p => {
+                const key = `${p.team_name} ${p.position_name}`; // e.g. "Arsenal DEF"
+                composition[key] = (composition[key] || 0) + 1;
+            });
+            return composition;
+        };
+        
+        const myComp = analyzeSquadComposition(mySquad);
+        const oppComp = analyzeSquadComposition(oppSquad);
+        
+        let overlapsHtml = '';
+        const allKeys = new Set([...Object.keys(myComp), ...Object.keys(oppComp)]);
+        
+        allKeys.forEach(key => {
+            const myCount = myComp[key] || 0;
+            const oppCount = oppComp[key] || 0;
+            
+            if (myCount > 0 && oppCount > 0) {
+                overlapsHtml += `
+                    <div class="overlap-item" style="display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px dashed #e2e8f0;">
+                        <div class="overlap-label" style="font-weight: 600; font-size: 13px; color: #334155;">${key}</div>
+                        <div class="overlap-values" style="font-family: monospace; font-weight: 700;">
+                            <span style="color:#3b82f6">${myCount}</span>
+                            <span style="color:#94a3b8; font-size: 11px; margin: 0 4px;">vs</span>
+                            <span style="color:#ef4444">${oppCount}</span>
+                        </div>
+                    </div>
+                `;
+            }
+        });
+        
+        if (overlapsHtml) {
+            html += `
+                <div class="overlap-section" style="background: #fff; padding: 15px; border-radius: 12px; border: 1px solid #e2e8f0;">
+                    <h3 style="margin: 0 0 10px; font-size: 14px; color: #0f172a; font-weight: 700;">🤝 חפיפות ונטרולים (Squad Overlaps)</h3>
+                    <div class="overlap-grid">${overlapsHtml}</div>
+                    <div style="margin-top: 8px; font-size: 11px; color: #64748b; text-align: right;">* שחקנים מאותה קבוצה ואותה עמדה מנטרלים זה את זה</div>
+                </div>
+            `;
+        }
+
+        container.innerHTML = html;
+
+    } catch (err) {
+        console.error('CRITICAL ERROR in renderNextRivalAnalysis:', err);
+        container.innerHTML = `<div class="alert alert-danger">
+            <strong>שגיאה בטעינת הנתונים:</strong><br>
+            ${err.message}
+            <br><small>בדוק את הקונסול לפרטים נוספים.</small>
+        </div>`;
+    }
+}
+
+// ============================================
+// TREND CHART (Updated)
+// ============================================
+
+window.renderAllTeamsTrendChart = function(teamAggregates, mode = 'cumulative', highlightTeamIds = []) {
+    // Note: highlightTeamIds can be a single ID (string/number) or array of IDs.
+    if (!Array.isArray(highlightTeamIds)) {
+        highlightTeamIds = highlightTeamIds ? [highlightTeamIds] : [];
+    }
+
+    // Default to including My Team if not specified
+    if (highlightTeamIds.length === 0 && state.draft.myTeamId) {
+        highlightTeamIds = [state.draft.myTeamId];
+    }
+    
+    // Ensure all are strings for comparison
+    highlightTeamIds = highlightTeamIds.map(id => String(id));
+
+    console.log('📈 renderAllTeamsTrendChart called', { mode, highlightTeamIds });
+    const container = document.getElementById('chart-progress');
+    if (!container) return;
+
+    // Data Preparation
+    const matches = state.draft.details?.matches || [];
+    const entries = state.draft.details?.league_entries || [];
+    
+    if (!matches.length || !entries.length) {
+        container.innerHTML = '<div class="alert alert-info">אין נתונים להצגת גרף מגמה.</div>';
+        return;
+    }
+
+    let currentMetric = document.getElementById('trendMetricSelect')?.value || 'points';
+
+    const teamsOptions = entries.map(e => {
+        const isSelected = highlightTeamIds.includes(String(e.id));
+        return `<option value="${e.id}" ${isSelected ? 'selected' : ''}>${e.entry_name}</option>`;
+    }).join('');
+
+    container.innerHTML = `
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; gap: 10px; flex-wrap: wrap;">
+            <div style="display: flex; align-items: center; gap: 10px;">
+                <div class="chart-toggles" style="display: flex; background: #f1f5f9; border-radius: 8px; padding: 2px;">
+                    <button onclick="renderAllTeamsTrendChart(null, 'cumulative', getSelectedTeamsForTrend())" class="${mode === 'cumulative' ? 'active' : ''}" style="padding: 6px 12px; border: none; background: ${mode === 'cumulative' ? 'white' : 'transparent'}; color: ${mode === 'cumulative' ? '#3b82f6' : '#64748b'}; font-weight: 600; border-radius: 6px; cursor: pointer;">מצטבר</button>
+                    <button onclick="renderAllTeamsTrendChart(null, 'weekly', getSelectedTeamsForTrend())" class="${mode === 'weekly' ? 'active' : ''}" style="padding: 6px 12px; border: none; background: ${mode === 'weekly' ? 'white' : 'transparent'}; color: ${mode === 'weekly' ? '#3b82f6' : '#64748b'}; font-weight: 600; border-radius: 6px; cursor: pointer;">מחזורי</button>
+                </div>
+                
+                <select id="trendMetricSelect" onchange="renderAllTeamsTrendChart(null, '${mode}', getSelectedTeamsForTrend())" style="padding: 6px 12px; border-radius: 8px; border: 1px solid #cbd5e1; font-size: 13px;">
+                    <option value="points" ${currentMetric === 'points' ? 'selected' : ''}>נקודות</option>
+                    <option value="table_points" ${currentMetric === 'table_points' ? 'selected' : ''}>נקודות בטבלה (נצחונות)</option>
+                </select>
+            </div>
+            
+            <div style="display: flex; align-items: center; gap: 8px;">
+                <label for="chartHighlightSelect" style="font-size: 13px; color: #64748b; font-weight: 600;">השוואת קבוצות:</label>
+                <select id="chartHighlightSelect" multiple onchange="renderAllTeamsTrendChart(null, '${mode}', getSelectedTeamsForTrend())" style="padding: 6px 12px; border-radius: 8px; border: 1px solid #cbd5e1; font-size: 13px; color: #334155; cursor: pointer; background: white; max-width: 200px; height: 35px;">
+                    ${teamsOptions}
+                </select>
+            </div>
+        </div>
+        <div style="height: 400px; position: relative; width: 100%;">
+            <canvas id="trendCanvas"></canvas>
+        </div>
+        <div style="text-align: right; font-size: 11px; color: #94a3b8; margin-top: 5px;">* החזק Ctrl כדי לבחור מספר קבוצות</div>
+    `;
+
+    const historyMap = new Map(); 
+    
+    entries.forEach(e => {
+        historyMap.set(String(e.id), { 
+            name: e.entry_name, 
+            points: [],
+            cumulative: [] 
+        });
+    });
+
+    const finishedMatches = matches.filter(m => m.finished).sort((a, b) => a.event - b.event);
+    const maxGW = finishedMatches.length ? finishedMatches[finishedMatches.length-1].event : 0;
+    
+    entries.forEach(e => {
+        for (let gw = 1; gw <= maxGW; gw++) {
+            historyMap.get(String(e.id)).points.push(0);
+        }
+    });
+
+    finishedMatches.forEach(m => {
+        const gwIdx = m.event - 1;
+        const id1 = String(m.league_entry_1);
+        const id2 = String(m.league_entry_2);
+        
+        let p1 = 0, p2 = 0;
+        
+        if (currentMetric === 'points') {
+            p1 = m.league_entry_1_points;
+            p2 = m.league_entry_2_points;
+        } else {
+            if (m.league_entry_1_points > m.league_entry_2_points) { p1 = 3; p2 = 0; }
+            else if (m.league_entry_1_points < m.league_entry_2_points) { p1 = 0; p2 = 3; }
+            else { p1 = 1; p2 = 1; }
+        }
+
+        if (historyMap.has(id1)) historyMap.get(id1).points[gwIdx] = p1;
+        if (historyMap.has(id2)) historyMap.get(id2).points[gwIdx] = p2;
+    });
+
+    historyMap.forEach((data, id) => {
+        let sum = 0;
+        data.points.forEach(p => {
+            sum += p;
+            data.cumulative.push(sum);
+        });
+    });
+
+    const datasets = Array.from(historyMap.entries())
+        .filter(([entryId, team]) => highlightTeamIds.includes(entryId))
+        .map(([entryId, team], index) => {
+            const colors = ['#3b82f6', '#ef4444', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#6366f1'];
+            const color = colors[index % colors.length];
+            
+            return {
+                label: team.name,
+                data: mode === 'cumulative' ? team.cumulative : team.points,
+                borderColor: color,
+                backgroundColor: color,
+                borderWidth: 3,
+                pointRadius: 4,
+                tension: 0.4,
+                fill: false
+            };
+    });
+
+    const labels = Array.from({length: maxGW}, (_, i) => `GW${i+1}`);
+    const canvas = document.getElementById('trendCanvas');
+    
+    if (window.trendChartInstance) {
+        window.trendChartInstance.destroy();
+    }
+
+    window.trendChartInstance = new Chart(canvas, {
+        type: 'line',
+        data: {
+            labels: labels,
+            datasets: datasets
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { position: 'top', align: 'end' },
+                tooltip: { 
+                    mode: 'index', 
+                    intersect: false,
+                    callbacks: { title: (items) => `מחזור ${items[0].label}` }
+                }
+            },
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    grid: { color: '#f1f5f9' },
+                    title: { display: true, text: currentMetric === 'points' ? 'נקודות' : 'נקודות ליגה' }
+                }
+            },
+            interaction: { mode: 'nearest', axis: 'x', intersect: false }
+        }
+    });
+}
+
+window.getSelectedTeamsForTrend = function() {
+    const select = document.getElementById('chartHighlightSelect');
+    if (!select) return [];
+    return Array.from(select.selectedOptions).map(opt => opt.value);
+}
+
+function switchDraftTab(tabId) {
+    const contents = document.querySelectorAll('.draft-sub-content');
+    contents.forEach(el => {
+        el.classList.remove('active');
+        el.style.display = 'none';
+    });
+    
+    const selected = document.getElementById(`draft-${tabId}`);
+    if (selected) {
+        selected.classList.add('active');
+        selected.style.display = 'block';
+    }
+    
+    const buttons = document.querySelectorAll('.draft-nav-btn');
+    buttons.forEach(btn => {
+        btn.classList.remove('active');
+        btn.style.background = 'transparent';
+        btn.style.color = '#64748b';
+        btn.style.boxShadow = 'none';
+        
+        if (btn.getAttribute('onclick').includes(tabId)) {
+            btn.classList.add('active');
+            btn.style.background = '#eff6ff';
+            btn.style.color = '#3b82f6';
+            btn.style.boxShadow = '0 2px 4px rgba(59,130,246,0.1)';
+        }
+    });
+    
+    if (tabId === 'overview' && window.trendChartInstance) {
+        setTimeout(() => window.trendChartInstance.resize(), 100);
+    }
+    
+    if (tabId === 'rival') {
+        renderNextRivalAnalysis();
+    }
+}
+
