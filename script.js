@@ -452,7 +452,7 @@ const config = {
         'https://api.codetabs.com/v1/proxy?quest='
     ],
     draftLeagueId: 689,
-    setPieceTakers: { "Arsenal": { "penalties": ["Saka", "Havertz"], "freekicks": ["Ødegaard", "Rice", "Martinelli"], "corners": ["Martinelli", "Saka", "Ødegaard"] }, "Aston Villa": { "penalties": ["Watkins", "Tielemans"], "freekicks": ["Digne", "Douglas Luiz", "Bailey"], "corners": ["Douglas Luiz", "McGinn"] }, "Bournemouth": { "penalties": ["Solanke", "Kluivert"], "freekicks": ["Tavernier", "Scott"], "corners": ["Tavernier", "Scott"] }, "Brentford": { "penalties": ["Toney", "Mbeumo"], "freekicks": ["Jensen", "Mbeumo", "Damsgaard"], "corners": ["Jensen", "Mbeumo"] }, "Brighton": { "penalties": ["João Pedro", "Gross"], "freekicks": ["Gross", "Estupiñán"], "corners": ["Gross", "March"] }, "Chelsea": { "penalties": ["Palmer", "Nkunku"], "freekicks": ["Palmer", "James", "Enzo"], "corners": ["Gallagher", "Chilwell", "Palmer"] }, "Crystal Palace": { "penalties": ["Eze", "Olise"], "freekicks": ["Eze", "Olise"], "corners": ["Eze", "Olise"] }, "Everton": { "penalties": ["Calvert-Lewin", "McNeil"], "freekicks": ["McNeil", "Garner"], "corners": ["McNeil", "Garner"] }, "Fulham": { "penalties": ["Andreas", "Jiménez"], "freekicks": ["Andreas", "Willian", "Wilson"], "corners": ["Andreas", "Willian"] }, "Ipswich": { "penalties": ["Chaplin", "Hirst"], "freekicks": ["Davis", "Morsy"], "corners": ["Davis", "Chaplin"] }, "Leicester": { "penalties": ["Vardy", "Dewsbury-Hall"], "freekicks": ["Dewsbury-Hall", "Fatawu"], "corners": ["Dewsbury-Hall", "Fatawu"] }, "Liverpool": { "penalties": ["M.Salah", "Szoboszlai"], "freekicks": ["Alexander-Arnold", "Szoboszlai", "Robertson"], "corners": ["Alexander-Arnold", "Robertson"] }, "Man City": { "penalties": ["Haaland", "Alvarez"], "freekicks": ["De Bruyne", "Foden", "Alvarez"], "corners": ["Foden", "De Bruyne"] }, "Man Utd": { "penalties": ["B.Fernandes", "Rashford"], "freekicks": ["B.Fernandes", "Eriksen", "Rashford"], "corners": ["B.Fernandes", "Shaw"] }, "Newcastle": { "penalties": ["Isak", "Wilson"], "freekicks": ["Trippier", "Gordon"], "corners": ["Trippier", "Gordon"] }, "Nott'm Forest": { "penalties": ["Gibbs-White", "Wood"], "freekicks": ["Gibbs-White", "Elanga"], "corners": ["Gibbs-White", "Elanga"] }, "Southampton": { "penalties": ["A. Armstrong", "Ward-Prowse"], "freekicks": ["Ward-Prowse", "Smallbone"], "corners": ["Ward-Prowse", "Aribo"] }, "Spurs": { "penalties": ["Son", "Maddison"], "freekicks": ["Maddison", "Pedro Porro"], "corners": ["Maddison", "Pedro Porro", "Son"] }, "West Ham": { "penalties": ["Ward-Prowse", "Bowen"], "freekicks": ["Ward-Prowse", "Emerson"], "corners": ["Ward-Prowse", "Bowen"] }, "Wolves": { "penalties": ["Cunha", "Hwang"], "freekicks": ["Sarabia", "Bellegarde"], "corners": ["Sarabia", "Aït-Nouri"] } },
+    setPieceTakers: {}, // DEPRECATED: Now automated via API in preprocessPlayerData
     tableColumns: [
         'rank', 'web_name', 'draft_score', 'stability_index', 'predicted_points_1_gw', 'team_name', 'draft_team',
         'position_name', 'now_cost', 'total_points', 'points_per_game_90', 'selected_by_percent',
@@ -1280,14 +1280,40 @@ function preprocessPlayerData(players, setPieceTakers) {
         p.team_name = state.teamsData[p.team] ? state.teamsData[p.team].name : 'Unknown';
         p.position_name = getPositionName(p.element_type);
 
-        const normalizedPlayerName = p.web_name.toLowerCase();
-        const teamSetPieces = setPieceTakers[p.team_name] || { penalties: [], freekicks: [], corners: [] };
+        // --- AUTOMATED SET PIECES (API 2025) ---
+        // Replacing manual 'setPieceTakers' config with direct API data
+        // API provides: penalties_order, direct_freekicks_order, corners_and_indirect_freekicks_order
+        // 1 = First choice, 2 = Second choice, etc. (null if not a taker)
 
         p.set_piece_priority = {
-            penalty: teamSetPieces.penalties.findIndex(name => normalizedPlayerName.includes(name.toLowerCase())) + 1,
-            free_kick: teamSetPieces.freekicks.findIndex(name => normalizedPlayerName.includes(name.toLowerCase())) + 1,
-            corner: teamSetPieces.corners.findIndex(name => normalizedPlayerName.includes(name.toLowerCase())) + 1,
+            penalty: p.penalties_order || 99,
+            free_kick: p.direct_freekicks_order || 99,
+            corner: p.corners_and_indirect_freekicks_order || 99,
         };
+
+        // --- ENHANCED INJURY INTELLIGENCE ---
+        // Using chance_of_playing_next_round for smarter status display
+        // 100/null = Available (Green)
+        // 75% = Slight Doubt (Yellow) - Valid Option
+        // 50% = Doubtful (Orange) - Risky
+        // 25% = Very Doubtful (Red) - Avoid
+        // 0% = Injured/Suspended (Red) - Out
+
+        p.availability_grade = 'available'; // Default
+        const chance = p.chance_of_playing_next_round;
+
+        if (chance === 0) p.availability_grade = 'out';
+        else if (chance === 25) p.availability_grade = 'avoid';
+        else if (chance === 50) p.availability_grade = 'risky';
+        else if (chance === 75) p.availability_grade = 'flagged'; // But valid
+
+        // Enrich news with timestamp if available (API: news_added)
+        if (p.news && p.news_added) {
+            const newsDate = new Date(p.news_added);
+            const today = new Date();
+            const diffDays = Math.floor((today - newsDate) / (1000 * 60 * 60 * 24));
+            p.news_age_days = diffDays; // Can be used for "New!" badge
+        }
 
         p.points_per_game_90 = p.minutes > 0 ? (p.total_points / mins90) : 0;
         p.goals_scored_assists = (p.goals_scored || 0) + (p.assists || 0);
@@ -1519,7 +1545,15 @@ function createPlayerRowHtml(player, index) {
     return `<tr>
         <td><input type="checkbox" class="player-select" data-player-id="${player.id}" ${isChecked}></td>
         <td>${index + 1}</td>
-        <td class="name-cell"><span class="player-name-icon">${nameBadges}</span>${player.web_name}</td>
+        <td class="name-cell">
+            <div class="player-name-wrapper">
+                <span class="player-name-icon">${nameBadges}</span>
+                <span class="player-name-text">${player.web_name}</span>
+                ${player.availability_grade !== 'available' ?
+            `<span class="status-badge status-${player.availability_grade}" title="${player.news || 'Status'}">${player.chance_of_playing_next_round !== null ? player.chance_of_playing_next_round + '%' : '!'}</span>`
+            : ''}
+            </div>
+        </td>
         <td class="bold-cell ${getPercentileClass(player.draft_score, displayedValues.draft_score)}">${player.draft_score.toFixed(1)}</td>
         <td class="bold-cell stability-cell ${getPercentileClass(player.stability_index || 0, displayedValues.stability_index)}">${(player.stability_index || 0).toFixed(0)}</td>
         <td class="bold-cell ${getPercentileClass(player.predicted_points_1_gw, displayedValues.predicted_points_1_gw)}" title="חיזוי טכני: ${(player.predicted_points_1_gw || 0).toFixed(1)} נקודות">${(player.predicted_points_1_gw || 0).toFixed(1)}</td>
