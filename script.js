@@ -546,6 +546,7 @@ const config = {
     ],
     columnTooltips: {
         'draft_score': 'ציון דראפט מושלם: 35% נקודות בפועל, 15% תרומה הגנתית, 12% G+A למשחק, 12% xG למשחק, 10% איכות משחק, 8% אחוז בעלות, 8% בונוס. מחושב לפי עמדה!',
+        'next_3_fdr': 'קושי ממוצע של 3 המשחקים הקרובים (1=קל, 5=קשה)',
         'predicted_points_1_gw': 'חיזוי נקודות למחזור הבא - מודל מתקדם: 17% מומנטום העברות 🔥, 28% כושר 📈, 25% xGI/90 ⚽, 20% קושי יריבות 🎯, 10% חוזק קבוצה 💪',
         'predicted_points_4_gw': 'צפי נקודות ממוצע ל-4 המחזורים הקרובים (לשימוש פנימי).',
         'stability_index': 'מדד יציבות (0-100) 📊 - מודד עקביות השחקן: 40% כושר אחרון 📈, 30% דיוק xG ⚽, 20% זמן משחק קבוע ⏱️, 10% שונות נקודות 📉. ככל שגבוה יותר = שחקן יציב ויותר צפוי ✅',
@@ -567,7 +568,7 @@ const state = {
     aggregatedCache: {}, // { 3: [...], 5: [...] }
     historicalPoints: {}, // GW -> Map(elementId -> stats)
     displayedData: [],
-    sortColumn: 2,
+    sortKey: 'draft_score',
     sortDirection: 'desc',
     activeQuickFilterName: null,
     selectedForComparison: new Set(),
@@ -1406,6 +1407,7 @@ function calculateRealFDR(players, fixtures) {
 function setupEventListeners() {
     ['searchName', 'priceRange', 'minPoints', 'minMinutes'].forEach(id => document.getElementById(id).addEventListener('keyup', processChange));
     ['positionFilter', 'teamFilter', 'xDiffFilter', 'showEntries'].forEach(id => document.getElementById(id).addEventListener('change', processChange));
+    setupTableSorting();
 }
 
 function initializeTooltips() {
@@ -1605,11 +1607,9 @@ function renderTable() {
     });
 
     // Add tooltips to headers
-    const headers = document.querySelectorAll('#playersTable thead th');
-    const columnKeys = ['rank', 'web_name', 'draft_score', 'stability_index', 'predicted_points_1_gw', 'team_name', 'draft_team', 'position_name', 'now_cost', 'total_points', 'points_per_game_90', 'selected_by_percent', 'dreamteam_count', 'net_transfers_event', 'def_contrib_per90', 'goals_scored_assists', 'expected_goals_assists', 'minutes', 'xDiff', 'ict_index', 'bonus', 'clean_sheets', 'set_piece_priority.penalty', 'set_piece_priority.corner', 'set_piece_priority.free_kick', 'fixtures'];
-
-    headers.forEach((th, i) => {
-        const key = columnKeys[i - 1];
+    // Add tooltips to headers
+    document.querySelectorAll('#playersTable thead th[data-sort]').forEach(th => {
+        const key = th.dataset.sort;
         if (config.columnTooltips[key]) {
             th.dataset.tooltip = config.columnTooltips[key];
         }
@@ -1761,25 +1761,26 @@ function processChange() {
     if (state.activeQuickFilterName) applyQuickFilter(state.activeQuickFilterName);
 
     // Sort BEFORE limiting to 50
-    if (state.sortColumn !== null) {
+    // Sort BEFORE limiting to 50
+    if (state.sortKey) {
         state.displayedData.sort((a, b) => {
             let aValue, bValue;
-            const field = config.tableColumns[state.sortColumn];
 
-            if (state.sortColumn === 14) { // Transfers column (shifted by +1 from 13)
+            if (state.sortKey === 'net_transfers_event') {
                 aValue = parseFloat(a.transfers_balance || a.net_transfers_event || 0);
                 bValue = parseFloat(b.transfers_balance || b.net_transfers_event || 0);
-            } else if (state.sortColumn === 16) { // G+A column (shifted by +1 from 15)
+            } else if (state.sortKey === 'goals_scored_assists') {
                 aValue = (a.goals_scored || 0) + (a.assists || 0);
                 bValue = (b.goals_scored || 0) + (b.assists || 0);
-            } else if (state.sortColumn === 17) { // xGI/90 column (shifted by +1 from 16)
+            } else if (state.sortKey === 'xGI_per90') {
                 aValue = parseFloat(a.xGI_per90 || 0);
                 bValue = parseFloat(b.xGI_per90 || 0);
             } else {
-                aValue = getNestedValue(a, field);
-                bValue = getNestedValue(b, field);
-                if (typeof aValue === 'string' && !isNaN(aValue)) aValue = parseFloat(aValue);
-                if (typeof bValue === 'string' && !isNaN(bValue)) bValue = parseFloat(bValue);
+                aValue = getNestedValue(a, state.sortKey);
+                bValue = getNestedValue(b, state.sortKey);
+                // Convert numeric strings to numbers for proper sorting
+                if (typeof aValue === 'string' && !isNaN(aValue) && aValue.trim() !== '') aValue = parseFloat(aValue);
+                if (typeof bValue === 'string' && !isNaN(bValue) && bValue.trim() !== '') bValue = parseFloat(bValue);
             }
 
             if (aValue === null || aValue === undefined) aValue = -Infinity;
@@ -1788,7 +1789,9 @@ function processChange() {
             if (typeof aValue === 'number' && typeof bValue === 'number') {
                 return state.sortDirection === 'asc' ? aValue - bValue : bValue - aValue;
             } else {
-                return state.sortDirection === 'asc' ? String(aValue).localeCompare(String(bValue)) : String(bValue).localeCompare(String(aValue));
+                return state.sortDirection === 'asc'
+                    ? String(aValue).localeCompare(String(bValue))
+                    : String(bValue).localeCompare(String(aValue));
             }
         });
     }
@@ -1820,25 +1823,27 @@ function applyQuickFilter(filterName) {
     }
 }
 
-function sortTable(columnIndex) {
-    if (state.sortColumn === columnIndex) {
+function sortTable(key) {
+    if (state.sortKey === key) {
         state.sortDirection = state.sortDirection === 'asc' ? 'desc' : 'asc';
     } else {
-        state.sortColumn = columnIndex;
-        // Default to DESC for score/points columns (draft_score, xPts 1GW, total_points, transfers, etc.)
-        // SHIFTED INDICES +1 FOR ALL COLUMNS >= 5 (due to next_3_fdr at index 5)
-        if ([2, 3, 4, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25].includes(columnIndex)) {
-            state.sortDirection = 'desc';
-        } else {
+        state.sortKey = key;
+        // Default to DESC for performance metrics
+        // ASC for text columns: rank, web_name, team_name, draft_team, position_name
+        const ascColumns = ['rank', 'web_name', 'team_name', 'draft_team', 'position_name'];
+        if (ascColumns.includes(key)) {
             state.sortDirection = 'asc';
+        } else {
+            state.sortDirection = 'desc';
         }
     }
 
-    document.querySelectorAll('#playersTable thead th').forEach((th, i) => {
+    // Update Indicators
+    document.querySelectorAll('#playersTable thead th[data-sort]').forEach(th => {
         const indicator = th.querySelector('.sort-indicator');
         if (indicator) {
             indicator.textContent = '';
-            if (i - 1 === columnIndex) {
+            if (th.dataset.sort === key) {
                 th.classList.add('sorted');
                 indicator.textContent = state.sortDirection === 'desc' ? '▼' : '▲';
             } else {
@@ -1847,7 +1852,20 @@ function sortTable(columnIndex) {
         }
     });
 
-    renderTable();
+    // TRIGGER RE-SORT BY CALLING processChange()
+    processChange();
+}
+
+function setupTableSorting() {
+    const thead = document.querySelector('#playersTable thead');
+    if (thead) {
+        thead.addEventListener('click', (e) => {
+            const th = e.target.closest('th[data-sort]');
+            if (!th) return;
+            const key = th.dataset.sort;
+            if (key) sortTable(key);
+        });
+    }
 }
 
 function setActiveButton(button) {
