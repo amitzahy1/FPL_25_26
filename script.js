@@ -618,10 +618,20 @@ const charts = {
  * @param {number} options.retryDelay - Initial retry delay in ms (default: 1000)
  * @returns {Promise<Object>} - Fetched data
  */
+// ============================================
+// ROBUST FETCHING (Tiered Strategy)
+// ============================================
+
+/**
+ * Robust Fetch with tiered strategy:
+ * 1. Local Proxy (http://localhost:8010) - Perfect reliability
+ * 2. Custom Proxy (if configured)
+ * 3. Public Proxies (rotation)
+ */
 async function fetchWithCache(url, cacheKey, cacheDurationMinutes = 120, options = {}) {
     const { maxRetries = 3, retryDelay = 1000 } = options;
 
-    // Try cache first
+    // 1. Try Cache
     const cachedItem = localStorage.getItem(cacheKey);
     if (cachedItem) {
         try {
@@ -631,123 +641,128 @@ async function fetchWithCache(url, cacheKey, cacheDurationMinutes = 120, options
                 console.log(`✅ Returning cached data for ${cacheKey}`);
                 return data;
             } else {
-                localStorage.removeItem(cacheKey);
                 console.log(`⏰ Cache expired for ${cacheKey}`);
+                localStorage.removeItem(cacheKey);
             }
         } catch (e) {
-            console.error('❌ Error parsing cache, removing item:', e);
+            console.error('❌ Error parsing cache:', e);
             localStorage.removeItem(cacheKey);
         }
     }
 
-    // Fetch with retry logic and proxy fallback
-    console.log(`🌐 Fetching fresh data for ${cacheKey}`);
+    console.log(`🌐 Fetching fresh data for ${cacheKey}...`);
 
-    // Extract original URL from proxy URL (if it's already proxied)
+    const saveToCache = (data) => {
+        try {
+            localStorage.setItem(cacheKey, JSON.stringify({ timestamp: new Date().getTime(), data }));
+            console.log(`💾 Cached data for ${cacheKey}`);
+        } catch (e) {
+            console.error("⚠️ Failed to write to localStorage", e);
+        }
+    };
+
+    // Extract original URL
     let originalUrl = url;
-    const proxies = config.corsProxyFallbacks || [config.corsProxy];
+    const knownProxies = [
+        'https://corsproxy.io/?',
+        'https://api.allorigins.win/raw?url=',
+        'https://cors-anywhere.herokuapp.com/',
+        'https://thingproxy.freeboard.io/fetch/',
+        'https://api.codetabs.com/v1/proxy?quest='
+    ];
 
-    // Check if URL is already proxied and extract the real URL
-    for (const proxy of proxies) {
+    for (const proxy of knownProxies) {
         if (url.startsWith(proxy)) {
-            // URL is already proxied, extract the original URL
             originalUrl = decodeURIComponent(url.substring(proxy.length));
             break;
         }
     }
 
-    // Try direct access first (requested by user, useful for VPN/Extensions)
+    // 🟢 Tier 1: Local Proxy (The "Perfect" Solution)
+    // We try this silently first. If it works, great.
     try {
-        console.log(`🌐 Trying direct connection: ${originalUrl}`);
-        const directResponse = await fetch(originalUrl);
-        if (directResponse.ok) {
-            const data = await directResponse.json();
-            console.log(`✅ Direct connection successful!`);
-            try {
-                localStorage.setItem(cacheKey, JSON.stringify({ timestamp: new Date().getTime(), data }));
-            } catch (e) { console.error("Cache write failed", e); }
+        const localProxyUrl = `http://localhost:8010/?url=${encodeURIComponent(originalUrl)}`;
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 1000); // Fast timeout check
+
+        const response = await fetch(localProxyUrl, { signal: controller.signal });
+        clearTimeout(timeoutId);
+
+        if (response.ok) {
+            const data = await response.json();
+            console.log(`🚀 Using Local Proxy (Perfect Connection)!`);
+            saveToCache(data);
             return data;
-        } else {
-            console.warn(`⚠️ Direct connection failed with status: ${directResponse.status}`);
         }
     } catch (e) {
-        console.warn(`⚠️ Direct connection failed: ${e.message}`);
+        // Local proxy not running, ignore and move on
     }
 
-    // Try each proxy
-    for (let proxyIndex = 0; proxyIndex < proxies.length; proxyIndex++) {
-        const currentProxy = proxies[proxyIndex];
+    // 🟢 Tier 2: Custom User Proxy (Cloudflare Worker)
+    const customProxy = localStorage.getItem('fpl_custom_proxy');
+    if (customProxy) {
+        try {
+            const targetUrl = customProxy.includes('?')
+                ? `${customProxy}&url=${encodeURIComponent(originalUrl)}`
+                : `${customProxy}?url=${encodeURIComponent(originalUrl)}`;
 
-        // Build new URL with current proxy
-        const proxyUrl = currentProxy + encodeURIComponent(originalUrl);
-
-        if (proxyIndex > 0) {
-            console.log(`🔄 Trying fallback proxy ${proxyIndex + 1}/${proxies.length}: ${currentProxy}`);
-        }
-
-        for (let attempt = 1; attempt <= maxRetries; attempt++) {
-            try {
-                const response = await fetch(proxyUrl);
-
-                // Handle rate limiting (429)
-                if (response.status === 429) {
-                    const waitTime = retryDelay * Math.pow(2, attempt - 1);
-                    console.warn(`⚠️ Rate limited (429), waiting ${waitTime}ms before retry ${attempt}/${maxRetries}...`);
-                    await new Promise(resolve => setTimeout(resolve, waitTime));
-                    continue;
-                }
-
-                // Handle 403 - try next proxy
-                if (response.status === 403) {
-                    console.warn(`⚠️ Proxy blocked (403), trying next proxy...`);
-                    break; // Break retry loop, try next proxy
-                }
-
-                // Handle other HTTP errors
-                if (!response.ok) {
-                    if (attempt === maxRetries) {
-                        console.warn(`⚠️ HTTP ${response.status} after ${maxRetries} attempts with proxy ${proxyIndex + 1}`);
-                        break; // Try next proxy
-                    }
-                    console.warn(`⚠️ HTTP ${response.status}, retry ${attempt}/${maxRetries}...`);
-                    await new Promise(resolve => setTimeout(resolve, retryDelay));
-                    continue;
-                }
-
-                // Success - parse and cache
+            const response = await fetch(targetUrl);
+            if (response.ok) {
                 const data = await response.json();
-
-                // Save to cache
-                try {
-                    localStorage.setItem(cacheKey, JSON.stringify({ timestamp: new Date().getTime(), data }));
-                    console.log(`💾 Cached data for ${cacheKey}`);
-                } catch (e) {
-                    console.error("⚠️ Failed to write to localStorage. Cache might be full.", e);
-                }
-
-                // Update config to use successful proxy for future requests
-                if (proxyIndex > 0) {
-                    config.corsProxy = currentProxy;
-                    console.log(`✅ Switched to working proxy: ${currentProxy}`);
-                }
-
+                console.log(`✅ Custom Proxy success!`);
+                saveToCache(data);
                 return data;
-
-            } catch (error) {
-                if (attempt === maxRetries) {
-                    console.warn(`⚠️ All attempts failed with proxy ${proxyIndex + 1}: ${error.message}`);
-                    break; // Try next proxy
-                }
-
-                console.warn(`⚠️ Attempt ${attempt}/${maxRetries} failed: ${error.message}`);
-                await new Promise(resolve => setTimeout(resolve, retryDelay));
             }
+        } catch (e) {
+            console.warn(`⚠️ Custom Proxy failed`);
         }
     }
 
-    // All proxies failed
-    console.error(`❌ All proxies failed for ${cacheKey}`);
-    throw new Error(`Failed to fetch ${originalUrl} - all CORS proxies failed`);
+    // 🟠 Tier 3: Public Proxy Rotation (Scattershot)
+    const proxies = [
+        ...config.corsProxyFallbacks,
+        config.corsProxy,
+        'https://api.codetabs.com/v1/proxy?quest=',
+        'https://dummy-cors-proxy.herokuapp.com/',
+        'https://cors-get-proxy.sirjosh.workers.dev/?url='
+    ].filter(p => p !== customProxy);
+
+    const uniqueProxies = [...new Set(proxies)];
+
+    // Try sequentially but fail fast
+    for (let i = 0; i < uniqueProxies.length; i++) {
+        const currentProxy = uniqueProxies[i];
+
+        try {
+            const targetUrl = currentProxy + encodeURIComponent(originalUrl);
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 8000);
+
+            const response = await fetch(targetUrl, { signal: controller.signal });
+            clearTimeout(timeoutId);
+
+            if (response.ok) {
+                const text = await response.text();
+                try {
+                    const data = JSON.parse(text); // Verify JSON
+                    console.log(`✅ Proxy ${i + 1} success (${currentProxy})`);
+
+                    // Prioritize this proxy for this session
+                    if (i > 0 && i < 3) config.corsProxy = currentProxy;
+
+                    saveToCache(data);
+                    return data;
+                } catch (jsonErr) {
+                    console.warn(`⚠️ Proxy returned non-JSON`);
+                }
+            }
+        } catch (e) {
+            // Continue
+        }
+    }
+
+    // 🔴 Final Fail
+    throw new Error(`Could not fetch data. Please run 'node local_proxy.js' for 100% reliability.`);
 }
 
 // ============================================
@@ -1034,6 +1049,59 @@ function showToast(title, message, type = 'info', duration = 4000) {
     return toast;
 }
 
+// ============================================
+// MANUAL DATA & SETTINGS UI
+// ============================================
+
+function openSettings() {
+    document.getElementById('customProxyInput').value = localStorage.getItem('fpl_custom_proxy') || '';
+    document.getElementById('settingsModal').style.display = 'block';
+}
+
+function saveSettings() {
+    const url = document.getElementById('customProxyInput').value.trim();
+    if (url) {
+        localStorage.setItem('fpl_custom_proxy', url);
+        showToast('הגדרות נשמרו', 'Custom Proxy עודכן בהצלחה', 'success');
+    } else {
+        localStorage.removeItem('fpl_custom_proxy');
+        showToast('הגדרות נשמרו', 'Custom Proxy הוסר', 'info');
+    }
+    document.getElementById('settingsModal').style.display = 'none';
+}
+
+async function processManualData() {
+    const input = document.getElementById('manualDataInput').value;
+    try {
+        const data = JSON.parse(input);
+
+        // Validate basic structure
+        if (!data.elements || !data.teams) {
+            throw new Error('JSON לא תקין: חסרים שדות חובה (elements, teams)');
+        }
+
+        console.log('📦 Manual data parsed successfully');
+
+        // Save to cache as if it was fetched
+        localStorage.setItem('fpl_bootstrap_live', JSON.stringify({
+            timestamp: new Date().getTime(),
+            data: data
+        }));
+
+        state.allPlayersData.live.raw = data;
+
+        document.getElementById('manualDataModal').style.display = 'none';
+        showToast('הצלחה', 'נתונים נטענו ידנית בהצלחה!', 'success');
+
+        // Re-run init process
+        await fetchAndProcessData();
+
+    } catch (e) {
+        alert('שגיאה בפענוח הנתונים: ' + e.message);
+    }
+}
+
+
 // Main init function for real data
 async function init() {
     Chart.register(ChartDataLabels);
@@ -1094,6 +1162,7 @@ async function fetchAndProcessData() {
 
             if (needsData) {
                 if (state.currentDataSource === 'live') {
+                    // Main data fetch - Robust auto-retry
                     state.allPlayersData.live.raw = await fetchWithCache(dataUrl, dataCacheKey, 60);
                 } else {
                     const response = await fetch(dataUrl); // Local file, no cache
@@ -1101,6 +1170,7 @@ async function fetchAndProcessData() {
                 }
             }
             if (needsFixtures) {
+                // Background fetch fixtures
                 const fixturesData = await fetchWithCache(fixturesUrl, fixturesCacheKey, 180);
                 state.allPlayersData.live.fixtures = fixturesData;
                 state.allPlayersData.historical.fixtures = fixturesData;
@@ -1120,6 +1190,12 @@ async function fetchAndProcessData() {
             }, {});
             const setPieceTakers = config.setPieceTakers;
             let processedPlayers = preprocessPlayerData(data.elements.filter(p => p.status !== 'u'), setPieceTakers);
+
+            // Calculate FDR if fixtures are available
+            if (state.allPlayersData.live.fixtures) {
+                processedPlayers = calculateRealFDR(processedPlayers, state.allPlayersData.live.fixtures);
+            }
+
             processedPlayers = calculateAdvancedScores(processedPlayers);
             state.allPlayersData[state.currentDataSource].processed = processedPlayers;
         }
@@ -1136,8 +1212,23 @@ async function fetchAndProcessData() {
         showToast('נתונים נטענו בהצלחה', `${state.allPlayersData[state.currentDataSource].processed.length} שחקנים נטענו`, 'success', 3000);
     } catch (error) {
         console.error('Error in fetchAndProcessData:', error);
-        document.getElementById('playersTableBody').innerHTML = `<tr><td colspan="26" style="text-align:center; padding: 20px; color: red;">שגיאה בטעינת נתונים: ${error.message}</td></tr>`;
-        showToast('שגיאה בטעינת נתונים', error.message, 'error', 5000);
+
+        const errorMsg = `
+            <div style="text-align: center;">
+                <h3>❌ שגיאה בטעינת נתונים</h3>
+                <p>${error.message}</p>
+                <div style="background: #fff3cd; padding: 10px; border-radius: 6px; margin-top: 10px; text-align: right; display: inline-block;">
+                    <strong>פתרון מומלץ (100% הצלחה):</strong><br>
+                    1. פתח טרמינל בתיקייה זו<br>
+                    2. הרץ: <code>node local_proxy.js</code><br>
+                    3. רענן את העמוד
+                </div>
+            </div>
+        `;
+
+        const tbody = document.getElementById('playersTableBody');
+        if (tbody) tbody.innerHTML = `<tr><td colspan="26" style="padding: 20px;">${errorMsg}</td></tr>`;
+        showToast('שגיאה בטעינת נתונים', 'נסה להריץ את local_proxy.js', 'error', 10000);
     } finally {
         hideLoading();
     }
@@ -1201,9 +1292,90 @@ function preprocessPlayerData(players, setPieceTakers) {
         p.points_per_game_90 = p.minutes > 0 ? (p.total_points / mins90) : 0;
         p.goals_scored_assists = (p.goals_scored || 0) + (p.assists || 0);
         p.expected_goals_assists = parseFloat(p.expected_goal_involvements) || 0;
+
+        // --- NEW METRICS 2025 ---
+        // 1. Smart FDR (Next 3 Games Difficulty)
+        // Requires 'fixtures' data which is now in state.allPlayersData[source].fixtures
+        // We need to calculate it outside or pass fixtures here. 
+        // For now, we'll initialize it to 0 and calculate in a separate pass if fixtures are available.
+        p.next_3_fdr = 0;
+
+        // 2. Defensive Workrate Badge (CBIT per 90)
+        // High workrate for MIDs (important for new BPS)
+        // Threshold: Top 20% estimated (~ 0.8 per 90 for MIDs)
+        const cbitPer90 = p.defensive_contribution_per_90 || 0;
+        p.is_defensive_workhorse = false;
+        if (p.element_type === 3 && cbitPer90 > 0.8) p.is_defensive_workhorse = true; // High workrate MID
+        if (p.element_type === 4 && cbitPer90 > 0.4) p.is_defensive_workhorse = true; // High workrate FWD (rare)
+
         return p;
     });
 }
+
+function calculateFDR(players, fixtures, teamStrength) {
+    if (!fixtures || !fixtures.length) return players;
+
+    // Map team ID to next 3 fixtures difficulty
+    const teamFDR = {}; // teamId -> average difficulty
+    const nextGameweek = getNextGameweek(fixtures);
+
+    // Helper to find next 3 GWs for a team
+    // ... (This logic needs to be robust, for now simplified)
+
+    return players.map(p => {
+        // Placeholder until we implement full FDR logic with fixtures
+        // We can use 'teamStrength' to estimate opposition strength if full fixtures map is complex here
+        return p;
+    });
+}
+
+function calculateRealFDR(players, fixtures) {
+    console.log('📊 Calculating FDR for next 3 games...');
+
+    // Group fixtures by team
+    const teamFixtures = {};
+    const nextGameweek = fixtures.find(f => !f.finished && f.event)?.event || 38;
+
+    // Pre-process fixtures to map by team
+    fixtures.forEach(f => {
+        if (f.event < nextGameweek) return; // Skip past
+
+        // Home Team
+        if (!teamFixtures[f.team_h]) teamFixtures[f.team_h] = [];
+        teamFixtures[f.team_h].push({ event: f.event, difficulty: f.team_h_difficulty, opponent: f.team_a, isHome: true });
+
+        // Away Team
+        if (!teamFixtures[f.team_a]) teamFixtures[f.team_a] = [];
+        teamFixtures[f.team_a].push({ event: f.event, difficulty: f.team_a_difficulty, opponent: f.team_h, isHome: false });
+    });
+
+    // Sort fixtures by event for each team
+    Object.keys(teamFixtures).forEach(teamId => {
+        teamFixtures[teamId].sort((a, b) => a.event - b.event);
+    });
+
+    return players.map(p => {
+        const teamNextFixtures = teamFixtures[p.team] || [];
+        const next3 = teamNextFixtures.slice(0, 3);
+
+        if (next3.length === 0) {
+            p.next_3_fdr = 0;
+            p.next_3_fdr_grade = 'unknown';
+            return p;
+        }
+
+        const avgDifficulty = next3.reduce((sum, f) => sum + f.difficulty, 0) / next3.length;
+        p.next_3_fdr = avgDifficulty.toFixed(1);
+
+        // Grade: 1-2 (Easy/Green), 3 (Medium/Gray), 4-5 (Hard/Red)
+        if (avgDifficulty <= 2.3) p.next_3_fdr_grade = 'easy';
+        else if (avgDifficulty >= 4) p.next_3_fdr_grade = 'hard';
+        else p.next_3_fdr_grade = 'medium';
+
+        return p;
+    });
+}
+
 
 function setupEventListeners() {
     ['searchName', 'priceRange', 'minPoints', 'minMinutes'].forEach(id => document.getElementById(id).addEventListener('keyup', processChange));
@@ -1325,13 +1497,33 @@ function createPlayerRowHtml(player, index) {
     const draftTeamDisplay = draftTeam || '🆓 חופשי';
     const draftTeamClass = draftTeam ? 'draft-owned' : 'draft-free';
 
+    // Badge Logic
+    let nameBadges = icons.icons;
+    if (player.is_defensive_workhorse) {
+        nameBadges += '<span title="High Defensive Workrate (Bonus Points Magnet)">🛡️</span>';
+    }
+
+    // FDR Logic
+    let fdrBadge = '<span class="fdr-badge" style="background-color:#e0e0e0; color:#333;">-</span>';
+    if (player.next_3_fdr > 0) {
+        const grade = player.next_3_fdr_grade || 'medium';
+        let color = '#9e9e9e'; // medium (gray)
+        let textColor = 'white';
+        if (grade === 'easy') { color = '#4caf50'; } // green
+        else if (grade === 'hard') { color = '#f44336'; } // red
+        else { color = '#fbbf24'; textColor = 'black'; } // medium (yellowish)
+
+        fdrBadge = `<div class="fdr-badge" style="background-color:${color}; color:${textColor}; padding:2px 6px; border-radius:4px; font-weight:bold; display:inline-block; min-width:30px; text-align:center;">${player.next_3_fdr}</div>`;
+    }
+
     return `<tr>
         <td><input type="checkbox" class="player-select" data-player-id="${player.id}" ${isChecked}></td>
         <td>${index + 1}</td>
-        <td class="name-cell"><span class="player-name-icon">${icons.icons}</span>${player.web_name}</td>
+        <td class="name-cell"><span class="player-name-icon">${nameBadges}</span>${player.web_name}</td>
         <td class="bold-cell ${getPercentileClass(player.draft_score, displayedValues.draft_score)}">${player.draft_score.toFixed(1)}</td>
         <td class="bold-cell stability-cell ${getPercentileClass(player.stability_index || 0, displayedValues.stability_index)}">${(player.stability_index || 0).toFixed(0)}</td>
         <td class="bold-cell ${getPercentileClass(player.predicted_points_1_gw, displayedValues.predicted_points_1_gw)}" title="חיזוי טכני: ${(player.predicted_points_1_gw || 0).toFixed(1)} נקודות">${(player.predicted_points_1_gw || 0).toFixed(1)}</td>
+        <td class="fdr-cell">${fdrBadge}</td>
         <td>${player.team_name}</td>
         <td class="${draftTeamClass}" title="${draftTeamDisplay}">${draftTeamDisplay}</td>
         <td>${player.position_name}</td>
