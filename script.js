@@ -1763,13 +1763,13 @@ function processChange() {
             let aValue, bValue;
             const field = config.tableColumns[state.sortColumn];
 
-            if (state.sortColumn === 13) { // Transfers column
+            if (state.sortColumn === 14) { // Transfers column (shifted by +1 from 13)
                 aValue = parseFloat(a.transfers_balance || a.net_transfers_event || 0);
                 bValue = parseFloat(b.transfers_balance || b.net_transfers_event || 0);
-            } else if (state.sortColumn === 15) { // G+A column
+            } else if (state.sortColumn === 16) { // G+A column (shifted by +1 from 15)
                 aValue = (a.goals_scored || 0) + (a.assists || 0);
                 bValue = (b.goals_scored || 0) + (b.assists || 0);
-            } else if (state.sortColumn === 16) { // xGI/90 column
+            } else if (state.sortColumn === 17) { // xGI/90 column (shifted by +1 from 16)
                 aValue = parseFloat(a.xGI_per90 || 0);
                 bValue = parseFloat(b.xGI_per90 || 0);
             } else {
@@ -1823,7 +1823,8 @@ function sortTable(columnIndex) {
     } else {
         state.sortColumn = columnIndex;
         // Default to DESC for score/points columns (draft_score, xPts 1GW, total_points, transfers, etc.)
-        if ([2, 3, 4, 7, 8, 9, 10, 13, 14, 15, 16, 17, 18, 19].includes(columnIndex)) {
+        // SHIFTED INDICES +1 FOR ALL COLUMNS >= 5 (due to next_3_fdr at index 5)
+        if ([2, 3, 4, 8, 9, 10, 11, 14, 15, 16, 17, 18, 19, 20].includes(columnIndex)) {
             state.sortDirection = 'desc';
         } else {
             state.sortDirection = 'asc';
