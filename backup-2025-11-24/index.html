@@ -1,0 +1,682 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>⚽ FPL Pro Analytics Hub</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/chartjs-plugin-annotation/2.2.1/chartjs-plugin-annotation.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.0.0"></script>
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
+</head>
+<body>
+    <div id="loadingOverlay" class="loading-overlay" style="display: none;">
+        <div class="spinner"></div>
+        <p>טוען נתונים...</p>
+    </div>
+
+    <!-- Progress Bar -->
+    <div id="progressBarContainer" class="progress-bar-container">
+        <div id="progressBar" class="progress-bar"></div>
+    </div>
+
+    <!-- Login Screen -->
+    <div id="loginScreen" class="login-screen" style="display: none;">
+        <div class="login-container">
+            <div class="login-header">
+                <div class="login-icon">⚽</div>
+                <h1>FPL Draft Analytics</h1>
+                <p class="login-subtitle">הכלי המתקדם לניתוח ליגות דראפט פנטזי</p>
+            </div>
+            <div class="login-content">
+                <p class="login-description">
+                    קבל גישה לניתוחים מתקדמים, <strong>חיזויי ביצועים</strong>, מטריצות השוואה ו<strong>המלצות חכמות</strong> לליגת הדראפט שלך
+                </p>
+                <button id="googleSignInBtn" class="google-signin-btn">
+                    <svg class="google-icon" viewBox="0 0 24 24">
+                        <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+                        <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+                        <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
+                        <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
+                    </svg>
+                    <span>התחבר עם Google</span>
+                </button>
+                <div class="demo-mode">
+                    <button id="demoModeBtn" class="demo-btn">
+                        <span>👁️</span>
+                        <span>צפייה במצב דמו</span>
+                    </button>
+                    <p class="demo-note">מצב דמו מאפשר <strong>צפייה בנתונים אמיתיים</strong> ללא אפשרות לשמור שינויים</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="container" id="mainApp" style="display: none;">
+        
+    <!-- MODERN HEADER -->
+    <header class="app-header">
+        <div class="header-content">
+            <!-- Brand -->
+            <div class="brand-section">
+                <div class="brand-logo">🦁</div>
+                <div class="brand-info">
+                    <h1>FPL Pro Analytics</h1>
+                    <span class="brand-subtitle">Draft Intelligence Hub</span>
+                </div>
+            </div>
+            
+            <!-- Main Navigation (Center) -->
+            <nav class="main-nav">
+                <button class="nav-item" onclick="showTab('players')" id="nav-players">🏃 נתוני שחקנים</button>
+                <button class="nav-item active" onclick="showTab('draft')" id="nav-draft">👥 ליגת דראפט</button>
+            </nav>
+
+            <!-- User & Status (Left) -->
+            <div class="user-actions">
+                <div class="status-pill">
+                    <span class="status-dot"></span>
+                    <span id="headerGW">GW--</span>
+                    <span id="lastUpdated" style="display:none;"></span> <!-- Hidden holder for JS -->
+                </div>
+                
+                <!-- User Profile (Restored IDs) -->
+                <div class="user-profile-mini" id="userInfo" style="display:none;">
+                    <img id="userPhoto" src="" alt="" class="user-avatar-mini">
+                    <div class="user-text">
+                        <span id="userName">User</span>
+                        <span id="userMode" class="user-mode-badge" style="font-size: 10px; color: #64748b; display: block; line-height: 1;"></span>
+                    </div>
+                    <button id="logoutBtn" onclick="auth.logout()" title="התנתק" style="background: none; border: none; cursor: pointer; color: #ef4444; padding: 4px; display: flex; align-items: center;">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <style>
+        /* Modern Header Styles */
+        .app-header {
+            background: #ffffff;
+            border-bottom: 1px solid #e2e8f0;
+            padding: 0 24px;
+            height: 70px;
+            display: flex;
+            align-items: center;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            box-shadow: 0 4px 20px -10px rgba(0,0,0,0.05);
+        }
+        .header-content {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            width: 100%;
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+        .brand-section { display: flex; align-items: center; gap: 12px; }
+        .brand-logo { font-size: 28px; background: #f8fafc; width: 42px; height: 42px; border-radius: 10px; display: flex; align-items: center; justify-content: center; border: 1px solid #e2e8f0; }
+        .brand-info h1 { font-size: 18px; margin: 0; color: #0f172a; font-weight: 800; letter-spacing: -0.5px; font-family: 'Segoe UI', sans-serif; }
+        .brand-subtitle { font-size: 11px; color: #64748b; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; display: block; }
+
+        .main-nav { display: flex; gap: 8px; background: #f1f5f9; padding: 6px; border-radius: 16px; margin: 0 auto; }
+        .nav-item {
+            background: transparent;
+            border: none;
+            padding: 10px 24px;
+            border-radius: 12px;
+            font-size: 15px;
+            font-weight: 700;
+            color: #64748b;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .nav-item:hover { color: #0f172a; background: rgba(255,255,255,0.6); }
+        .nav-item.active { background: #ffffff; color: #3b82f6; box-shadow: 0 4px 12px rgba(0,0,0,0.08); transform: translateY(-1px); }
+
+        .user-actions { display: flex; align-items: center; gap: 16px; }
+        .status-pill { display: flex; align-items: center; gap: 6px; background: #ecfdf5; padding: 6px 12px; border-radius: 20px; border: 1px solid #a7f3d0; font-size: 12px; font-weight: 700; color: #059669; }
+        .status-dot { width: 8px; height: 8px; background: #10b981; border-radius: 50%; animation: pulse 2s infinite; }
+        
+        .user-profile-mini { display: flex; align-items: center; gap: 8px; }
+        .user-avatar-mini { width: 32px; height: 32px; border-radius: 50%; border: 2px solid white; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        #userNameHeader { font-size: 13px; font-weight: 600; color: #334155; }
+
+        @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.5; } 100% { opacity: 1; } }
+    </style>
+
+    <!-- Draft Sub Navigation (Sticky below header) -->
+    
+    <style>
+    .draft-sub-nav-container {
+        background: white;
+        border-bottom: 1px solid #e2e8f0;
+        padding: 0 24px;
+        position: sticky;
+        top: 70px;
+        z-index: 90;
+        box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);
+    }
+    .draft-sub-nav {
+        max-width: 1400px; 
+        margin: 0 auto; 
+        display: flex; 
+        gap: 12px; 
+        overflow-x: auto; 
+        padding: 16px 0;
+    }
+    .draft-nav-btn {
+        padding: 10px 20px;
+        border: 1px solid transparent;
+        background: #f8fafc;
+        color: #64748b;
+        font-weight: 700;
+        font-size: 15px;
+        border-radius: 12px;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        white-space: nowrap;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+    .draft-nav-btn:hover {
+        background: #f1f5f9;
+        color: #334155;
+    }
+    .draft-nav-btn.active {
+        background: #eff6ff;
+        color: #3b82f6;
+        border-color: #bfdbfe;
+        box-shadow: 0 2px 4px rgba(59, 130, 246, 0.1);
+    }
+    .nav-icon {
+        font-size: 18px;
+    }
+    </style>
+
+    <div id="playersTabContent" class="tab-content" style="display: block;">
+    
+    <!-- Removed Legend as requested -->
+
+    <!-- Dashboard KPIs -->
+    <div id="dashboardKPIs" class="dashboard-kpis">
+        <div class="kpi-card" data-kpi="hot-player">
+            <div class="kpi-icon">🔥</div>
+            <div class="kpi-content">
+                <div class="kpi-label">שחקן לוהט</div>
+                <div class="kpi-value" id="kpiHotPlayer">-</div>
+                <div class="kpi-subtext" id="kpiHotPlayerForm">-</div>
+            </div>
+        </div>
+        
+        <div class="kpi-card" data-kpi="best-draft">
+            <div class="kpi-icon">🏅</div>
+            <div class="kpi-content">
+                <div class="kpi-label">מלך הדראפט</div>
+                <div class="kpi-value" id="kpiBestDraft">-</div>
+                <div class="kpi-subtext" id="kpiBestDraftScore">-</div>
+            </div>
+        </div>
+        
+        <div class="kpi-card" data-kpi="top-scorer">
+            <div class="kpi-icon">⚽</div>
+            <div class="kpi-content">
+                <div class="kpi-label">מלך השערים</div>
+                <div class="kpi-value" id="kpiTopScorer">-</div>
+                <div class="kpi-subtext" id="kpiTopScorerGoals">-</div>
+            </div>
+        </div>
+        
+        <div class="kpi-card" data-kpi="top-assister">
+            <div class="kpi-icon">🎯</div>
+            <div class="kpi-content">
+                <div class="kpi-label">מלך הבישולים</div>
+                <div class="kpi-value" id="kpiTopAssister">-</div>
+                <div class="kpi-subtext" id="kpiTopAssisterAssists">-</div>
+            </div>
+        </div>
+        
+        <div class="kpi-card" data-kpi="top-points">
+            <div class="kpi-icon">🏆</div>
+            <div class="kpi-content">
+                <div class="kpi-label">מוביל נקודות</div>
+                <div class="kpi-value" id="kpiTopPoints">-</div>
+                <div class="kpi-subtext" id="kpiTopPointsValue">-</div>
+            </div>
+        </div>
+        
+        <div class="kpi-card" data-kpi="best-value">
+            <div class="kpi-icon">💎</div>
+            <div class="kpi-content">
+                <div class="kpi-label">תמורה מיטבית</div>
+                <div class="kpi-value" id="kpiBestValue">-</div>
+                <div class="kpi-subtext" id="kpiBestValueRatio">-</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="filters">
+
+        <div class="filter-group"><label>🔍 חיפוש שחקן:</label><input type="text" id="searchName" onkeyup="processChange()" placeholder="שם שחקן..."></div>
+
+        <div class="filter-group"><label>⚽ עמדה:</label><select id="positionFilter" onchange="processChange()"><option value="">כל העמדות</option><option value="GKP">🥅 שוערים</option><option value="DEF">🛡️ מגנים</option><option value="MID">⚽ קשרים</option><option value="FWD">🎯 חלוצים</option></select></div>
+
+        <div class="filter-group"><label>🏟️ קבוצה:</label><select id="teamFilter" onchange="processChange()"><option value="">כל הקבוצות</option></select></div>
+
+        <div class="filter-group"><label>💰 מחיר טווח:</label><input type="text" id="priceRange" onkeyup="processChange()" placeholder="4.0-15.0"></div>
+
+        <div class="filter-group"><label>🏆 נקודות מינימום:</label><input type="number" id="minPoints" onkeyup="processChange()" placeholder="0"></div>
+
+        <div class="filter-group"><label>⏳ דקות מינימום:</label><input type="number" id="minMinutes" onkeyup="processChange()" value="30" placeholder="0"></div>
+
+        <div class="filter-group"><label>🎯 טווח xDiff:</label><select id="xDiffFilter" onchange="processChange()"><option value="">כל הטווח</option><option value="positive">חיובי (ביצועי יתר)</option><option value="negative">שלילי (ביצועי חסר)</option></select></div>
+
+        <div class="filter-group"><label>הצג:</label><select id="showEntries" onchange="processChange()"><option value="50">50</option><option value="100">100</option><option value="200">200</option><option value="all" selected>הכל</option></select></div>
+
+    </div>
+
+    <!-- UNIFIED CONTROLS TOOLBAR -->
+    <div class="controls-toolbar" style="display: flex; flex-direction: column; gap: 16px; margin-bottom: 24px; background: white; padding: 20px; border-radius: 16px; box-shadow: 0 4px 12px rgba(0,0,0,0.03); border: 1px solid #f1f5f9;">
+
+        <!-- Top Row: Toggles & Actions -->
+        <div style="display: flex; flex-wrap: wrap; gap: 16px; align-items: center; justify-content: space-between; width: 100%;">
+            
+            <!-- Left: Data Source & View -->
+            <div style="display: flex; gap: 16px; align-items: center;">
+                <!-- Data Source -->
+                <div class="toggle-group" style="display: flex; background: #f8fafc; padding: 4px; border-radius: 10px; border: 1px solid #e2e8f0;">
+                    <button class="source-toggle-btn active" id="liveDataBtn" onclick="switchDataSource('live')" style="padding: 8px 16px; border: none; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; transition: all 0.2s;">2025/26</button>
+                    <button class="source-toggle-btn" id="historicalDataBtn" onclick="switchDataSource('historical')" style="padding: 8px 16px; border: none; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; transition: all 0.2s;">2024/25</button>
+        </div>
+
+                <div style="width: 1px; height: 32px; background: #e2e8f0;"></div>
+
+                <!-- View Switcher -->
+                <div class="toggle-group" style="display: flex; background: #f8fafc; padding: 4px; border-radius: 10px; border: 1px solid #e2e8f0;">
+                    <button class="view-btn active" onclick="switchMainView('table')" id="btnViewTable" style="padding: 8px 16px; border: none; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 6px; transition: all 0.2s;">📋 טבלה</button>
+                    <button class="view-btn" onclick="switchMainView('charts')" id="btnViewCharts" style="padding: 8px 16px; border: none; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 6px; transition: all 0.2s;">📊 גרפים</button>
+                </div>
+            </div>
+
+            <!-- Right: Main Actions -->
+            <div style="display: flex; gap: 10px;">
+                <button class="action-btn" onclick="showAllPlayers(this)" style="padding: 8px 16px; border: 1px solid #e2e8f0; background: white; border-radius: 8px; color: #475569; font-weight: 600; cursor: pointer; transition: all 0.2s;">🔄 איפוס</button>
+                <button class="action-btn" id="compareBtn" onclick="compareSelectedPlayers()" style="padding: 8px 16px; border: 1px solid #c7d2fe; background: #e0e7ff; border-radius: 8px; color: #4338ca; font-weight: 600; cursor: pointer; transition: all 0.2s;">⚖️ השוואה</button>
+                <button class="action-btn" onclick="exportToCsv()" style="padding: 8px 16px; border: 1px solid #bbf7d0; background: #dcfce7; border-radius: 8px; color: #166534; font-weight: 600; cursor: pointer; transition: all 0.2s;">📥 CSV</button>
+            </div>
+        </div>
+
+        <!-- Bottom Row: Quick Filters -->
+        <div style="display: flex; align-items: center; gap: 12px; padding-top: 16px; border-top: 1px solid #f1f5f9; overflow-x: auto;">
+            <span style="font-size: 14px; font-weight: 700; color: #64748b; white-space: nowrap;">✨ פילטרים חכמים:</span>
+            <div class="quick-filters-group" style="display: flex; gap: 8px;">
+                <button class="quick-filter-btn" onclick="toggleQuickFilter(this, 'set_pieces')">🎯 מצבים נייחים</button>
+                <button class="quick-filter-btn" onclick="toggleQuickFilter(this, 'attacking_defenders')">🛡️ מגנים תוקפים</button>
+                <button class="quick-filter-btn" onclick="toggleQuickFilter(this, 'differentials')">💎 יהלומים (Diffs)</button>
+                <button class="quick-filter-btn" onclick="toggleQuickFilter(this, 'underperformers')">📈 חייבים להתפוצץ (xGI)</button>
+                <button class="quick-filter-btn" onclick="toggleQuickFilter(this, 'bonus_magnets')">🌟 מגנט בונוס</button>
+                <button class="quick-filter-btn" onclick="toggleQuickFilter(this, 'form_kings')">🔥 בכושר שיא</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- TABLE VIEW WRAPPER -->
+    <div id="mainTableView">
+    <div class="table-container">
+
+        <table id="playersTable">
+
+            <thead>
+                <tr>
+                    <th>בחר</th>
+                    <th onclick="sortTable(0)">דירוג<span class="sort-indicator"></span></th>
+                    <th onclick="sortTable(1)">שחקן<span class="sort-indicator"></span></th>
+                    <th onclick="sortTable(2)" title="ציון דראפט משוקלל">ציון<span class="sort-indicator"></span></th>
+                    <th onclick="sortTable(3)" title="מדד יציבות (0-100)">יציבות<span class="sort-indicator"></span></th>
+                    <th onclick="sortTable(4)" title="חיזוי טכני">📊 חיזוי<span class="sort-indicator"></span></th>
+                    <th onclick="sortTable(5)">קבוצה<span class="sort-indicator"></span></th>
+                    <th onclick="sortTable(6)" title="קבוצת דראפט (חופשי/שם הקבוצה)">קבוצת דראפט<span class="sort-indicator"></span></th>
+                    <th onclick="sortTable(7)">עמדה<span class="sort-indicator"></span></th>
+                    <th onclick="sortTable(8)">מחיר<span class="sort-indicator"></span></th>
+                    <th onclick="sortTable(9)">נק'<span class="sort-indicator"></span></th>
+                    <th onclick="sortTable(10)">נק'/90<span class="sort-indicator"></span></th>
+                    <th onclick="sortTable(11)">% בחירה<span class="sort-indicator"></span></th>
+                    <th onclick="sortTable(12)">דרימטים<span class="sort-indicator"></span></th>
+                    <th onclick="sortTable(13)">העברות<span class="sort-indicator"></span></th>
+                    <th onclick="sortTable(14)">DC/90<span class="sort-indicator"></span></th>
+                    <th onclick="sortTable(15)">G+A<span class="sort-indicator"></span></th>
+                    <th onclick="sortTable(16)">xGI<span class="sort-indicator"></span></th>
+                    <th onclick="sortTable(17)">דקות<span class="sort-indicator"></span></th>
+                    <th onclick="sortTable(18)" title="הפרש מביצועים בפועל">xDiff<span class="sort-indicator"></span></th>
+                    <th onclick="sortTable(19)">ICT<span class="sort-indicator"></span></th>
+                    <th onclick="sortTable(20)">בונוס<span class="sort-indicator"></span></th>
+                    <th onclick="sortTable(21)">CS<span class="sort-indicator"></span></th>
+                    <th onclick="sortTable(22)">פנדל<span class="sort-indicator"></span></th>
+                    <th onclick="sortTable(23)">קרן<span class="sort-indicator"></span></th>
+                    <th onclick="sortTable(24)">חופשית<span class="sort-indicator"></span></th>
+                    <th class="fixtures-header">משחקים קרובים</th>
+                </tr>
+            </thead>
+
+            <tbody id="playersTableBody"></tbody>
+
+        </table>
+
+        </div>
+    
+        <!-- Pagination -->
+        <div class="pagination-controls">
+            <button class="pagination-btn" onclick="prevPage()">הקודם</button>
+            <span id="pageInfo">עמוד 1 מתוך 1</span>
+            <button class="pagination-btn" onclick="nextPage()">הבא</button>
+        </div>
+    </div> <!-- End mainTableView -->
+
+    <!-- MAIN CHARTS VIEW WRAPPER -->
+    <div id="mainChartsView" style="display: none; display: grid; grid-template-columns: repeat(auto-fit, minmax(400px, 1fr)); gap: 24px; padding-bottom: 40px;">
+
+    <!-- CHARTS VIEW WRAPPER (New Grid Layout) -->
+        <div class="charts-dashboard-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(450px, 1fr)); gap: 24px; margin-top: 24px; padding-bottom: 40px;">
+            
+            <!-- Midfielders Matrix -->
+            <div class="chart-card" style="background: white; padding: 20px; border-radius: 16px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); border: 1px solid #f1f5f9; min-height: 400px;">
+                <h3 class="chart-title" style="font-size: 18px; margin-bottom: 15px; padding-bottom: 10px; border-bottom: 1px solid #eee; color: #1e293b;">📊 מטריצת קשרים</h3>
+                <div style="height: 350px; position: relative;">
+                    <canvas id="chart-mid"></canvas>
+                </div>
+            </div>
+
+            <!-- Forwards Matrix -->
+            <div class="chart-card" style="background: white; padding: 20px; border-radius: 16px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); border: 1px solid #f1f5f9; min-height: 400px;">
+                <h3 class="chart-title" style="font-size: 18px; margin-bottom: 15px; padding-bottom: 10px; border-bottom: 1px solid #eee; color: #1e293b;">📊 מטריצת חלוצים</h3>
+                <div style="height: 350px; position: relative;">
+                    <canvas id="chart-fwd"></canvas>
+                </div>
+            </div>
+
+            <!-- Defenders Matrix -->
+            <div class="chart-card" style="background: white; padding: 20px; border-radius: 16px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); border: 1px solid #f1f5f9; min-height: 400px;">
+                <h3 class="chart-title" style="font-size: 18px; margin-bottom: 15px; padding-bottom: 10px; border-bottom: 1px solid #eee; color: #1e293b;">📊 מטריצת מגנים</h3>
+                <div style="height: 350px; position: relative;">
+                    <canvas id="chart-def"></canvas>
+                </div>
+            </div>
+
+            <!-- Goalkeepers Matrix -->
+            <div class="chart-card" style="background: white; padding: 20px; border-radius: 16px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); border: 1px solid #f1f5f9; min-height: 400px;">
+                <h3 class="chart-title" style="font-size: 18px; margin-bottom: 15px; padding-bottom: 10px; border-bottom: 1px solid #eee; color: #1e293b;">📊 מטריצת שוערים</h3>
+                <div style="height: 350px; position: relative;">
+                    <canvas id="chart-gkp"></canvas>
+                </div>
+            </div>
+
+            <!-- Team Attack -->
+            <div class="chart-card" style="background: white; padding: 20px; border-radius: 16px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); border: 1px solid #f1f5f9; min-height: 400px;">
+                <h3 class="chart-title" style="font-size: 18px; margin-bottom: 15px; padding-bottom: 10px; border-bottom: 1px solid #eee; color: #1e293b;">⚔️ התקפת קבוצות</h3>
+                <div style="height: 350px; position: relative;">
+                    <canvas id="chart-attack"></canvas>
+                </div>
+            </div>
+
+               <!-- Team Defense -->
+               <div class="chart-card" style="background: white; padding: 20px; border-radius: 16px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); border: 1px solid #f1f5f9; min-height: 400px;">
+                   <h3 class="chart-title" style="font-size: 18px; margin-bottom: 15px; padding-bottom: 10px; border-bottom: 1px solid #eee; color: #1e293b;">🛡️ הגנת קבוצות</h3>
+                   <div style="height: 350px; position: relative;">
+                       <canvas id="chart-defense"></canvas>
+                   </div>
+               </div>
+
+               <!-- Price vs Score -->
+               <div class="chart-card" style="background: white; padding: 20px; border-radius: 16px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); border: 1px solid #f1f5f9; min-height: 400px;">
+                   <h3 class="chart-title" style="font-size: 18px; margin-bottom: 15px; padding-bottom: 10px; border-bottom: 1px solid #eee; color: #1e293b;">💎 ערך (נקודות מול אחוז בחירה)</h3>
+                   <div style="height: 350px; position: relative;">
+                       <canvas id="chart-price-score"></canvas>
+                   </div>
+               </div>
+
+               <!-- ICT Breakdown -->
+               <div class="chart-card" style="background: white; padding: 20px; border-radius: 16px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); border: 1px solid #f1f5f9; min-height: 400px;">
+                   <h3 class="chart-title" style="font-size: 18px; margin-bottom: 15px; padding-bottom: 10px; border-bottom: 1px solid #eee; color: #1e293b;">⚡ מדד ICT (טופ 15)</h3>
+                   <div style="height: 350px; position: relative;">
+                       <canvas id="chart-ict"></canvas>
+                   </div>
+               </div>
+               
+           </div>
+
+    <div id="compareModal" class="modal">
+
+        <div class="modal-content">
+
+            <span class="close" onclick="closeModal()">&times;</span>
+
+            <div id="compareContent"></div>
+
+        </div>
+
+    </div>
+
+    </div> <!-- End mainChartsView -->
+
+    <div id="visualizationModal" class="modal">
+
+        <div class="modal-content">
+
+            <span class="close" onclick="closeModal()">&times;</span>
+
+            <h2 id="visualizationTitle"></h2>
+
+            <div class="chart-container-wrapper">
+                 <canvas id="visualizationChart"></canvas>
+            </div>
+
+        </div>
+
+    </div>
+
+    <div id="tooltip" class="tooltip" style="display:none;"></div>
+
+    </div> <!-- end playersTabContent -->
+    
+    <!-- Toast Container -->
+    <div id="toastContainer" class="toast-container"></div>
+
+    <!-- Draft Tab Content -->
+    <div id="draftTabContent" class="tab-content" style="display: none;">
+        
+        <!-- Simple Title Section (Clean) -->
+        <div class="draft-header-simple" style="padding: 24px 0 10px 0;">
+            <h2 style="font-size: 24px; font-weight: 800; color: #1e293b; margin: 0;">ליגת הדראפט שלי</h2>
+            <p style="font-size: 14px; color: #64748b; margin: 4px 0 0 0;">סטטיסטיקה, טבלאות ונתונים בזמן אמת</p>
+        </div>
+
+        <!-- Draft Sub Navigation -->
+        <!-- Draft Sub Navigation (Improved Design) -->
+        <div id="draftSubNav" class="draft-sub-nav-container" style="background: #ffffff; padding: 16px 0; border-bottom: 1px solid #f1f5f9; margin-bottom: 24px; position: sticky; top: 70px; z-index: 90;">
+            <div class="draft-sub-nav" style="max-width: 1200px; margin: 0 auto; display: flex; justify-content: center; gap: 16px; overflow-x: auto;">
+                <button class="draft-nav-btn active" onclick="switchDraftTab('overview')" style="padding: 12px 24px; border-radius: 12px; border: none; font-weight: 700; font-size: 16px; cursor: pointer; transition: all 0.2s; display: flex; align-items: center; gap: 8px; background: #eff6ff; color: #3b82f6; box-shadow: 0 2px 4px rgba(59,130,246,0.1);">
+                    <span style="font-size: 18px;">📊</span> מבט על
+                </button>
+                <button class="draft-nav-btn" onclick="switchDraftTab('standings')" style="padding: 12px 24px; border-radius: 12px; border: none; font-weight: 700; font-size: 16px; cursor: pointer; transition: all 0.2s; display: flex; align-items: center; gap: 8px; background: transparent; color: #64748b;">
+                    <span style="font-size: 18px;">📋</span> טבלה וסגלים
+                </button>
+                <button class="draft-nav-btn" onclick="switchDraftTab('market')" style="padding: 12px 24px; border-radius: 12px; border: none; font-weight: 700; font-size: 16px; cursor: pointer; transition: all 0.2s; display: flex; align-items: center; gap: 8px; background: transparent; color: #64748b;">
+                    <span style="font-size: 18px;">💡</span> שוק והמלצות
+                </button>
+                <button class="draft-nav-btn" onclick="switchDraftTab('analytics')" style="padding: 12px 24px; border-radius: 12px; border: none; font-weight: 700; font-size: 16px; cursor: pointer; transition: all 0.2s; display: flex; align-items: center; gap: 8px; background: transparent; color: #64748b;">
+                    <span style="font-size: 18px;">📈</span> אנליטיקס
+                </button>
+                <button class="draft-nav-btn" onclick="switchDraftTab('rival')" style="padding: 12px 24px; border-radius: 12px; border: none; font-weight: 700; font-size: 16px; cursor: pointer; transition: all 0.2s; display: flex; align-items: center; gap: 8px; background: transparent; color: #64748b;">
+                    <span style="font-size: 18px;">⚔️</span> השוואת יריב
+                </button>
+            </div>
+        </div>
+        <style>
+            .draft-sub-nav-container {
+                background: white;
+                border-bottom: 1px solid #e2e8f0;
+                padding: 16px 0;
+                margin-bottom: 24px;
+                position: sticky;
+                top: 0; /* Adjust if header is sticky */
+                z-index: 90;
+            }
+            .draft-sub-nav {
+                display: flex;
+                gap: 12px;
+                overflow-x: auto;
+                padding: 4px 8px; /* Space for focus ring */
+            }
+            .draft-nav-btn {
+                padding: 10px 20px;
+                border: 1px solid #e2e8f0;
+                background: #f8fafc;
+                color: #64748b;
+                font-weight: 700;
+                font-size: 15px;
+                border-radius: 12px;
+                cursor: pointer;
+                transition: all 0.2s ease;
+                white-space: nowrap;
+                display: flex;
+                align-items: center;
+                gap: 8px;
+            }
+            .draft-nav-btn:hover {
+                background: #f1f5f9;
+                color: #334155;
+                transform: translateY(-1px);
+            }
+            .draft-nav-btn.active {
+                background: #eff6ff;
+                color: #3b82f6;
+                border-color: #bfdbfe;
+                box-shadow: 0 2px 4px rgba(59, 130, 246, 0.1);
+            }
+            .nav-icon {
+                font-size: 18px;
+            }
+        </style>
+
+        <div id="draft-overview" class="draft-sub-content active">
+            <!-- My Team Selector -->
+            <div class="my-team-selector-container" style="margin-bottom: 20px; background: white; padding: 15px; border-radius: 12px; border: 1px solid #e2e8f0; display: flex; align-items: center; gap: 15px; box-shadow: 0 2px 8px rgba(0,0,0,0.03);">
+                <label for="myTeamSelect" style="font-weight: 700; color: #1e293b; display: flex; align-items: center; gap: 8px;">
+                    <span style="font-size: 20px;">👤</span>
+                    בחר את הקבוצה שלי:
+                </label>
+                <select id="myTeamSelect" onchange="setMyTeam(this.value)" style="padding: 8px 16px; border-radius: 8px; border: 1px solid #cbd5e1; font-size: 16px; font-weight: 600; color: #334155; flex-grow: 1; max-width: 300px; cursor: pointer;">
+                    <option value="">-- טוען קבוצות... --</option>
+                </select>
+            </div>
+
+            <div class="draft-top-grid">
+                <div class="standings-pane">
+                    <h3 class="section-title">טבלת הליגה</h3>
+                    <div id="draftStandingsInfo"></div>
+                    <div class="table-container">
+                        <div id="draftStandingsContent">
+                            <table id="draftStandingsTable" class="styled-table draft-table">
+                                <thead>
+                                    <tr>
+                                        <th onclick="sortTableDraft('rank')">דירוג</th>
+                                        <th onclick="sortTableDraft('manager')">מנהל</th>
+                                        <th onclick="sortTableDraft('team')">קבוצה</th>
+                                        <th onclick="sortTableDraft('wins')">נצ'</th>
+                                        <th onclick="sortTableDraft('draws')">ת'</th>
+                                        <th onclick="sortTableDraft('losses')">הפ'</th>
+                                        <th onclick="sortTableDraft('pf')">בעד</th>
+                                        <th onclick="sortTableDraft('pa')">נגד</th>
+                                        <th onclick="sortTableDraft('diff')">+/-</th>
+                                        <th onclick="sortTableDraft('total')">נק'</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <!-- Populated by JS -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+                <div class="right-pane">
+                    <h3 class="section-title" style="margin-top: 10px; margin-bottom: 15px;">ההרכב שלי</h3>
+                    <div id="myLineupContainer"></div>
+                </div>
+            </div>
+            <!-- League Progress Chart -->
+            <div class="chart-card" style="background: white; padding: 24px; border-radius: 16px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); margin-top: 24px; border: 1px solid #e2e8f0;">
+                <h3 class="section-title" style="margin-bottom: 20px; display: flex; align-items: center; gap: 10px;">
+                    <span style="font-size: 24px;">📈</span> המירוץ לאליפות (מגמת נקודות)
+                </h3>
+                <div id="chart-progress" style="height: 400px; width: 100%;"></div>
+            </div>        </div>
+
+        <div id="draft-standings" class="draft-sub-content">
+            <h3 class="section-title" style="margin-top:14px;">סגלים לפי קבוצה</h3>
+            <div id="otherRosters" class="roster-cards"></div>
+        </div>
+
+        <div id="draft-market" class="draft-sub-content">
+            <div style="margin-top: 10px;">
+                <h3 class="section-title">
+                    <span style="font-size: 24px;">💡</span> המלצות חכמות להחלפת שחקנים
+                </h3>
+                <div id="draftRecommendations"></div>
+            </div>
+        </div>
+
+        <div id="draft-analytics" class="draft-sub-content">
+            <h3 class="section-title" style="margin-top:14px;">השוואת קבוצות</h3>
+            <div id="draftComparison" class="card"></div>
+
+            <h3 class="section-title" style="margin-top:24px;">
+                <span style="font-size: 24px;">📊</span> אנליטיקות דראפט מתקדמות
+            </h3>
+            <div class="analytics-header-card">
+                <div class="analytics-controls">
+                    <div class="control-group">
+                        <label for="analyticsHighlight">
+                            <span class="control-icon">🎯</span>
+                            <span class="control-label">הדגש קבוצה ספציפית:</span>
+                        </label>
+                        <select id="analyticsHighlight" class="analytics-select" onchange="updateAnalyticsHighlight()">
+                            <option value="">ללא הדגשה - הצג הכל</option>
+                        </select>
+                    </div>
+                    <div class="analytics-info">
+                        <span class="info-icon">💡</span>
+                        <span class="info-text">בחר קבוצה כדי להדגיש אותה בכל הגרפים</span>
+                    </div>
+                </div>
+            </div>
+            <div id="draftAnalytics" class="analytics-grid"></div>
+
+            <h3 class="section-title" style="margin-top:14px;">מטריצות דראפט</h3>
+            <div id="draftMatrices" class="matrix-grid"></div>
+        </div>
+
+        <!-- NEXT RIVAL TAB -->
+        <div id="draft-rival" class="draft-sub-content">
+            <div class="rival-analysis-container" id="rivalAnalysisContainer">
+                <div class="loader-container">
+                    <div class="loader"></div>
+                    <div class="loader-text">טוען ניתוח יריבה...</div>
+                </div>
+            </div>
+        </div>
+
+    </div> <!-- end draftTabContent -->
+
+    </div>
+    <!-- REMOVED 04_ml_predictor_draft.js -->
+    <script src="script.js?v=3.3.3" defer></script>
+</body>
+</html>

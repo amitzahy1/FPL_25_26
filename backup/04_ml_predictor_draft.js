@@ -474,8 +474,8 @@ if (typeof window !== 'undefined') {
         if (success) {
             console.log('🎯 Draft FPL ML Model initialized!');
             
-    // Trigger re-calculation and re-render
-    setTimeout(() => {
+            // Trigger re-calculation and re-render
+            setTimeout(() => {
                 // Get players from state
                 let players = null;
                 if (typeof state !== 'undefined' && state.displayedData && state.displayedData.length > 0) {
@@ -485,14 +485,14 @@ if (typeof window !== 'undefined') {
                 }
                 
                 if (players && typeof calculateAllPredictions === 'function' && typeof renderTable === 'function') {
-            console.log('♻️ Recalculating ML predictions...');
+                    console.log('♻️ Recalculating ML predictions...');
                     calculateAllPredictions(players);
-            console.log('♻️ Re-rendering table with Draft ML predictions...');
-            renderTable();
+                    console.log('♻️ Re-rendering table with Draft ML predictions...');
+                    renderTable();
                 } else {
                     console.warn('⚠️ Cannot recalculate: players data not available yet');
-        }
-    }, 100);
+                }
+            }, 100);
         }
     });
 }

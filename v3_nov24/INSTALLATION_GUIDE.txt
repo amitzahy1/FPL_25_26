@@ -1,0 +1,360 @@
+╔══════════════════════════════════════════════════════════════╗
+║         FPL Draft Analytics - Installation Guide             ║
+║                    Version 3.0                               ║
+╚══════════════════════════════════════════════════════════════╝
+
+📦 QUICK START
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+1. Extract all files to a folder
+2. Open terminal in that folder
+3. Run: python3 -m http.server 8000
+4. Open browser: http://localhost:8000
+5. Done! 🎉
+
+═══════════════════════════════════════════════════════════════
+
+📋 DETAILED INSTALLATION METHODS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+METHOD 1: Local Python Server (Recommended)
+────────────────────────────────────────────────────────────────
+
+Prerequisites:
+  • Python 3.x installed
+
+Steps:
+  1. Open terminal/command prompt
+  2. Navigate to v3_nov24 folder:
+     cd /path/to/v3_nov24
+  
+  3. Start server:
+     
+     For Python 3:
+     python3 -m http.server 8000
+     
+     For Python 2:
+     python -m SimpleHTTPServer 8000
+  
+  4. Open browser and go to:
+     http://localhost:8000
+  
+  5. To stop server: Press Ctrl+C
+
+Pros:
+  ✅ Fast and simple
+  ✅ No external dependencies
+  ✅ Works offline (except API calls)
+
+Cons:
+  ⚠️  Need to keep terminal open
+  ⚠️  Only accessible from your computer
+
+────────────────────────────────────────────────────────────────
+
+METHOD 2: Node.js HTTP Server
+────────────────────────────────────────────────────────────────
+
+Prerequisites:
+  • Node.js installed
+  • npm installed
+
+Steps:
+  1. Install http-server globally (one time):
+     npm install -g http-server
+  
+  2. Navigate to v3_nov24 folder:
+     cd /path/to/v3_nov24
+  
+  3. Start server:
+     http-server -p 8000
+     
+     Or with CORS enabled:
+     http-server -p 8000 --cors
+  
+  4. Open browser:
+     http://localhost:8000
+
+Pros:
+  ✅ More features than Python server
+  ✅ Better for development
+  ✅ CORS support
+
+Cons:
+  ⚠️  Requires Node.js installation
+
+────────────────────────────────────────────────────────────────
+
+METHOD 3: GitHub Pages (Free Hosting)
+────────────────────────────────────────────────────────────────
+
+Prerequisites:
+  • GitHub account
+  • Git installed
+
+Steps:
+  1. Create new repository on GitHub:
+     - Go to github.com
+     - Click "New repository"
+     - Name it: fpl-draft-analytics
+     - Make it Public or Private
+  
+  2. Upload files:
+     
+     Option A - Via GitHub Website:
+     - Click "uploading an existing file"
+     - Drag all files from v3_nov24 folder
+     - Commit changes
+     
+     Option B - Via Git:
+     cd /path/to/v3_nov24
+     git init
+     git add .
+     git commit -m "Initial commit - v3.0"
+     git branch -M main
+     git remote add origin https://github.com/[username]/[repo-name].git
+     git push -u origin main
+  
+  3. Enable GitHub Pages:
+     - Go to repository Settings
+     - Scroll to "Pages" section
+     - Source: Deploy from branch
+     - Branch: main
+     - Folder: / (root)
+     - Click Save
+  
+  4. Wait 1-2 minutes, then access at:
+     https://[username].github.io/[repo-name]
+
+Pros:
+  ✅ Free hosting
+  ✅ Accessible from anywhere
+  ✅ HTTPS enabled
+  ✅ No server maintenance
+
+Cons:
+  ⚠️  Public by default (unless you have Pro)
+  ⚠️  Takes a few minutes to deploy
+
+────────────────────────────────────────────────────────────────
+
+METHOD 4: Netlify (Free Hosting)
+────────────────────────────────────────────────────────────────
+
+Prerequisites:
+  • Netlify account (free)
+
+Steps:
+  1. Go to netlify.com
+  2. Sign up / Log in
+  3. Click "Add new site" → "Deploy manually"
+  4. Drag the v3_nov24 folder to the upload area
+  5. Wait for deployment (30-60 seconds)
+  6. Your site is live!
+
+Custom Domain (Optional):
+  - Go to Site settings → Domain management
+  - Add custom domain
+  - Follow DNS instructions
+
+Pros:
+  ✅ Extremely easy
+  ✅ Free hosting
+  ✅ Custom domain support
+  ✅ HTTPS enabled
+  ✅ Fast CDN
+
+Cons:
+  ⚠️  Requires account
+
+────────────────────────────────────────────────────────────────
+
+METHOD 5: Vercel (Free Hosting)
+────────────────────────────────────────────────────────────────
+
+Prerequisites:
+  • Vercel account (free)
+
+Steps:
+  1. Go to vercel.com
+  2. Sign up / Log in
+  3. Click "Add New" → "Project"
+  4. Import from Git or drag folder
+  5. Deploy!
+
+Pros:
+  ✅ Very fast deployment
+  ✅ Free hosting
+  ✅ Excellent performance
+  ✅ HTTPS enabled
+
+Cons:
+  ⚠️  Requires account
+
+────────────────────────────────────────────────────────────────
+
+METHOD 6: VS Code Live Server Extension
+────────────────────────────────────────────────────────────────
+
+Prerequisites:
+  • VS Code installed
+  • Live Server extension
+
+Steps:
+  1. Open VS Code
+  2. Install "Live Server" extension by Ritwick Dey
+  3. Open v3_nov24 folder in VS Code
+  4. Right-click on index.html
+  5. Select "Open with Live Server"
+  6. Browser opens automatically
+
+Pros:
+  ✅ Great for development
+  ✅ Auto-reload on changes
+  ✅ Easy to use
+
+Cons:
+  ⚠️  Only for local development
+  ⚠️  Requires VS Code
+
+═══════════════════════════════════════════════════════════════
+
+⚙️ CONFIGURATION
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+After installation, you may want to configure:
+
+1. League ID (in script.js):
+   Line ~25: draftLeagueId: 689
+   
+   Change 689 to your league ID
+
+2. My Team Name (in script.js):
+   Line ~26: myTeamName: "Amit United"
+   
+   Change to your team name
+
+3. Cache Duration (in script.js):
+   Line ~30: cacheDuration: 120
+   
+   Change to desired minutes (default: 120)
+
+4. CORS Proxy (in script.js):
+   Line ~28: corsProxy: "https://corsproxy.io/?"
+   
+   Change if needed (has fallbacks)
+
+═══════════════════════════════════════════════════════════════
+
+🔧 TROUBLESHOOTING
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Problem: "CORS Error" in console
+Solution: 
+  • Use a local server (don't open HTML directly)
+  • The app handles CORS with proxies
+  • Try clearing cache: Ctrl+Shift+Delete
+
+Problem: "Failed to fetch" errors
+Solution:
+  • Check internet connection
+  • CORS proxies might be down (app tries 3 different ones)
+  • Wait a few seconds and refresh
+
+Problem: No data showing
+Solution:
+  • Open browser console (F12)
+  • Check for errors
+  • Clear localStorage: localStorage.clear()
+  • Refresh page
+
+Problem: Player images not loading
+Solution:
+  • This is normal for some players
+  • App has fallback placeholder
+  • Images load from premierleague.com
+
+Problem: Slow loading
+Solution:
+  • First load is always slower (no cache)
+  • Subsequent loads are much faster
+  • CORS proxies can be slow during peak hours
+
+Problem: "Cannot read property" errors
+Solution:
+  • Clear cache and refresh
+  • Make sure you're logged in (if required)
+  • Check if your league ID is correct
+
+═══════════════════════════════════════════════════════════════
+
+🌐 BROWSER COMPATIBILITY
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Recommended Browsers:
+  ✅ Chrome 90+ (Best performance)
+  ✅ Firefox 88+
+  ✅ Safari 14+
+  ✅ Edge 90+
+
+Not Supported:
+  ❌ Internet Explorer
+  ❌ Very old browser versions
+
+═══════════════════════════════════════════════════════════════
+
+📱 MOBILE ACCESS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+The app is responsive and works on mobile, but optimized for desktop.
+
+For best mobile experience:
+  • Use landscape mode for tables
+  • Pinch to zoom if needed
+  • Some tables require horizontal scroll
+
+═══════════════════════════════════════════════════════════════
+
+🔐 SECURITY & PRIVACY
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Data Storage:
+  • All data cached in browser's localStorage
+  • No data sent to external servers (except FPL API)
+  • Google OAuth for authentication only
+
+Privacy:
+  • Your league data is private
+  • Only you can see your team's data
+  • No tracking or analytics
+
+CORS Proxies:
+  • Used only to bypass CORS restrictions
+  • Data passes through but not stored
+  • Public proxies (corsproxy.io, allorigins.win)
+
+═══════════════════════════════════════════════════════════════
+
+📞 SUPPORT
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+If you encounter issues:
+
+1. Check browser console (F12) for errors
+2. Try clearing cache and cookies
+3. Make sure you're using a supported browser
+4. Check if FPL API is working (fantasy.premierleague.com)
+5. Contact: amitzahy1@gmail.com
+
+═══════════════════════════════════════════════════════════════
+
+✅ INSTALLATION COMPLETE!
+
+You're ready to use FPL Draft Analytics v3.0
+
+Enjoy analyzing your draft league! 🏆
+
+═══════════════════════════════════════════════════════════════
+
+Last Updated: November 24, 2025
+

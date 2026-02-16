@@ -1,0 +1,27 @@
+# Large data files (50MB+)
+Fantasy-Premier-League/
+historical_data.csv
+features_data.csv
+ml_implementation/historical_data.csv
+ml_implementation/features_data.csv
+
+# Archive folder
+ml_implementation/archive/
+
+# Model files (optional - they're large)
+*.pkl
+decision_tree_model.pkl
+
+# System files
+.DS_Store
+.cursor/
+
+# Logs
+training_log.txt
+*.log
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+

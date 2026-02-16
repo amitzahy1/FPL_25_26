@@ -1,0 +1,266 @@
+╔══════════════════════════════════════════════════════════════╗
+║        FPL Draft Analytics - Version 4.0                     ║
+║              December 2, 2025                                ║
+╚══════════════════════════════════════════════════════════════╝
+
+📦 PACKAGE INFORMATION
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Version:        4.0
+Release Date:   December 2, 2025
+Status:         ✅ Production Ready
+Build:          Final
+Environment:    Production
+
+📁 FILES INCLUDED
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+✅ index.html       - Main HTML structure
+✅ script.js        - Application logic (7,500+ lines)
+✅ style.css        - Styling (1,250+ lines)
+✅ mobile.css       - Mobile responsive styles
+✅ README.md        - Documentation
+✅ VERSION_INFO.txt - This file
+
+Total Lines of Code: ~17,000+
+
+🎯 MAIN FEATURES
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Players Page:
+  ✅ Advanced filtering & sorting
+  ✅ Smart filters (Top Scorers, Form, Value)
+  ✅ Matrix charts (Price vs Points, ICT, Team Attack)
+  ✅ Player comparison (up to 5 players) - ENHANCED UI
+  ✅ Player images with fallback
+  ✅ Injury indicators with visual alerts
+
+Draft League Page:
+  ✅ Overview - My lineup on pitch (4-3-3/3-4-3/3-5-2)
+  ✅ Standings & Rosters - Full league table
+  ✅ Analytics - Charts & team comparison
+  ✅ Next Fixtures - Win probability predictions
+  ✅ Market & Recommendations - Smart suggestions
+  ✅ Rival Analysis - REDESIGNED with color-coded comparisons
+  ✅ H2H History - Historical matches
+  ✅ Lineup Analysis - IMPROVED with bench points table
+
+🔧 TECHNICAL HIGHLIGHTS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+CORS Management:
+  • 3 fallback proxies
+  • Retry logic with exponential backoff
+  • Rate limiting handling
+
+Caching:
+  • LocalStorage with TTL
+  • AGGRESSIVE cache clearing for fresh data
+  • Background data loading
+  • Smart cache invalidation
+
+Authentication:
+  • Google OAuth
+  • Demo mode
+  • Premium features
+
+Data Processing:
+  • Player ID mapping (Draft ↔ FPL)
+  • Fuzzy matching
+  • Historical lineup loading (GW 1-current)
+  • Team aggregates calculation
+  • REAL-TIME roster updates
+
+Algorithms:
+  • Advanced win probability (Form, Injuries) - H2H removed
+  • Smart recommendation score
+  • xPts calculation (top 11 only)
+
+🎨 UI/UX IMPROVEMENTS IN v4.0
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+✅ RIVAL ANALYSIS REDESIGN:
+   • Color-coded comparison blocks (Green=Better, Red=Worse, Gray=Equal)
+   • New section: "Same Team Players Comparison"
+   • Centered VS header
+   • Larger win probability bar
+   • More detailed metrics
+
+✅ LINEUP ANALYSIS IMPROVEMENTS:
+   • Team selector dropdown
+   • "Points Left on Bench" table for ALL teams
+   • Compact, modern design
+   • Fixed null team filtering
+
+✅ PITCH DISPLAY ENHANCEMENTS:
+   • Larger player names (+15%)
+   • Current GW points display
+   • Next GW predicted points
+   • Opponent team name below player
+   • ENHANCED injury indicators (32px, pulsing animation)
+   • Better visibility and clarity
+
+✅ PLAYER COMPARISON MODAL:
+   • Modern grid-based layout
+   • Highlighted best values
+   • Larger player images
+   • More metrics (DefCon, Starts, Threat, etc.)
+   • Current GW points
+   • Next fixtures display
+
+✅ GENERAL UI:
+   • Fixed draft sub-navigation overflow
+   • Improved mobile responsiveness
+   • Better chart tooltips (larger font)
+   • Smooth animations
+   • RTL support (Hebrew)
+
+🔄 DATA FRESHNESS IMPROVEMENTS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+✅ Aggressive cache clearing for draft picks
+✅ Timestamp-based URL parameters to force fresh fetches
+✅ Zero cache duration for current GW data
+✅ Reduced historical cache from 24h to 1h
+✅ Detailed logging for roster population
+✅ Historical lineups now AWAIT completion before rendering
+
+📊 ALGORITHMS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Win Probability (UPDATED):
+  Base xPts:        55%
+  Form Factor:      25% (increased from 20%)
+  Injury Impact:    20% (increased from 10%)
+  Range:            25% - 75%
+  Special:          Null team = 50-50
+  REMOVED:          H2H History (was 15%)
+
+Smart Recommendation:
+  xPts (1GW):       30%
+  Draft Score:      25%
+  Form:             15%
+  Transfers:        20%
+  Ownership:        10%
+  Comeback Bonus:   Variable
+
+🐛 FIXES IN v4.0
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+✅ Fixed outdated roster data (Robertson → Hall issue)
+✅ Fixed "Points Left on Bench" showing 0.0
+✅ Fixed null teams appearing in tables
+✅ Fixed Lineup Analysis page showing empty
+✅ Fixed opponent name not displaying on pitch
+✅ Fixed Rival Analysis colors (now green/red/gray logic)
+✅ Fixed injury indicator size (now 32px with pulse)
+✅ Fixed draft sub-navigation overflow
+✅ Fixed historical lineup loading (now awaits completion)
+
+🐛 KNOWN ISSUES
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+⚠️  Draft Standings endpoint returns 404 (fallback works)
+⚠️  CORS proxies may be slow during peak hours
+⚠️  Player images load from external source (fallback available)
+⚠️  Mobile design optimized but better on desktop
+
+🔄 CHANGELOG v4.0
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+NEW FEATURES:
+  ✅ Same Team Players Comparison in Rival Analysis
+  ✅ All Teams Bench Points Table
+  ✅ Enhanced injury indicators with pulse animation
+  ✅ Team selector in Lineup Analysis
+  ✅ Opponent display on pitch for all lineups
+
+DATA IMPROVEMENTS:
+  ✅ Aggressive cache clearing for fresh data
+  ✅ Timestamp-based URL parameters
+  ✅ Zero cache duration for current GW
+  ✅ Await historical lineups before rendering
+  ✅ Detailed roster logging
+
+UI/UX IMPROVEMENTS:
+  ✅ Color-coded Rival Analysis (green/red/gray)
+  ✅ Larger injury indicators (32px)
+  ✅ Better pitch display with opponent names
+  ✅ Fixed draft sub-navigation overflow
+  ✅ Null team filtering
+
+ALGORITHM CHANGES:
+  ✅ Removed H2H History from win probability
+  ✅ Increased Form weight to 25%
+  ✅ Increased Injury Impact to 20%
+
+📝 CONFIGURATION
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+League ID:        689
+My Team:          Amit United
+Cache Duration:   0 minutes (current GW), 60 minutes (historical)
+CORS Proxy:       corsproxy.io (+ 2 fallbacks)
+
+🌐 API ENDPOINTS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+FPL Bootstrap:    fantasy.premierleague.com/api/bootstrap-static/
+FPL Live:         fantasy.premierleague.com/api/event/{gw}/live/
+Draft Details:    draft.premierleague.com/api/league/{id}/details
+Draft Picks:      draft.premierleague.com/api/entry/{id}/event/{gw}
+Draft Standings:  draft.premierleague.com/api/league/{id}/standings
+
+📦 DEPENDENCIES
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Chart.js:                     v4.4.1
+chartjs-plugin-annotation:    v3.0.1
+chartjs-plugin-datalabels:    v2.2.0
+Google OAuth:                 Latest
+
+🖥️ BROWSER SUPPORT
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+✅ Chrome 90+
+✅ Firefox 88+
+✅ Safari 14+
+✅ Edge 90+
+
+🚀 DEPLOYMENT OPTIONS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+1. Local Server:
+   python3 -m http.server 8000
+   (or port 8001 if 8000 is busy)
+
+2. GitHub Pages:
+   Upload to repo & enable Pages
+
+3. Netlify/Vercel:
+   Drag & drop folder
+
+👨‍💻 DEVELOPER
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Name:     Amit Zahy
+Email:    amitzahy1@gmail.com
+Team:     Amit United 🏆🏆
+League:   689
+
+📄 LICENSE
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Private project for personal use
+All rights reserved © 2024-2025
+
+═══════════════════════════════════════════════════════════════
+
+✅ VERSION 4.0 - PRODUCTION READY
+
+Built with ❤️ for FPL Draft Analytics
+
+Last Updated: December 2, 2025
+
+🎉 MAJOR UPDATE: Enhanced data freshness, improved UI/UX, 
+   better injury indicators, and comprehensive bug fixes!

@@ -1,0 +1,167 @@
+# ⚽ Advanced FPL Draft Tool
+
+> **כלי מתקדם לניהול צוות Draft Fantasy Premier League**  
+> Version 2.4.0 | עדכון: 16 נובמבר 2025
+
+---
+
+## 🎯 מה זה?
+
+אתר ווב מתקדם לניתוח ושיפור הביצועים ב-Draft Fantasy FPL.
+
+### תכונות עיקריות:
+- ✅ **ציון דראפט מתקדם** - אלגוריתם ייחודי לדירוג שחקנים
+- ✅ **מדד יציבות** - מדידת עקביות שחקנים
+- ✅ **חיזוי נקודות** - למחזור הבא
+- ✅ **טבלת השוואה** - עד 10 שחקנים במקביל
+- ✅ **ניהול הרכבים** - צפייה בהרכב הליגה שלך
+- ✅ **שחקנים חופשיים** - מיון לפי ערך
+- ✅ **🤖 ML Model** - XGBoost מאומן על 10 עונות!
+
+---
+
+## 🚀 התחלה מהירה - הרצה מקומית
+
+### שלב 1: הרץ שרת מקומי
+
+**Mac / Linux**:
+```bash
+cd /Users/amitzahy/Documents/Draft/FPL_25_26
+./START_SERVER.sh
+```
+
+**Windows**:
+```bash
+START_SERVER.bat
+```
+
+### שלב 2: פתח דפדפן
+
+גלוש ל: **http://localhost:8000**
+
+### שלב 3: התחבר או צפה בדמו
+
+- לחץ "מצב דמו" לצפייה מהירה ללא התחברות
+- או התחבר עם Google לגישה מלאה
+
+📖 **למדריך מפורט**: [HOW_TO_RUN_LOCALLY.md](HOW_TO_RUN_LOCALLY.md)
+
+---
+
+### ⚠️ חשוב!
+**אתר זה דורש שרת HTTP מקומי** - לא ניתן לפתוח ישירות את `index.html`  
+(בגלל מגבלות CORS של JavaScript מודרני)
+
+---
+
+## 🤖 ML Model (חדש!)
+
+### סטטוס: ✅ מאומן ומוכן!
+
+**ביצועים:**
+- 📊 MAE: 2.049 נקודות
+- 📈 R²: 0.092
+- 🎯 99 features
+- 📦 3.5KB משקלים
+
+**איך להשתמש:**
+ראה `ml_implementation/README.md`
+
+---
+
+## 📁 מבנה הפרויקט
+
+```
+/
+├── index.html              # דף ראשי
+├── script.js               # לוגיקה ראשית
+├── style.css               # עיצוב
+├── sw.js                   # Service Worker
+├── CHANGELOG.md            # רשימת שינויים
+├── README.md               # זה!
+│
+├── ml_implementation/      # 🤖 ML Model
+│   ├── 01_load_data.py
+│   ├── 02_feature_engineering.py
+│   ├── 03_train_model.py
+│   ├── 04_ml_predictor.js
+│   ├── model_weights_xgboost.json
+│   └── README.md
+│
+├── docs/archive/           # תיעוד ישן
+└── Fantasy-Premier-League/ # נתונים היסטוריים
+```
+
+---
+
+## 📊 כיצד זה עובד?
+
+### 1. משיכת דאטה
+- FPL API - נתוני שחקנים עדכניים
+- Draft API - נתוני הליגה שלך
+- Fixtures - לוח משחקים
+
+### 2. עיבוד
+- חישוב מטריקס מתקדמים
+- דירוג לפי עמדה
+- חיזוי ביצועים
+
+### 3. תצוגה
+- טבלאות אינטראקטיביות
+- גרפים
+- השוואות
+
+---
+
+## 🛠️ טכנולוגיות
+
+- **Frontend:** Vanilla JS, HTML5, CSS3
+- **Data:** FPL API, Draft FPL API
+- **ML:** Python (training), JavaScript (inference)
+- **Models:** XGBoost, Random Forest
+- **Cache:** Service Worker + localStorage
+
+---
+
+## 📈 עדכונים אחרונים
+
+### V2.4.0 (16 נוב 2025)
+- 🤖 **ML Model מאומן!** XGBoost על 10 עונות
+- 🧹 ניקיון קבצים - העברה לתיקיות
+
+### V2.3.0
+- 📊 Grid Layout לטבלת השוואה (50% פחות גלילה!)
+- 🔄 סידור מטריקס לפי חשיבות
+
+### V2.2.0
+- 📊 מדד יציבות חדש
+- 🔄 Better Error Handling (retry + rate limiting)
+- 📏 שיפור עיצוב דף השוואה
+
+---
+
+## 💡 Tips
+
+1. **רענן cache** - Ctrl/Cmd + Shift + R
+2. **console.log** - F12 לראות מה קורה מאחורי הקלעים
+3. **השוואה** - בחר 3-5 שחקנים לתוצאות מיטביות
+
+---
+
+## 🐛 בעיות?
+
+1. בדוק את ה-console (F12)
+2. נקה cache
+3. ודא League ID נכון
+
+---
+
+## 📞 יצירת קשר
+
+אם יש שאלות או הצעות - פתח issue!
+
+---
+
+**Made with ⚽ by Amit**  
+**Powered by 🤖 ML & ☕ Coffee**
+
