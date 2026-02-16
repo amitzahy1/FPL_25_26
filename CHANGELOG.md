@@ -1,5 +1,128 @@
 # 📝 יומן שינויים - 16 נובמבר 2025
 
+## 🔧 תיקון (V4.0.2) - ML Timing + Better Filter Logic!
+
+### 🐛 בעיות שנפתרו
+
+**בעיה 1: ML Prediction נשאר על 0**
+- הטבלה מתרנדרת לפני שהמודל נטען
+- `calculateAllPredictions()` מחזיר 0 כי המודל לא מוכן
+
+**הפתרון:**
+1. `predictPlayerPoints()` מחזיר `null` במקום `0` כשהמודל לא מוכן
+2. `script.js` שומר ערכים קיימים אם מקבל `null`
+3. כש-ML Model מוכן → קורא ל-`calculateAllPredictions()` + `renderTable()`
+
+```javascript
+// Before:
+if (!globalDraftPredictor) return 0;  // ❌
+
+// After:  
+if (!globalDraftPredictor) return null;  // ✅
+p.ml_prediction = (prediction !== null) ? prediction : (p.ml_prediction || 0);
+```
+
+**בעיה 2: גרפים מסננים יותר מדי**
+- פילטר: "Amit United" (15 שחקנים)
+- גרף: רק 3 שחקנים! ❌
+- הסיבה: פילטר נוסף של `minutes > 900`
+
+**הפתרון:**
+- אם המשתמש כבר פילטר → הצג את כל השחקנים המפולטרים
+- אם לא פילטר → הוסף פילטר דקות מינימום (למנוע רעש)
+
+```javascript
+// Smart filtering logic:
+const isFiltered = state.displayedData.length < state.allPlayersData[...].processed.length;
+const players = isFiltered 
+    ? state.displayedData  // Show all filtered
+    : state.displayedData.filter(p => p.minutes > 300);  // Add minutes filter (300+ only)
+```
+
+### ✅ גרפים שתוקנו:
+- ✅ showVisualization() - כל הגרפים הכלליים
+- ✅ showPriceVsScoreChart() - תמורה למחיר
+- ✅ showIctBreakdownChart() - פירוק ICT
+
+### 📊 תוצאה:
+
+**לפני:**
+```
+פילטר: Amit United (15 שחקנים)
+גרף: 3 שחקנים ❌
+ML: 0, 0, 0 ❌
+```
+
+**אחרי:**
+```
+פילטר: Amit United (15 שחקנים)
+גרף: 15 שחקנים ✅
+ML: 8.2, 6.5, 4.1, ... ✅
+```
+
+**קבצים שהשתנו:**
+- `04_ml_predictor_draft.js` - timing fix + null return
+- `script.js` - smart filter logic + null handling
+- `CHANGELOG.md` - תיעוד
+
+---
+
+## 🔧 תיקון (V4.0.1) - Filter Charts Fix!
+
+### 🐛 בעיה שנפתרה
+
+**הבעיה:**
+- כשמפלטרים שחקנים בטבלה (למשל: רק קבוצה מסוימת, או דקות מינימום)
+- הגרפים לא מתעדכנים להציג רק את השחקנים המפולטרים
+- מציגים את **כל** השחקנים, לא רק את אלו שבטבלה
+
+**הסיבה:**
+- `showTeamDefenseChart()` ו-`showTeamAttackChart()` השתמשו ב-`state.allPlayersData`
+- במקום להשתמש ב-`state.displayedData` (נתונים מפולטרים)
+
+**הפתרון:**
+```javascript
+// Before:
+state.allPlayersData[state.currentDataSource].processed.forEach(p => {
+  // Process all players
+});
+
+// After:
+const dataToUse = state.displayedData || state.allPlayersData[state.currentDataSource].processed;
+dataToUse.forEach(p => {
+  // Process only filtered players!
+});
+```
+
+### ✅ תוצאה
+
+**לפני:**
+```
+פילטר: רק ליברפול (11 שחקנים)
+גרף: מציג 20 קבוצות! ❌
+```
+
+**אחרי:**
+```
+פילטר: רק ליברפול (11 שחקנים)
+גרף: מציג רק ליברפול! ✅
+```
+
+### 📊 גרפים שתוקנו:
+- ✅ הגנת קבוצות (xGC vs GC)
+- ✅ התקפת קבוצות (xGI vs GI)
+
+### 📋 גרפים שכבר תקינים:
+- ✅ תמורה למחיר (כבר השתמש ב-displayedData)
+- ✅ פירוק ICT (כבר השתמש ב-displayedData)
+- ✅ כל המטריצות האחרות (כבר תקינות)
+
+**קבצים שהשתנו:**
+- `script.js` - תיקון 2 פונקציות chart
+- `CHANGELOG.md` - תיעוד
+
+---
+
 ## 🎯 עדכון מהפכני (V4.0) - Draft FPL Model! 🏆
 
 ### 🚀 המהפכה - מודל ייעודי ל-Draft!

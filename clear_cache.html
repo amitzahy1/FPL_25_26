@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Clear Cache</title>
+</head>
+<body>
+    <h1>Clearing localStorage cache...</h1>
+    <script>
+        // Clear all FPL-related cache
+        const keys = Object.keys(localStorage);
+        let cleared = 0;
+        keys.forEach(key => {
+            if (key.includes('fpl_draft') || key.includes('draft_bootstrap')) {
+                localStorage.removeItem(key);
+                cleared++;
+            }
+        });
+        document.body.innerHTML += `<p>Cleared ${cleared} cache entries.</p>`;
+        document.body.innerHTML += '<p><a href="index.html">Back to app</a></p>';
+    </script>
+</body>
+</html>

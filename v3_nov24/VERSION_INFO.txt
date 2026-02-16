@@ -1,0 +1,205 @@
+╔══════════════════════════════════════════════════════════════╗
+║        FPL Draft Analytics - Version 3.0                     ║
+║              November 24, 2025                               ║
+╚══════════════════════════════════════════════════════════════╝
+
+📦 PACKAGE INFORMATION
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Version:        3.0
+Release Date:   November 24, 2025
+Status:         ✅ Production Ready
+Build:          Final
+Environment:    Production
+
+📁 FILES INCLUDED
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+✅ index.html       - Main HTML structure (7,421 lines)
+✅ script.js        - Application logic (7,421 lines)
+✅ style.css        - Styling (1,200+ lines)
+✅ README.md        - Documentation
+✅ VERSION_INFO.txt - This file
+
+Total Lines of Code: ~16,000+
+
+🎯 MAIN FEATURES
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Players Page:
+  ✅ Advanced filtering & sorting
+  ✅ Smart filters (Top Scorers, Form, Value)
+  ✅ Matrix charts (Price vs Points, ICT, Team Attack)
+  ✅ Player comparison (up to 5 players)
+  ✅ Player images with fallback
+
+Draft League Page:
+  ✅ Overview - My lineup on pitch (4-3-3/3-4-3/3-5-2)
+  ✅ Standings & Rosters - Full league table
+  ✅ Analytics - Charts & team comparison
+  ✅ Next Fixtures - Win probability predictions
+  ✅ Market & Recommendations - Smart suggestions
+  ✅ Rival Analysis - Detailed opponent analysis
+  ✅ H2H History - Historical matches
+  ✅ Lineup Analysis - Mistakes & optimal lineups
+
+🔧 TECHNICAL HIGHLIGHTS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+CORS Management:
+  • 3 fallback proxies
+  • Retry logic with exponential backoff
+  • Rate limiting handling
+
+Caching:
+  • LocalStorage with TTL
+  • Background data loading
+  • Cache invalidation
+
+Authentication:
+  • Google OAuth
+  • Demo mode
+  • Premium features
+
+Data Processing:
+  • Player ID mapping (Draft ↔ FPL)
+  • Fuzzy matching
+  • Historical lineup loading (GW 1-12)
+  • Team aggregates calculation
+
+Algorithms:
+  • Advanced win probability (Form, H2H, Injuries)
+  • Smart recommendation score
+  • xPts calculation (top 11 only)
+
+🎨 UI/UX IMPROVEMENTS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+✅ Centered Rival Analysis header
+✅ Larger team names in fixtures (+18%)
+✅ Larger logos (+12.5%)
+✅ Improved spacing and readability
+✅ Responsive design
+✅ RTL support (Hebrew)
+✅ Smooth transitions
+✅ Loading states
+✅ Error handling with toasts
+✅ Modal system
+
+📊 ALGORITHMS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Win Probability:
+  Base xPts:        55%
+  Form Factor:      20%
+  H2H History:      15%
+  Injury Impact:    10%
+  Range:            25% - 75%
+  Special:          Null team = 50-50
+
+Smart Recommendation:
+  xPts (1GW):       30%
+  Draft Score:      25%
+  Form:             15%
+  Transfers:        20%
+  Ownership:        10%
+  Comeback Bonus:   Variable
+
+🐛 KNOWN ISSUES
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+⚠️  Draft Standings endpoint returns 404 (fallback works)
+⚠️  CORS proxies may be slow during peak hours
+⚠️  Player images load from external source (fallback available)
+⚠️  Mobile design optimized but better on desktop
+
+🔄 CHANGELOG v3.0
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+NEW FEATURES:
+  ✅ "H2H History" tab
+  ✅ "Lineup Analysis" tab
+  ✅ Player comparison modal
+  ✅ Historical lineups loading (GW 1-12)
+  ✅ Advanced win probability algorithm
+
+FIXES:
+  ✅ CORS proxy with 3 fallbacks
+  ✅ Scroll issue in Analytics tab
+  ✅ Lineup analysis with detailed breakdown
+  ✅ Centered Rival Analysis header
+  ✅ Larger team names in fixtures
+
+IMPROVEMENTS:
+  ✅ Better UI/UX overall
+  ✅ Improved spacing and readability
+  ✅ Better error handling
+  ✅ More realistic predictions
+
+📝 CONFIGURATION
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+League ID:        689
+My Team:          Amit United
+Cache Duration:   120 minutes
+CORS Proxy:       corsproxy.io (+ 2 fallbacks)
+
+🌐 API ENDPOINTS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+FPL Bootstrap:    fantasy.premierleague.com/api/bootstrap-static/
+FPL Live:         fantasy.premierleague.com/api/event/{gw}/live/
+Draft Details:    draft.premierleague.com/api/league/{id}/details
+Draft Picks:      draft.premierleague.com/api/entry/{id}/event/{gw}
+Draft Standings:  draft.premierleague.com/api/league/{id}/standings
+
+📦 DEPENDENCIES
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Chart.js:                     v4.4.1
+chartjs-plugin-annotation:    v3.0.1
+chartjs-plugin-datalabels:    v2.2.0
+Google OAuth:                 Latest
+
+🖥️ BROWSER SUPPORT
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+✅ Chrome 90+
+✅ Firefox 88+
+✅ Safari 14+
+✅ Edge 90+
+
+🚀 DEPLOYMENT OPTIONS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+1. Local Server:
+   python3 -m http.server 8000
+
+2. GitHub Pages:
+   Upload to repo & enable Pages
+
+3. Netlify/Vercel:
+   Drag & drop folder
+
+👨‍💻 DEVELOPER
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Name:     Amit Zahy
+Email:    redacted@users.noreply.github.com
+Team:     Amit United 🏆🏆
+League:   689
+
+📄 LICENSE
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Private project for personal use
+All rights reserved © 2024-2025
+
+═══════════════════════════════════════════════════════════════
+
+✅ VERSION 3.0 - PRODUCTION READY
+
+Built with ❤️ for FPL Draft Analytics
+
+Last Updated: November 24, 2025
+

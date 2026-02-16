@@ -1,0 +1,211 @@
+/* Mobile Responsiveness for FPL Tool */
+
+@media (max-width: 768px) {
+    /* Main Layout */
+    .main-nav {
+        flex-direction: column;
+        gap: 10px;
+        padding: 10px;
+    }
+
+    .nav-item {
+        width: 100%;
+        justify-content: center;
+        padding: 12px;
+    }
+
+    /* Draft Sub-Navigation - Horizontal Scroll */
+    .draft-sub-nav-container {
+        display: flex;
+        flex-wrap: nowrap;
+        overflow-x: auto;
+        padding: 10px 5px;
+        justify-content: flex-start;
+        -webkit-overflow-scrolling: touch;
+        gap: 8px;
+        background: white;
+        border-bottom: 1px solid #e2e8f0;
+        scrollbar-width: none; /* Firefox */
+    }
+
+    .draft-sub-nav-container::-webkit-scrollbar {
+        display: none; /* Chrome/Safari */
+    }
+
+    .draft-nav-btn {
+        flex: 0 0 auto;
+        white-space: nowrap;
+        font-size: 13px;
+        padding: 8px 12px;
+    }
+
+    /* Grid Layouts - Single Column */
+    .analytics-grid, 
+    .draft-main-grid,
+    .top-stats-grid,
+    .stats-grid {
+        grid-template-columns: 1fr !important;
+    }
+
+    .next-fixtures-card > div {
+        grid-template-columns: 1fr !important;
+    }
+
+    /* Pitch Container - Mobile Optimized */
+    .pitch-container {
+        height: 620px !important;
+        margin: 10px -10px;
+        width: calc(100% + 20px);
+        border-radius: 0;
+        background-size: cover;
+    }
+
+    .pitch-wrapper {
+        width: 100% !important;
+        max-width: none !important;
+        overflow: hidden;
+    }
+
+    .player-spot {
+        width: 60px;
+        /* Adjust positioning logic if needed, but relative % usually works */
+    }
+
+    .player-spot img {
+        width: 35px !important;
+        height: 35px !important;
+    }
+
+    .player-name {
+        font-size: 9px !important;
+        max-width: 65px !important;
+        padding: 1px 3px !important;
+    }
+
+    .player-data {
+        font-size: 8px !important;
+        padding: 1px 3px !important;
+    }
+
+    /* Tables - Horizontal Scroll */
+    .table-container, 
+    .draft-table-container,
+    .h2h-table-container,
+    .lineup-analysis-container {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        border-radius: 8px;
+        margin-bottom: 15px;
+    }
+    
+    table {
+        min-width: 600px;
+    }
+
+    /* Modal */
+    .modal-content {
+        width: 95% !important;
+        padding: 15px !important;
+        max-height: 85vh;
+    }
+
+    /* Rival Analysis */
+    .rival-header {
+        padding: 15px !important;
+    }
+
+    .team-badge {
+        flex-direction: column;
+        gap: 5px !important;
+        text-align: center !important;
+    }
+
+    .team-badge.opp-team {
+        flex-direction: column !important;
+    }
+
+    .versus-badge {
+        margin: 0 10px;
+    }
+}
+
+/* UI Adjustments requested by user */
+
+/* Shrink Stats Strip */
+.lineup-stats-card {
+    padding: 10px 15px !important;
+    margin-bottom: 10px !important;
+}
+
+.lineup-stats-card .stat-value {
+    font-size: 1.1em !important;
+}
+
+.lineup-stats-card .stat-label {
+    font-size: 0.75em !important;
+    margin-bottom: 2px !important;
+}
+
+/* Enlarge Pitch Wrapper on Desktop */
+@media (min-width: 769px) {
+    .pitch-wrapper {
+        max-width: 650px !important; /* Increased from implicit default */
+        margin: 0 auto;
+    }
+    
+    .pitch-container {
+        height: 750px !important; /* Taller pitch */
+    }
+}
+
+/* Player Card Data on Pitch */
+.player-data {
+    font-size: 10px;
+    background: rgba(0,0,0,0.75);
+    color: white;
+    padding: 2px 5px;
+    border-radius: 4px;
+    margin-top: 2px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    line-height: 1.2;
+    white-space: nowrap;
+    backdrop-filter: blur(2px);
+}
+
+.player-data div {
+    display: flex;
+    gap: 4px;
+}
+
+.player-points {
+    color: #4ade80; /* Green */
+    font-weight: 700;
+}
+
+.player-proj {
+    color: #94a3b8; /* Gray */
+}
+
+.player-opp {
+    color: #fbbf24; /* Yellow */
+    font-weight: 600;
+    font-size: 9px;
+    margin-top: 1px;
+}
+
+
+/* Additional Mobile Grids */
+@media (max-width: 768px) {
+    .draft-top-grid {
+        display: grid !important;
+        grid-template-columns: 1fr !important;
+        gap: 20px !important;
+    }
+    
+    .standings-pane, .right-pane {
+        width: 100% !important;
+    }
+}
+
