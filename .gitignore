@@ -1,5 +1,5 @@
 # Large data files
-Fantasy-Premier-League/
+# Fantasy-Premier-League/ (Removed to fix CI build)
 historical_data.csv
 features_data.csv
 
