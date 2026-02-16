@@ -565,38 +565,41 @@
                             <thead>
                                 <tr>
                                     <th>בחר</th>
-                                    <th onclick="sortTable(0)">דירוג<span class="sort-indicator"></span></th>
-                                    <th onclick="sortTable(1)">שחקן<span class="sort-indicator"></span></th>
-                                    <th onclick="sortTable(2)" title="ציון דראפט משוקלל">ציון<span
+                                    <th data-sort="rank">דירוג<span class="sort-indicator"></span></th>
+                                    <th data-sort="web_name">שחקן<span class="sort-indicator"></span></th>
+                                    <th data-sort="draft_score" title="ציון דראפט משוקלל">ציון<span
                                             class="sort-indicator"></span></th>
-                                    <th onclick="sortTable(3)" title="מדד יציבות (0-100)">יציבות<span
+                                    <th data-sort="stability_index" title="מדד יציבות (0-100)">יציבות<span
                                             class="sort-indicator"></span></th>
-                                    <th onclick="sortTable(4)" title="חיזוי טכני">📊 חיזוי<span
+                                    <th data-sort="predicted_points_1_gw" title="חיזוי טכני">📊 חיזוי<span
                                             class="sort-indicator"></span></th>
-                                    <th onclick="sortTable(5)" title="קושי 3 משחקים קרובים (1=קל, 5=קשה)">קושי (3)<span
+                                    <th data-sort="next_3_fdr" title="קושי 3 משחקים קרובים (1=קל, 5=קשה)">קושי (3)<span
                                             class="sort-indicator"></span></th>
-                                    <th onclick="sortTable(6)">קבוצה<span class="sort-indicator"></span></th>
-                                    <th onclick="sortTable(7)" title="קבוצת דראפט (חופשי/שם הקבוצה)">קבוצת דראפט<span
+                                    <th data-sort="team_name">קבוצה<span class="sort-indicator"></span></th>
+                                    <th data-sort="draft_team" title="קבוצת דראפט (חופשי/שם הקבוצה)">קבוצת דראפט<span
                                             class="sort-indicator"></span></th>
-                                    <th onclick="sortTable(8)">עמדה<span class="sort-indicator"></span></th>
-                                    <th onclick="sortTable(9)">מחיר<span class="sort-indicator"></span></th>
-                                    <th onclick="sortTable(10)">נק'<span class="sort-indicator"></span></th>
-                                    <th onclick="sortTable(11)">נק'/90<span class="sort-indicator"></span></th>
-                                    <th onclick="sortTable(12)">% בחירה<span class="sort-indicator"></span></th>
-                                    <th onclick="sortTable(13)">דרימטים<span class="sort-indicator"></span></th>
-                                    <th onclick="sortTable(14)">העברות<span class="sort-indicator"></span></th>
-                                    <th onclick="sortTable(15)">DC/90<span class="sort-indicator"></span></th>
-                                    <th onclick="sortTable(16)">G+A<span class="sort-indicator"></span></th>
-                                    <th onclick="sortTable(17)">xGI<span class="sort-indicator"></span></th>
-                                    <th onclick="sortTable(18)">דקות<span class="sort-indicator"></span></th>
-                                    <th onclick="sortTable(19)" title="הפרש מביצועים בפועל">xDiff<span
+                                    <th data-sort="position_name">עמדה<span class="sort-indicator"></span></th>
+                                    <th data-sort="now_cost">מחיר<span class="sort-indicator"></span></th>
+                                    <th data-sort="total_points">נק'<span class="sort-indicator"></span></th>
+                                    <th data-sort="points_per_game_90">נק'/90<span class="sort-indicator"></span></th>
+                                    <th data-sort="selected_by_percent">% בחירה<span class="sort-indicator"></span></th>
+                                    <th data-sort="dreamteam_count">דרימטים<span class="sort-indicator"></span></th>
+                                    <th data-sort="net_transfers_event">העברות<span class="sort-indicator"></span></th>
+                                    <th data-sort="def_contrib_per90">DC/90<span class="sort-indicator"></span></th>
+                                    <th data-sort="goals_scored_assists">G+A<span class="sort-indicator"></span></th>
+                                    <th data-sort="xGI_per90">xGI<span class="sort-indicator"></span></th>
+                                    <th data-sort="minutes">דקות<span class="sort-indicator"></span></th>
+                                    <th data-sort="xDiff" title="הפרש מביצועים בפועל">xDiff<span
                                             class="sort-indicator"></span></th>
-                                    <th onclick="sortTable(20)">ICT/90<span class="sort-indicator"></span></th>
-                                    <th onclick="sortTable(21)">בונוס/90<span class="sort-indicator"></span></th>
-                                    <th onclick="sortTable(22)">CS/90<span class="sort-indicator"></span></th>
-                                    <th onclick="sortTable(23)">פנדל<span class="sort-indicator"></span></th>
-                                    <th onclick="sortTable(24)">קרן<span class="sort-indicator"></span></th>
-                                    <th onclick="sortTable(25)">חופשית<span class="sort-indicator"></span></th>
+                                    <th data-sort="ict_index_per90">ICT/90<span class="sort-indicator"></span></th>
+                                    <th data-sort="bonus_per90">בונוס/90<span class="sort-indicator"></span></th>
+                                    <th data-sort="clean_sheets_per90">CS/90<span class="sort-indicator"></span></th>
+                                    <th data-sort="set_piece_priority.penalty">פנדל<span class="sort-indicator"></span>
+                                    </th>
+                                    <th data-sort="set_piece_priority.corner">קרן<span class="sort-indicator"></span>
+                                    </th>
+                                    <th data-sort="set_piece_priority.free_kick">חופשית<span
+                                            class="sort-indicator"></span></th>
                                     <th class="fixtures-header">משחקים קרובים</th>
                                 </tr>
                             </thead>
