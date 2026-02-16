@@ -454,10 +454,10 @@ const config = {
     draftLeagueId: 689,
     setPieceTakers: {}, // DEPRECATED: Now automated via API in preprocessPlayerData
     tableColumns: [
-        'rank', 'web_name', 'draft_score', 'stability_index', 'predicted_points_1_gw', 'team_name', 'draft_team',
+        'rank', 'web_name', 'draft_score', 'stability_index', 'predicted_points_1_gw', 'next_3_fdr', 'team_name', 'draft_team',
         'position_name', 'now_cost', 'total_points', 'points_per_game_90', 'selected_by_percent',
         'dreamteam_count', 'net_transfers_event', 'def_contrib_per90', 'goals_scored_assists',
-        'expected_goals_assists', 'minutes', 'xDiff', 'ict_index', 'bonus', 'clean_sheets',
+        'xGI_per90', 'minutes', 'xDiff', 'ict_index_per90', 'bonus_per90', 'clean_sheets_per90',
         'set_piece_priority.penalty', 'set_piece_priority.corner', 'set_piece_priority.free_kick', 'fixtures'
     ],
     comparisonMetrics: {
@@ -1695,7 +1695,10 @@ function processChange() {
     // In v3/Root, state.allPlayersData.processed is the source.
     // We should create `displaySource` which is either processed (all) or aggregated (range).
 
-    let sourceData = state.allPlayersData[state.currentDataSource].processed;
+    let sourceData = state.allPlayersData[state.currentDataSource].processed.map(p => ({
+        ...p,
+        draft_team: getDraftTeamForPlayer(p.id) || '' // Ensure string for sorting (empty string if free agent)
+    }));
 
     if (statsRange !== 'all') {
         const lastN = parseInt(statsRange);
@@ -1824,7 +1827,7 @@ function sortTable(columnIndex) {
         state.sortColumn = columnIndex;
         // Default to DESC for score/points columns (draft_score, xPts 1GW, total_points, transfers, etc.)
         // SHIFTED INDICES +1 FOR ALL COLUMNS >= 5 (due to next_3_fdr at index 5)
-        if ([2, 3, 4, 8, 9, 10, 11, 14, 15, 16, 17, 18, 19, 20].includes(columnIndex)) {
+        if ([2, 3, 4, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25].includes(columnIndex)) {
             state.sortDirection = 'desc';
         } else {
             state.sortDirection = 'asc';
