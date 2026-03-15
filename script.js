@@ -1392,7 +1392,7 @@ function calculateRealFDR(players, fixtures) {
         }
 
         const avgDifficulty = next3.reduce((sum, f) => sum + f.difficulty, 0) / next3.length;
-        p.next_3_fdr = avgDifficulty.toFixed(1);
+        p.next_3_fdr = Math.round(avgDifficulty * 10) / 10;
 
         // Grade: 1-2 (Easy/Green), 3 (Medium/Gray), 4-5 (Hard/Red)
         if (avgDifficulty <= 2.3) p.next_3_fdr_grade = 'easy';
@@ -1541,7 +1541,7 @@ function createPlayerRowHtml(player, index) {
         else if (grade === 'hard') { color = '#f44336'; } // red
         else { color = '#fbbf24'; textColor = 'black'; } // medium (yellowish)
 
-        fdrBadge = `<div class="fdr-badge" style="background-color:${color}; color:${textColor}; padding:2px 6px; border-radius:4px; font-weight:bold; display:inline-block; min-width:30px; text-align:center;">${player.next_3_fdr}</div>`;
+        fdrBadge = `<div class="fdr-badge" style="background-color:${color}; color:${textColor}; padding:2px 6px; border-radius:4px; font-weight:bold; display:inline-block; min-width:30px; text-align:center;">${player.next_3_fdr.toFixed(1)}</div>`;
     }
 
     return `<tr>
@@ -1783,8 +1783,21 @@ function processChange() {
                 if (typeof bValue === 'string' && !isNaN(bValue) && bValue.trim() !== '') bValue = parseFloat(bValue);
             }
 
-            if (aValue === null || aValue === undefined) aValue = -Infinity;
-            if (bValue === null || bValue === undefined) bValue = -Infinity;
+            // Treat sentinel values as "no data" — push to bottom
+            // Set piece 99 = not a taker, next_3_fdr 0 = no fixture data
+            const isSetPieceCol = state.sortKey.startsWith('set_piece_priority.');
+            const isFdrCol = state.sortKey === 'next_3_fdr';
+            const aNoData = aValue === null || aValue === undefined
+                || (isSetPieceCol && aValue === 99)
+                || (isFdrCol && aValue === 0);
+            const bNoData = bValue === null || bValue === undefined
+                || (isSetPieceCol && bValue === 99)
+                || (isFdrCol && bValue === 0);
+            const aNull = aNoData;
+            const bNull = bNoData;
+            if (aNull && bNull) return 0;
+            if (aNull) return 1;
+            if (bNull) return -1;
 
             if (typeof aValue === 'number' && typeof bValue === 'number') {
                 return state.sortDirection === 'asc' ? aValue - bValue : bValue - aValue;
@@ -1830,7 +1843,8 @@ function sortTable(key) {
         state.sortKey = key;
         // Default to DESC for performance metrics
         // ASC for text columns: rank, web_name, team_name, draft_team, position_name
-        const ascColumns = ['rank', 'web_name', 'team_name', 'draft_team', 'position_name'];
+        const ascColumns = ['rank', 'web_name', 'team_name', 'draft_team', 'position_name',
+            'next_3_fdr', 'set_piece_priority.penalty', 'set_piece_priority.corner', 'set_piece_priority.free_kick'];
         if (ascColumns.includes(key)) {
             state.sortDirection = 'asc';
         } else {
@@ -3486,7 +3500,12 @@ function calculateAdvancedScores(players) {
         }
     });
 
-    return players.sort((a, b) => b.draft_score - a.draft_score);
+    players.sort((a, b) => b.draft_score - a.draft_score);
+
+    // Assign rank based on draft_score order
+    players.forEach((p, i) => p.rank = i + 1);
+
+    return players;
 }
 
 function sortTableDraft(field) {
