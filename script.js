@@ -2628,19 +2628,19 @@ function createPlayerRowHtml(player, index) {
         ${trendKeys.map(key => trendCellHtml(player, key, index)).join('')}
         <td data-tooltip="${config.columnTooltips.defcon_hit_rate}">${formatDefconRate(player.defcon_hit_rate)}</td>
         <td class="${getPercentileClass(player.def_contrib_per90, displayedValues.def_contrib_per90)}" data-tooltip="${config.columnTooltips.def_contrib_per90}">${player.def_contrib_per90.toFixed(1)}</td>
-        <td data-tooltip="${config.columnTooltips.rotation_risk}">${formatRotation(player.rotation_risk)}</td>
         <td class="${getPercentileClass(parseFloat(player.xGI_per90) || 0, displayedValues.xGI_per90)}">${(parseFloat(player.xGI_per90) || 0).toFixed(2)}</td>
         <td class="${getPercentileClass((player.goals_scored || 0) + (player.assists || 0), displayedValues.goals_assists)}">${(player.goals_scored || 0) + (player.assists || 0)}</td>
-        <td class="${player.xDiff >= 0 ? 'xdiff-positive' : 'xdiff-negative'}" data-tooltip="${config.columnTooltips.xDiff}">${player.xDiff.toFixed(2)}</td>
         <td class="fdr-cell">${fdrBadge}</td>
         <td class="fixtures-cell">${fixturesHTML}</td>
-        <td class="${getPercentileClass(player.minutes, displayedValues.minutes)}">${player.minutes}</td>
         <td class="${getPercentileClass(parseFloat(player.bonus_per90) || 0, displayedValues.bonus_per90)}">${(parseFloat(player.bonus_per90) || 0).toFixed(2)}</td>
         <td class="${getPercentileClass(parseFloat(player.clean_sheets_per90) || 0, displayedValues.clean_sheets_per90)}">${(parseFloat(player.clean_sheets_per90) || 0).toFixed(2)}</td>
         <td>${player.now_cost.toFixed(1)}</td>
         <td class="bold-cell stability-cell ${getPercentileClass(player.stability_index || 0, displayedValues.stability_index)}">${(player.stability_index || 0).toFixed(0)}</td>
         <td class="${getPercentileClass(parseFloat(player.ict_index_per90) || 0, displayedValues.ict_index_per90)}">${(parseFloat(player.ict_index_per90) || 0).toFixed(1)}</td>
         <td class="${getPercentileClass(player.dreamteam_count, displayedValues.dreamteam_count)}">${player.dreamteam_count}</td>
+        <td class="${player.xDiff >= 0 ? 'xdiff-positive' : 'xdiff-negative'}" data-tooltip="${config.columnTooltips.xDiff}">${player.xDiff.toFixed(2)}</td>
+        <td data-tooltip="${config.columnTooltips.rotation_risk}">${formatRotation(player.rotation_risk)}</td>
+        <td class="${getPercentileClass(player.minutes, displayedValues.minutes)}">${player.minutes}</td>
         <td class="${player.set_piece_priority.penalty === 1 ? 'set-piece-yes' : 'set-piece-no'}">${player.set_piece_priority.penalty === 1 ? '🎯 (1)' : '–'}</td>
         <td class="${player.set_piece_priority.corner > 0 ? 'set-piece-yes' : 'set-piece-no'}">${player.set_piece_priority.corner > 0 ? `(${player.set_piece_priority.corner})` : '–'}</td>
         <td class="${player.set_piece_priority.free_kick > 0 ? 'set-piece-yes' : 'set-piece-no'}">${player.set_piece_priority.free_kick > 0 ? `(${player.set_piece_priority.free_kick})` : '–'}</td>
@@ -2681,7 +2681,10 @@ const OPTIONAL_COLUMNS = [
     { key: 'dreamteam_count', label: 'דרימטים' },
     { key: 'set_piece_priority.penalty', label: 'פנדל' },
     { key: 'set_piece_priority.corner', label: 'קרן' },
-    { key: 'set_piece_priority.free_kick', label: 'חופשית' }
+    { key: 'set_piece_priority.free_kick', label: 'חופשית' },
+    { key: 'xDiff', label: 'xDiff' },
+    { key: 'rotation_risk', label: 'הרכב' },
+    { key: 'minutes', label: 'דקות' }
 ];
 
 const OPTIONAL_COLUMNS_KEY = 'fpl_optional_columns';
@@ -3940,9 +3943,8 @@ function updateDashboardKPIs(dataToUse = null) {
 
         if (!ranked.length) {
             return `<div class="kpi-card" data-kpi="${card.id}">
-                <div class="kpi-icon">${card.icon}</div>
                 <div class="kpi-content">
-                    <div class="kpi-label">${card.label}</div>
+                    <div class="kpi-label"><span class="kpi-icon">${card.icon}</span>${card.label}</div>
                     <div class="kpi-value">–</div>
                     <div class="kpi-subtext">אין מועמד בסינון הנוכחי</div>
                 </div></div>`;
@@ -3954,9 +3956,8 @@ function updateDashboardKPIs(dataToUse = null) {
         const freeMark = p => (owned.size > 0 && !owned.has(p.id)) ? '<span class="kpi-free">🆓</span>' : '';
 
         return `<div class="kpi-card" data-kpi="${card.id}">
-            <div class="kpi-icon">${card.icon}</div>
             <div class="kpi-content">
-                <div class="kpi-label">${card.label}</div>
+                <div class="kpi-label"><span class="kpi-icon">${card.icon}</span>${card.label}</div>
                 <div class="kpi-value">${escapeHtml(first.p.web_name)}${freeMark(first.p)}</div>
                 <div class="kpi-subtext">${card.fmt(first.v, first.p)}${miniSparkHtml(first.p.id, 'pts')}</div>
                 ${rest.length ? `<div class="kpi-runners">${rest.map((x, i) => `
