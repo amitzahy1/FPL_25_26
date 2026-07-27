@@ -938,6 +938,9 @@ async function init() {
         state.currentDataSource = 'historical';
         syncDataSourceButtons();
         await fetchAndProcessData();
+        // Explain the season being shown even if the live API never answers,
+        // so the numbers are never presented without their context.
+        showSeasonBanner(finishedGameweekCount());
 
         // 2. Now see whether the new season has actually started.
         ensureLiveBootstrap({ timeoutMs: 20000 })
