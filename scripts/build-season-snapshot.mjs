@@ -123,17 +123,30 @@ async function main() {
 
         let acc = perPlayer.get(el);
         if (!acc) {
-            acc = { appearances: 0, defconHits: 0, defconEligible: 0, pointsByGw: {} };
+            acc = { appearances: 0, defconHits: 0, defconEligible: 0, log: [] };
             perPlayer.set(el, acc);
         }
         acc.appearances++;
-        acc.pointsByGw[gw] = num(r.total_points);
 
         const threshold = DEFCON_THRESHOLD[positionByElement.get(el)];
+        let hitDefcon = 0;
         if (threshold !== null && threshold !== undefined) {
             acc.defconEligible++;
-            if (num(r.defensive_contribution) >= threshold) acc.defconHits++;
+            if (num(r.defensive_contribution) >= threshold) { acc.defconHits++; hitDefcon = 1; }
         }
+
+        // Flat per-appearance log: [gw, points, minutes, xGI(x100), defconHit].
+        // Flat rather than objects because the key names would otherwise repeat
+        // roughly 20,000 times. This is what powers the "last N matches"
+        // window -- during a season, form over recent matches matters far more
+        // than a season-long average.
+        acc.log.push(
+            gw,
+            num(r.total_points),
+            minutes,
+            Math.round(num(r.expected_goal_involvements) * 100),
+            hitDefcon
+        );
     }
 
     const players = playersRaw.map(p => {
@@ -159,7 +172,6 @@ async function main() {
         out.defcon_hit_rate = acc && acc.defconEligible > 0
             ? Math.round((acc.defconHits / acc.defconEligible) * 1000) / 10
             : null;
-        out.points_by_gw = acc ? acc.pointsByGw : {};
         return out;
     });
 
@@ -171,11 +183,14 @@ async function main() {
 
     // Columnar layout: field names are written once instead of ~540 times.
     // Floats are rounded to 2dp; the source has no meaningful precision beyond that.
-    const fields = Object.keys(withMinutes[0]).filter(f => f !== 'points_by_gw');
+    const fields = Object.keys(withMinutes[0]);
     const round2 = v => (typeof v === 'number' && !Number.isInteger(v))
         ? Math.round(v * 100) / 100 : v;
     const rows = withMinutes.map(p => fields.map(f => round2(p[f])));
-    const pointsByGw = Object.fromEntries(withMinutes.map(p => [p.id, p.points_by_gw]));
+    // Per-appearance logs, keyed by player id. LOG_STRIDE fields per entry.
+    const gwLogs = Object.fromEntries(
+        withMinutes.map(p => [p.id, (perPlayer.get(p.id) || {}).log || []])
+    );
 
     const snapshot = {
         seasonId: SEASON,
@@ -186,7 +201,9 @@ async function main() {
         teams,
         fields,
         rows,
-        pointsByGw
+        logStride: 5,
+        logFields: ['gw', 'points', 'minutes', 'xgi_x100', 'defcon_hit'],
+        gwLogs
     };
 
     mkdirSync(dirname(OUT), { recursive: true });

@@ -31,6 +31,7 @@
   min-height:100vh; padding:22px 26px 60px; font-size:14.5px; line-height:1.5; -webkit-font-smoothing:antialiased}
 button{font-family:inherit;cursor:pointer}
 .n{direction:ltr;unicode-bidi:isolate;font-variant-numeric:tabular-nums}
+.ni{direction:ltr;unicode-bidi:isolate;font-variant-numeric:tabular-nums}
 .lbl{font-size:10.5px; font-weight:800; letter-spacing:.13em; text-transform:uppercase; color:var(--ink-3)}
 :focus-visible{outline:2.5px solid var(--accent-2); outline-offset:3px; border-radius:8px}
 
@@ -38,8 +39,9 @@ button{font-family:inherit;cursor:pointer}
 .top{display:flex; align-items:center; gap:14px; flex-wrap:wrap; margin-bottom:20px}
 .top h1{margin:0; font-size:27px; font-weight:850; letter-spacing:-.7px}
 .top h1 b{color:var(--accent)}
-.flag{font-family:var(--mono); font-size:10px; letter-spacing:.12em; text-transform:uppercase;
-  background:var(--card); border:1px solid var(--line-2); color:var(--ink-3); padding:4px 8px; border-radius:6px}
+.flag{font-size:11px; background:var(--card); border:1px solid var(--line-2); color:var(--ink-3);
+  padding:4px 8px; border-radius:6px}
+.flag i{font-style:normal; font-family:var(--mono); letter-spacing:.12em; text-transform:uppercase}
 .top .sp{flex:1}
 .gw{background:var(--ink); color:#fff; font-weight:700; font-size:13px; padding:7px 13px; border-radius:100px}
 .gw span{opacity:.6; font-weight:500}
@@ -115,10 +117,11 @@ button{font-family:inherit;cursor:pointer}
 .starbtn{border:none; background:transparent; font-size:20px; line-height:1; color:var(--line-2); padding:0; flex:none}
 .starbtn.on{color:#E0A70C} .starbtn:hover{color:#E0A70C; transform:scale(1.12)}
 .ring{width:56px; height:56px; border-radius:50%; flex:none; display:grid; place-items:center; position:relative}
-.ring::before{content:""; position:absolute; inset:0; border-radius:50%;
+.ring::before{content:""; position:absolute; inset:0; border-radius:50%; z-index:0;
   background:conic-gradient(var(--rc) calc(var(--p)*1%), #EDEEF5 0)}
-.ring::after{content:""; position:absolute; inset:5px; border-radius:50%; background:var(--card)}
-.ring b{position:relative; font-size:18px; font-weight:850; letter-spacing:-.7px; font-variant-numeric:tabular-nums; direction:ltr}
+.ring::after{content:""; position:absolute; inset:5px; border-radius:50%; background:var(--card); z-index:1}
+.ring b{position:relative; z-index:2; font-size:18px; font-weight:850; letter-spacing:-.7px;
+  font-variant-numeric:tabular-nums; direction:ltr}
 .ring small{position:absolute; bottom:-16px; inset-inline:0; text-align:center; font-size:9.5px; color:var(--ink-3); font-weight:700}
 
 .availrow{display:flex; align-items:center; gap:6px; margin-bottom:11px; flex-wrap:wrap}
@@ -217,7 +220,7 @@ button{font-family:inherit;cursor:pointer}
 <div class="app" lang="he">
   <header class="top">
     <h1>לוח <b>ההזדמנויות</b></h1>
-    <span class="flag">mockup · נתונים מומצאים</span>
+    <span class="flag"><i>mockup</i> · נתונים מומצאים</span>
     <span class="sp"></span>
     <span class="gw">מחזור 9 <span>· וויוורים נסגרים בעוד 2 ימים</span></span>
   </header>
@@ -368,17 +371,24 @@ const RAILS=[
 const SIGCOL={claim:'var(--good)',buylow:'var(--info)',swing:'var(--plum)',fade:'var(--bad)',hold:'var(--ink-3)'};
 const RISKTAG={rot:['t-risk','סיכון סיבוב'],knock:['t-knock','דיווח על מכה'],new:['t-risk','תפקיד חדש']};
 const fdrAvg=(p,n)=>p.fdr.slice(0,n).reduce((s,f)=>s+f.fdr,0)/n;
-const medScore=pos=>{const a=PLAYERS.filter(p=>p.pos===pos&&p.owner).map(p=>p.score).sort((x,y)=>x-y);
-  return a.length?a[Math.floor(a.length/2)]:0};
+const num=t=>String(t).replace(/(^|\s)([+-]\d+(?:\.\d+)?)/g,'$1<span class="ni">$2</span>');
+const sgn=v=>(v>0?'+':'')+v;
+/* replacement level = the weakest player anyone in the league actually holds at that position.
+   beating it is the real bar for a waiver claim — not beating the league's best. */
+const repl=pos=>{const a=PLAYERS.filter(p=>p.pos===pos&&p.owner).map(p=>p.score);
+  return a.length?Math.min(...a):0};
 
 /* =================== fragments =================== */
 const ribbon=p=>`<div class="fx" title="ששת המשחקים הבאים — הבא ביותר מימין">${
   p.fdr.map(f=>`<i class="f${f.fdr}${f.home?'':' away'}">${f.opp}</i>`).join('')}</div>`;
 function card(p){
-  const on=S.watch.has(p.id), med=medScore(p.pos), gap=p.score-med;
+  const on=S.watch.has(p.id), gap=p.score-repl(p.pos);
   const weak=PLAYERS.filter(x=>x.owner===MY&&x.pos===p.pos).sort((a,b)=>a.pred4-b.pred4)[0];
-  const swap=!p.owner&&weak?`מחליף אצלך את ${weak.name} · <span class="n">${(p.pred4-weak.pred4>0?'+':'')+(p.pred4-weak.pred4).toFixed(1)}</span> חיזוי 4 מחזורים`
-    :!p.owner?`<span class="n">${gap>0?'+':''}${gap}</span> מול חציון ה${POSNAME[p.pos]}ים המוחזקים בליגה`:'';
+  const d=weak?+(p.pred4-weak.pred4).toFixed(1):0;
+  const swap=!p.owner&&weak&&d>0
+      ?`משדרג אצלך על ${weak.name} · <span class="n">+${d}</span> חיזוי 4 מחזורים`
+    :!p.owner
+      ?`<span class="n">${sgn(gap)}</span> מול ה${POSNAME[p.pos]} החלש ביותר שמוחזק בליגה`:'';
   return `<article class="pc" data-sig="${p.signal}" draggable="true" data-id="${p.id}"
       onclick="openSheet(${p.id})" ondragstart="dragStart(event,${p.id})" ondragend="dragEnd(event)">
     <div class="pc-top">
@@ -393,7 +403,7 @@ function card(p){
         :p.owner?`<span class="tag t-taken">אצל ${p.owner}</span>`:'<span class="tag t-free">🆓 חופשי</span>'}
       ${p.risk?`<span class="tag ${RISKTAG[p.risk][0]}">${RISKTAG[p.risk][1]}</span>`:''}
     </div>
-    <div class="reasons">${p.reasons.slice(0,3).map(t=>`<div><i>▸</i><span>${t}</span></div>`).join('')}</div>
+    <div class="reasons">${p.reasons.slice(0,3).map(t=>`<div><i>▸</i><span>${num(t)}</span></div>`).join('')}</div>
     ${ribbon(p)}
     <div class="pc-foot">
       <div><b class="n">${p.xgi90.toFixed(2)}</b><span>xGI/90</span></div>
@@ -417,7 +427,7 @@ function draw(){
       <h2>${H.name}</h2>
       <div class="sub"><span class="pos pos-${H.pos}">${H.pos}</span> ${H.team} · ${POSNAME[H.pos]}
         <span class="tag t-free">🆓 חופשי</span></div>
-      <p>${H.note.replace('הפער הגדול','<em>הפער הגדול</em>')}</p>
+      <p>${num(H.note).replace('הפער הגדול','<em>הפער הגדול</em>')}</p>
       <div class="hero-acts">
         <button class="btn pri" onclick="alert('מוקאפ — מגיש בקשת וויוור')">הגש בקשת וויוור</button>
         <button class="btn star" onclick="togWatch(${H.id})">${S.watch.has(H.id)?'★ במעקב':'☆ הוסף למעקב'}</button>
@@ -430,7 +440,7 @@ function draw(){
         <div class="hstat"><span>ביקוש בליגה — כמה סיכוי שייחטף</span><b class="bad n">${H.heat}%</b></div>
         <div class="hstat"><span>xDiff — פער מהנתונים</span><b class="good n">${H.xdiff.toFixed(1)}</b></div>
         <div class="hstat"><span>קושי 3 המשחקים הקרובים</span><b class="acc n">${fdrAvg(H,3).toFixed(1)}</b></div>
-        <div class="hstat"><span>מעל חציון הקשרים המוחזקים</span><b class="acc n">+${H.score-medScore('MID')}</b></div>
+        <div class="hstat"><span>מול הקשר החלש שמוחזק בליגה</span><b class="good n">${sgn(H.score-repl('MID'))}</b></div>
       </div>
       <div style="margin-top:16px">${ribbon(H)}</div>
     </div>`;
@@ -504,8 +514,8 @@ function openSheet(id){const p=PLAYERS.find(x=>x.id===id),on=S.watch.has(id);
       <button class="btn" onclick="closeSheet()">סגור</button>
     </div>
     <div class="sheet-grid">
-      <section><h4>הקריאה</h4><p>${p.note}</p>
-        <div class="reasons">${p.reasons.map(t=>`<div><i>▸</i><span>${t}</span></div>`).join('')}</div></section>
+      <section><h4>הקריאה</h4><p>${num(p.note)}</p>
+        <div class="reasons">${p.reasons.map(t=>`<div><i>▸</i><span>${num(t)}</span></div>`).join('')}</div></section>
       <section><h4>אחוזון בעמדה (${POSNAME[p.pos]}ים)</h4><div class="pbars">
         ${[['xGI/90','xgi90'],['xG/90','xg90'],['xA/90','xa90'],['תרומה הגנתית','dc90'],['בונוס/90','bonus90'],['% דקות','minPct']]
           .map(([l,k])=>`<div class="pb"><span>${l}</span><span class="t"><span class="f" style="width:${pc(k)}%"></span></span><b>${pc(k)}</b></div>`).join('')}

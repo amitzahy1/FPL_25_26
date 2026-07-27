@@ -34,6 +34,8 @@
   -webkit-font-smoothing:antialiased;
 }
 .n{direction:ltr; unicode-bidi:isolate; font-family:var(--mono); font-variant-numeric:tabular-nums}
+/* numeric run inside Hebrew prose — keeps signs on the correct side */
+.ni{direction:ltr; unicode-bidi:isolate; font-variant-numeric:tabular-nums}
 button{font-family:inherit; cursor:pointer}
 :focus-visible{outline:2px solid var(--accent-2); outline-offset:2px; border-radius:4px}
 
@@ -42,8 +44,9 @@ button{font-family:inherit; cursor:pointer}
   border-bottom:2px solid var(--ink); padding-bottom:10px; margin-bottom:2px}
 .mast h1{margin:0; font-size:23px; font-weight:800; letter-spacing:-.4px}
 .mast h1 small{font-weight:500; color:var(--ink-3); font-size:13px; letter-spacing:0}
-.mockflag{font-family:var(--mono); font-size:10px; letter-spacing:.14em; text-transform:uppercase;
-  border:1px solid var(--rule-2); color:var(--ink-3); padding:3px 7px; border-radius:3px; background:var(--panel)}
+.mockflag{font-size:10.5px; border:1px solid var(--rule-2); color:var(--ink-3); padding:3px 7px;
+  border-radius:3px; background:var(--panel)}
+.mockflag i{font-style:normal; font-family:var(--mono); letter-spacing:.13em; text-transform:uppercase}
 .mast .spacer{flex:1}
 .gwpill{font-family:var(--mono); font-size:12px; background:var(--ink); color:#fff; padding:5px 10px; border-radius:3px}
 .mast-tools{display:flex; gap:8px; align-items:center}
@@ -130,8 +133,8 @@ thead th.stick{z-index:4; background:var(--panel-2)}
 .taken{background:#F1F3F6; color:var(--ink-3); font-weight:600}
 
 .bar{position:relative; min-width:74px}
-.bar .track{height:4px; background:var(--rule); border-radius:2px; margin-top:3px; overflow:hidden}
-.bar .fill{height:100%; border-radius:2px; background:var(--accent-2)}
+.bar .track{display:block; height:4px; background:var(--rule); border-radius:2px; margin-top:3px; overflow:hidden}
+.bar .fill{display:block; height:100%; border-radius:2px; background:var(--accent-2)}
 .bar .v{font-family:var(--mono); font-size:12.5px; font-variant-numeric:tabular-nums; direction:ltr; display:block}
 .bar.g .fill{background:var(--good)} .bar.b .fill{background:var(--bad)} .bar.w .fill{background:#C88A12}
 
@@ -168,8 +171,8 @@ tr.detail td{padding:0; background:var(--accent-soft); border-bottom:2px solid v
 .det p{margin:0 0 10px; font-size:13px; color:var(--ink-2); max-width:62ch}
 .pbars{display:grid; gap:6px}
 .pbar{display:grid; grid-template-columns:88px 1fr 40px; align-items:center; gap:8px; font-size:12px}
-.pbar .t{height:6px; background:#DDE2F0; border-radius:3px; overflow:hidden}
-.pbar .f{height:100%; background:var(--accent-2); border-radius:3px}
+.pbar .t{display:block; height:6px; background:#DDE2F0; border-radius:3px; overflow:hidden}
+.pbar .f{display:block; height:100%; background:var(--accent-2); border-radius:3px}
 .pbar b{font-family:var(--mono); font-size:11.5px; text-align:end; direction:ltr; font-weight:600}
 .pbar span:first-child{color:var(--ink-2)}
 .fixlist{display:grid; gap:4px}
@@ -216,7 +219,7 @@ tr.detail td{padding:0; background:var(--accent-soft); border-bottom:2px solid v
 
   <header class="mast">
     <h1>מוקד סקאוטינג <small>· ליגת הדראפט 25/26</small></h1>
-    <span class="mockflag">mockup · נתונים מומצאים</span>
+    <span class="mockflag"><i>mockup</i> · נתונים מומצאים</span>
     <span class="spacer"></span>
     <div class="mast-tools">
       <button class="kbtn" onclick="openPal()">חיפוש שחקן <kbd>⌘K</kbd></button>
@@ -381,8 +384,13 @@ const PLAYERS=[
 const S={avail:'free',pos:new Set(),preset:'scout',sort:'score',dir:-1,watch:new Set([1,4,13]),cmp:[],open:null,palSel:0};
 
 /* =================== column registry =================== */
+/* isolate numeric runs so signs render on the correct side inside RTL prose */
+const num=t=>String(t).replace(/(^|\s)([+-]\d+(?:\.\d+)?)/g,'$1<span class="ni">$2</span>');
 const pct=(v,k)=>{const a=PLAYERS.map(p=>+p[k]);const mn=Math.min(...a),mx=Math.max(...a);return mx===mn?0:(v-mn)/(mx-mn)};
-const bar=(v,k,fmt,tone='')=>`<div class="bar ${tone}"><span class="v">${fmt}</span><span class="track"><span class="fill" style="width:${(pct(v,k)*100).toFixed(0)}%"></span></span></div>`;
+/* percentile against the same position only — a defender's xGI means nothing against forwards */
+const pctPos=(p,k)=>{const a=PLAYERS.filter(x=>x.pos===p.pos).map(x=>+x[k]);
+  const mn=Math.min(...a),mx=Math.max(...a);return mx===mn?.5:(+p[k]-mn)/(mx-mn)};
+const bar=(v,k,fmt,tone='')=>`<div class="bar ${tone}"><span class="v">${fmt}</span><span class="track"><span class="fill" style="width:${Math.max(pct(v,k)*100,4).toFixed(0)}%"></span></span></div>`;
 const ribbon=p=>`<span class="ribbon" title="ששת המשחקים הבאים — הבא ביותר מימין">${p.fdr.map(f=>`<i class="f${f.fdr}${f.home?'':' away'}">${f.opp}</i>`).join('')}</span>`;
 function spark(a,w=58,h=18,col='#2E3E90'){const mx=Math.max(...a,1),mn=Math.min(...a,0);
   const pts=a.map((v,i)=>`${(i/(a.length-1)*w).toFixed(1)},${(h-((v-mn)/((mx-mn)||1))*h).toFixed(1)}`);
@@ -400,7 +408,7 @@ const RISK={rot:['risk-rot','סיבוב'],knock:['risk-knock','מכה'],new:['ri
 
 const COLS={
   signal:{h:'סיגנל',s:'signal',r:p=>`<span class="sig sig-${p.signal}">${SIGICO[p.signal]} ${SIGTXT[p.signal]}</span>
-    <span class="why">${p.reasons.slice(0,2).map(t=>`<span>${t}</span>`).join('')}</span>`},
+    <span class="why">${p.reasons.slice(0,2).map(t=>`<span>${num(t)}</span>`).join('')}</span>`},
   score:{h:'ציון',s:'score',r:p=>bar(p.score,'score',p.score,p.score>=80?'g':p.score<65?'b':'w')},
   avail:{h:'זמינות',s:'owner',r:availCell},
   fdr6:{h:'לו״ז 6 ←',s:null,r:ribbon},
@@ -463,17 +471,17 @@ function render(){
       </div></td>`+cols.map(c=>`<td>${COLS[c].r(p)}</td>`).join('')+`</tr>`;
     if(S.open!==p.id)return main;
     return main+`<tr class="detail"><td colspan="${cols.length+1}"><div class="det">
-      <section><h4>למה הוא ברשימה</h4><p>${p.note}</p>
-        <div class="why">${p.reasons.map(t=>`<span>${t}</span>`).join('')}</div>
+      <section><h4>למה הוא ברשימה</h4><p>${num(p.note)}</p>
+        <div class="why">${p.reasons.map(t=>`<span>${num(t)}</span>`).join('')}</div>
         <div class="act">
-          <button class="pri" onclick="event.stopPropagation();togWatch(${p.id})">${on?'★ הוסר מהמעקב':'☆ הוסף למעקב'}</button>
+          <button class="pri" onclick="event.stopPropagation();togWatch(${p.id})">${on?'★ הסר מהמעקב':'☆ הוסף למעקב'}</button>
           <button onclick="event.stopPropagation();addCmp(${p.id})">+ להשוואה</button>
           <button onclick="event.stopPropagation();alert('מוקאפ')">סמן כמטרת טרייד</button>
           <button onclick="event.stopPropagation();alert('מוקאפ')">התראה אם הציון עולה ל-90</button>
         </div></section>
       <section><h4>אחוזונים בעמדה (${p.pos})</h4><div class="pbars">
-        ${[['xGI/90','xgi90',2],['xG/90','xg90',2],['xA/90','xa90',2],['תרומה הגנתית','dc90',1],['בונוס/90','bonus90',1],['ICT/90','ict90',1]]
-          .map(([l,k,d])=>{const v=Math.round(pct(p[k],k)*100);
+        ${[['xGI/90','xgi90'],['xG/90','xg90'],['xA/90','xa90'],['תרומה הגנתית','dc90'],['בונוס/90','bonus90'],['ICT/90','ict90']]
+          .map(([l,k])=>{const v=Math.round(pctPos(p,k)*100);
           return `<div class="pbar"><span>${l}</span><span class="t"><span class="f" style="width:${v}%"></span></span><b>${v}</b></div>`}).join('')}
       </div></section>
       <section><h4>ששת המשחקים הבאים</h4><div class="fixlist">
@@ -496,7 +504,7 @@ function tape(){
   const easy=w.filter(p=>p.fdr.slice(0,3).reduce((s,f)=>s+f.fdr,0)/3<=2.4).length;
   document.getElementById('tWatch').innerHTML=`${easy} <em>מתוך ${w.length}</em>`;
   const g=[...PLAYERS].sort((a,b)=>a.xdiff-b.xdiff)[0];
-  document.getElementById('tGap').innerHTML=`<span class="up">${g.xdiff.toFixed(1)}</span> <em>${g.name}</em>`;
+  document.getElementById('tGap').innerHTML=`<span class="up n">${g.xdiff.toFixed(1)}</span> <em>${g.name}</em>`;
   document.getElementById('tRisk').innerHTML=`${PLAYERS.filter(p=>p.owner===MY&&p.risk).length} <em>שחקנים</em>`;
 }
 /* =================== interactions =================== */

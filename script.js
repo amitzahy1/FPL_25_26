@@ -3321,6 +3321,99 @@ function getChartConfig(data, xKey, yKey, xLabel, yLabel, quadLabels = {}, color
 }
 
 // ============================================
+// FORM WINDOW — "last N matches"
+// ============================================
+// A season-long average is the wrong lens once matches are being played: it
+// keeps rewarding someone who was excellent in August and has since lost their
+// place. These recompute the panel inputs over a player's most recent
+// appearances, using the per-match log stored in the season snapshot.
+
+const FORM_WINDOWS = [
+    { id: 'season', label: 'כל העונה', matches: null },
+    { id: 'last10', label: '10 אחרונים', matches: 10 },
+    { id: 'last6', label: '6 אחרונים', matches: 6 },
+    { id: 'last3', label: '3 אחרונים', matches: 3 }
+];
+
+state.formWindow = 'season';
+
+/**
+ * Per-match log for a player, newest last: {gw, points, minutes, xgi, defconHit}.
+ * Comes from the snapshot; live seasons fall back to season totals until the
+ * per-gameweek data has been fetched.
+ */
+function getMatchLog(player) {
+    const snap = state.allPlayersData[state.currentDataSource]?.raw?.__snapshot;
+    if (!snap || !snap.gwLogs) return null;
+    const flat = snap.gwLogs[player.id];
+    if (!flat || !flat.length) return null;
+
+    const stride = snap.logStride || 5;
+    const out = [];
+    for (let i = 0; i < flat.length; i += stride) {
+        out.push({
+            gw: flat[i], points: flat[i + 1], minutes: flat[i + 2],
+            xgi: flat[i + 3] / 100, defconHit: flat[i + 4]
+        });
+    }
+    return out.sort((a, b) => a.gw - b.gw);
+}
+
+/**
+ * Recompute the window-sensitive metrics over the last N appearances.
+ * Writes window_* fields, leaving the season-long values untouched so both
+ * remain available.
+ */
+function applyFormWindow(players, windowId = state.formWindow) {
+    const spec = FORM_WINDOWS.find(w => w.id === windowId) || FORM_WINDOWS[0];
+
+    players.forEach(p => {
+        if (!spec.matches) {
+            p.window_ppg = parseFloat(p.points_per_game) || 0;
+            p.window_defcon_rate = p.defcon_hit_rate;
+            p.window_xgi90 = p.xGI_per90;
+            p.window_minutes = p.minutes;
+            p.window_matches = p.appearances || 0;
+            p.window_points = p.total_points;
+            return;
+        }
+
+        const log = getMatchLog(p);
+        if (!log || !log.length) {
+            // No per-match data (live season before gameweek stats load).
+            p.window_ppg = null; p.window_defcon_rate = null; p.window_xgi90 = null;
+            p.window_minutes = 0; p.window_matches = 0; p.window_points = 0;
+            return;
+        }
+
+        const recent = log.slice(-spec.matches);
+        const mins = recent.reduce((s, m) => s + m.minutes, 0);
+        const pts = recent.reduce((s, m) => s + m.points, 0);
+        const xgi = recent.reduce((s, m) => s + m.xgi, 0);
+        const hits = recent.reduce((s, m) => s + m.defconHit, 0);
+
+        p.window_matches = recent.length;
+        p.window_minutes = mins;
+        p.window_points = pts;
+        p.window_ppg = recent.length ? Math.round((pts / recent.length) * 100) / 100 : 0;
+        p.window_xgi90 = mins > 0 ? Math.round((xgi / (mins / 90)) * 100) / 100 : 0;
+        // Goalkeepers are not DEFCON-eligible, so keep them null rather than 0%.
+        p.window_defcon_rate = p.defcon_hit_rate === null
+            ? null
+            : Math.round((hits / recent.length) * 1000) / 10;
+    });
+
+    return players;
+}
+
+function setFormWindow(windowId) {
+    state.formWindow = windowId;
+    const players = state.allPlayersData[state.currentDataSource]?.processed;
+    if (players) applyFormWindow(players, windowId);
+    renderDraftBoard();
+}
+
+// ============================================
 // DRAFT BOARD — "why pick this player"
 // ============================================
 // Each panel answers one concrete draft question with an explicit, stated
@@ -3328,6 +3421,8 @@ function getChartConfig(data, xKey, yKey, xLabel, yLabel, quadLabels = {}, color
 // Pre-draft every player is available; once the league is loaded these
 // restrict themselves to genuine free agents.
 
+// `minMatches` scales with the window so a 3-match view is not judged against
+// a full-season sample size.
 const DRAFT_PANELS = [
     {
         id: 'value',
@@ -3335,9 +3430,26 @@ const DRAFT_PANELS = [
         subtitle: 'VORP — יתרון על החלופה החופשית',
         icon: '💎',
         accent: '#6366f1',
-        why: p => `+${p.vorp.toFixed(2)} נק'/משחק מעל חלופה (${p.replacement_score.toFixed(2)})`,
-        eligible: p => p.vorp !== null && p.vorp > 0 && p.minutes > 600,
-        rank: (a, b) => b.vorp - a.vorp
+        metric: p => p.vorp,
+        display: p => `+${p.vorp.toFixed(2)}`,
+        why: p => `חלופה בעמדה: ${p.replacement_score.toFixed(2)} נק'`,
+        eligible: (p, w) => p.vorp !== null && p.vorp > 0 && p.window_matches >= w.minMatches,
+        rank: (a, b) => b.vorp - a.vorp,
+        windowAware: false
+    },
+    {
+        id: 'form',
+        title: 'הכי חמים עכשיו',
+        subtitle: 'נקודות למשחק בחלון הנבחר',
+        icon: '🔥',
+        accent: '#ea580c',
+        metric: p => p.window_ppg,
+        display: p => `${p.window_ppg.toFixed(1)}`,
+        why: p => `${p.window_points} נק' ב-${p.window_matches} משחקים`,
+        eligible: (p, w) => p.window_ppg !== null && p.window_matches >= w.minMatches &&
+            p.window_minutes >= w.minMatches * 45,
+        rank: (a, b) => b.window_ppg - a.window_ppg,
+        windowAware: true
     },
     {
         id: 'defcon',
@@ -3345,9 +3457,13 @@ const DRAFT_PANELS = [
         subtitle: 'עוברים את הסף בפועל, לא בממוצע',
         icon: '🛡️',
         accent: '#0891b2',
-        why: p => `עבר את הסף ב-${p.defcon_hit_rate.toFixed(0)}% מההופעות (${p.defcon_hits}/${p.defcon_eligible_apps})`,
-        eligible: p => p.defcon_hit_rate !== null && p.defcon_hit_rate >= 20 && p.defcon_eligible_apps >= 10,
-        rank: (a, b) => b.defcon_hit_rate - a.defcon_hit_rate
+        metric: p => p.window_defcon_rate,
+        display: p => `${p.window_defcon_rate.toFixed(0)}%`,
+        why: p => `${Math.round(p.window_defcon_rate * p.window_matches / 100)}/${p.window_matches} משחקים מעל הסף`,
+        eligible: (p, w) => p.window_defcon_rate !== null && p.window_defcon_rate >= 20 &&
+            p.window_matches >= w.minMatches,
+        rank: (a, b) => b.window_defcon_rate - a.window_defcon_rate,
+        windowAware: true
     },
     {
         id: 'nailed',
@@ -3355,10 +3471,13 @@ const DRAFT_PANELS = [
         subtitle: 'דקות יציבות — קריטי בדראפט',
         icon: '🔒',
         accent: '#059669',
-        why: p => `${Math.round(p.rotation_risk * 100)}% פתיחות · ${p.points_per_game_90.toFixed(1)} נק'/90`,
-        eligible: p => p.rotation_risk !== null && p.rotation_risk >= 0.85 &&
-            p.minutes > 1200 && p.points_per_game_90 > 3,
-        rank: (a, b) => (b.rotation_risk * b.points_per_game_90) - (a.rotation_risk * a.points_per_game_90)
+        metric: p => p.rotation_risk,
+        display: p => `${Math.round(p.rotation_risk * 100)}%`,
+        why: p => `${Math.round(p.window_minutes / Math.max(p.window_matches, 1))} דק' למשחק · ${p.window_ppg.toFixed(1)} נק'`,
+        eligible: (p, w) => p.rotation_risk !== null && p.rotation_risk >= 0.85 &&
+            p.window_matches >= w.minMatches && p.window_ppg > 3,
+        rank: (a, b) => (b.rotation_risk * b.window_ppg) - (a.rotation_risk * a.window_ppg),
+        windowAware: true
     },
     {
         id: 'underlying',
@@ -3366,9 +3485,13 @@ const DRAFT_PANELS = [
         subtitle: 'מייצרים יותר ממה שהמירו',
         icon: '📈',
         accent: '#d97706',
-        why: p => `xGI ${p.xGI_per90.toFixed(2)}/90 · פער המרה ${p.xDiff.toFixed(1)}`,
-        eligible: p => p.minutes > 900 && p.xDiff < -1 && p.xGI_per90 > 0.35,
-        rank: (a, b) => a.xDiff - b.xDiff
+        metric: p => p.window_xgi90,
+        display: p => `${p.window_xgi90.toFixed(2)}`,
+        why: p => `פער המרה ${p.xDiff.toFixed(1)} — צפוי לתקן`,
+        eligible: (p, w) => p.window_xgi90 !== null && p.window_xgi90 > 0.35 &&
+            p.xDiff < -1 && p.window_matches >= w.minMatches,
+        rank: (a, b) => b.window_xgi90 - a.window_xgi90,
+        windowAware: true
     },
     {
         id: 'setpiece',
@@ -3376,6 +3499,12 @@ const DRAFT_PANELS = [
         subtitle: 'פנדלים וקרנות = נקודות חוזרות',
         icon: '🎯',
         accent: '#be185d',
+        metric: p => p.draft_score,
+        display: p => {
+            const o = Math.min(p.set_piece_priority.penalty, p.set_piece_priority.corner,
+                p.set_piece_priority.free_kick);
+            return `#${o}`;
+        },
         why: p => {
             const bits = [];
             if (p.set_piece_priority.penalty <= 2) bits.push(`פנדל #${p.set_piece_priority.penalty}`);
@@ -3383,9 +3512,10 @@ const DRAFT_PANELS = [
             if (p.set_piece_priority.free_kick <= 2) bits.push(`חופשית #${p.set_piece_priority.free_kick}`);
             return bits.join(' · ') || 'בעל כדורים נייחים';
         },
-        eligible: p => Math.min(p.set_piece_priority.penalty, p.set_piece_priority.corner,
-            p.set_piece_priority.free_kick) <= 2 && p.minutes > 600,
-        rank: (a, b) => b.draft_score - a.draft_score
+        eligible: (p, w) => Math.min(p.set_piece_priority.penalty, p.set_piece_priority.corner,
+            p.set_piece_priority.free_kick) <= 2 && p.window_matches >= w.minMatches,
+        rank: (a, b) => b.draft_score - a.draft_score,
+        windowAware: false
     }
 ];
 
@@ -3396,47 +3526,66 @@ function renderDraftBoard() {
     const players = state.allPlayersData[state.currentDataSource]?.processed || [];
     if (!players.length) { host.innerHTML = ''; return; }
 
+    if (players[0].window_ppg === undefined) applyFormWindow(players);
+
+    const spec = FORM_WINDOWS.find(w => w.id === state.formWindow) || FORM_WINDOWS[0];
+    const win = { ...spec, minMatches: spec.matches ? Math.max(2, Math.ceil(spec.matches * 0.6)) : 10 };
+
     const owned = state.draft.ownedElementIds;
     const availableOnly = owned && owned.size > 0;
     const pool = availableOnly ? players.filter(p => !owned.has(p.id)) : players;
-
     // Injured or suspended players are never a recommendation.
     const healthy = pool.filter(p => p.availability_factor > 0.5);
 
-    const cards = DRAFT_PANELS.map(panel => {
-        const picks = healthy.filter(panel.eligible).sort(panel.rank).slice(0, 3);
+    const cards = DRAFT_PANELS.map((panel, cardIdx) => {
+        const picks = healthy.filter(p => panel.eligible(p, win)).sort(panel.rank).slice(0, 3);
         if (!picks.length) return '';
 
         const rows = picks.map((p, i) => `
-            <div style="display:flex; align-items:center; gap:8px; padding:7px 0; ${i < picks.length - 1 ? 'border-bottom:1px solid #f1f5f9;' : ''}">
-                <span style="width:18px; height:18px; flex:none; border-radius:5px; background:${panel.accent}1a; color:${panel.accent}; font-size:10px; font-weight:800; display:flex; align-items:center; justify-content:center;">${i + 1}</span>
-                <div style="min-width:0; flex:1;">
-                    <div style="font-weight:700; font-size:12.5px; color:#0f172a; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
-                        ${p.web_name}
-                        <span style="font-weight:600; color:#94a3b8; font-size:10.5px;">${p.position_name} · ${p.team_name}</span>
-                    </div>
-                    <div style="font-size:10.5px; color:#64748b; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${panel.why(p)}</div>
-                </div>
-            </div>`).join('');
+            <li class="db-row" style="--i:${i}">
+                <span class="db-rank" style="--accent:${panel.accent}">${i + 1}</span>
+                <span class="db-player">
+                    <span class="db-name">${escapeHtml(p.web_name)}</span>
+                    <span class="db-meta">${p.position_name} · ${escapeHtml(p.team_name)}</span>
+                    <span class="db-why">${escapeHtml(panel.why(p))}</span>
+                </span>
+                <span class="db-value" style="--accent:${panel.accent}">${escapeHtml(panel.display(p))}</span>
+            </li>`).join('');
 
         return `
-            <div style="background:#fff; border:1px solid #e8edf3; border-top:3px solid ${panel.accent}; border-radius:12px; padding:12px 14px; box-shadow:0 1px 3px rgba(15,23,42,.05);">
-                <div style="display:flex; align-items:baseline; gap:6px; margin-bottom:2px;">
-                    <span style="font-size:14px;">${panel.icon}</span>
-                    <span style="font-weight:800; font-size:13px; color:#0f172a;">${panel.title}</span>
-                </div>
-                <div style="font-size:10.5px; color:#94a3b8; margin-bottom:6px;">${panel.subtitle}</div>
-                ${rows}
-            </div>`;
+            <article class="db-card" style="--accent:${panel.accent}; --d:${cardIdx * 55}ms">
+                <header class="db-head">
+                    <span class="db-icon">${panel.icon}</span>
+                    <span>
+                        <span class="db-title">${panel.title}</span>
+                        <span class="db-sub">${panel.subtitle}${panel.windowAware && spec.matches ? ` · ${spec.label}` : ''}</span>
+                    </span>
+                </header>
+                <ul class="db-list">${rows}</ul>
+            </article>`;
     }).filter(Boolean).join('');
 
-    host.innerHTML = cards
-        ? `<div style="display:flex; align-items:center; justify-content:space-between; margin:4px 2px 10px;">
-               <div style="font-weight:800; font-size:14px; color:#0f172a;">🎯 למי כדאי לקחת</div>
-               <div style="font-size:11px; color:#64748b;">${availableOnly ? 'מוצגים שחקנים חופשיים בלבד' : 'לפני הדראפט — כל השחקנים זמינים'}</div>
-           </div>
-           <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(230px, 1fr)); gap:12px;">${cards}</div>`
-        : '';
+    if (!cards) { host.innerHTML = ''; return; }
+
+    const chips = FORM_WINDOWS.map(w => `
+        <button type="button" class="db-chip${w.id === state.formWindow ? ' is-on' : ''}"
+                onclick="setFormWindow('${w.id}')">${w.label}</button>`).join('');
+
+    host.innerHTML = `
+        <div class="db-bar">
+            <div class="db-heading"><span class="db-heading-dot"></span>למי כדאי לקחת</div>
+            <div class="db-controls">
+                <span class="db-scope">${availableOnly ? 'שחקנים חופשיים בלבד' : 'לפני הדראפט — כל השחקנים זמינים'}</span>
+                <div class="db-chips">${chips}</div>
+            </div>
+        </div>
+        <div class="db-grid">${cards}</div>`;
+}
+
+function escapeHtml(value) {
+    return String(value ?? '').replace(/[&<>"']/g, c => (
+        { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
+    ));
 }
 
 // --- Cell formatters for the draft metrics ---
