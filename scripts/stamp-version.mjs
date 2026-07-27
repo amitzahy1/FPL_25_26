@@ -32,15 +32,20 @@ function nextVersion() {
 
 const version = nextVersion();
 const html = readFileSync(INDEX, 'utf8');
-const updated = html.replace(
-    /(<script src="script\.js\?v=)[^"]*(")/,
-    `$1${version}$2`
-);
+const TAG = /(<script src="script\.js\?v=)([^"]*)(")/;
 
-if (updated === html) {
+const match = html.match(TAG);
+if (!match) {
     console.error('No script.js version tag found in index.html — nothing stamped.');
     process.exit(1);
 }
 
-writeFileSync(INDEX, updated);
-console.log(`Stamped script.js?v=${version}`);
+// Re-running on the same commit yields the same version. That is a no-op, not
+// a failure -- treating it as one made the script look broken.
+if (match[2] === version) {
+    console.log(`script.js?v=${version} already current`);
+    process.exit(0);
+}
+
+writeFileSync(INDEX, html.replace(TAG, `$1${version}$3`));
+console.log(`Stamped script.js?v=${match[2]} -> ${version}`);
