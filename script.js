@@ -227,6 +227,24 @@ const config = {
     }
 };
 
+/**
+ * Per-item logging is off unless asked for. A single page load emitted ~940
+ * console lines — one per fetch, per proxy hop, and per player-name match — and
+ * the ~125 "no match found" lines went out at warn level even though they are an
+ * expected outcome (academy players and departed players are not in the current
+ * FPL bootstrap). The volume buried anything genuinely wrong.
+ *
+ * Turn it on with ?debug=1, or localStorage.setItem('fpl_debug','1').
+ */
+const DEBUG_LOGS = (() => {
+    try {
+        return /[?&]debug=1\b/.test(window.location.search)
+            || localStorage.getItem('fpl_debug') === '1';
+    } catch (e) { return false; }
+})();
+
+function dbg(...args) { if (DEBUG_LOGS) console.log(...args); }
+
 const state = {
     allPlayersData: {
         historical: { raw: null, processed: null, fixtures: null },
@@ -250,7 +268,10 @@ const state = {
     // --- scouting view ---
     watchlist: new Set(),        // player ids, persisted in localStorage
     watchlistOnly: false,        // filter the table down to the watchlist
-    rowMode: 'trend',            // 'trend' = tall rows with per-GW micro-charts, 'compact' = classic
+    rowMode: 'trend',
+    columnPreset: (() => {
+        try { return localStorage.getItem('fpl_column_preset') || 'scout'; } catch (e) { return 'scout'; }
+    })(),            // 'trend' = tall rows with per-GW micro-charts, 'compact' = classic
     trendWindow: 5,              // how many recent gameweeks each micro-chart covers
     trendGws: [],                // [{ gw, stats: Map(playerId -> gwStats) }] newest last
     trendPrevGws: [],            // the window before it, so deltas have a baseline
@@ -439,10 +460,10 @@ async function _fetchWithCacheUncoalesced(url, cacheKey, cacheDurationMinutes = 
             const { timestamp, data } = JSON.parse(cachedItem);
             const isCacheValid = (new Date().getTime() - timestamp) / (1000 * 60) < cacheDurationMinutes;
             if (isCacheValid) {
-                console.log(`✅ Returning cached data for ${cacheKey}`);
+                dbg(`✅ Returning cached data for ${cacheKey}`);
                 return data;
             } else {
-                console.log(`⏰ Cache expired for ${cacheKey}`);
+                dbg(`⏰ Cache expired for ${cacheKey}`);
                 localStorage.removeItem(cacheKey);
             }
         } catch (e) {
@@ -451,7 +472,7 @@ async function _fetchWithCacheUncoalesced(url, cacheKey, cacheDurationMinutes = 
         }
     }
 
-    console.log(`🌐 Fetching fresh data for ${cacheKey}...`);
+    dbg(`🌐 Fetching fresh data for ${cacheKey}...`);
 
     const saveToCache = (data) => {
         const payload = JSON.stringify({ timestamp: new Date().getTime(), data });
@@ -575,7 +596,7 @@ async function _fetchWithCacheUncoalesced(url, cacheKey, cacheDurationMinutes = 
                 const text = await response.text();
                 try {
                     const data = JSON.parse(text); // Verify JSON
-                    console.log(`✅ Proxy ${i + 1} success (${currentProxy})`);
+                    dbg(`✅ Proxy ${i + 1} success (${currentProxy})`);
 
                     // Prioritize this proxy for this session
                     if (i > 0 && i < 3) config.corsProxy = currentProxy;
@@ -693,7 +714,7 @@ function findFuzzyMatch(draftPlayer, fplPlayers) {
  * This solves the problem where IDs don't match between the two APIs
  */
 async function buildDraftToFplMapping() {
-    console.log('🔄 Building Draft to FPL ID mapping...');
+    dbg('🔄 Building Draft to FPL ID mapping...');
 
     try {
         const fplUrl = config.corsProxy + encodeURIComponent(config.urls.bootstrap);
@@ -730,8 +751,9 @@ async function buildDraftToFplMapping() {
         let nameMatches = 0;
         let fuzzyMatches = 0;
         let unmapped = 0;
+        const unmappedNames = [];
 
-        console.log('📋 Starting player mapping...');
+        dbg('📋 Starting player mapping...');
 
         for (const draftPlayer of draftData.elements) {
             let fplPlayer = null;
@@ -753,7 +775,7 @@ async function buildDraftToFplMapping() {
                     matchType = 'name';
                     nameMatches++;
                     if (draftPlayer.id !== fplPlayer.id) {
-                        console.log(`  🔗 Name match: ${draftPlayer.web_name} - Draft:${draftPlayer.id} → FPL:${fplPlayer.id}`);
+                        dbg(`  🔗 Name match: ${draftPlayer.web_name} - Draft:${draftPlayer.id} → FPL:${fplPlayer.id}`);
                     }
                 }
             }
@@ -765,7 +787,7 @@ async function buildDraftToFplMapping() {
                     fplPlayer = fuzzyMatch.player;
                     matchType = 'fuzzy';
                     fuzzyMatches++;
-                    console.log(`  🔍 Fuzzy match: ${draftPlayer.web_name} → ${fplPlayer.web_name} (${(fuzzyMatch.similarity * 100).toFixed(0)}% similar, Draft:${draftPlayer.id} → FPL:${fplPlayer.id})`);
+                    dbg(`  🔍 Fuzzy match: ${draftPlayer.web_name} → ${fplPlayer.web_name} (${(fuzzyMatch.similarity * 100).toFixed(0)}% similar, Draft:${draftPlayer.id} → FPL:${fplPlayer.id})`);
                 }
             }
 
@@ -774,16 +796,18 @@ async function buildDraftToFplMapping() {
                 state.draft.fplToDraftIdMap.set(fplPlayer.id, draftPlayer.id);
             } else {
                 unmapped++;
-                console.warn(`  ❌ No match found for: ${draftPlayer.web_name} (Draft ID: ${draftPlayer.id}, Position: ${draftPlayer.element_type})`);
+                // Expected for academy and departed players, so this is not a
+                // warning; collected for the one-line summary below.
+                unmappedNames.push(draftPlayer.web_name);
             }
         }
 
-        console.log('✅ Mapping complete:');
-        console.log(`  - Exact ID matches: ${exactMatches}`);
-        console.log(`  - Name matches: ${nameMatches}`);
-        console.log(`  - Fuzzy matches: ${fuzzyMatches}`);
-        console.log(`  - Unmapped: ${unmapped}`);
-        console.log(`  - Total mapped: ${state.draft.draftToFplIdMap.size} / ${draftData.elements.length}`);
+        const total = draftData.elements.length;
+        console.log(`🔗 Draft→FPL mapping: ${state.draft.draftToFplIdMap.size}/${total} matched`
+            + ` (${exactMatches} by id, ${nameMatches} by name, ${fuzzyMatches} fuzzy)`
+            + `${unmapped ? ` · ${unmapped} unmatched — expected for academy/departed players` : ''}`
+            + `${unmapped && !DEBUG_LOGS ? '. Add ?debug=1 for the list.' : ''}`);
+        if (unmapped && DEBUG_LOGS) console.log('   unmatched:', unmappedNames.join(', '));
 
         return {
             success: true,
@@ -1836,22 +1860,18 @@ const SIGNAL_RULES = [
     {
         key: 'out', label: 'לא זמין', tone: 'bad',
         test: p => p.availability_grade && p.availability_grade !== 'available',
-        why: p => [p.news ? String(p.news).slice(0, 48) : 'ספק השתתפות',
-                   p.chance_of_playing_next_round !== null ? `${p.chance_of_playing_next_round}% סיכוי` : null]
+        why: p => [p.chance_of_playing_next_round !== null && p.chance_of_playing_next_round < 100
+            ? `סיכוי ${p.chance_of_playing_next_round}% לשחק במחזור הקרוב`
+            : 'פציעה או הרחקה — לא לסמוך עליו למחזור הקרוב']
     },
     {
         key: 'clinical', label: 'יעיל', tone: 'clinical',
-        // A real sample, real chance volume, and a persistent surplus: this is a
-        // finisher, and the surplus is a reason to want him rather than to worry.
         test: p => p.xDiff >= 1.5 && p.minutes >= 900 && (parseFloat(p.xGI_per90) || 0) >= 0.35
             && (pointsConcentration(p) === null || pointsConcentration(p) < 0.5),
-        why: p => [`${p.xDiff.toFixed(1)} מעל הצפי ב-${Math.round(p.minutes / 90)} משחקים`,
-                   `xGI/90 ${(parseFloat(p.xGI_per90) || 0).toFixed(2)}`]
+        why: p => [`מסיים טוב יותר מהצפוי, ובאופן עקבי לאורך ${Math.round(p.minutes / 90)} משחקים`]
     },
     {
         key: 'overperf', label: 'מימוש יתר', tone: 'bad',
-        // Surplus without the underlying volume to support it, or a total that
-        // rests on a single gameweek.
         test: p => {
             if (p.xDiff < 1.5 || p.minutes < 270) return false;
             const thin = (parseFloat(p.xGI_per90) || 0) < 0.30;
@@ -1860,49 +1880,41 @@ const SIGNAL_RULES = [
         },
         why: p => {
             const conc = pointsConcentration(p);
-            return [`xDiff +${p.xDiff.toFixed(1)} בלי נתונים שתומכים`,
-                    conc !== null && conc >= 0.5
-                        ? `${Math.round(conc * 100)}% מהנקודות ממחזור אחד`
-                        : `xGI/90 ${(parseFloat(p.xGI_per90) || 0).toFixed(2)} — נמוך`];
+            return [conc !== null && conc >= 0.5
+                ? 'כמעט כל הנקודות שלו הגיעו ממחזור אחד — לא צפוי לחזור'
+                : 'הנקודות שלו גבוהות ממה שהביצועים מצדיקים — צפוי לרדת'];
         }
     },
     {
         key: 'sell', label: 'למכור גבוה', tone: 'warn',
         test: p => p.xDiff >= 2 && p.next_3_fdr >= 3.4,
-        why: p => [`xDiff +${p.xDiff.toFixed(1)}`, `לו״ז 3 קרובים ${p.next_3_fdr.toFixed(1)}`]
+        why: p => ['הערך שלו בשיא ולו״ז קשה מחכה — הזמן להציע אותו בטרייד']
     },
     {
         key: 'buylow', label: 'קנייה בזול', tone: 'info',
-        // Producing far more than the returns show — the gap usually closes.
         test: p => p.xDiff <= -1.5 && p.minutes >= 360,
-        why: p => [`xDiff ${p.xDiff.toFixed(1)} — צפוי לתיקון`,
-                   `${(parseFloat(p.xGI_per90) || 0).toFixed(2)} xGI/90`]
+        why: p => ['מגיע להזדמנויות אבל הנקודות לא באו — בדרך כלל זה מתיישר']
     },
     {
         key: 'claim', label: 'קח עכשיו', tone: 'good',
-        // Free agent who would start for most teams in the league.
-        //
-        // Reads the ownership Set, which league/{id}/element-status fills from
-        // the league's own answer — getDraftTeamForPlayer() walks every roster,
-        // which is both O(teams x squad) per player per sort and wrong whenever
-        // element-status knows about ownership the picks requests missed.
-        //
-        // The size check comes first: until ownership loads every player looks
-        // unowned, and "קח עכשיו" would sit on all 600 rows.
+        // ownedElementIds is what the "שחקנים חופשיים" filter tests, so the verdict
+        // and the filter cannot disagree about who is available. The roster walk it
+        // used before could say "free" for a player the filter had already excluded.
         test: p => state.draft.ownedElementIds.size > 0 && !state.draft.ownedElementIds.has(p.id)
             && p.draft_score >= 45 && p.minutes >= 270,
-        why: p => [`ציון ${p.draft_score.toFixed(0)} וחופשי`,
-                   p.set_piece_priority && p.set_piece_priority.penalty === 1 ? 'פנדלים #1' : `נק׳/90 ${p.points_per_game_90.toFixed(1)}`]
+        why: p => [p.set_piece_priority && p.set_piece_priority.penalty === 1
+            ? 'חופשי, בועט את הפנדלים, ובאיכות של שחקן הרכב'
+            : 'חופשי, ובאיכות של שחקן שפותח אצל רוב הקבוצות בליגה']
     },
     {
         key: 'swing', label: 'לו״ז מתהפך', tone: 'plum',
         test: p => p.next_3_fdr > 0 && p.next_3_fdr <= 2.4 && p.minutes >= 270,
-        why: p => [`לו״ז 3 קרובים ${p.next_3_fdr.toFixed(1)}`, `חיזוי ${(p.predicted_points_1_gw || 0).toFixed(1)}`]
+        why: p => ['שלושת המשחקים הבאים שלו מהקלים בליגה']
     },
     {
         key: 'rotation', label: 'סיכון סיבוב', tone: 'warn',
         test: p => Number.isFinite(p.rotation_risk) && p.rotation_risk < 0.6 && p.minutes >= 180,
-        why: p => [`פתח ב-${Math.round(p.rotation_risk * 100)}% מהמשחקים`]
+        why: p => [`לא מובטח בהרכב — פתח רק ב-${Math.round(p.rotation_risk * 100)}% מהמשחקים`]
     }
 ];
 
@@ -1926,7 +1938,7 @@ function signalFor(player) {
         try { matched = !!rule.test(player); } catch (e) { matched = false; }
         if (!matched) continue;
         let why = [];
-        try { why = (rule.why(player) || []).filter(Boolean).slice(0, 2); } catch (e) { why = []; }
+        try { why = (rule.why(player) || []).filter(Boolean).slice(0, 1); } catch (e) { why = []; }
         result = { key: rule.key, label: rule.label, tone: rule.tone, why };
         break;
     }
@@ -2391,7 +2403,6 @@ function boxValue(p) {
             ${statLine('VORP', formatVorp(p.vorp), 'עדיפות על השחקן החופשי הטוב ביותר באותה עמדה')}
             ${statLine('רמת החלפה', fmt(p.replacement_score, 2),
                 'נק׳ למשחק של השחקן שהיה מחליף אותו')}
-            ${statLine('חיזוי מחזור הבא', fmt(p.predicted_points_1_gw, 1))}
             ${statLine('חיזוי FPL הרשמי', fmt(p.ep_next, 1),
                 'ep_next — החיזוי של FPL עצמה, כנקודת ייחוס לחיזוי שלנו')}
             ${statLine('קושי 3 קרובים', num1(p.next_3_fdr) ? num1(p.next_3_fdr).toFixed(1) : null)}
@@ -2554,10 +2565,10 @@ function createPlayerRowHtml(player, index) {
 
     const signal = signalFor(player);
     const watched = state.watchlist.has(player.id);
-    // One trend column only. Two side-by-side windows of bars with no labels were
-    // impossible to read at a glance; xG+xA already has a per-90 column, and its
-    // trend is labelled properly in the row that opens on click.
-    const trendKeys = ['pts'];
+    // Points beside the chances they came from: more xG+xA than points means the
+    // returns lag the performance, and the other way round means they flatter it.
+    // Both cells label every bar, which is what made a single one readable.
+    const trendKeys = ['pts', 'xgi'];
 
     const icons = generatePlayerIcons(player);
     const fixturesHTML = generateFixturesHTML(player);
@@ -2609,11 +2620,14 @@ function createPlayerRowHtml(player, index) {
         ${trendKeys.map(key => trendCellHtml(player, key, index)).join('')}
         <td class="bold-cell ${getPercentileClass(player.draft_score, displayedValues.draft_score)}">${player.draft_score.toFixed(1)}</td>
         <td class="bold-cell" data-tooltip="${config.columnTooltips.vorp}" style="color:${player.vorp > 0 ? '#059669' : player.vorp < 0 ? '#dc2626' : '#94a3b8'};">${formatVorp(player.vorp)}</td>
+        <td class="${getPercentileClass(parseFloat(player.selected_by_percent), displayedValues.selected_by_percent)}">${player.selected_by_percent}%</td>
+        <td class="transfers-cell" data-tooltip="${config.columnTooltips.net_transfers_event}"><span class="${player.net_transfers_event >= 0 ? 'net-transfers-positive' : 'net-transfers-negative'}">${player.net_transfers_event.toLocaleString()}</span></td>
         <td data-tooltip="${config.columnTooltips.defcon_hit_rate}">${formatDefconRate(player.defcon_hit_rate)}</td>
         <td data-tooltip="${config.columnTooltips.rotation_risk}">${formatRotation(player.rotation_risk)}</td>
         <td data-tooltip="${config.columnTooltips.availability}">${formatAvailability(player)}</td>
         <td class="bold-cell stability-cell ${getPercentileClass(player.stability_index || 0, displayedValues.stability_index)}">${(player.stability_index || 0).toFixed(0)}</td>
-        <td class="bold-cell ${getPercentileClass(player.predicted_points_1_gw, displayedValues.predicted_points_1_gw)}" title="חיזוי טכני: ${(player.predicted_points_1_gw || 0).toFixed(1)} נקודות">${(player.predicted_points_1_gw || 0).toFixed(1)}</td>
+        <td class="${getPercentileClass(parseFloat(player.xGI_per90) || 0, displayedValues.xGI_per90)}">${(parseFloat(player.xGI_per90) || 0).toFixed(2)}</td>
+        <td class="${getPercentileClass((player.goals_scored || 0) + (player.assists || 0), displayedValues.goals_assists)}">${(player.goals_scored || 0) + (player.assists || 0)}</td>
         <td class="fdr-cell">${fdrBadge}</td>
         <td>${player.team_name}</td>
         <td class="${draftTeamClass}" title="${draftTeamDisplay}">${draftTeamDisplay}</td>
@@ -2621,12 +2635,8 @@ function createPlayerRowHtml(player, index) {
         <td>${player.now_cost.toFixed(1)}</td>
         <td class="${getPercentileClass(player.total_points, displayedValues.total_points)}">${player.total_points}</td>
         <td class="${getPercentileClass(player.points_per_game_90, displayedValues.points_per_game_90)}">${player.points_per_game_90.toFixed(1)}</td>
-        <td class="${getPercentileClass(parseFloat(player.selected_by_percent), displayedValues.selected_by_percent)}">${player.selected_by_percent}%</td>
         <td class="${getPercentileClass(player.dreamteam_count, displayedValues.dreamteam_count)}">${player.dreamteam_count}</td>
-        <td class="transfers-cell" data-tooltip="${config.columnTooltips.net_transfers_event}"><span class="${player.net_transfers_event >= 0 ? 'net-transfers-positive' : 'net-transfers-negative'}">${player.net_transfers_event.toLocaleString()}</span></td>
         <td class="${getPercentileClass(player.def_contrib_per90, displayedValues.def_contrib_per90)}" data-tooltip="${config.columnTooltips.def_contrib_per90}">${player.def_contrib_per90.toFixed(1)}</td>
-        <td class="${getPercentileClass((player.goals_scored || 0) + (player.assists || 0), displayedValues.goals_assists)}">${(player.goals_scored || 0) + (player.assists || 0)}</td>
-        <td class="${getPercentileClass(parseFloat(player.xGI_per90) || 0, displayedValues.xGI_per90)}">${(parseFloat(player.xGI_per90) || 0).toFixed(2)}</td>
         <td class="${getPercentileClass(player.minutes, displayedValues.minutes)}">${player.minutes}</td>
         <td class="${player.xDiff >= 0 ? 'xdiff-positive' : 'xdiff-negative'}" data-tooltip="${config.columnTooltips.xDiff}">${player.xDiff.toFixed(2)}</td>
         <td class="${getPercentileClass(parseFloat(player.ict_index_per90) || 0, displayedValues.ict_index_per90)}">${(parseFloat(player.ict_index_per90) || 0).toFixed(1)}</td>
@@ -2659,6 +2669,96 @@ function fitDetailPanel() {
 
 window.addEventListener('resize', fitDetailPanel);
 
+/* ==========================================================================
+   COLUMN PRESETS
+   34 columns do not fit any screen, so the table shipped with a horizontal
+   scroll that hid most of the metrics off-frame. Each preset shows the ~10
+   columns that answer one question, and "הכל" still gives the full set.
+   ========================================================================== */
+
+// The first three columns (select, rank, player) are always on screen; the rest
+// are named by their data-sort key.
+const ALWAYS_VISIBLE_COLUMNS = 3;
+
+const COLUMN_PRESETS = {
+    scout: {
+        label: 'סקאוטינג',
+        title: 'מי כדאי לקחת: המלצה, מגמה, ציון, זמינות ולו״ז',
+        keys: ['signal_rank', 'trend_pts', 'trend_xgi', 'draft_score', 'vorp', 'selected_by_percent', 'next_3_fdr',
+            'draft_team', 'position_name', 'points_per_game_90', 'rotation_risk', 'fixtures']
+    },
+    attack: {
+        label: 'התקפה',
+        title: 'ייצור התקפי: שערים, בישולים, xGI, בונוס',
+        keys: ['trend_pts', 'trend_xgi', 'draft_score', 'goals_scored_assists', 'xGI_per90', 'xDiff',
+            'ict_index_per90', 'bonus_per90', 'set_piece_priority.penalty', 'minutes', 'fixtures']
+    },
+    defence: {
+        label: 'הגנה',
+        title: 'תרומה הגנתית, DEFCON וקלין שיטים',
+        keys: ['draft_score', 'def_contrib_per90', 'defcon_hit_rate', 'clean_sheets_per90',
+            'team_name', 'position_name', 'minutes', 'rotation_risk', 'next_3_fdr', 'fixtures']
+    },
+    form: {
+        label: 'כושר ולו״ז',
+        title: 'מגמה, חיזוי, יציבות ולוח המשחקים',
+        keys: ['trend_pts', 'trend_xgi', 'points_per_game_90', 'stability_index',
+            'total_points', 'minutes', 'rotation_risk', 'next_3_fdr', 'fixtures']
+    },
+    all: { label: 'הכל', title: 'כל העמודות — כאן צריך גלילה אופקית', keys: null }
+};
+
+/** key -> column index, read from the header so the two can never drift. */
+function columnIndexByKey() {
+    const map = new Map();
+    document.querySelectorAll('#playersTable > thead > tr > th').forEach((th, i) => {
+        const key = th.dataset.sort || (th.classList.contains('fixtures-header') ? 'fixtures' : null);
+        if (key) map.set(key, i);
+    });
+    return map;
+}
+
+function visibleColumnCount() {
+    return [...document.querySelectorAll('#playersTable > thead > tr > th')]
+        .filter(th => !th.hidden).length;
+}
+
+function applyColumnPreset(name) {
+    const preset = COLUMN_PRESETS[name] ? name : 'scout';
+    state.columnPreset = preset;
+    try { localStorage.setItem('fpl_column_preset', preset); } catch (e) { /* private mode */ }
+
+    const keys = COLUMN_PRESETS[preset].keys;
+    const byKey = columnIndexByKey();
+    const show = new Set();
+    for (let i = 0; i < ALWAYS_VISIBLE_COLUMNS; i++) show.add(i);
+    if (keys) keys.forEach(k => { if (byKey.has(k)) show.add(byKey.get(k)); });
+
+    const heads = [...document.querySelectorAll('#playersTable > thead > tr > th')];
+    heads.forEach((th, i) => { th.hidden = keys ? !show.has(i) : false; });
+
+    document.querySelectorAll('#playersTable > tbody > tr.player-row').forEach(tr => {
+        [...tr.children].forEach((td, i) => { td.hidden = keys ? !show.has(i) : false; });
+    });
+
+    // The expanded row spans the table, so it has to follow the visible count.
+    const span = visibleColumnCount();
+    document.querySelectorAll('#playersTable .detail-row > td').forEach(td => {
+        td.colSpan = span;
+    });
+
+    document.querySelectorAll('[data-preset]').forEach(btn => {
+        btn.setAttribute('aria-pressed', String(btn.dataset.preset === preset));
+    });
+    const hint = document.getElementById('presetHint');
+    if (hint) hint.textContent = COLUMN_PRESETS[preset].title;
+}
+
+function setColumnPreset(name) {
+    applyColumnPreset(name);
+    fitDetailPanel();
+}
+
 function renderTable() {
     const columnMapping = config.tableColumns;
 
@@ -2687,6 +2787,7 @@ function renderTable() {
             ? row + playerDetailRowHtml(player, colCount)
             : row;
     }).join('');
+    applyColumnPreset(state.columnPreset);
     fitDetailPanel();
     updateScoutingUi();
     syncDetailWidth();

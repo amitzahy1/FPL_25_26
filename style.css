@@ -3555,7 +3555,11 @@ th {
        !important table-cell here outranked that. The exclusion is safe: this
        rule only exists to undo the stacked-card layout, which is scoped to
        narrow screens and so never applies inside this query anyway. */
-    td:not(.trend-col), th:not(.trend-col) { display: table-cell !important; }
+    /* `[hidden]` is excluded as well as `.trend-col`: the column presets hide
+       cells by setting the hidden property, and an !important table-cell here
+       silently outranked it, so every preset showed the full 35 columns. */
+    td:not(.trend-col):not([hidden]),
+    th:not(.trend-col):not([hidden]) { display: table-cell !important; }
 }
 
 
@@ -6061,3 +6065,49 @@ canvas {
 .boxes-heading { margin: 0 0 8px !important; }
 .detail-boxes { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-start; }
 .detail-boxes .boxes-heading { flex: 0 0 100%; }
+
+/* ==========================================================================
+   COLUMN PRESETS + a scrollbar you can actually see
+   ========================================================================== */
+.preset-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    padding: 11px 14px 0;
+}
+
+.preset-label { font-size: 13px; font-weight: 800; color: #64748b; white-space: nowrap; }
+.preset-group { display: flex; gap: 2px; background: #f1f5f9; padding: 3px; border-radius: 10px; }
+
+.preset-btn {
+    border: none;
+    background: transparent;
+    border-radius: 8px;
+    padding: 7px 14px;
+    font-family: inherit;
+    font-size: 13.5px;
+    font-weight: 700;
+    color: #475569;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: background .15s, color .15s;
+}
+
+.preset-btn:hover { background: #e2e8f0; }
+.preset-btn[aria-pressed="true"] { background: var(--primary-color); color: #fff; }
+.preset-hint { font-size: 12.5px; color: #94a3b8; }
+
+/* macOS hides overlay scrollbars until you scroll, so nothing indicated that 20
+   more columns existed to the side. Always show the track on the table. */
+.table-container { scrollbar-width: thin; scrollbar-color: #94a3b8 #eef2f7; }
+.table-container::-webkit-scrollbar { height: 12px; -webkit-appearance: none; }
+.table-container::-webkit-scrollbar-track { background: #eef2f7; border-radius: 6px; }
+
+.table-container::-webkit-scrollbar-thumb {
+    background: #94a3b8;
+    border-radius: 6px;
+    border: 3px solid #eef2f7;
+}
+
+.table-container::-webkit-scrollbar-thumb:hover { background: #64748b; }
