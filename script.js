@@ -109,7 +109,8 @@ const config = {
     get draftLeagueId() { return getLeagueId(); },
     setPieceTakers: {}, // DEPRECATED: Now automated via API in preprocessPlayerData
     tableColumns: [
-        'rank', 'web_name', 'draft_score', 'stability_index', 'predicted_points_1_gw', 'next_3_fdr', 'team_name', 'draft_team',
+        'rank', 'web_name', 'draft_score', 'vorp', 'defcon_hit_rate', 'rotation_risk', 'availability',
+        'stability_index', 'predicted_points_1_gw', 'next_3_fdr', 'team_name', 'draft_team',
         'position_name', 'now_cost', 'total_points', 'points_per_game_90', 'selected_by_percent',
         'dreamteam_count', 'net_transfers_event', 'def_contrib_per90', 'goals_scored_assists',
         'xGI_per90', 'minutes', 'xDiff', 'ict_index_per90', 'bonus_per90', 'clean_sheets_per90',
@@ -206,6 +207,10 @@ const config = {
         'predicted_points_4_gw': 'צפי נקודות ממוצע ל-4 המחזורים הקרובים (לשימוש פנימי).',
         'stability_index': 'מדד יציבות (0-100) 📊 - מודד עקביות השחקן: 40% כושר אחרון 📈, 30% דיוק xG ⚽, 20% זמן משחק קבוע ⏱️, 10% שונות נקודות 📉. ככל שגבוה יותר = שחקן יציב ויותר צפוי ✅',
         'def_contrib_per90': 'תרומה הגנתית ל-90 דקות (תיקולים, חטיפות, חילוצים).',
+        'vorp': 'VORP — כמה נקודות למשחק השחקן טוב יותר מהחלופה הזמינה בחינם באותה עמדה. המדד המרכזי לדראפט: בדראפט אין מחירים, ולכן ה"ערך" הוא היתרון על פני מי שאפשר לקחת בלי לבזבז פיק.',
+        'defcon_hit_rate': 'אחוז ההופעות שבהן השחקן עבר בפועל את סף ה-DEFCON (10 CBIT למגן, 12 CBIRT לקשר/חלוץ) וזכה ב-2 נקודות. זהו סף פר-משחק, ולכן ממוצע ל-90 דקות מטעה.',
+        'rotation_risk': 'אחוז ההופעות שבהן השחקן פתח בהרכב. בדראפט אי אפשר פשוט להעביר שחקן, ולכן שחקן מסובב מסוכן יותר מאשר ב-FPL רגיל.',
+        'availability': 'מצב זמינות: פציעה, הרחקה או סיכוי השתתפות מתחת ל-100%.',
         'xDiff': 'ההפרש בין שערים+בישולים בפועל לצפי (xGI). ערך חיובי מעיד על מימוש יתר.',
         'net_transfers_event': 'סה"כ העברות נכנסות פחות יוצאות במחזור הנוכחי - מדד למומנטום ביקוש לשחקן.'
     }
@@ -1117,12 +1122,14 @@ async function fetchAndProcessData() {
             }
 
             processedPlayers = calculateAdvancedScores(processedPlayers);
+            processedPlayers = computeDraftMetrics(processedPlayers);
             state.allPlayersData[state.currentDataSource].processed = processedPlayers;
         }
 
         document.getElementById('lastUpdated').textContent = `עדכון אחרון: ${new Date().toLocaleString('he-IL')}`;
         populateTeamFilter();
         updateDashboardKPIs(); // Update dashboard KPIs
+        renderDraftBoard();    // "who to pick and why" panels
         processChange();
 
         // Load draft data in background (for team filter)
@@ -1614,6 +1621,10 @@ function createPlayerRowHtml(player, index) {
             </div>
         </td>
         <td class="bold-cell ${getPercentileClass(player.draft_score, displayedValues.draft_score)}">${player.draft_score.toFixed(1)}</td>
+        <td class="bold-cell" data-tooltip="${config.columnTooltips.vorp}" style="color:${player.vorp > 0 ? '#059669' : player.vorp < 0 ? '#dc2626' : '#94a3b8'};">${formatVorp(player.vorp)}</td>
+        <td data-tooltip="${config.columnTooltips.defcon_hit_rate}">${formatDefconRate(player.defcon_hit_rate)}</td>
+        <td data-tooltip="${config.columnTooltips.rotation_risk}">${formatRotation(player.rotation_risk)}</td>
+        <td data-tooltip="${config.columnTooltips.availability}">${formatAvailability(player)}</td>
         <td class="bold-cell stability-cell ${getPercentileClass(player.stability_index || 0, displayedValues.stability_index)}">${(player.stability_index || 0).toFixed(0)}</td>
         <td class="bold-cell ${getPercentileClass(player.predicted_points_1_gw, displayedValues.predicted_points_1_gw)}" title="חיזוי טכני: ${(player.predicted_points_1_gw || 0).toFixed(1)} נקודות">${(player.predicted_points_1_gw || 0).toFixed(1)}</td>
         <td class="fdr-cell">${fdrBadge}</td>
@@ -1647,6 +1658,21 @@ function renderTable() {
     // Sorting logic moved to processChange() - sort before limiting to 50
 
     const tbody = document.getElementById('playersTableBody');
+    const colCount = document.querySelectorAll('#playersTable thead th').length || 28;
+
+    if (!state.displayedData.length) {
+        // An empty table with no explanation reads as a broken page. Say which
+        // filter emptied it, or why the data for it does not exist yet.
+        const reason = state.quickFilterNotice
+            || 'לא נמצאו שחקנים התואמים לסינון הנוכחי';
+        tbody.innerHTML = `<tr><td colspan="${colCount}" style="padding:26px; text-align:center; color:#475569;">
+            <div style="font-size:14px; font-weight:700; margin-bottom:4px;">אין תוצאות</div>
+            <div style="font-size:12.5px;">${reason}</div>
+        </td></tr>`;
+        updateDashboardKPIs(state.displayedData);
+        return;
+    }
+
     tbody.innerHTML = state.displayedData.map((player, index) => createPlayerRowHtml(player, index)).join('');
 
     // Update KPIs based on displayed/filtered data
@@ -1878,19 +1904,102 @@ function processChange() {
     }
 }
 
-function applyQuickFilter(filterName) {
-    const data = state.allPlayersData[state.currentDataSource].processed;
-    switch (filterName) {
-        case 'set_pieces':
-            state.displayedData = state.displayedData.filter(p => p.set_piece_priority.penalty > 0 || p.set_piece_priority.corner > 0 || p.set_piece_priority.free_kick > 0);
-            break;
-        case 'attacking_defenders':
-            state.displayedData = state.displayedData.filter(p => p.position_name === 'DEF' && p.minutes > 300).sort((a, b) => b.xGI_per90 - a.xGI_per90);
-            break;
-        case 'differentials':
-            state.displayedData = state.displayedData.filter(p => parseFloat(p.selected_by_percent) < 5);
-            break;
+// Every chip rendered in the UI must appear here. Five of them previously fell
+// through the switch and did nothing at all: the chip highlighted, the table
+// did not change, and there was no error to notice.
+const QUICK_FILTERS = {
+    // set_piece_priority is 99 for a non-taker, so the old `> 0` test matched
+    // every player in the league.
+    set_pieces: {
+        filter: p => Math.min(p.set_piece_priority.penalty, p.set_piece_priority.corner,
+            p.set_piece_priority.free_kick) <= 3,
+        sort: (a, b) => a.set_piece_priority.penalty - b.set_piece_priority.penalty
+    },
+    attacking_defenders: {
+        filter: p => p.position_name === 'DEF' && p.minutes > 300,
+        sort: (a, b) => b.xGI_per90 - a.xGI_per90
+    },
+    differentials: {
+        filter: p => parseFloat(p.selected_by_percent) < 10 && p.draft_score > 40,
+        sort: (a, b) => b.draft_score - a.draft_score
+    },
+    bonus_magnets: {
+        filter: p => p.minutes > 450 && p.bonus_per90 > 0.25,
+        sort: (a, b) => b.bonus_per90 - a.bonus_per90
+    },
+    // "form > 0" matched essentially the whole league. Require a genuinely
+    // strong recent return from someone who is actually playing.
+    form_kings: {
+        filter: p => parseFloat(p.form) >= 4.5 && p.minutes > 450,
+        sort: (a, b) => parseFloat(b.form) - parseFloat(a.form)
+    },
+    // Good underlying numbers against a soft run of fixtures.
+    easy_fixtures_ppg: {
+        filter: p => p.next_3_fdr > 0 && p.next_3_fdr <= 2.7 && p.minutes > 450,
+        sort: (a, b) => (b.points_per_game_90 || 0) - (a.points_per_game_90 || 0)
+    },
+    // Creating more than they have converted: candidates to improve.
+    underperformers: {
+        filter: p => p.minutes > 600 && p.xDiff < -1.5,
+        sort: (a, b) => a.xDiff - b.xDiff
+    },
+    // Underperforming AND being bought — the market expects a correction.
+    trending_underachievers: {
+        filter: p => p.minutes > 450 && p.xDiff < 0 && p.net_transfers_event > 0,
+        sort: (a, b) => b.net_transfers_event - a.net_transfers_event
+    },
+    // Reliable starters: high share of appearances as a starter.
+    nailed_starters: {
+        filter: p => p.rotation_risk !== null && p.rotation_risk >= 0.85 && p.minutes > 600,
+        sort: (a, b) => (b.points_per_game_90 || 0) - (a.points_per_game_90 || 0)
+    },
+    // The DEFCON specialists: players who actually clear the threshold often.
+    defcon_kings: {
+        filter: p => p.defcon_hit_rate !== null && p.defcon_hit_rate >= 25,
+        sort: (a, b) => (b.defcon_hit_rate || 0) - (a.defcon_hit_rate || 0)
+    },
+    // Best value relative to what is freely available at the same position.
+    best_value: {
+        filter: p => p.vorp !== null && p.vorp > 0,
+        sort: (a, b) => (b.vorp || 0) - (a.vorp || 0)
     }
+};
+
+// Filters whose inputs simply do not exist yet outside a live season, so an
+// empty result is expected and should be explained rather than shown as a
+// blank table.
+const FILTER_PREREQS = {
+    easy_fixtures_ppg: {
+        available: () => (state.allPlayersData.live.fixtures || []).length > 0,
+        reason: 'אין עדיין לוח משחקים לעונה החדשה — הפילטר הזה יעבוד כשהמשחקים יתפרסמו'
+    },
+    trending_underachievers: {
+        available: () => state.currentDataSource === 'live',
+        reason: 'נתוני העברות קיימים רק בעונה פעילה — לא זמין בנתוני עונה שהסתיימה'
+    },
+    differentials: {
+        available: () => state.currentDataSource === 'live',
+        reason: 'אחוזי בחירה משקפים את העונה שהסתיימה ולא את הדראפט הקרוב'
+    }
+};
+
+function applyQuickFilter(filterName) {
+    const spec = QUICK_FILTERS[filterName];
+    if (!spec) {
+        console.warn(`⚠️ Unknown quick filter: ${filterName}`);
+        return;
+    }
+
+    const prereq = FILTER_PREREQS[filterName];
+    if (prereq && !prereq.available()) {
+        state.displayedData = [];
+        state.quickFilterNotice = prereq.reason;
+        return;
+    }
+
+    state.quickFilterNotice = null;
+    state.displayedData = state.displayedData.filter(spec.filter);
+    if (spec.sort) state.displayedData.sort(spec.sort);
 }
 
 function sortTable(key) {
@@ -1954,7 +2063,7 @@ function showAllPlayers(button) {
     document.getElementById('minMinutes').value = '30';
     document.getElementById('showEntries').value = 'all';
     processChange();
-    sortTable(2);
+    sortTable('draft_score');
 }
 
 function toggleQuickFilter(button, filterName) {
@@ -1979,7 +2088,7 @@ function toggleQuickFilter(button, filterName) {
         document.getElementById('minMinutes').value = '0'; // Often quick filters need low minutes
 
         processChange();
-        sortTable(2); // Sort by Draft Score/Quality by default when filtering
+        sortTable('draft_score'); // Sort by Draft Score/Quality by default when filtering
     }
 }
 
@@ -3163,6 +3272,236 @@ function getChartConfig(data, xKey, yKey, xLabel, yLabel, quadLabels = {}, color
             }
         }
     };
+}
+
+// ============================================
+// DRAFT BOARD — "why pick this player"
+// ============================================
+// Each panel answers one concrete draft question with an explicit, stated
+// rule, so a recommendation can be argued with rather than taken on trust.
+// Pre-draft every player is available; once the league is loaded these
+// restrict themselves to genuine free agents.
+
+const DRAFT_PANELS = [
+    {
+        id: 'value',
+        title: 'הערך הגדול ביותר',
+        subtitle: 'VORP — יתרון על החלופה החופשית',
+        icon: '💎',
+        accent: '#6366f1',
+        why: p => `+${p.vorp.toFixed(2)} נק'/משחק מעל חלופה (${p.replacement_score.toFixed(2)})`,
+        eligible: p => p.vorp !== null && p.vorp > 0 && p.minutes > 600,
+        rank: (a, b) => b.vorp - a.vorp
+    },
+    {
+        id: 'defcon',
+        title: 'מכונות DEFCON',
+        subtitle: 'עוברים את הסף בפועל, לא בממוצע',
+        icon: '🛡️',
+        accent: '#0891b2',
+        why: p => `עבר את הסף ב-${p.defcon_hit_rate.toFixed(0)}% מההופעות (${p.defcon_hits}/${p.defcon_eligible_apps})`,
+        eligible: p => p.defcon_hit_rate !== null && p.defcon_hit_rate >= 20 && p.defcon_eligible_apps >= 10,
+        rank: (a, b) => b.defcon_hit_rate - a.defcon_hit_rate
+    },
+    {
+        id: 'nailed',
+        title: 'בטוחים בהרכב',
+        subtitle: 'דקות יציבות — קריטי בדראפט',
+        icon: '🔒',
+        accent: '#059669',
+        why: p => `${Math.round(p.rotation_risk * 100)}% פתיחות · ${p.points_per_game_90.toFixed(1)} נק'/90`,
+        eligible: p => p.rotation_risk !== null && p.rotation_risk >= 0.85 &&
+            p.minutes > 1200 && p.points_per_game_90 > 3,
+        rank: (a, b) => (b.rotation_risk * b.points_per_game_90) - (a.rotation_risk * a.points_per_game_90)
+    },
+    {
+        id: 'underlying',
+        title: 'המספרים מתחת לפני השטח',
+        subtitle: 'מייצרים יותר ממה שהמירו',
+        icon: '📈',
+        accent: '#d97706',
+        why: p => `xGI ${p.xGI_per90.toFixed(2)}/90 · פער המרה ${p.xDiff.toFixed(1)}`,
+        eligible: p => p.minutes > 900 && p.xDiff < -1 && p.xGI_per90 > 0.35,
+        rank: (a, b) => a.xDiff - b.xDiff
+    },
+    {
+        id: 'setpiece',
+        title: 'בעלי כדורים נייחים',
+        subtitle: 'פנדלים וקרנות = נקודות חוזרות',
+        icon: '🎯',
+        accent: '#be185d',
+        why: p => {
+            const bits = [];
+            if (p.set_piece_priority.penalty <= 2) bits.push(`פנדל #${p.set_piece_priority.penalty}`);
+            if (p.set_piece_priority.corner <= 2) bits.push(`קרן #${p.set_piece_priority.corner}`);
+            if (p.set_piece_priority.free_kick <= 2) bits.push(`חופשית #${p.set_piece_priority.free_kick}`);
+            return bits.join(' · ') || 'בעל כדורים נייחים';
+        },
+        eligible: p => Math.min(p.set_piece_priority.penalty, p.set_piece_priority.corner,
+            p.set_piece_priority.free_kick) <= 2 && p.minutes > 600,
+        rank: (a, b) => b.draft_score - a.draft_score
+    }
+];
+
+function renderDraftBoard() {
+    const host = document.getElementById('draftBoardPanels');
+    if (!host) return;
+
+    const players = state.allPlayersData[state.currentDataSource]?.processed || [];
+    if (!players.length) { host.innerHTML = ''; return; }
+
+    const owned = state.draft.ownedElementIds;
+    const availableOnly = owned && owned.size > 0;
+    const pool = availableOnly ? players.filter(p => !owned.has(p.id)) : players;
+
+    // Injured or suspended players are never a recommendation.
+    const healthy = pool.filter(p => p.availability_factor > 0.5);
+
+    const cards = DRAFT_PANELS.map(panel => {
+        const picks = healthy.filter(panel.eligible).sort(panel.rank).slice(0, 3);
+        if (!picks.length) return '';
+
+        const rows = picks.map((p, i) => `
+            <div style="display:flex; align-items:center; gap:8px; padding:7px 0; ${i < picks.length - 1 ? 'border-bottom:1px solid #f1f5f9;' : ''}">
+                <span style="width:18px; height:18px; flex:none; border-radius:5px; background:${panel.accent}1a; color:${panel.accent}; font-size:10px; font-weight:800; display:flex; align-items:center; justify-content:center;">${i + 1}</span>
+                <div style="min-width:0; flex:1;">
+                    <div style="font-weight:700; font-size:12.5px; color:#0f172a; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
+                        ${p.web_name}
+                        <span style="font-weight:600; color:#94a3b8; font-size:10.5px;">${p.position_name} · ${p.team_name}</span>
+                    </div>
+                    <div style="font-size:10.5px; color:#64748b; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${panel.why(p)}</div>
+                </div>
+            </div>`).join('');
+
+        return `
+            <div style="background:#fff; border:1px solid #e8edf3; border-top:3px solid ${panel.accent}; border-radius:12px; padding:12px 14px; box-shadow:0 1px 3px rgba(15,23,42,.05);">
+                <div style="display:flex; align-items:baseline; gap:6px; margin-bottom:2px;">
+                    <span style="font-size:14px;">${panel.icon}</span>
+                    <span style="font-weight:800; font-size:13px; color:#0f172a;">${panel.title}</span>
+                </div>
+                <div style="font-size:10.5px; color:#94a3b8; margin-bottom:6px;">${panel.subtitle}</div>
+                ${rows}
+            </div>`;
+    }).filter(Boolean).join('');
+
+    host.innerHTML = cards
+        ? `<div style="display:flex; align-items:center; justify-content:space-between; margin:4px 2px 10px;">
+               <div style="font-weight:800; font-size:14px; color:#0f172a;">🎯 למי כדאי לקחת</div>
+               <div style="font-size:11px; color:#64748b;">${availableOnly ? 'מוצגים שחקנים חופשיים בלבד' : 'לפני הדראפט — כל השחקנים זמינים'}</div>
+           </div>
+           <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(230px, 1fr)); gap:12px;">${cards}</div>`
+        : '';
+}
+
+// --- Cell formatters for the draft metrics ---
+// A dash means "not applicable / unknown". It must never render as 0, which
+// would sort a player with no data alongside genuinely bad ones.
+
+function formatVorp(v) {
+    if (v === null || v === undefined) return '<span style="color:#cbd5e1;">–</span>';
+    return (v > 0 ? '+' : '') + v.toFixed(2);
+}
+
+function formatDefconRate(rate) {
+    if (rate === null || rate === undefined) return '<span style="color:#cbd5e1;">–</span>';
+    const color = rate >= 40 ? '#059669' : rate >= 20 ? '#d97706' : '#94a3b8';
+    return `<span style="color:${color}; font-weight:700;">${rate.toFixed(0)}%</span>`;
+}
+
+function formatRotation(r) {
+    if (r === null || r === undefined) return '<span style="color:#cbd5e1;">–</span>';
+    const pct = Math.round(r * 100);
+    const color = pct >= 85 ? '#059669' : pct >= 65 ? '#d97706' : '#dc2626';
+    return `<span style="color:${color}; font-weight:700;">${pct}%</span>`;
+}
+
+function formatAvailability(p) {
+    if (p.status && ['i', 's', 'u'].includes(p.status)) {
+        const label = p.status === 'i' ? 'פציעה' : p.status === 's' ? 'הרחקה' : 'לא זמין';
+        return `<span title="${(p.news || '').replace(/"/g, '')}" style="color:#dc2626; font-weight:700;">⛔ ${label}</span>`;
+    }
+    const chance = p.chance_of_playing_next_round;
+    if (chance !== null && chance !== undefined && chance < 100) {
+        return `<span title="${(p.news || '').replace(/"/g, '')}" style="color:#d97706; font-weight:700;">⚠️ ${chance}%</span>`;
+    }
+    return '<span style="color:#059669;">✓</span>';
+}
+
+// ============================================
+// DRAFT-SPECIFIC METRICS
+// ============================================
+// In a draft league every player costs the same (nothing), so "value for money"
+// is meaningless. What matters is how much better a player is than whoever you
+// could get for free at the same position. That is VORP, and it is the metric
+// draft formats are actually decided on.
+
+// Starters a typical FPL Draft lineup fields per position (GKP/DEF/MID/FWD).
+// Replacement level sits at leagueSize x startersAtPosition: the point where
+// the next player at that position is realistically available to anyone.
+const REPLACEMENT_SLOTS = { GKP: 1, DEF: 4, MID: 4, FWD: 2 };
+
+function computeDraftMetrics(players) {
+    const leagueSize = state.draft.details?.league_entries?.length || 8;
+    const ownedIds = state.draft.ownedElementIds;
+    const haveOwnership = ownedIds && ownedIds.size > 0;
+
+    // Points per APPEARANCE, not per 90 minutes. Per-90 divides by playing time,
+    // so a substitute with 10 points in 100 minutes scores 9.0 -- higher than
+    // any genuine starter -- and would top the VORP table on noise alone.
+    const scoreOf = p => {
+        const apps = p.appearances || (p.minutes > 0 ? Math.round(p.minutes / 70) : 0);
+        if (!apps) return 0;
+        const perApp = parseFloat(p.points_per_game);
+        return Number.isFinite(perApp) && perApp > 0 ? perApp : (p.total_points || 0) / apps;
+    };
+
+    ['GKP', 'DEF', 'MID', 'FWD'].forEach(pos => {
+        // Require roughly a third of a season. Below that the sample is too
+        // small to describe anyone's true level.
+        const atPos = players
+            .filter(p => p.position_name === pos && p.minutes >= 900)
+            .sort((a, b) => scoreOf(b) - scoreOf(a));
+        if (!atPos.length) return;
+
+        let replacementScore;
+        if (haveOwnership) {
+            // Mid-season: replacement level is literally the best free agent.
+            const bestFreeAgent = atPos.find(p => !ownedIds.has(p.id));
+            replacementScore = bestFreeAgent ? scoreOf(bestFreeAgent) : scoreOf(atPos[atPos.length - 1]);
+        } else {
+            // Pre-draft: nobody is owned yet, so replacement level is the first
+            // player past the point where every team has filled that position.
+            const idx = Math.min(leagueSize * (REPLACEMENT_SLOTS[pos] || 2), atPos.length - 1);
+            replacementScore = scoreOf(atPos[idx]);
+        }
+
+        atPos.forEach(p => {
+            p.replacement_score = Math.round(replacementScore * 100) / 100;
+            p.vorp = Math.round((scoreOf(p) - replacementScore) * 100) / 100;
+        });
+    });
+
+    players.forEach(p => {
+        if (p.vorp === undefined) { p.vorp = null; p.replacement_score = null; }
+
+        // Share of appearances that were starts. A high scorer who only starts
+        // half the time is a very different proposition in a draft league,
+        // where you cannot simply transfer them out.
+        const apps = p.appearances || (p.minutes > 0 ? Math.round(p.minutes / 70) : 0);
+        p.rotation_risk = apps > 0 && p.starts !== undefined
+            ? Math.round(Math.min(p.starts / apps, 1) * 100) / 100
+            : null;
+
+        // Goalkeepers are not DEFCON-eligible, so null rather than zero.
+        if (p.defcon_hit_rate === undefined) p.defcon_hit_rate = null;
+
+        // Availability as a plain multiplier the projection can use.
+        const chance = p.chance_of_playing_next_round;
+        p.availability_factor = ['i', 's', 'u'].includes(p.status) ? 0
+            : (chance === null || chance === undefined ? 1 : chance / 100);
+    });
+
+    return players;
 }
 
 function calculatePercentiles(players, metric, isAscending = false) {

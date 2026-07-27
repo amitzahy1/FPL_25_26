@@ -1,0 +1,538 @@
+<title>מוקד סקאוטינג — מוקאפ A</title>
+<style>
+/* ============================================================
+   MOCKUP A — "מוקד סקאוטינג" / SCOUT TERMINAL
+   Identity: instrument panel. Cool paper, ink text, hairline
+   rules, indigo structural accent, monospaced numerals.
+   Committed light theme (per brief).
+   ============================================================ */
+:root{
+  color-scheme: light;
+  --paper:#F5F6F8;
+  --panel:#FFFFFF;
+  --panel-2:#FAFBFC;
+  --ink:#0E1116;
+  --ink-2:#4A5261;
+  --ink-3:#828C9E;
+  --rule:#E4E7EC;
+  --rule-2:#CFD4DC;
+  --accent:#1F2A66;
+  --accent-2:#2E3E90;
+  --accent-soft:#EDEFF8;
+  --good:#0E7A4A;   --good-bg:#E7F4EC;
+  --warn:#9A5B08;   --warn-bg:#FCF2E2;
+  --bad:#B03028;    --bad-bg:#FBEBEA;
+  --info:#1C5C9E;   --info-bg:#E9F1F9;
+  --r:6px;
+  --mono: ui-monospace,"SF Mono",SFMono-Regular,Menlo,Consolas,monospace;
+  --ui: -apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,"Arial Hebrew",sans-serif;
+}
+*{box-sizing:border-box}
+.app{
+  direction:rtl; font-family:var(--ui); background:var(--paper); color:var(--ink);
+  min-height:100vh; padding:18px 20px 120px; font-size:14px; line-height:1.45;
+  -webkit-font-smoothing:antialiased;
+}
+.n{direction:ltr; unicode-bidi:isolate; font-family:var(--mono); font-variant-numeric:tabular-nums}
+button{font-family:inherit; cursor:pointer}
+:focus-visible{outline:2px solid var(--accent-2); outline-offset:2px; border-radius:4px}
+
+/* ---------- masthead ---------- */
+.mast{display:flex; align-items:flex-end; gap:16px; flex-wrap:wrap;
+  border-bottom:2px solid var(--ink); padding-bottom:10px; margin-bottom:2px}
+.mast h1{margin:0; font-size:23px; font-weight:800; letter-spacing:-.4px}
+.mast h1 small{font-weight:500; color:var(--ink-3); font-size:13px; letter-spacing:0}
+.mockflag{font-family:var(--mono); font-size:10px; letter-spacing:.14em; text-transform:uppercase;
+  border:1px solid var(--rule-2); color:var(--ink-3); padding:3px 7px; border-radius:3px; background:var(--panel)}
+.mast .spacer{flex:1}
+.gwpill{font-family:var(--mono); font-size:12px; background:var(--ink); color:#fff; padding:5px 10px; border-radius:3px}
+.mast-tools{display:flex; gap:8px; align-items:center}
+.kbtn{display:flex; align-items:center; gap:8px; background:var(--panel); border:1px solid var(--rule-2);
+  border-radius:var(--r); padding:6px 10px; color:var(--ink-3); font-size:13px}
+.kbtn kbd{font-family:var(--mono); font-size:10px; border:1px solid var(--rule-2); border-bottom-width:2px;
+  border-radius:3px; padding:1px 4px; color:var(--ink-2); background:var(--panel-2)}
+.wl-btn{display:flex; align-items:center; gap:7px; background:var(--accent); color:#fff; border:none;
+  border-radius:var(--r); padding:7px 12px; font-size:13px; font-weight:700}
+.wl-btn .cnt{font-family:var(--mono); background:rgba(255,255,255,.22); border-radius:3px; padding:0 5px}
+
+/* ---------- strip of headline numbers ---------- */
+.tape{display:grid; grid-template-columns:repeat(auto-fit,minmax(168px,1fr)); border:1px solid var(--rule);
+  border-top:none; background:var(--panel); margin-bottom:16px}
+.tape > div{padding:10px 14px; border-inline-start:1px solid var(--rule)}
+.tape > div:first-child{border-inline-start:none}
+.tape dt{font-size:11px; color:var(--ink-3); letter-spacing:.02em; margin:0 0 2px}
+.tape dd{margin:0; font-size:21px; font-weight:700; font-family:var(--mono); letter-spacing:-.5px}
+.tape dd em{font-style:normal; font-size:12px; font-family:var(--ui); font-weight:600; color:var(--ink-3); margin-inline-start:4px}
+.tape .up{color:var(--good)} .tape .dn{color:var(--bad)}
+
+/* ---------- control deck ---------- */
+.deck{background:var(--panel); border:1px solid var(--rule); border-radius:var(--r); margin-bottom:14px}
+.deck-row{display:flex; gap:14px; align-items:center; flex-wrap:wrap; padding:11px 14px}
+.deck-row + .deck-row{border-top:1px solid var(--rule)}
+.deck-label{font-size:11px; font-weight:700; color:var(--ink-3); letter-spacing:.06em; text-transform:uppercase}
+.seg{display:flex; border:1px solid var(--rule-2); border-radius:var(--r); overflow:hidden; background:var(--panel-2)}
+.seg button{border:none; background:transparent; padding:7px 13px; font-size:13px; font-weight:600; color:var(--ink-2);
+  border-inline-start:1px solid var(--rule); transition:background .12s,color .12s}
+.seg button:first-child{border-inline-start:none}
+.seg button[aria-pressed="true"]{background:var(--ink); color:#fff}
+.seg.avail button[aria-pressed="true"]{background:var(--accent); color:#fff}
+.tabs{display:flex; gap:2px}
+.tabs button{border:none; background:transparent; padding:6px 12px; font-size:13px; font-weight:600; color:var(--ink-3);
+  border-bottom:2px solid transparent; border-radius:0}
+.tabs button[aria-pressed="true"]{color:var(--ink); border-bottom-color:var(--accent)}
+.chip{border:1px solid var(--rule-2); background:var(--panel); border-radius:100px; padding:5px 11px;
+  font-size:12.5px; font-weight:600; color:var(--ink-2)}
+.chip[aria-pressed="true"]{background:var(--accent-soft); border-color:#B9C0E0; color:var(--accent)}
+.vsep{width:1px; align-self:stretch; background:var(--rule)}
+.deck .spacer{flex:1}
+.hint{font-size:12px; color:var(--ink-3)}
+
+/* ---------- table ---------- */
+.tablewrap{background:var(--panel); border:1px solid var(--rule); border-radius:var(--r); overflow:auto; max-height:74vh}
+table{border-collapse:separate; border-spacing:0; width:100%; font-size:13px}
+thead th{position:sticky; top:0; z-index:3; background:var(--panel-2); text-align:start; white-space:nowrap;
+  font-size:11px; font-weight:700; color:var(--ink-2); letter-spacing:.03em; padding:9px 10px;
+  border-bottom:1px solid var(--rule-2); cursor:pointer; user-select:none}
+thead th:hover{color:var(--accent)}
+thead th .sd{color:var(--ink-3); font-size:9px; margin-inline-start:3px}
+td{padding:7px 10px; border-bottom:1px solid var(--rule); vertical-align:middle}
+tbody tr:hover td{background:#FBFCFE}
+tbody tr.open td{background:var(--accent-soft)}
+th.stick, td.stick{position:sticky; inset-inline-start:0; z-index:2; background:var(--panel); box-shadow:1px 0 0 var(--rule-2)}
+tbody tr:hover td.stick{background:#FBFCFE}
+tbody tr.open td.stick{background:var(--accent-soft)}
+thead th.stick{z-index:4; background:var(--panel-2)}
+
+.pcell{display:flex; align-items:center; gap:9px; min-width:230px}
+.star{border:none; background:transparent; font-size:15px; line-height:1; padding:2px; color:var(--rule-2); border-radius:4px}
+.star.on{color:#D99B0B}
+.star:hover{color:#D99B0B}
+.rk{font-family:var(--mono); font-size:11px; color:var(--ink-3); width:20px; text-align:end}
+.pname{font-weight:700}
+.pmeta{font-size:11px; color:var(--ink-3); display:flex; gap:5px; align-items:center}
+.posbadge{font-family:var(--mono); font-size:9.5px; font-weight:700; padding:1px 4px; border-radius:3px; letter-spacing:.04em}
+.pos-GK{background:#F3E8FB;color:#6B2A8C} .pos-DEF{background:#E4F0FB;color:#155E96}
+.pos-MID{background:#E4F4EA;color:#12653F} .pos-FWD{background:#FCEAE6;color:#9A3B23}
+
+.sig{display:inline-flex; align-items:center; gap:5px; font-size:11.5px; font-weight:700; padding:3px 8px; border-radius:3px; white-space:nowrap}
+.sig-claim{background:var(--good-bg); color:var(--good)}
+.sig-buylow{background:var(--info-bg); color:var(--info)}
+.sig-swing{background:#EFEAFB; color:#5B3AA6}
+.sig-hold{background:#F1F3F6; color:var(--ink-2)}
+.sig-fade{background:var(--bad-bg); color:var(--bad)}
+.why{display:flex; flex-wrap:wrap; gap:4px; margin-top:4px}
+.why span{font-size:10.5px; color:var(--ink-2); background:var(--panel-2); border:1px solid var(--rule);
+  border-radius:3px; padding:1px 5px; white-space:nowrap}
+
+.availtag{font-size:11.5px; font-weight:700; padding:3px 8px; border-radius:3px; white-space:nowrap; display:inline-block}
+.free{background:#E7F4EC; color:var(--good)}
+.mine{background:var(--accent-soft); color:var(--accent)}
+.taken{background:#F1F3F6; color:var(--ink-3); font-weight:600}
+
+.bar{position:relative; min-width:74px}
+.bar .track{height:4px; background:var(--rule); border-radius:2px; margin-top:3px; overflow:hidden}
+.bar .fill{height:100%; border-radius:2px; background:var(--accent-2)}
+.bar .v{font-family:var(--mono); font-size:12.5px; font-variant-numeric:tabular-nums; direction:ltr; display:block}
+.bar.g .fill{background:var(--good)} .bar.b .fill{background:var(--bad)} .bar.w .fill{background:#C88A12}
+
+.div{display:flex; align-items:center; gap:6px; min-width:96px}
+.div .axis{position:relative; flex:1; height:5px; background:var(--rule); border-radius:2px}
+.div .axis::after{content:""; position:absolute; inset-inline-start:50%; top:-2px; bottom:-2px; width:1px; background:var(--rule-2)}
+.div .seg2{position:absolute; top:0; bottom:0; border-radius:2px}
+.div .val{font-family:var(--mono); font-size:12px; direction:ltr; width:34px; text-align:end}
+
+.ribbon{display:flex; gap:2px}
+.ribbon i{width:22px; height:22px; border-radius:3px; font-family:var(--mono); font-size:9px; font-style:normal;
+  display:flex; align-items:center; justify-content:center; font-weight:700; letter-spacing:-.02em}
+.f1{background:#CFEBD9;color:#0B5C37} .f2{background:#E3F3E8;color:#186B44}
+.f3{background:#F0F1F4;color:#5A6474} .f4{background:#FBE3DF;color:#9E3A28} .f5{background:#F6CDC5;color:#7E2415}
+.ribbon i.away{box-shadow:inset 0 -2.5px 0 rgba(0,0,0,.16)}
+.spark{display:block}
+.sp-flags{display:flex; gap:3px}
+.sp-flags i{font-family:var(--mono); font-size:9.5px; font-style:normal; font-weight:700; width:17px; height:17px;
+  border-radius:3px; display:flex; align-items:center; justify-content:center; border:1px solid var(--rule-2); color:var(--ink-3)}
+.sp-flags i.p1{background:#F5E6C8; border-color:#E0C486; color:#7A5405}
+.sp-flags i.p2{background:var(--panel-2); border-color:var(--rule-2); color:var(--ink-2)}
+.risk{font-size:11px; font-weight:700; padding:2px 7px; border-radius:3px; white-space:nowrap}
+.risk-none{color:var(--ink-3); font-weight:500}
+.risk-rot{background:var(--warn-bg); color:var(--warn)}
+.risk-knock{background:var(--bad-bg); color:var(--bad)}
+.risk-new{background:var(--info-bg); color:var(--info)}
+
+/* ---------- expanded drawer row ---------- */
+tr.detail td{padding:0; background:var(--accent-soft); border-bottom:2px solid var(--accent)}
+.det{display:grid; grid-template-columns:1.25fr 1fr 1fr; gap:0; }
+.det > section{padding:14px 16px; border-inline-start:1px solid #D9DEEE}
+.det > section:first-child{border:none}
+.det h4{margin:0 0 8px; font-size:11px; letter-spacing:.07em; text-transform:uppercase; color:var(--accent)}
+.det p{margin:0 0 10px; font-size:13px; color:var(--ink-2); max-width:62ch}
+.pbars{display:grid; gap:6px}
+.pbar{display:grid; grid-template-columns:88px 1fr 40px; align-items:center; gap:8px; font-size:12px}
+.pbar .t{height:6px; background:#DDE2F0; border-radius:3px; overflow:hidden}
+.pbar .f{height:100%; background:var(--accent-2); border-radius:3px}
+.pbar b{font-family:var(--mono); font-size:11.5px; text-align:end; direction:ltr; font-weight:600}
+.pbar span:first-child{color:var(--ink-2)}
+.fixlist{display:grid; gap:4px}
+.fixrow{display:grid; grid-template-columns:38px 1fr auto; gap:8px; align-items:center; font-size:12px;
+  background:var(--panel); border:1px solid #DDE2F0; border-radius:4px; padding:4px 7px}
+.fixrow .gw{font-family:var(--mono); font-size:10px; color:var(--ink-3)}
+.act{display:flex; gap:7px; margin-top:12px; flex-wrap:wrap}
+.act button{border:1px solid var(--rule-2); background:var(--panel); border-radius:var(--r); padding:6px 11px;
+  font-size:12.5px; font-weight:700; color:var(--ink-2)}
+.act button.pri{background:var(--accent); border-color:var(--accent); color:#fff}
+
+/* ---------- compare tray ---------- */
+.tray{position:fixed; inset-block-end:0; inset-inline:0; background:var(--ink); color:#fff; padding:11px 20px;
+  display:flex; gap:12px; align-items:center; transform:translateY(110%); transition:transform .22s ease; z-index:40}
+.tray.on{transform:none}
+.tray .lbl{font-size:11px; letter-spacing:.07em; text-transform:uppercase; color:#9AA3B4}
+.traychips{display:flex; gap:7px; flex-wrap:wrap; flex:1}
+.traychip{background:#232833; border:1px solid #343B49; border-radius:100px; padding:4px 9px; font-size:12.5px;
+  display:flex; align-items:center; gap:6px}
+.traychip button{border:none; background:transparent; color:#8C95A6; font-size:14px; line-height:1; padding:0}
+.tray .go{background:#fff; color:var(--ink); border:none; border-radius:var(--r); padding:7px 15px; font-weight:800; font-size:13px}
+.tray .clr{background:transparent; border:1px solid #3C4351; color:#B9C0CD; border-radius:var(--r); padding:7px 12px; font-size:12.5px}
+
+/* ---------- command palette ---------- */
+.scrim{position:fixed; inset:0; background:rgba(14,17,22,.34); backdrop-filter:blur(2px); z-index:50; display:none}
+.scrim.on{display:block}
+.pal{position:fixed; inset-inline:0; top:12vh; margin:auto; width:min(560px,92vw); background:var(--panel);
+  border:1px solid var(--rule-2); border-radius:10px; box-shadow:0 24px 60px rgba(14,17,22,.28); z-index:51;
+  overflow:hidden; display:none}
+.pal.on{display:block}
+.pal input{width:100%; border:none; border-bottom:1px solid var(--rule); padding:15px 17px; font-size:16px;
+  font-family:inherit; outline:none; color:var(--ink)}
+.pal ul{list-style:none; margin:0; padding:6px; max-height:44vh; overflow:auto}
+.pal li{display:flex; align-items:center; gap:9px; padding:8px 11px; border-radius:5px; font-size:13.5px; cursor:pointer}
+.pal li[aria-selected="true"]{background:var(--accent-soft)}
+.pal li .k{margin-inline-start:auto; font-family:var(--mono); font-size:10.5px; color:var(--ink-3)}
+.palfoot{border-top:1px solid var(--rule); padding:7px 14px; font-size:11px; color:var(--ink-3); display:flex; gap:14px}
+.empty{padding:26px; text-align:center; color:var(--ink-3); font-size:13px}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+@media (max-width:760px){ .det{grid-template-columns:1fr} .det>section{border-inline-start:none; border-top:1px solid #D9DEEE} }
+</style>
+
+<div class="app" lang="he">
+
+  <header class="mast">
+    <h1>מוקד סקאוטינג <small>· ליגת הדראפט 25/26</small></h1>
+    <span class="mockflag">mockup · נתונים מומצאים</span>
+    <span class="spacer"></span>
+    <div class="mast-tools">
+      <button class="kbtn" onclick="openPal()">חיפוש שחקן <kbd>⌘K</kbd></button>
+      <button class="wl-btn" onclick="setAvail('watch')">★ המעקב שלי <span class="cnt n" id="wlCount">0</span></button>
+    </div>
+  </header>
+
+  <dl class="tape">
+    <div><dt>חופשיים בציון 70+</dt><dd id="tFree">—</dd></div>
+    <div><dt>מהמעקב עם לו״ז קל</dt><dd id="tWatch">—</dd></div>
+    <div><dt>הפער הגדול (xDiff)</dt><dd id="tGap">—</dd></div>
+    <div><dt>בסיכון בקבוצה שלי</dt><dd id="tRisk">—</dd></div>
+    <div><dt>נחטפו מאז מחזור 8</dt><dd class="dn">4 <em>שחקנים</em></dd></div>
+  </dl>
+
+  <div class="deck">
+    <div class="deck-row">
+      <span class="deck-label">מי מוצג</span>
+      <div class="seg avail" id="availSeg">
+        <button aria-pressed="false" onclick="setAvail('all')">כולם</button>
+        <button aria-pressed="true"  onclick="setAvail('free')">חופשיים בלבד</button>
+        <button aria-pressed="false" onclick="setAvail('mine')">הקבוצה שלי</button>
+        <button aria-pressed="false" onclick="setAvail('taken')">אצל היריבים</button>
+        <button aria-pressed="false" onclick="setAvail('watch')">★ מעקב</button>
+      </div>
+      <div class="vsep"></div>
+      <span class="deck-label">עמדה</span>
+      <div style="display:flex;gap:6px">
+        <button class="chip" aria-pressed="false" onclick="togPos(this,'GK')">שוער</button>
+        <button class="chip" aria-pressed="false" onclick="togPos(this,'DEF')">הגנה</button>
+        <button class="chip" aria-pressed="false" onclick="togPos(this,'MID')">קישור</button>
+        <button class="chip" aria-pressed="false" onclick="togPos(this,'FWD')">חלוץ</button>
+      </div>
+      <span class="spacer"></span>
+      <span class="hint" id="rowCount"></span>
+    </div>
+    <div class="deck-row">
+      <span class="deck-label">סט עמודות</span>
+      <div class="tabs" id="presetTabs">
+        <button aria-pressed="true"  onclick="setPreset('scout')">סקאוטינג</button>
+        <button aria-pressed="false" onclick="setPreset('attack')">התקפה</button>
+        <button aria-pressed="false" onclick="setPreset('defence')">הגנה</button>
+        <button aria-pressed="false" onclick="setPreset('form')">כושר ולו״ז</button>
+        <button aria-pressed="false" onclick="setPreset('all')">הכל (28)</button>
+      </div>
+      <div class="vsep"></div>
+      <span class="hint">לחיצה על שורה פותחת כרטיס · ⇧ לחיצה מוסיפה להשוואה</span>
+    </div>
+  </div>
+
+  <div class="tablewrap">
+    <table id="tbl">
+      <thead><tr id="thead"></tr></thead>
+      <tbody id="tbody"></tbody>
+    </table>
+    <div class="empty" id="emptyMsg" hidden>אין שחקנים שעונים על הסינון.</div>
+  </div>
+
+  <div class="tray" id="tray">
+    <span class="lbl">השוואה</span>
+    <div class="traychips" id="trayChips"></div>
+    <button class="go" onclick="alert('מוקאפ — כאן ייפתח מסך השוואה')">השווה</button>
+    <button class="clr" onclick="clearCmp()">נקה</button>
+  </div>
+
+  <div class="scrim" id="scrim" onclick="closePal()"></div>
+  <div class="pal" id="pal" role="dialog" aria-label="חיפוש שחקן">
+    <input id="palIn" placeholder="חפש שחקן, קבוצה או פקודה…" oninput="palRender()" onkeydown="palKey(event)">
+    <ul id="palList" role="listbox"></ul>
+    <div class="palfoot"><span>↑↓ ניווט</span><span>↵ פתח כרטיס</span><span>★ הוסף למעקב</span><span>esc סגור</span></div>
+  </div>
+</div>
+
+<script>
+/* =================== MOCK DATA (shared across all 3 mockups) =================== */
+const fx = s => s.split(',').map(t=>{const p=t.trim().split(' ');return{opp:p[0],home:p[1]==='h',fdr:+p[2]}});
+const MY='הקבוצה שלי';
+const PLAYERS=[
+{id:1,name:'ר. אוקונקוו',team:'NEW',pos:'MID',owner:null,score:87,pred1:6.4,pred4:5.8,form:6.2,ppg:4.9,minPct:94,mins:1128,ga:6,xgi90:.62,xg90:.34,xa90:.28,xdiff:-2.4,dc90:4.1,cs90:.21,bonus90:.9,ict90:9.4,pen:0,cor:1,fk:2,heat:82,signal:'claim',risk:null,
+ reasons:['xDiff -2.4 — הפער הגדול בליגה','לו״ז 3 קרובים: 2.0','קרנות #1'],
+ note:'שלישי בליגה ב-xGI/90 בין הקשרים, אבל רק 6 מעורבויות בפועל. 94% מהדקות, שני מצבים נייחים, ושני משחקי בית מול הגנות מהחלשות בליגה. אם הוא מתקן — הוא מתקן אצל מי שלוקח אותו עכשיו.',
+ fdr:fx('BUR h 2, SUN a 2, EVE h 3, LEE h 2, MCI a 5, FUL h 2'),spark:[2,5,3,8,6,11],mspark:[88,90,90,94,90,90]},
+{id:2,name:'ד. פאולסן',team:'BRE',pos:'FWD',owner:null,score:81,pred1:5.9,pred4:5.1,form:7.4,ppg:4.2,minPct:71,mins:702,ga:7,xgi90:.71,xg90:.52,xa90:.19,xdiff:-.8,dc90:1.2,cs90:.05,bonus90:1.4,ict90:8.1,pen:1,cor:0,fk:0,heat:91,signal:'claim',risk:'new',
+ reasons:['בועט פנדלים #1','דקות: 45→90 בשלושה מחזורים','7 מעורבויות ב-702 דקות'],
+ note:'קיבל את התפקיד אחרי הפציעה של החלוץ הראשון וכבר שלושה מחזורים מסיים 90 דקות. הפנדלים עברו אליו במחזור 7. הסיכון: כשהראשון חוזר. השווי: הוא היחיד מהחופשיים עם xG/90 מעל 0.50.',
+ fdr:fx('WOL h 2, BOU a 3, NFO h 2, TOT a 4, WHU h 2, CRY a 3'),spark:[1,6,9,4,12,8],mspark:[31,45,62,90,90,90]},
+{id:3,name:'מ. וילייה',team:'CRY',pos:'DEF',owner:null,score:78,pred1:4.8,pred4:4.6,form:5.1,ppg:4.0,minPct:98,mins:1176,ga:2,xgi90:.19,xg90:.11,xa90:.08,xdiff:-.4,dc90:9.8,cs90:.38,bonus90:1.1,ict90:5.2,pen:0,cor:2,fk:0,heat:58,signal:'claim',risk:null,
+ reasons:['DC/90 9.8 — עשירון עליון','5 קלין שיטים ב-12','98% מהדקות'],
+ note:'לא ייתן לך שערים, אבל בפורמט הזה הוא מכונת נקודות הגנתיות: תרומה הגנתית בעשירון העליון, 5 קלין שיטים, ו-1.1 בונוס למשחק. הסוג של השחקן שנשאר חופשי כי הוא משעמם.',
+ fdr:fx('EVE h 2, BUR a 1, WHU h 2, BHA a 3, SUN h 2, ARS a 5'),spark:[6,2,6,1,7,2],mspark:[90,90,90,98,90,90]},
+{id:4,name:'ל. סנטוס',team:'AVL',pos:'MID',owner:'קרן זווית',score:84,pred1:6.1,pred4:5.9,form:4.2,ppg:5.3,minPct:89,mins:1068,ga:4,xgi90:.58,xg90:.24,xa90:.34,xdiff:-3.1,dc90:3.4,cs90:.18,bonus90:.7,ict90:10.2,pen:0,cor:1,fk:1,heat:44,signal:'buylow',risk:null,
+ reasons:['xDiff -3.1 — הגדול בליגה','שלושה מחזורים בלי נקודות','הבעלים בלחץ לפני הדדליין'],
+ note:'הנתונים מתחתיו הם של שחקן טופ-5, התוצאות של שחקן טופ-60. שלושה מחזורים רזופים הפכו אותו למטרת טרייד ריאלית — הבעלים שלו ראה רק את הטבלה, לא את ה-xGI. הצע עליו עכשיו, לא אחרי שהוא יבקיע.',
+ fdr:fx('FUL h 2, LEE a 2, BOU h 2, NEW a 4, EVE h 2, BRE h 2'),spark:[9,7,2,0,1,0],mspark:[90,90,84,90,72,90]},
+{id:5,name:'ק. הרטמן',team:'BHA',pos:'GK',owner:null,score:69,pred1:4.4,pred4:4.3,form:4.8,ppg:3.8,minPct:100,mins:1200,ga:0,xgi90:0,xg90:0,xa90:0,xdiff:0,dc90:0,cs90:.25,bonus90:.6,ict90:2.1,pen:0,cor:0,fk:0,heat:35,signal:'claim',risk:null,
+ reasons:['4.1 הצלות למשחק','100% מהדקות','שלושה מ-4 הקרובים בבית'],
+ note:'שוער של קבוצה בינונית שספגה הרבה — כלומר הרבה נקודות הצלה. משעמם, יציב, וחופשי. בליגת דראפט זה בדיוק סוג הפער שאף אחד לא ממלא עד מחזור 15.',
+ fdr:fx('NFO h 2, WHU h 2, CRY h 3, MUN a 4, BUR h 1, LIV a 5'),spark:[3,6,2,5,4,7],mspark:[90,90,90,90,90,90]},
+{id:6,name:'ג׳יי ריד',team:'BOU',pos:'DEF',owner:'הנשרים',score:75,pred1:4.1,pred4:5.4,form:3.4,ppg:3.6,minPct:92,mins:1104,ga:3,xgi90:.28,xg90:.14,xa90:.14,xdiff:.6,dc90:7.2,cs90:.17,bonus90:.8,ict90:6.0,pen:0,cor:1,fk:2,heat:39,signal:'swing',risk:null,
+ reasons:['לו״ז הופך: 4.3 → 1.7 ממחזור 11','קרנות #1','xPts 4 מחזורים ↑ 32%'],
+ note:'שני מחזורים קשים ואז ריצה של ארבעה משחקים מול ההגנות הגרועות בליגה. מי שמסתכל רק על הכושר הנוכחי יראה שחקן קר — מי שמסתכל על הלו״ז יראה חלון קנייה שנסגר בעוד שבועיים.',
+ fdr:fx('MCI a 5, ARS h 4, BUR a 1, SUN h 2, LEE h 2, WOL a 2'),spark:[2,1,5,2,0,6],mspark:[90,90,90,78,90,90]},
+{id:7,name:'א. מורנו',team:'WOL',pos:'FWD',owner:null,score:64,pred1:3.6,pred4:3.2,form:5.6,ppg:3.1,minPct:76,mins:912,ga:5,xgi90:.31,xg90:.22,xa90:.09,xdiff:2.2,dc90:1.0,cs90:.04,bonus90:.5,ict90:6.4,pen:0,cor:0,fk:0,heat:66,signal:'fade',risk:'rot',
+ reasons:['xDiff +2.2 — מימוש יתר','xG/90 0.22 בלבד','76% מהדקות'],
+ note:'המלכודת של השבוע. חמש מעורבויות שמרגישות כמו כושר, אבל הנתונים מתחתיו הם של שחקן ספסל. 66% מהיריבים בליגה כבר בדקו אותו — תן להם לקחת.',
+ fdr:fx('BRE a 3, MUN h 4, LIV a 5, ARS h 5, TOT a 4, BOU h 2'),spark:[7,2,8,1,6,1],mspark:[63,90,58,90,72,45]},
+{id:8,name:'ט. אנקוואנדה',team:'FUL',pos:'MID',owner:MY,score:88,pred1:6.8,pred4:6.2,form:7.1,ppg:5.8,minPct:91,mins:1092,ga:9,xgi90:.66,xg90:.31,xa90:.35,xdiff:.4,dc90:4.8,cs90:.20,bonus90:1.3,ict90:11.4,pen:2,cor:1,fk:1,heat:12,signal:'hold',risk:'knock',
+ reasons:['הנכס הטוב שלך','דווח על מכה בקרסול','לו״ז 4 קרובים: 2.3'],
+ note:'לא נוגעים. אבל בדוק את הדיווח מיום חמישי לפני שאתה מגדיר הרכב — אם הוא יוצא, שני החופשיים בראש הרשימה ממלאים את המקום בלי לשבור את השבוע.',
+ fdr:fx('AVL a 3, CRY h 2, SUN a 2, BUR h 1, NEW a 4, MCI h 5'),spark:[8,11,5,9,7,12],mspark:[90,90,72,90,90,90]},
+{id:9,name:'פ. וויתרס',team:'EVE',pos:'DEF',owner:null,score:72,pred1:3.9,pred4:5.0,form:3.1,ppg:3.4,minPct:87,mins:1044,ga:1,xgi90:.15,xg90:.07,xa90:.08,xdiff:-.2,dc90:8.4,cs90:.22,bonus90:.7,ict90:4.6,pen:0,cor:0,fk:0,heat:28,signal:'swing',risk:null,
+ reasons:['שלושה מ-4 הקרובים בבית','xGC של הקבוצה ↓','DC/90 8.4'],
+ note:'הקבוצה תיקנה את ההגנה בשלושת המחזורים האחרונים והלו״ז הבא כמעט כולו בבית. שחקן מסוג "ממלא מקום שנשאר בהרכב".',
+ fdr:fx('CRY a 2, LEE h 2, NEW a 3, BRE h 2, AVL a 2, TOT h 4'),spark:[1,2,6,1,2,5],mspark:[90,90,63,90,90,90]},
+{id:10,name:'נ. קסטרו',team:'TOT',pos:'MID',owner:'מלכי xG',score:91,pred1:7.2,pred4:6.9,form:8.2,ppg:6.4,minPct:96,mins:1152,ga:12,xgi90:.79,xg90:.41,xa90:.38,xdiff:1.1,dc90:2.9,cs90:.19,bonus90:1.8,ict90:13.1,pen:1,cor:1,fk:1,heat:4,signal:'hold',risk:null,
+ reasons:['#1 בליגה בציון','לא יזוז בטרייד סביר','שלושה מצבים נייחים'],
+ note:'הבנצ׳מרק. שמור אותו בטבלה כדי לדעת מול מה אתה מודד את כל השאר — לא כדי לבזבז הצעות טרייד.',
+ fdr:fx('WHU h 2, NFO a 2, MUN h 3, BRE h 2, WOL h 2, EVE a 3'),spark:[12,9,14,8,11,15],mspark:[90,90,90,96,90,90]},
+{id:11,name:'ס. באלדווין',team:'LIV',pos:'FWD',owner:'אבירי הבונוס',score:93,pred1:7.6,pred4:7.1,form:8.8,ppg:6.9,minPct:93,mins:1116,ga:15,xgi90:.92,xg90:.68,xa90:.24,xdiff:1.8,dc90:.8,cs90:.06,bonus90:2.1,ict90:12.6,pen:1,cor:0,fk:0,heat:2,signal:'hold',risk:null,
+ reasons:['#1 בליגה ב-xG/90','2.1 בונוס למשחק','15 מעורבויות'],
+ note:'לא זמין, ולא יהיה. בטבלה רק כתקרה: כל חלוץ אחר נמדד ביחס ל-0.68 xG/90 שלו.',
+ fdr:fx('BHA h 2, WOL h 1, AVL a 3, LEE h 1, CHE a 4, NEW h 3'),spark:[15,11,9,17,13,10],mspark:[90,90,84,90,90,72]},
+{id:12,name:'ר. ואן אסן',team:'ARS',pos:'DEF',owner:'טוטו יונייטד',score:86,pred1:5.6,pred4:5.5,form:6.4,ppg:5.1,minPct:97,mins:1164,ga:4,xgi90:.34,xg90:.21,xa90:.13,xdiff:-.6,dc90:6.9,cs90:.42,bonus90:1.6,ict90:7.2,pen:0,cor:1,fk:0,heat:6,signal:'hold',risk:null,
+ reasons:['6 קלין שיטים ב-13','קרנות #1','xGC הקבוצה הנמוך בליגה'],
+ note:'המגן הטוב בליגה ואצל יריב. שווה לזכור מי מחזיק אותו — בעל הקבוצה הזאת חסר חלוץ, וזה הבסיס לטרייד שדווקא כן יעבור.',
+ fdr:fx('SUN h 1, BOU a 2, LEE h 1, CHE h 3, BUR a 1, CRY h 2'),spark:[6,9,2,7,6,11],mspark:[90,90,90,97,90,90]},
+{id:13,name:'ח. עוסמאן',team:'WHU',pos:'MID',owner:null,score:74,pred1:4.6,pred4:5.6,form:3.8,ppg:3.9,minPct:84,mins:1008,ga:3,xgi90:.44,xg90:.19,xa90:.25,xdiff:-1.9,dc90:5.2,cs90:.12,bonus90:.6,ict90:8.8,pen:0,cor:2,fk:1,heat:47,signal:'buylow',risk:null,
+ reasons:['xDiff -1.9','לו״ז נפתח ממחזור 11','84% מהדקות'],
+ note:'שלושה מחזורים מול טופ-6 הסתירו שחקן עם xGI סביר לגמרי. הלו״ז מתהפך בדיוק כשחלון הוויוורים הבא נפתח — זה תזמון, לא מקריות.',
+ fdr:fx('TOT a 5, BHA a 3, CRY a 2, WOL h 2, BRE a 2, SUN h 1'),spark:[1,4,0,2,1,5],mspark:[72,90,63,90,84,90]},
+{id:14,name:'ד. קרלייל',team:'NFO',pos:'FWD',owner:null,score:70,pred1:4.2,pred4:5.2,form:4.4,ppg:3.5,minPct:79,mins:948,ga:4,xgi90:.48,xg90:.36,xa90:.12,xdiff:-1.1,dc90:1.4,cs90:.05,bonus90:.7,ict90:7.0,pen:0,cor:0,fk:1,heat:52,signal:'swing',risk:'rot',
+ reasons:['לו״ז 4 קרובים: 1.8','xG/90 0.36','79% מהדקות — סיכון סיבוב'],
+ note:'הלו״ז הקל בליגה בארבעת המחזורים הבאים, ו-xG/90 שמצדיק מקום בהרכב. מה שעוצר אותו זה 79% דקות — אם המאמן קובע אותו, זה הפיקאפ של החודש.',
+ fdr:fx('BHA a 2, TOT h 3, BRE a 2, BUR h 1, LEE a 2, SUN h 1'),spark:[0,5,2,7,1,4],mspark:[68,90,54,90,72,90]},
+{id:15,name:'מ. פנטון',team:'BUR',pos:'MID',owner:null,score:58,pred1:2.9,pred4:2.6,form:4.0,ppg:2.8,minPct:88,mins:1056,ga:3,xgi90:.21,xg90:.09,xa90:.12,xdiff:1.4,dc90:3.8,cs90:.08,bonus90:.3,ict90:5.1,pen:0,cor:1,fk:0,heat:61,signal:'fade',risk:null,
+ reasons:['xGI/90 0.21 — עשירון תחתון','לו״ז 5 הקרובים: 4.2','נראה זול, אינו זול'],
+ note:'הרבה דקות ושם מוכר יוצרים אשליה. בפועל: עשירון תחתון בכל מטריקה התקפית ולו״ז הגרוע בליגה. הפילטר של הדף הזה קיים בדיוק כדי שלא תיקח אותו.',
+ fdr:fx('NEW a 5, CRY h 4, MUN a 5, NFO a 4, BHA a 4, ARS h 5'),spark:[2,1,4,0,2,1],mspark:[90,84,90,90,72,90]},
+{id:16,name:'א. סרקיס',team:'SUN',pos:'DEF',owner:null,score:66,pred1:3.7,pred4:3.9,form:4.6,ppg:3.2,minPct:95,mins:1140,ga:2,xgi90:.26,xg90:.13,xa90:.13,xdiff:-.5,dc90:7.8,cs90:.14,bonus90:.9,ict90:5.8,pen:0,cor:1,fk:1,heat:31,signal:'claim',risk:null,
+ reasons:['95% מהדקות','שני מצבים נייחים','DC/90 7.8'],
+ note:'מגן שמבצע קרנות וחופשיות בקבוצה שלא מייצרת הרבה — אבל 95% דקות ותרומה הגנתית גבוהה הופכים אותו לרצפה בטוחה, לא לתקרה.',
+ fdr:fx('ARS a 5, NEW h 3, FUL h 2, BOU a 2, CRY a 2, WHU a 2'),spark:[3,1,5,2,6,2],mspark:[90,90,90,95,90,90]},
+{id:17,name:'ג. לינדקוויסט',team:'LEE',pos:'GK',owner:'בלוק הגנתי',score:61,pred1:3.4,pred4:3.1,form:3.6,ppg:3.0,minPct:100,mins:1200,ga:0,xgi90:0,xg90:0,xa90:0,xdiff:0,dc90:0,cs90:.08,bonus90:.4,ict90:1.8,pen:0,cor:0,fk:0,heat:9,signal:'hold',risk:null,
+ reasons:['קלין שיט אחד ב-13','לו״ז קשה','אין מחליף חופשי טוב יותר'],
+ note:'לא טוב, אבל מוחזק. רלוונטי רק כדי לדעת שהשוק בעמדת השוער דליל — מה שהופך את השוער החופשי שבראש הרשימה לנכס טרייד, לא רק לפיקאפ.',
+ fdr:fx('MUN h 4, EVE a 2, ARS a 5, LIV a 5, BOU a 2, NFO h 3'),spark:[2,4,1,3,2,5],mspark:[90,90,90,90,90,90]},
+{id:18,name:'ב. אדיאיי',team:'MCI',pos:'MID',owner:'מלכי xG',score:89,pred1:5.4,pred4:6.6,form:5.8,ppg:6.1,minPct:64,mins:768,ga:8,xgi90:.84,xg90:.44,xa90:.40,xdiff:-.9,dc90:2.4,cs90:.24,bonus90:1.5,ict90:12.9,pen:0,cor:0,fk:0,heat:8,signal:'hold',risk:'rot',
+ reasons:['xGI/90 0.84 — שני בליגה','64% דקות בלבד','סיבוב מובטח בלו״ז צפוף'],
+ note:'הדוגמה למה שציון לבד לא מספיק: הנתונים ל-90 דקות מדהימים, אבל 64% דקות בליגת דראפט זה שריפת מקום בהרכב. שווה לעקוב אחרי מי שמחזיק אותו ומתעצבן.',
+ fdr:fx('BOU h 1, LIV a 4, TOT a 3, FUL a 2, NEW h 2, WHU h 2'),spark:[9,0,12,2,8,0],mspark:[45,90,36,90,63,54]},
+{id:19,name:'ק. דורנטה',team:'CHE',pos:'FWD',owner:MY,score:83,pred1:5.2,pred4:4.4,form:7.8,ppg:5.4,minPct:90,mins:1080,ga:11,xgi90:.49,xg90:.33,xa90:.16,xdiff:4.2,dc90:1.1,cs90:.07,bonus90:1.2,ict90:9.0,pen:0,cor:0,fk:0,heat:74,signal:'fade',risk:null,
+ reasons:['xDiff +4.2 — מימוש היתר הגדול','לו״ז 4 הקרובים: 4.0','הערך בשוק בשיא'],
+ note:'הכושר שלו במקסימום והנתונים מתחתיו לא תומכים בו. זה הרגע למכור גבוה: יש בליגה שתי קבוצות שיציעו עליו מגן טופ-5 כי הן קונות את ה-11 מעורבויות. הלו״ז שלו נהיה מכוער בדיוק אחרי הדדליין.',
+ fdr:fx('LEE a 2, ARS a 5, LIV h 4, MCI a 5, TOT h 4, BHA h 2'),spark:[11,8,13,6,9,12],mspark:[90,90,72,90,90,90]},
+{id:20,name:'ו. מקגארי',team:'MUN',pos:'DEF',owner:null,score:68,pred1:3.8,pred4:4.7,form:3.2,ppg:3.3,minPct:81,mins:972,ga:2,xgi90:.30,xg90:.12,xa90:.18,xdiff:-1.3,dc90:6.4,cs90:.11,bonus90:.6,ict90:6.1,pen:0,cor:2,fk:0,heat:41,signal:'buylow',risk:'new',
+ reasons:['עבר למגן ימני התקפי','xDiff -1.3','81% דקות ועולה'],
+ note:'שינוי תפקיד לפני שני מחזורים העלה לו את ה-xA/90 ב-140%. מדגם קטן, וזאת בדיוק הסיבה שהוא עוד חופשי. הימור מחושב עם רצפה סבירה.',
+ fdr:fx('LEE a 2, WOL a 2, MCI h 5, BHA h 3, TOT a 4, LIV a 5'),spark:[1,5,2,1,6,2],mspark:[63,72,90,81,90,90]},
+];
+
+/* =================== state =================== */
+const S={avail:'free',pos:new Set(),preset:'scout',sort:'score',dir:-1,watch:new Set([1,4,13]),cmp:[],open:null,palSel:0};
+
+/* =================== column registry =================== */
+const pct=(v,k)=>{const a=PLAYERS.map(p=>+p[k]);const mn=Math.min(...a),mx=Math.max(...a);return mx===mn?0:(v-mn)/(mx-mn)};
+const bar=(v,k,fmt,tone='')=>`<div class="bar ${tone}"><span class="v">${fmt}</span><span class="track"><span class="fill" style="width:${(pct(v,k)*100).toFixed(0)}%"></span></span></div>`;
+const ribbon=p=>`<span class="ribbon" title="ששת המשחקים הבאים — הבא ביותר מימין">${p.fdr.map(f=>`<i class="f${f.fdr}${f.home?'':' away'}">${f.opp}</i>`).join('')}</span>`;
+function spark(a,w=58,h=18,col='#2E3E90'){const mx=Math.max(...a,1),mn=Math.min(...a,0);
+  const pts=a.map((v,i)=>`${(i/(a.length-1)*w).toFixed(1)},${(h-((v-mn)/((mx-mn)||1))*h).toFixed(1)}`);
+  return `<svg class="spark" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" aria-hidden="true">
+  <polyline points="${pts.join(' ')}" fill="none" stroke="${col}" stroke-width="1.4" stroke-linejoin="round"/>
+  <circle cx="${pts[pts.length-1].split(',')[0]}" cy="${pts[pts.length-1].split(',')[1]}" r="2.1" fill="${col}"/></svg>`}
+const diverge=v=>{const m=5,w=Math.min(Math.abs(v)/m,1)*50,neg=v<0;
+  return `<div class="div"><span class="val">${v>0?'+':''}${v.toFixed(1)}</span><span class="axis">
+  <span class="seg2" style="${neg?`inset-inline-start:${50-w}%`:`inset-inline-start:50%`};width:${w}%;background:${neg?'var(--info)':'var(--bad)'}"></span></span></div>`};
+const availCell=p=>p.owner===MY?`<span class="availtag mine">הקבוצה שלי</span>`
+  :p.owner?`<span class="availtag taken">${p.owner}</span>`:`<span class="availtag free">🆓 חופשי</span>`;
+const SIGTXT={claim:'קח עכשיו',buylow:'קנייה בזול',swing:'לו״ז מתהפך',hold:'להחזיק',fade:'להיפרד'};
+const SIGICO={claim:'●',buylow:'▲',swing:'◆',hold:'■',fade:'▼'};
+const RISK={rot:['risk-rot','סיבוב'],knock:['risk-knock','מכה'],new:['risk-new','תפקיד חדש']};
+
+const COLS={
+  signal:{h:'סיגנל',s:'signal',r:p=>`<span class="sig sig-${p.signal}">${SIGICO[p.signal]} ${SIGTXT[p.signal]}</span>
+    <span class="why">${p.reasons.slice(0,2).map(t=>`<span>${t}</span>`).join('')}</span>`},
+  score:{h:'ציון',s:'score',r:p=>bar(p.score,'score',p.score,p.score>=80?'g':p.score<65?'b':'w')},
+  avail:{h:'זמינות',s:'owner',r:availCell},
+  fdr6:{h:'לו״ז 6 ←',s:null,r:ribbon},
+  xgi90:{h:'xGI/90',s:'xgi90',r:p=>bar(p.xgi90,'xgi90',p.xgi90.toFixed(2))},
+  xdiff:{h:'xDiff',s:'xdiff',r:p=>diverge(p.xdiff)},
+  mspark:{h:'דקות (6)',s:'minPct',r:p=>`${spark(p.mspark,50,16,'#4A5261')}<span class="n" style="font-size:11px;color:var(--ink-3)">${p.minPct}%</span>`},
+  sp:{h:'נייחים',s:null,r:p=>`<span class="sp-flags">${[['P',p.pen],['C',p.cor],['F',p.fk]].map(([l,v])=>
+    `<i class="${v===1?'p1':v?'p2':''}" title="${l}: ${v||'—'}">${l}${v||''}</i>`).join('')}</span>`},
+  risk:{h:'סיכון',s:null,r:p=>p.risk?`<span class="risk ${RISK[p.risk][0]}">${RISK[p.risk][1]}</span>`:`<span class="risk-none">—</span>`},
+  ga:{h:'G+A',s:'ga',r:p=>bar(p.ga,'ga',p.ga)},
+  xg90:{h:'xG/90',s:'xg90',r:p=>bar(p.xg90,'xg90',p.xg90.toFixed(2))},
+  xa90:{h:'xA/90',s:'xa90',r:p=>bar(p.xa90,'xa90',p.xa90.toFixed(2))},
+  bonus90:{h:'בונוס/90',s:'bonus90',r:p=>bar(p.bonus90,'bonus90',p.bonus90.toFixed(1))},
+  ict90:{h:'ICT/90',s:'ict90',r:p=>bar(p.ict90,'ict90',p.ict90.toFixed(1))},
+  cs90:{h:'CS/90',s:'cs90',r:p=>bar(p.cs90,'cs90',p.cs90.toFixed(2))},
+  dc90:{h:'DC/90',s:'dc90',r:p=>bar(p.dc90,'dc90',p.dc90.toFixed(1))},
+  pred1:{h:'חיזוי GW',s:'pred1',r:p=>bar(p.pred1,'pred1',p.pred1.toFixed(1))},
+  pred4:{h:'חיזוי 4GW',s:'pred4',r:p=>bar(p.pred4,'pred4',p.pred4.toFixed(1))},
+  form:{h:'כושר',s:'form',r:p=>`${spark(p.spark,50,16)}<span class="n" style="font-size:11px">${p.form.toFixed(1)}</span>`},
+  ppg:{h:'נק׳/משחק',s:'ppg',r:p=>bar(p.ppg,'ppg',p.ppg.toFixed(1))},
+  minPct:{h:'% דקות',s:'minPct',r:p=>bar(p.minPct,'minPct',p.minPct+'%',p.minPct>=90?'g':p.minPct<75?'b':'w')},
+  mins:{h:'דקות',s:'mins',r:p=>`<span class="n">${p.mins}</span>`},
+  heat:{h:'ביקוש',s:'heat',r:p=>bar(p.heat,'heat',p.heat+'%',p.heat>70?'b':'')},
+};
+const PRESETS={
+  scout:['signal','score','avail','fdr6','xdiff','xgi90','mspark','sp','risk','heat'],
+  attack:['score','avail','ga','xg90','xa90','xgi90','bonus90','ict90','fdr6'],
+  defence:['score','avail','cs90','dc90','minPct','bonus90','fdr6','risk'],
+  form:['pred1','pred4','form','ppg','mspark','minPct','fdr6','avail'],
+  all:['signal','score','avail','pred1','pred4','form','ppg','ga','xgi90','xg90','xa90','xdiff','dc90','cs90','bonus90','ict90','minPct','mins','sp','fdr6','risk','heat'],
+};
+
+/* =================== render =================== */
+function rows(){
+  let r=PLAYERS.filter(p=>{
+    if(S.avail==='free'&&p.owner)return false;
+    if(S.avail==='mine'&&p.owner!==MY)return false;
+    if(S.avail==='taken'&&(!p.owner||p.owner===MY))return false;
+    if(S.avail==='watch'&&!S.watch.has(p.id))return false;
+    if(S.pos.size&&!S.pos.has(p.pos))return false;
+    return true;});
+  const k=S.sort;
+  r.sort((a,b)=>{const x=a[k]??'',y=b[k]??'';
+    return (typeof x==='string'||typeof y==='string')?String(x).localeCompare(String(y),'he')*-S.dir:(x-y)*S.dir});
+  return r;
+}
+function render(){
+  const cols=PRESETS[S.preset], data=rows();
+  document.getElementById('thead').innerHTML=
+    `<th class="stick" data-k="score">שחקן</th>`+cols.map(c=>{const C=COLS[c];
+      return `<th data-k="${C.s||''}">${C.h}${C.s===S.sort?`<span class="sd">${S.dir<0?'▼':'▲'}</span>`:''}</th>`}).join('');
+  document.getElementById('tbody').innerHTML=data.map((p,i)=>{
+    const on=S.watch.has(p.id);
+    const main=`<tr data-id="${p.id}" class="${S.open===p.id?'open':''}" onclick="rowClick(event,${p.id})">
+      <td class="stick"><div class="pcell">
+        <button class="star ${on?'on':''}" aria-label="הוסף למעקב" onclick="event.stopPropagation();togWatch(${p.id})">${on?'★':'☆'}</button>
+        <span class="rk">${i+1}</span>
+        <span><span class="pname">${p.name}</span>
+        <span class="pmeta"><b class="posbadge pos-${p.pos}">${p.pos}</b> ${p.team}</span></span>
+      </div></td>`+cols.map(c=>`<td>${COLS[c].r(p)}</td>`).join('')+`</tr>`;
+    if(S.open!==p.id)return main;
+    return main+`<tr class="detail"><td colspan="${cols.length+1}"><div class="det">
+      <section><h4>למה הוא ברשימה</h4><p>${p.note}</p>
+        <div class="why">${p.reasons.map(t=>`<span>${t}</span>`).join('')}</div>
+        <div class="act">
+          <button class="pri" onclick="event.stopPropagation();togWatch(${p.id})">${on?'★ הוסר מהמעקב':'☆ הוסף למעקב'}</button>
+          <button onclick="event.stopPropagation();addCmp(${p.id})">+ להשוואה</button>
+          <button onclick="event.stopPropagation();alert('מוקאפ')">סמן כמטרת טרייד</button>
+          <button onclick="event.stopPropagation();alert('מוקאפ')">התראה אם הציון עולה ל-90</button>
+        </div></section>
+      <section><h4>אחוזונים בעמדה (${p.pos})</h4><div class="pbars">
+        ${[['xGI/90','xgi90',2],['xG/90','xg90',2],['xA/90','xa90',2],['תרומה הגנתית','dc90',1],['בונוס/90','bonus90',1],['ICT/90','ict90',1]]
+          .map(([l,k,d])=>{const v=Math.round(pct(p[k],k)*100);
+          return `<div class="pbar"><span>${l}</span><span class="t"><span class="f" style="width:${v}%"></span></span><b>${v}</b></div>`}).join('')}
+      </div></section>
+      <section><h4>ששת המשחקים הבאים</h4><div class="fixlist">
+        ${p.fdr.map((f,j)=>`<div class="fixrow"><span class="gw">GW${9+j}</span>
+          <span>${f.opp} · ${f.home?'בית':'חוץ'}</span>
+          <span class="ribbon"><i class="f${f.fdr}">${f.fdr}</i></span></div>`).join('')}
+      </div></section></div></td></tr>`;
+  }).join('');
+  document.getElementById('emptyMsg').hidden=data.length>0;
+  document.getElementById('rowCount').textContent=`${data.length} שחקנים · ${S.watch.size} במעקב`;
+  document.getElementById('wlCount').textContent=S.watch.size;
+  document.querySelectorAll('#thead th').forEach(th=>th.onclick=()=>{const k=th.dataset.k;if(!k)return;
+    if(S.sort===k)S.dir*=-1;else{S.sort=k;S.dir=-1}render()});
+  tape();tray();
+}
+function tape(){
+  const free=PLAYERS.filter(p=>!p.owner);
+  document.getElementById('tFree').innerHTML=`${free.filter(p=>p.score>=70).length} <em>מתוך ${free.length}</em>`;
+  const w=[...S.watch].map(id=>PLAYERS.find(p=>p.id===id)).filter(Boolean);
+  const easy=w.filter(p=>p.fdr.slice(0,3).reduce((s,f)=>s+f.fdr,0)/3<=2.4).length;
+  document.getElementById('tWatch').innerHTML=`${easy} <em>מתוך ${w.length}</em>`;
+  const g=[...PLAYERS].sort((a,b)=>a.xdiff-b.xdiff)[0];
+  document.getElementById('tGap').innerHTML=`<span class="up">${g.xdiff.toFixed(1)}</span> <em>${g.name}</em>`;
+  document.getElementById('tRisk').innerHTML=`${PLAYERS.filter(p=>p.owner===MY&&p.risk).length} <em>שחקנים</em>`;
+}
+/* =================== interactions =================== */
+function setAvail(v){S.avail=v;const b=[...document.querySelectorAll('#availSeg button')];
+  const map={all:0,free:1,mine:2,taken:3,watch:4};b.forEach((x,i)=>x.setAttribute('aria-pressed',i===map[v]));render()}
+function togPos(btn,p){const on=btn.getAttribute('aria-pressed')==='true';btn.setAttribute('aria-pressed',!on);
+  on?S.pos.delete(p):S.pos.add(p);render()}
+function setPreset(v){S.preset=v;const order=['scout','attack','defence','form','all'];
+  [...document.querySelectorAll('#presetTabs button')].forEach((b,i)=>b.setAttribute('aria-pressed',order[i]===v));render()}
+function togWatch(id){S.watch.has(id)?S.watch.delete(id):S.watch.add(id);render()}
+function rowClick(e,id){if(e.shiftKey){addCmp(id);return}S.open=S.open===id?null:id;render()}
+function addCmp(id){if(S.cmp.includes(id))return;if(S.cmp.length>=4)S.cmp.shift();S.cmp.push(id);render()}
+function clearCmp(){S.cmp=[];render()}
+function tray(){const t=document.getElementById('tray');t.classList.toggle('on',S.cmp.length>=2);
+  document.getElementById('trayChips').innerHTML=S.cmp.map(id=>{const p=PLAYERS.find(x=>x.id===id);
+    return `<span class="traychip">${p.name} <b class="n">${p.score}</b><button onclick="S.cmp=S.cmp.filter(x=>x!==${id});render()">×</button></span>`}).join('')}
+/* palette */
+function openPal(){document.getElementById('scrim').classList.add('on');const p=document.getElementById('pal');
+  p.classList.add('on');document.getElementById('palIn').value='';S.palSel=0;palRender();document.getElementById('palIn').focus()}
+function closePal(){document.getElementById('scrim').classList.remove('on');document.getElementById('pal').classList.remove('on')}
+function palHits(){const q=document.getElementById('palIn').value.trim();
+  return (q?PLAYERS.filter(p=>p.name.includes(q)||p.team.toLowerCase().includes(q.toLowerCase())):PLAYERS.slice(0,8))}
+function palRender(){const hits=palHits();if(S.palSel>=hits.length)S.palSel=0;
+  document.getElementById('palList').innerHTML=hits.map((p,i)=>`<li role="option" aria-selected="${i===S.palSel}"
+    onclick="palGo(${p.id})"><b class="posbadge pos-${p.pos}">${p.pos}</b> ${p.name}
+    <span style="color:var(--ink-3)">${p.team}</span>
+    ${p.owner?'':'<span class="availtag free" style="font-size:10px">חופשי</span>'}
+    <span class="k">ציון ${p.score}</span></li>`).join('')||'<div class="empty">אין תוצאות</div>'}
+function palKey(e){const hits=palHits();
+  if(e.key==='ArrowDown'){S.palSel=Math.min(S.palSel+1,hits.length-1);palRender();e.preventDefault()}
+  else if(e.key==='ArrowUp'){S.palSel=Math.max(S.palSel-1,0);palRender();e.preventDefault()}
+  else if(e.key==='Enter'&&hits[S.palSel])palGo(hits[S.palSel].id)
+  else if(e.key==='Escape')closePal()}
+function palGo(id){closePal();S.avail='all';setAvail('all');S.open=id;render();
+  document.querySelector(`tr[data-id="${id}"]`)?.scrollIntoView({block:'center',behavior:'smooth'})}
+addEventListener('keydown',e=>{if((e.metaKey||e.ctrlKey)&&e.key==='k'){e.preventDefault();openPal()}
+  if(e.key==='Escape')closePal()});
+render();
+</script>

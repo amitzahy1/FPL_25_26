@@ -8,7 +8,8 @@
     "test": "node --test tests/",
     "build:season": "node scripts/build-season-snapshot.mjs",
     "serve": "python3 -m http.server 8000",
-    "proxy": "node local_proxy.js"
+    "proxy": "node local_proxy.js",
+    "stamp": "node scripts/stamp-version.mjs"
   },
   "engines": {
     "node": ">=20"
