@@ -1244,6 +1244,10 @@ async function init() {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
+    // Render season names immediately. init() runs only after sign-in, so
+    // labelling there left the season toggle blank on the landing screen.
+    applySeasonLabels();
+
     // Initialize authentication
     auth.init();
 
@@ -1605,6 +1609,14 @@ function calculateFDR(players, fixtures, teamStrength) {
 
 function calculateRealFDR(players, fixtures) {
     console.log('📊 Calculating FDR for next 3 games...');
+
+    // A flaky public proxy can return an error object or HTML instead of the
+    // fixture array. Losing the FDR column is acceptable; failing the entire
+    // data load over it is not.
+    if (!Array.isArray(fixtures)) {
+        console.warn('⚠️ Fixtures unavailable or malformed — skipping FDR', fixtures);
+        return players;
+    }
 
     // Group fixtures by team
     const teamFixtures = {};
