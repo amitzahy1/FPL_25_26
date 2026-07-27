@@ -6419,7 +6419,9 @@ function computeDraftTeamAggregates() {
         // Get table points from standings
         const standingsEntry = state.draft._standingsData.find(s => s.entry_id === e.id);
         const tablePoints = standingsEntry ? standingsEntry.total : 0;
-        const wins = standingsEntry ? standingsEntry.matches_won : 0;
+        // _standingsData normalises this to `wins`; `matches_won` is the raw
+        // API field name and is not present on these rows.
+        const wins = standingsEntry ? (standingsEntry.wins || 0) : 0;
 
         return {
             team: teamName,
@@ -6432,7 +6434,11 @@ function computeDraftTeamAggregates() {
                 totalCleanSheets,
                 totalXGI,
                 totalDefCon,
-                totalPointsFor,
+                // The per-gameweek loop sums `event_points`, which is a single
+                // live-season snapshot and is 0 throughout the completed-season
+                // data — so this was 0 for every team. The league standings
+                // carry the real season total, exactly as they do for pa.
+                totalPointsFor: standingsEntry ? (standingsEntry.pf || 0) : totalPointsFor,
                 // The league standings already carry this; it never needed
                 // recomputing from the match list.
                 totalPointsAgainst: standingsEntry ? (standingsEntry.pa || 0) : 0,
