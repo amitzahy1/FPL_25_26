@@ -269,9 +269,7 @@ const state = {
     watchlist: new Set(),        // player ids, persisted in localStorage
     watchlistOnly: false,        // filter the table down to the watchlist
     rowMode: 'trend',
-    columnPreset: (() => {
-        try { return localStorage.getItem('fpl_column_preset') || 'scout'; } catch (e) { return 'scout'; }
-    })(),            // 'trend' = tall rows with per-GW micro-charts, 'compact' = classic
+    shownOptional: new Set(),   // filled by loadOptionalColumns() once the DOM is up            // 'trend' = tall rows with per-GW micro-charts, 'compact' = classic
     trendWindow: 5,              // how many recent gameweeks each micro-chart covers
     trendGws: [],                // [{ gw, stats: Map(playerId -> gwStats) }] newest last
     trendPrevGws: [],            // the window before it, so deltas have a baseline
@@ -1291,6 +1289,7 @@ async function fetchAndProcessData() {
         document.getElementById('lastUpdated').textContent = `עדכון אחרון: ${new Date().toLocaleString('he-IL')}`;
         populateTeamFilter();
         loadWatchlist();
+        state.shownOptional = loadOptionalColumns();
         invalidateSignals();
         updateDashboardKPIs(); // Update dashboard KPIs
         processChange();
@@ -1986,7 +1985,7 @@ const TREND_METRICS = {
         read: s => gwNum(s.goals_scored) + gwNum(s.assists)
     },
     xgi: {
-        label: 'xG+xA', agg: 'sum', fmt: v => v.toFixed(2), unit: '',
+        label: 'xG+xA', agg: 'sum', fmt: v => v.toFixed(2), unit: '', showTotal: false,
         // One decimal above a 13px bar; two collide with the neighbour.
         barFmt: v => v.toFixed(1),
         read: s => gwNum(s.expected_goals) + gwNum(s.expected_assists)
@@ -2282,7 +2281,7 @@ function trendCellHtml(player, metricKey, index) {
     return `<td class="trend-cell trend-col" data-metric="${metricKey}"
         title="${def.fmt(now)} ב-${recent.length} המחזורים האחרונים · ${def.fmt(before)} ב-${recent.length} שלפניהם. לחיצה על השורה פותחת את הפירוט">
         <span class="trend-main">
-            <span class="trend-value">${def.fmt(now)}</span>
+            ${def.showTotal === false ? '' : `<span class="trend-value">${def.fmt(now)}</span>`}
             ${bars}
         </span>
     </td>`;
@@ -2613,16 +2612,19 @@ function createPlayerRowHtml(player, index) {
             : ''}
             </div>
         </td>
+        <td>${player.position_name}</td>
         <td class="signal-cell">
             <span class="signal-badge signal-${signal.tone}">${signal.label}</span>
             ${signal.why.length ? `<span class="signal-why">${signal.why.map(w => `<span>${w}</span>`).join('')}</span>` : ''}
         </td>
+        <td class="${getPercentileClass(player.total_points, displayedValues.total_points)}">${player.total_points}</td>
         ${trendKeys.map(key => trendCellHtml(player, key, index)).join('')}
         <td class="bold-cell ${getPercentileClass(player.draft_score, displayedValues.draft_score)}">${player.draft_score.toFixed(1)}</td>
         <td class="bold-cell" data-tooltip="${config.columnTooltips.vorp}" style="color:${player.vorp > 0 ? '#059669' : player.vorp < 0 ? '#dc2626' : '#94a3b8'};">${formatVorp(player.vorp)}</td>
         <td class="${getPercentileClass(parseFloat(player.selected_by_percent), displayedValues.selected_by_percent)}">${player.selected_by_percent}%</td>
         <td class="transfers-cell" data-tooltip="${config.columnTooltips.net_transfers_event}"><span class="${player.net_transfers_event >= 0 ? 'net-transfers-positive' : 'net-transfers-negative'}">${player.net_transfers_event.toLocaleString()}</span></td>
         <td data-tooltip="${config.columnTooltips.defcon_hit_rate}">${formatDefconRate(player.defcon_hit_rate)}</td>
+        <td class="${getPercentileClass(player.def_contrib_per90, displayedValues.def_contrib_per90)}" data-tooltip="${config.columnTooltips.def_contrib_per90}">${player.def_contrib_per90.toFixed(1)}</td>
         <td data-tooltip="${config.columnTooltips.rotation_risk}">${formatRotation(player.rotation_risk)}</td>
         <td data-tooltip="${config.columnTooltips.availability}">${formatAvailability(player)}</td>
         <td class="bold-cell stability-cell ${getPercentileClass(player.stability_index || 0, displayedValues.stability_index)}">${(player.stability_index || 0).toFixed(0)}</td>
@@ -2631,12 +2633,9 @@ function createPlayerRowHtml(player, index) {
         <td class="fdr-cell">${fdrBadge}</td>
         <td>${player.team_name}</td>
         <td class="${draftTeamClass}" title="${draftTeamDisplay}">${draftTeamDisplay}</td>
-        <td>${player.position_name}</td>
         <td>${player.now_cost.toFixed(1)}</td>
-        <td class="${getPercentileClass(player.total_points, displayedValues.total_points)}">${player.total_points}</td>
         <td class="${getPercentileClass(player.points_per_game_90, displayedValues.points_per_game_90)}">${player.points_per_game_90.toFixed(1)}</td>
         <td class="${getPercentileClass(player.dreamteam_count, displayedValues.dreamteam_count)}">${player.dreamteam_count}</td>
-        <td class="${getPercentileClass(player.def_contrib_per90, displayedValues.def_contrib_per90)}" data-tooltip="${config.columnTooltips.def_contrib_per90}">${player.def_contrib_per90.toFixed(1)}</td>
         <td class="${getPercentileClass(player.minutes, displayedValues.minutes)}">${player.minutes}</td>
         <td class="${player.xDiff >= 0 ? 'xdiff-positive' : 'xdiff-negative'}" data-tooltip="${config.columnTooltips.xDiff}">${player.xDiff.toFixed(2)}</td>
         <td class="${getPercentileClass(parseFloat(player.ict_index_per90) || 0, displayedValues.ict_index_per90)}">${(parseFloat(player.ict_index_per90) || 0).toFixed(1)}</td>
@@ -2670,93 +2669,72 @@ function fitDetailPanel() {
 window.addEventListener('resize', fitDetailPanel);
 
 /* ==========================================================================
-   COLUMN PRESETS
-   34 columns do not fit any screen, so the table shipped with a horizontal
-   scroll that hid most of the metrics off-frame. Each preset shows the ~10
-   columns that answer one question, and "הכל" still gives the full set.
+   OPTIONAL COLUMNS
+   Presets replaced: hiding two thirds of the table by default reads as columns
+   having been deleted. Every column is present; these six are the ones that
+   crowd the row without being consulted often, so they start off and go back on
+   with one click. The choice is remembered.
    ========================================================================== */
 
-// The first three columns (select, rank, player) are always on screen; the rest
-// are named by their data-sort key.
-const ALWAYS_VISIBLE_COLUMNS = 3;
+const OPTIONAL_COLUMNS = [
+    { key: 'stability_index', label: 'יציבות' },
+    { key: 'ict_index_per90', label: 'ICT/90' },
+    { key: 'dreamteam_count', label: 'דרימטים' },
+    { key: 'set_piece_priority.penalty', label: 'פנדל' },
+    { key: 'set_piece_priority.corner', label: 'קרן' },
+    { key: 'set_piece_priority.free_kick', label: 'חופשית' }
+];
 
-const COLUMN_PRESETS = {
-    scout: {
-        label: 'סקאוטינג',
-        title: 'מי כדאי לקחת: המלצה, מגמה, ציון, זמינות ולו״ז',
-        keys: ['signal_rank', 'trend_pts', 'trend_xgi', 'draft_score', 'vorp', 'selected_by_percent', 'next_3_fdr',
-            'draft_team', 'position_name', 'points_per_game_90', 'rotation_risk', 'fixtures']
-    },
-    attack: {
-        label: 'התקפה',
-        title: 'ייצור התקפי: שערים, בישולים, xGI, בונוס',
-        keys: ['trend_pts', 'trend_xgi', 'draft_score', 'goals_scored_assists', 'xGI_per90', 'xDiff',
-            'ict_index_per90', 'bonus_per90', 'set_piece_priority.penalty', 'minutes', 'fixtures']
-    },
-    defence: {
-        label: 'הגנה',
-        title: 'תרומה הגנתית, DEFCON וקלין שיטים',
-        keys: ['draft_score', 'def_contrib_per90', 'defcon_hit_rate', 'clean_sheets_per90',
-            'team_name', 'position_name', 'minutes', 'rotation_risk', 'next_3_fdr', 'fixtures']
-    },
-    form: {
-        label: 'כושר ולו״ז',
-        title: 'מגמה, חיזוי, יציבות ולוח המשחקים',
-        keys: ['trend_pts', 'trend_xgi', 'points_per_game_90', 'stability_index',
-            'total_points', 'minutes', 'rotation_risk', 'next_3_fdr', 'fixtures']
-    },
-    all: { label: 'הכל', title: 'כל העמודות — כאן צריך גלילה אופקית', keys: null }
-};
+const OPTIONAL_COLUMNS_KEY = 'fpl_optional_columns';
 
-/** key -> column index, read from the header so the two can never drift. */
-function columnIndexByKey() {
-    const map = new Map();
-    document.querySelectorAll('#playersTable > thead > tr > th').forEach((th, i) => {
-        const key = th.dataset.sort || (th.classList.contains('fixtures-header') ? 'fixtures' : null);
-        if (key) map.set(key, i);
-    });
-    return map;
+function loadOptionalColumns() {
+    try {
+        const raw = JSON.parse(localStorage.getItem(OPTIONAL_COLUMNS_KEY) || '[]');
+        return new Set(raw.filter(k => OPTIONAL_COLUMNS.some(c => c.key === k)));
+    } catch (e) { return new Set(); }
 }
 
-function visibleColumnCount() {
-    return [...document.querySelectorAll('#playersTable > thead > tr > th')]
-        .filter(th => !th.hidden).length;
-}
-
-function applyColumnPreset(name) {
-    const preset = COLUMN_PRESETS[name] ? name : 'scout';
-    state.columnPreset = preset;
-    try { localStorage.setItem('fpl_column_preset', preset); } catch (e) { /* private mode */ }
-
-    const keys = COLUMN_PRESETS[preset].keys;
-    const byKey = columnIndexByKey();
-    const show = new Set();
-    for (let i = 0; i < ALWAYS_VISIBLE_COLUMNS; i++) show.add(i);
-    if (keys) keys.forEach(k => { if (byKey.has(k)) show.add(byKey.get(k)); });
-
-    const heads = [...document.querySelectorAll('#playersTable > thead > tr > th')];
-    heads.forEach((th, i) => { th.hidden = keys ? !show.has(i) : false; });
-
-    document.querySelectorAll('#playersTable > tbody > tr.player-row').forEach(tr => {
-        [...tr.children].forEach((td, i) => { td.hidden = keys ? !show.has(i) : false; });
-    });
-
-    // The expanded row spans the table, so it has to follow the visible count.
-    const span = visibleColumnCount();
-    document.querySelectorAll('#playersTable .detail-row > td').forEach(td => {
-        td.colSpan = span;
-    });
-
-    document.querySelectorAll('[data-preset]').forEach(btn => {
-        btn.setAttribute('aria-pressed', String(btn.dataset.preset === preset));
-    });
-    const hint = document.getElementById('presetHint');
-    if (hint) hint.textContent = COLUMN_PRESETS[preset].title;
-}
-
-function setColumnPreset(name) {
-    applyColumnPreset(name);
+function toggleOptionalColumn(key) {
+    if (state.shownOptional.has(key)) state.shownOptional.delete(key);
+    else state.shownOptional.add(key);
+    try {
+        localStorage.setItem(OPTIONAL_COLUMNS_KEY, JSON.stringify([...state.shownOptional]));
+    } catch (e) { /* private mode */ }
+    applyOptionalColumns();
     fitDetailPanel();
+}
+
+/** Hide the switched-off optional columns, in the header and in every row. */
+function applyOptionalColumns() {
+    const heads = [...document.querySelectorAll('#playersTable > thead > tr > th')];
+    if (!heads.length) return;
+
+    const hide = new Set();
+    heads.forEach((th, i) => {
+        const key = th.dataset.sort;
+        if (key && OPTIONAL_COLUMNS.some(c => c.key === key) && !state.shownOptional.has(key)) {
+            hide.add(i);
+        }
+    });
+
+    heads.forEach((th, i) => { th.hidden = hide.has(i); });
+    document.querySelectorAll('#playersTable > tbody > tr.player-row').forEach(tr => {
+        [...tr.children].forEach((td, i) => { td.hidden = hide.has(i); });
+    });
+
+    // The expanded row spans the table, so it follows the visible count.
+    const span = heads.length - hide.size;
+    document.querySelectorAll('#playersTable .detail-row > td').forEach(td => { td.colSpan = span; });
+
+    const host = document.getElementById('optionalCols');
+    if (host) {
+        host.innerHTML = OPTIONAL_COLUMNS.map(c => {
+            const on = state.shownOptional.has(c.key);
+            return `<button class="optional-chip" aria-pressed="${on}"
+                onclick="toggleOptionalColumn('${c.key}')"
+                title="${on ? 'הסתר' : 'הצג'} את עמודת ${c.label}">${on ? '✓ ' : '+ '}${c.label}</button>`;
+        }).join('');
+    }
 }
 
 function renderTable() {
@@ -2787,7 +2765,7 @@ function renderTable() {
             ? row + playerDetailRowHtml(player, colCount)
             : row;
     }).join('');
-    applyColumnPreset(state.columnPreset);
+    applyOptionalColumns();
     fitDetailPanel();
     updateScoutingUi();
     syncDetailWidth();
@@ -3877,23 +3855,6 @@ const KPI_CARDS = [
         pick: p => p.draft_score,
         fmt: v => `ציון ${v.toFixed(1)}`,
         short: v => v.toFixed(1)
-    },
-    {
-        id: 'rising-minutes', icon: '📈', label: 'עולה בדקות',
-        // The earliest signal there is. Points, form and xG all lag behind a
-        // player winning his place; minutes do not. Requires him to be starting
-        // now, so this surfaces a new starter rather than a returning injury.
-        pick: p => {
-            const d = trendDelta(p, 'mins');
-            if (d === null || d < 8) return null;
-            const now = summariseTrend(getTrendSeries(p.id, 'mins', 'recent'), 'avg');
-            return now >= 70 ? d : null;
-        },
-        fmt: (v, p) => {
-            const now = summariseTrend(getTrendSeries(p.id, 'mins', 'recent'), 'avg');
-            return `${Math.round(now - v)} ← ${Math.round(now)} דק׳ למשחק`;
-        },
-        short: v => `+${Math.round(v)}`
     },
     {
         id: 'top-scorer', icon: '⚽', label: 'מלך השערים',

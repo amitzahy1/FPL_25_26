@@ -6078,7 +6078,29 @@ canvas {
 }
 
 .preset-label { font-size: 13px; font-weight: 800; color: #64748b; white-space: nowrap; }
-.preset-group { display: flex; gap: 2px; background: #f1f5f9; padding: 3px; border-radius: 10px; }
+.optional-cols { display: flex; gap: 6px; flex-wrap: wrap; }
+
+.optional-chip {
+    border: 1px dashed #cbd5e1;
+    background: #fff;
+    border-radius: 100px;
+    padding: 5px 12px;
+    font-family: inherit;
+    font-size: 13px;
+    font-weight: 700;
+    color: #64748b;
+    cursor: pointer;
+    transition: all .15s;
+}
+
+.optional-chip:hover { border-color: #94a3b8; color: #334155; }
+
+.optional-chip[aria-pressed="true"] {
+    border-style: solid;
+    border-color: var(--primary-color);
+    background: #e9f4fb;
+    color: var(--primary-dark);
+}
 
 .preset-btn {
     border: none;
@@ -6111,3 +6133,11 @@ canvas {
 }
 
 .table-container::-webkit-scrollbar-thumb:hover { background: #64748b; }
+
+/* xG+xA carries two-decimal labels, which collide above 9px bars. Wider bars and
+   gaps, and no aggregate figure competing for the same width. */
+.trend-cell[data-metric="xgi"] { min-width: 138px; }
+.trend-cell[data-metric="xgi"] .trend-bars { gap: 7px; }
+.trend-cell[data-metric="xgi"] .trend-bar { width: 14px; }
+.trend-cell[data-metric="xgi"] .trend-bar b { inset-inline: -6px; font-size: 9px; }
+.trend-cell[data-metric="pts"] { min-width: 116px; }

@@ -7,8 +7,8 @@
     <title>⚽ FPL Pro Analytics Hub</title>
     <!-- Inline so the tab icon needs no extra request; mirrors the header mark. -->
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='40' y2='40' gradientUnits='userSpaceOnUse'%3E%3Cstop stop-color='%2322D3EE'/%3E%3Cstop offset='.55' stop-color='%233B82F6'/%3E%3Cstop offset='1' stop-color='%236366F1'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='40' height='40' rx='9' fill='%230F172A'/%3E%3Cpath d='M20 5 8 9.7v9.9c0 7 4.9 12.4 12 14.1 7.1-1.7 12-7.1 12-14.1V9.7L20 5Z' fill='url(%23g)'/%3E%3Crect x='12.6' y='20.4' width='3.4' height='7' rx='1.2' fill='%23fff' fill-opacity='.95'/%3E%3Crect x='18.3' y='16.2' width='3.4' height='11.2' rx='1.2' fill='%23fff'/%3E%3Crect x='24' y='12' width='3.4' height='15.4' rx='1.2' fill='%23fff' fill-opacity='.95'/%3E%3C/svg%3E">
-    <link rel="stylesheet" href="style.css?v=2026.07.27.255">
-    <link rel="stylesheet" href="mobile.css?v=2026.07.27.255">
+    <link rel="stylesheet" href="style.css?v=2026.07.27.256">
+    <link rel="stylesheet" href="mobile.css?v=2026.07.27.256">
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.5.1"></script>
     <script
         src="https://cdnjs.cloudflare.com/ajax/libs/chartjs-plugin-annotation/2.2.1/chartjs-plugin-annotation.min.js"></script>
@@ -460,24 +460,11 @@
                                 CSV</button>
                         </div>
                     </div>
-
-                    <!-- Column presets: 34 columns never fit one screen, so each set shows
-                         the ~10 that answer one question. "הכל" keeps the full table. -->
+                    <!-- Columns that are useful occasionally but crowd the table by
+                         default. Off unless switched on; the choice is remembered. -->
                     <div class="preset-row">
-                        <span class="preset-label">עמודות:</span>
-                        <div class="preset-group">
-                            <button class="preset-btn" data-preset="scout" aria-pressed="true"
-                                onclick="setColumnPreset('scout')">סקאוטינג</button>
-                            <button class="preset-btn" data-preset="attack" aria-pressed="false"
-                                onclick="setColumnPreset('attack')">התקפה</button>
-                            <button class="preset-btn" data-preset="defence" aria-pressed="false"
-                                onclick="setColumnPreset('defence')">הגנה</button>
-                            <button class="preset-btn" data-preset="form" aria-pressed="false"
-                                onclick="setColumnPreset('form')">כושר ולו״ז</button>
-                            <button class="preset-btn" data-preset="all" aria-pressed="false"
-                                onclick="setColumnPreset('all')">הכל</button>
-                        </div>
-                        <span class="preset-hint" id="presetHint"></span>
+                        <span class="preset-label">עמודות נוספות:</span>
+                        <div class="optional-cols" id="optionalCols"></div>
                     </div>
 
                     <!-- Bottom Row: Quick Filters -->
@@ -518,9 +505,11 @@
                                     <th>בחר</th>
                                     <th data-sort="rank">דירוג<span class="sort-indicator"></span></th>
                                     <th data-sort="web_name">שחקן<span class="sort-indicator"></span></th>
+                                    <th data-sort="position_name">עמדה<span class="sort-indicator"></span></th>
                                     <th data-sort="signal_rank"
                                         title="המלצה אחת לשחקן, עם המספרים שהובילו אליה. מסודר: קח עכשיו → קנייה בזול → לו״ז מתהפך → ניטרלי → סיכון → למכור → מלכודת → לא זמין">
                                         סיגנל<span class="sort-indicator"></span></th>
+                                    <th data-sort="total_points">נק'<span class="sort-indicator"></span></th>
                                     <th class="trend-col" data-sort="trend_pts" id="trendPtsHeader"
                                         title="הנקודות בכל אחד מהמחזורים האחרונים, והשינוי מול החלון שלפניו. מיון = לפי כמות השינוי">
                                         <span class="trend-head-label">נקודות לפי מחזור</span><span class="sort-indicator"></span></th>
@@ -537,6 +526,7 @@
                                     <th data-sort="defcon_hit_rate"
                                         title="אחוז ההופעות שבהן עבר את סף ה-DEFCON (10 CBIT / 12 CBIRT)">DEFCON<span
                                             class="sort-indicator"></span></th>
+                                    <th data-sort="def_contrib_per90">DC/90<span class="sort-indicator"></span></th>
                                     <th data-sort="rotation_risk" title="אחוז ההופעות שבהן פתח בהרכב">הרכב<span
                                             class="sort-indicator"></span></th>
                                     <th data-sort="availability_factor" title="זמינות: פציעה / הרחקה / סיכוי השתתפות">
@@ -550,12 +540,9 @@
                                     <th data-sort="team_name">קבוצה<span class="sort-indicator"></span></th>
                                     <th data-sort="draft_team" title="קבוצת דראפט (חופשי/שם הקבוצה)">קבוצת דראפט<span
                                             class="sort-indicator"></span></th>
-                                    <th data-sort="position_name">עמדה<span class="sort-indicator"></span></th>
                                     <th data-sort="now_cost">מחיר<span class="sort-indicator"></span></th>
-                                    <th data-sort="total_points">נק'<span class="sort-indicator"></span></th>
                                     <th data-sort="points_per_game_90">נק'/90<span class="sort-indicator"></span></th>
                                     <th data-sort="dreamteam_count">דרימטים<span class="sort-indicator"></span></th>
-                                    <th data-sort="def_contrib_per90">DC/90<span class="sort-indicator"></span></th>
                                     <th data-sort="minutes">דקות<span class="sort-indicator"></span></th>
                                     <th data-sort="xDiff" title="הפרש מביצועים בפועל">xDiff<span
                                             class="sort-indicator"></span></th>
@@ -1013,7 +1000,7 @@
     <!-- Version query is bumped by scripts/stamp-version.mjs on every commit
          (npm run stamp). It was left at 4.0.0 for months, so returning
          visitors kept running a cached script.js and never saw fixes. -->
-    <script src="script.js?v=2026.07.27.255" defer></script>
+    <script src="script.js?v=2026.07.27.256" defer></script>
 </body>
 
 </html>
