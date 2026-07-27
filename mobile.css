@@ -231,6 +231,10 @@
 .filters-toggle { display: none; }
 
 @media (max-width: 768px) {
+    /* One row is a desktop layout; on a phone the filters stack. */
+    .filters { flex-wrap: wrap; }
+    .filters .filter-group { flex: 1 1 45%; }
+
     .filters-wrap {
         background: #fff;
         border: 1px solid #e2e8f0;

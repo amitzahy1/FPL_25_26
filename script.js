@@ -1995,7 +1995,7 @@ const TREND_METRICS = {
         read: s => gwNum(s.minutes)
     },
     dc: {
-        label: 'DC', agg: 'avg', fmt: v => v.toFixed(1), unit: 'ממוצע',
+        label: 'DC', agg: 'avg', fmt: v => v.toFixed(1), unit: 'ממוצע', barFmt: v => v.toFixed(0),
         read: (s, p) => gwDefensiveContribution(s, p.element_type)
     },
     bps: {
@@ -2003,7 +2003,7 @@ const TREND_METRICS = {
         read: s => gwNum(s.bps)
     },
     saves: {
-        label: 'הצלות', agg: 'avg', fmt: v => v.toFixed(1), unit: 'ממוצע',
+        label: 'הצלות', agg: 'avg', fmt: v => v.toFixed(1), unit: 'ממוצע', barFmt: v => v.toFixed(0),
         read: s => gwNum(s.saves)
     }
 };
@@ -2564,10 +2564,9 @@ function createPlayerRowHtml(player, index) {
 
     const signal = signalFor(player);
     const watched = state.watchlist.has(player.id);
-    // Points beside the chances they came from: more xG+xA than points means the
-    // returns lag the performance, and the other way round means they flatter it.
-    // Both cells label every bar, which is what made a single one readable.
-    const trendKeys = ['pts', 'xgi'];
+    // Points beside what earned them. The second metric depends on the position
+    // being filtered — see roleTrend() — because xG+xA is meaningless for a keeper.
+    const trendKeys = ['pts', roleTrend().metric];
 
     const icons = generatePlayerIcons(player);
     const fixturesHTML = generateFixturesHTML(player);
@@ -2613,38 +2612,38 @@ function createPlayerRowHtml(player, index) {
             </div>
         </td>
         <td>${player.position_name}</td>
+        <td>${player.team_name}</td>
+        <td class="${draftTeamClass}" title="${draftTeamDisplay}">${draftTeamDisplay}</td>
+        <td data-tooltip="${config.columnTooltips.availability}">${formatAvailability(player)}</td>
+        <td class="bold-cell ${getPercentileClass(player.draft_score, displayedValues.draft_score)}">${player.draft_score.toFixed(1)}</td>
+        <td class="${getPercentileClass(player.total_points, displayedValues.total_points)}">${player.total_points}</td>
+        <td class="${getPercentileClass(player.points_per_game_90, displayedValues.points_per_game_90)}">${player.points_per_game_90.toFixed(1)}</td>
         <td class="signal-cell">
             <span class="signal-badge signal-${signal.tone}">${signal.label}</span>
             ${signal.why.length ? `<span class="signal-why">${signal.why.map(w => `<span>${w}</span>`).join('')}</span>` : ''}
         </td>
-        <td class="${getPercentileClass(player.total_points, displayedValues.total_points)}">${player.total_points}</td>
         ${trendKeys.map(key => trendCellHtml(player, key, index)).join('')}
-        <td class="bold-cell ${getPercentileClass(player.draft_score, displayedValues.draft_score)}">${player.draft_score.toFixed(1)}</td>
         <td class="bold-cell" data-tooltip="${config.columnTooltips.vorp}" style="color:${player.vorp > 0 ? '#059669' : player.vorp < 0 ? '#dc2626' : '#94a3b8'};">${formatVorp(player.vorp)}</td>
-        <td class="${getPercentileClass(parseFloat(player.selected_by_percent), displayedValues.selected_by_percent)}">${player.selected_by_percent}%</td>
-        <td class="transfers-cell" data-tooltip="${config.columnTooltips.net_transfers_event}"><span class="${player.net_transfers_event >= 0 ? 'net-transfers-positive' : 'net-transfers-negative'}">${player.net_transfers_event.toLocaleString()}</span></td>
         <td data-tooltip="${config.columnTooltips.defcon_hit_rate}">${formatDefconRate(player.defcon_hit_rate)}</td>
         <td class="${getPercentileClass(player.def_contrib_per90, displayedValues.def_contrib_per90)}" data-tooltip="${config.columnTooltips.def_contrib_per90}">${player.def_contrib_per90.toFixed(1)}</td>
         <td data-tooltip="${config.columnTooltips.rotation_risk}">${formatRotation(player.rotation_risk)}</td>
-        <td data-tooltip="${config.columnTooltips.availability}">${formatAvailability(player)}</td>
-        <td class="bold-cell stability-cell ${getPercentileClass(player.stability_index || 0, displayedValues.stability_index)}">${(player.stability_index || 0).toFixed(0)}</td>
         <td class="${getPercentileClass(parseFloat(player.xGI_per90) || 0, displayedValues.xGI_per90)}">${(parseFloat(player.xGI_per90) || 0).toFixed(2)}</td>
         <td class="${getPercentileClass((player.goals_scored || 0) + (player.assists || 0), displayedValues.goals_assists)}">${(player.goals_scored || 0) + (player.assists || 0)}</td>
-        <td class="fdr-cell">${fdrBadge}</td>
-        <td>${player.team_name}</td>
-        <td class="${draftTeamClass}" title="${draftTeamDisplay}">${draftTeamDisplay}</td>
-        <td>${player.now_cost.toFixed(1)}</td>
-        <td class="${getPercentileClass(player.points_per_game_90, displayedValues.points_per_game_90)}">${player.points_per_game_90.toFixed(1)}</td>
-        <td class="${getPercentileClass(player.dreamteam_count, displayedValues.dreamteam_count)}">${player.dreamteam_count}</td>
-        <td class="${getPercentileClass(player.minutes, displayedValues.minutes)}">${player.minutes}</td>
         <td class="${player.xDiff >= 0 ? 'xdiff-positive' : 'xdiff-negative'}" data-tooltip="${config.columnTooltips.xDiff}">${player.xDiff.toFixed(2)}</td>
-        <td class="${getPercentileClass(parseFloat(player.ict_index_per90) || 0, displayedValues.ict_index_per90)}">${(parseFloat(player.ict_index_per90) || 0).toFixed(1)}</td>
+        <td class="fdr-cell">${fdrBadge}</td>
+        <td class="fixtures-cell">${fixturesHTML}</td>
+        <td class="${getPercentileClass(player.minutes, displayedValues.minutes)}">${player.minutes}</td>
         <td class="${getPercentileClass(parseFloat(player.bonus_per90) || 0, displayedValues.bonus_per90)}">${(parseFloat(player.bonus_per90) || 0).toFixed(2)}</td>
         <td class="${getPercentileClass(parseFloat(player.clean_sheets_per90) || 0, displayedValues.clean_sheets_per90)}">${(parseFloat(player.clean_sheets_per90) || 0).toFixed(2)}</td>
+        <td class="${getPercentileClass(parseFloat(player.selected_by_percent), displayedValues.selected_by_percent)}">${player.selected_by_percent}%</td>
+        <td class="transfers-cell" data-tooltip="${config.columnTooltips.net_transfers_event}"><span class="${player.net_transfers_event >= 0 ? 'net-transfers-positive' : 'net-transfers-negative'}">${player.net_transfers_event.toLocaleString()}</span></td>
+        <td>${player.now_cost.toFixed(1)}</td>
+        <td class="bold-cell stability-cell ${getPercentileClass(player.stability_index || 0, displayedValues.stability_index)}">${(player.stability_index || 0).toFixed(0)}</td>
+        <td class="${getPercentileClass(parseFloat(player.ict_index_per90) || 0, displayedValues.ict_index_per90)}">${(parseFloat(player.ict_index_per90) || 0).toFixed(1)}</td>
+        <td class="${getPercentileClass(player.dreamteam_count, displayedValues.dreamteam_count)}">${player.dreamteam_count}</td>
         <td class="${player.set_piece_priority.penalty === 1 ? 'set-piece-yes' : 'set-piece-no'}">${player.set_piece_priority.penalty === 1 ? '🎯 (1)' : '–'}</td>
         <td class="${player.set_piece_priority.corner > 0 ? 'set-piece-yes' : 'set-piece-no'}">${player.set_piece_priority.corner > 0 ? `(${player.set_piece_priority.corner})` : '–'}</td>
         <td class="${player.set_piece_priority.free_kick > 0 ? 'set-piece-yes' : 'set-piece-no'}">${player.set_piece_priority.free_kick > 0 ? `(${player.set_piece_priority.free_kick})` : '–'}</td>
-        <td class="fixtures-cell">${fixturesHTML}</td>
     </tr>`;
 }
 
@@ -2700,6 +2699,7 @@ function toggleOptionalColumn(key) {
     try {
         localStorage.setItem(OPTIONAL_COLUMNS_KEY, JSON.stringify([...state.shownOptional]));
     } catch (e) { /* private mode */ }
+    updateRoleTrendHeader();
     applyOptionalColumns();
     fitDetailPanel();
 }
@@ -2735,6 +2735,35 @@ function applyOptionalColumns() {
                 title="${on ? 'הסתר' : 'הצג'} את עמודת ${c.label}">${on ? '✓ ' : '+ '}${c.label}</button>`;
         }).join('');
     }
+}
+
+/**
+ * The second trend column follows the position filter. xG+xA is a column of
+ * zeros for a goalkeeper and near-zeros for a centre-back, while saves mean
+ * nothing for a forward — so the column shows whatever the selected position is
+ * actually scored on, and the header says which.
+ */
+const ROLE_TREND = {
+    GKP: { metric: 'saves', head: 'הצלות לפי מחזור', title: 'הצלות בכל אחד מהמחזורים האחרונים — מה ששוער מרוויח עליו נקודות' },
+    DEF: { metric: 'dc', head: 'DEFCON לפי מחזור', title: 'תרומה הגנתית (CBIT) בכל מחזור — הסף שמזכה מגן בנקודות' },
+    def: { metric: 'xgi', head: 'xG+xA לפי מחזור', title: 'xG+xA בכל אחד מהמחזורים האחרונים — מה שהיה אמור לצאת לו. קרא אותה מול הנקודות' }
+};
+
+function roleTrend() {
+    // Guarded for the unit tests, which render rows without a document.
+    const el = typeof document !== 'undefined' ? document.getElementById('positionFilter') : null;
+    const pos = el ? el.value : '';
+    return ROLE_TREND[pos] || ROLE_TREND.def;
+}
+
+/** Keep the header honest about which metric the column is currently showing. */
+function updateRoleTrendHeader() {
+    const th = document.getElementById('trendRoleHeader');
+    if (!th) return;
+    const role = roleTrend();
+    const label = th.querySelector('.trend-head-label');
+    if (label) label.textContent = role.head;
+    th.title = role.title;
 }
 
 function renderTable() {
@@ -2967,11 +2996,11 @@ function processChange() {
                 // "desc" default meaning "show me the opportunities".
                 aValue = -signalRank(a);
                 bValue = -signalRank(b);
-            } else if (state.sortKey === 'trend_pts' || state.sortKey === 'trend_xgi') {
+            } else if (state.sortKey === 'trend_pts' || state.sortKey === 'trend_role') {
                 // Sort by the figure the cell prints. It used to sort by the
                 // change against the previous window — a number that is no longer
                 // shown, so the ordering looked arbitrary.
-                const key = state.sortKey === 'trend_pts' ? 'pts' : 'xgi';
+                const key = state.sortKey === 'trend_pts' ? 'pts' : roleTrend().metric;
                 const total = p => summariseTrend(getTrendSeries(p.id, key, 'recent'), TREND_METRICS[key].agg);
                 aValue = total(a);
                 bValue = total(b);

@@ -99,21 +99,46 @@ h1 {
 
 .filters { 
     background: var(--card-bg); 
-    padding: 20px; 
-    margin-bottom: 20px; 
+    padding: 12px 14px; 
+    margin-bottom: 14px; 
     border-radius: var(--radius-md); 
     box-shadow: var(--shadow-md);
     border: 1px solid var(--border-color);
-    display: grid; 
-    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); 
+    /* One row: ten filters at minmax(160px) wrapped onto two lines and cost more
+       vertical space than the table they filter. Equal flexible shares instead,
+       and however many filters exist stay on one line. */
+    display: flex;
+    flex-wrap: nowrap;
+    align-items: flex-end; 
     gap: 16px; 
     align-items: end;
 }
 
-.filter-group { 
-    display: flex; 
+.filter-group {
+    display: flex;
     flex-direction: column;
-    gap: 6px;
+    gap: 3px;
+    /* flex-basis 0 with min-width 0 makes the shares equal and lets a long
+       <select> shrink instead of pushing the row wider than its container. */
+    flex: 1 1 0;
+    min-width: 0;
+}
+
+.filters .filter-group label {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.filters .filter-group input,
+.filters .filter-group select {
+    width: 100%;
+    min-width: 0;
+    padding: 7px 8px;
+    font-size: 12.5px;
 }
 
 label { 

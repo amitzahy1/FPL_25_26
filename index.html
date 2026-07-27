@@ -7,8 +7,8 @@
     <title>⚽ FPL Pro Analytics Hub</title>
     <!-- Inline so the tab icon needs no extra request; mirrors the header mark. -->
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='40' y2='40' gradientUnits='userSpaceOnUse'%3E%3Cstop stop-color='%2322D3EE'/%3E%3Cstop offset='.55' stop-color='%233B82F6'/%3E%3Cstop offset='1' stop-color='%236366F1'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='40' height='40' rx='9' fill='%230F172A'/%3E%3Cpath d='M20 5 8 9.7v9.9c0 7 4.9 12.4 12 14.1 7.1-1.7 12-7.1 12-14.1V9.7L20 5Z' fill='url(%23g)'/%3E%3Crect x='12.6' y='20.4' width='3.4' height='7' rx='1.2' fill='%23fff' fill-opacity='.95'/%3E%3Crect x='18.3' y='16.2' width='3.4' height='11.2' rx='1.2' fill='%23fff'/%3E%3Crect x='24' y='12' width='3.4' height='15.4' rx='1.2' fill='%23fff' fill-opacity='.95'/%3E%3C/svg%3E">
-    <link rel="stylesheet" href="style.css?v=2026.07.27.256">
-    <link rel="stylesheet" href="mobile.css?v=2026.07.27.256">
+    <link rel="stylesheet" href="style.css?v=2026.07.27.257">
+    <link rel="stylesheet" href="mobile.css?v=2026.07.27.257">
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.5.1"></script>
     <script
         src="https://cdnjs.cloudflare.com/ajax/libs/chartjs-plugin-annotation/2.2.1/chartjs-plugin-annotation.min.js"></script>
@@ -335,10 +335,10 @@
                     </summary>
                 <div class="filters">
 
-                    <div class="filter-group"><label>🔍 חיפוש שחקן:</label><input type="text" id="searchName"
+                    <div class="filter-group"><label title="חיפוש לפי שם שחקן">🔍 שחקן</label><input type="text" id="searchName"
                             onkeyup="processChange()" placeholder="שם שחקן..."></div>
 
-                    <div class="filter-group"><label>⚽ עמדה:</label><select id="positionFilter"
+                    <div class="filter-group"><label>⚽ עמדה</label><select id="positionFilter"
                             onchange="processChange()">
                             <option value="">כל העמדות</option>
                             <option value="GKP">🥅 שוערים</option>
@@ -347,21 +347,21 @@
                             <option value="FWD">🎯 חלוצים</option>
                         </select></div>
 
-                    <div class="filter-group"><label>🏟️ קבוצה:</label><select id="teamFilter"
+                    <div class="filter-group"><label>🏟️ קבוצה</label><select id="teamFilter"
                             onchange="processChange()">
                             <option value="">כל הקבוצות</option>
                         </select></div>
 
-                    <div class="filter-group"><label>💰 מחיר טווח:</label><input type="text" id="priceRange"
+                    <div class="filter-group"><label title="טווח מחירים, למשל 4.0-9.0">💰 מחיר</label><input type="text" id="priceRange"
                             onkeyup="processChange()" placeholder="4.0-15.0"></div>
 
-                    <div class="filter-group"><label>🏆 נקודות מינימום:</label><input type="number" id="minPoints"
+                    <div class="filter-group"><label title="מסנן שחקנים מתחת למספר הנקודות הזה">🏆 נק׳ מ-</label><input type="number" id="minPoints"
                             onkeyup="processChange()" placeholder="0"></div>
 
-                    <div class="filter-group"><label>⏳ דקות מינימום:</label><input type="number" id="minMinutes"
+                    <div class="filter-group"><label title="טווח דקות, למשל 120-3420">⏳ דקות</label><input type="number" id="minMinutes"
                             onkeyup="processChange()" value="120" placeholder="0"></div>
                     <div class="filter-group">
-                        <label>📅 טווח:</label>
+                        <label title="החלון שהנתונים מחושבים עליו">📅 טווח</label>
                         <select id="statsRange" onchange="processChange()">
                             <option value="all">כל העונה</option>
                             <option value="1">מחזור אחרון</option>
@@ -371,7 +371,7 @@
                         </select>
                     </div>
 
-                    <div class="filter-group"><label>🎯 טווח xDiff:</label><select id="xDiffFilter"
+                    <div class="filter-group"><label title="ביצועי יתר או חסר מול הצפי">🎯 xDiff</label><select id="xDiffFilter"
                             onchange="processChange()">
                             <option value="">כל הטווח</option>
                             <option value="positive">חיובי (ביצועי יתר)</option>
@@ -506,56 +506,56 @@
                                     <th data-sort="rank">דירוג<span class="sort-indicator"></span></th>
                                     <th data-sort="web_name">שחקן<span class="sort-indicator"></span></th>
                                     <th data-sort="position_name">עמדה<span class="sort-indicator"></span></th>
+                                    <th data-sort="team_name">קבוצה<span class="sort-indicator"></span></th>
+                                    <th data-sort="draft_team" title="קבוצת דראפט (חופשי/שם הקבוצה)">קבוצת דראפט<span
+                                            class="sort-indicator"></span></th>
+                                    <th data-sort="availability_factor" title="זמינות: פציעה / הרחקה / סיכוי השתתפות">
+                                        זמינות<span class="sort-indicator"></span></th>
+                                    <th data-sort="draft_score" title="ציון דראפט משוקלל">ציון<span
+                                            class="sort-indicator"></span></th>
+                                    <th data-sort="total_points">נק'<span class="sort-indicator"></span></th>
+                                    <th data-sort="points_per_game_90">נק'/90<span class="sort-indicator"></span></th>
                                     <th data-sort="signal_rank"
                                         title="המלצה אחת לשחקן, עם המספרים שהובילו אליה. מסודר: קח עכשיו → קנייה בזול → לו״ז מתהפך → ניטרלי → סיכון → למכור → מלכודת → לא זמין">
                                         סיגנל<span class="sort-indicator"></span></th>
-                                    <th data-sort="total_points">נק'<span class="sort-indicator"></span></th>
                                     <th class="trend-col" data-sort="trend_pts" id="trendPtsHeader"
                                         title="הנקודות בכל אחד מהמחזורים האחרונים, והשינוי מול החלון שלפניו. מיון = לפי כמות השינוי">
                                         <span class="trend-head-label">נקודות לפי מחזור</span><span class="sort-indicator"></span></th>
-                                    <th class="trend-col" data-sort="trend_xgi"
-                                        title="xG+xA בכל אחד מהמחזורים האחרונים — מה שהיה אמור לצאת לו. קרא אותה מול הנקודות: יותר xG+xA מנקודות = הגיע לו יותר">
+                                    <th class="trend-col" data-sort="trend_role" id="trendRoleHeader"
+                                        title="xG+xA בכל אחד מהמחזורים האחרונים">
                                         <span class="trend-head-label">xG+xA לפי מחזור</span><span class="sort-indicator"></span></th>
-                                    <th data-sort="draft_score" title="ציון דראפט משוקלל">ציון<span
-                                            class="sort-indicator"></span></th>
                                     <th data-sort="vorp"
                                         title="VORP — יתרון בנקודות למשחק על פני החלופה החופשית באותה עמדה">VORP<span
                                             class="sort-indicator"></span></th>
-                                    <th data-sort="selected_by_percent">% בחירה<span class="sort-indicator"></span></th>
-                                    <th data-sort="net_transfers_event">העברות<span class="sort-indicator"></span></th>
                                     <th data-sort="defcon_hit_rate"
                                         title="אחוז ההופעות שבהן עבר את סף ה-DEFCON (10 CBIT / 12 CBIRT)">DEFCON<span
                                             class="sort-indicator"></span></th>
                                     <th data-sort="def_contrib_per90">DC/90<span class="sort-indicator"></span></th>
                                     <th data-sort="rotation_risk" title="אחוז ההופעות שבהן פתח בהרכב">הרכב<span
                                             class="sort-indicator"></span></th>
-                                    <th data-sort="availability_factor" title="זמינות: פציעה / הרחקה / סיכוי השתתפות">
-                                        זמינות<span class="sort-indicator"></span></th>
-                                    <th data-sort="stability_index" title="מדד יציבות (0-100)">יציבות<span
-                                            class="sort-indicator"></span></th>
                                     <th data-sort="xGI_per90">xGI<span class="sort-indicator"></span></th>
                                     <th data-sort="goals_scored_assists">G+A<span class="sort-indicator"></span></th>
-                                    <th data-sort="next_3_fdr" title="קושי 3 משחקים קרובים (1=קל, 5=קשה)">קושי (3)<span
-                                            class="sort-indicator"></span></th>
-                                    <th data-sort="team_name">קבוצה<span class="sort-indicator"></span></th>
-                                    <th data-sort="draft_team" title="קבוצת דראפט (חופשי/שם הקבוצה)">קבוצת דראפט<span
-                                            class="sort-indicator"></span></th>
-                                    <th data-sort="now_cost">מחיר<span class="sort-indicator"></span></th>
-                                    <th data-sort="points_per_game_90">נק'/90<span class="sort-indicator"></span></th>
-                                    <th data-sort="dreamteam_count">דרימטים<span class="sort-indicator"></span></th>
-                                    <th data-sort="minutes">דקות<span class="sort-indicator"></span></th>
                                     <th data-sort="xDiff" title="הפרש מביצועים בפועל">xDiff<span
                                             class="sort-indicator"></span></th>
-                                    <th data-sort="ict_index_per90">ICT/90<span class="sort-indicator"></span></th>
+                                    <th data-sort="next_3_fdr" title="קושי 3 משחקים קרובים (1=קל, 5=קשה)">קושי (3)<span
+                                            class="sort-indicator"></span></th>
+                                    <th class="fixtures-header">משחקים קרובים</th>
+                                    <th data-sort="minutes">דקות<span class="sort-indicator"></span></th>
                                     <th data-sort="bonus_per90">בונוס/90<span class="sort-indicator"></span></th>
                                     <th data-sort="clean_sheets_per90">CS/90<span class="sort-indicator"></span></th>
+                                    <th data-sort="selected_by_percent">% בחירה<span class="sort-indicator"></span></th>
+                                    <th data-sort="net_transfers_event">העברות<span class="sort-indicator"></span></th>
+                                    <th data-sort="now_cost">מחיר<span class="sort-indicator"></span></th>
+                                    <th data-sort="stability_index" title="מדד יציבות (0-100)">יציבות<span
+                                            class="sort-indicator"></span></th>
+                                    <th data-sort="ict_index_per90">ICT/90<span class="sort-indicator"></span></th>
+                                    <th data-sort="dreamteam_count">דרימטים<span class="sort-indicator"></span></th>
                                     <th data-sort="set_piece_priority.penalty">פנדל<span class="sort-indicator"></span>
                                     </th>
                                     <th data-sort="set_piece_priority.corner">קרן<span class="sort-indicator"></span>
                                     </th>
                                     <th data-sort="set_piece_priority.free_kick">חופשית<span
                                             class="sort-indicator"></span></th>
-                                    <th class="fixtures-header">משחקים קרובים</th>
                                 </tr>
                             </thead>
 
@@ -1000,7 +1000,7 @@
     <!-- Version query is bumped by scripts/stamp-version.mjs on every commit
          (npm run stamp). It was left at 4.0.0 for months, so returning
          visitors kept running a cached script.js and never saw fixes. -->
-    <script src="script.js?v=2026.07.27.256" defer></script>
+    <script src="script.js?v=2026.07.27.257" defer></script>
 </body>
 
 </html>
