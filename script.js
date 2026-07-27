@@ -929,14 +929,32 @@ async function init() {
     // Load data sources in sequence to ensure mapping works
     showLoading();
     try {
-        // 1. Fetch the live calendar first, then pick the season, then do the
-        //    expensive work exactly once. Processing first and switching after
-        //    ran the entire pipeline twice.
-        await ensureLiveBootstrap();
-        applyPreSeasonDefault();
+        // 1. Paint from the local completed-season snapshot immediately. It
+        //    needs no network, so the page is usable in well under a second
+        //    even when every public proxy is failing. The live season is then
+        //    checked in the background and takes over only once it has real
+        //    data. Blocking on the live API here left the page empty for 30s
+        //    whenever the proxies were down, which is most of the time.
+        state.currentDataSource = 'historical';
+        syncDataSourceButtons();
         await fetchAndProcessData();
 
-        // 2. Then build the Draft→FPL mapping
+        // 2. Now see whether the new season has actually started.
+        ensureLiveBootstrap({ timeoutMs: 20000 })
+            .then(async () => {
+                if (!state.allPlayersData.live.raw) return;
+                if (currentSeasonIsTooEarly()) {
+                    showSeasonBanner(finishedGameweekCount());
+                    return;
+                }
+                console.log('🔄 New season has data — switching to live');
+                state.currentDataSource = 'live';
+                syncDataSourceButtons();
+                await fetchAndProcessData();
+            })
+            .catch(e => console.warn('Live season check failed:', e.message));
+
+        // 3. Then build the Draft→FPL mapping
         await buildDraftToFplMapping();
 
         // 3. Finally load Draft data (now mapping is ready!)
@@ -1050,27 +1068,59 @@ function finishedGameweekCount() {
 }
 
 // Fetch the live bootstrap and fixtures without processing or rendering.
-// Season selection depends on the gameweek calendar, so it has to be known
-// before any of the expensive work runs -- otherwise the whole pipeline
-// executes once for the live season and again for the snapshot.
-async function ensureLiveBootstrap() {
+//
+// This must never block the first paint. The bootstrap is well over a
+// megabyte and the free proxies routinely reject it (413) or go down
+// entirely, so waiting on it left the page empty for 30+ seconds. The
+// completed-season snapshot is local and needs no proxy, so it renders first
+// and this upgrades the view afterwards if the live data actually arrives.
+async function ensureLiveBootstrap({ timeoutMs = 0 } = {}) {
+    const withTimeout = (promise, label) => {
+        if (!timeoutMs) return promise;
+        return Promise.race([
+            promise,
+            new Promise((_, reject) =>
+                setTimeout(() => reject(new Error(`${label} timed out`)), timeoutMs))
+        ]);
+    };
+
+    const jobs = [];
+
     if (!state.allPlayersData.live.raw) {
-        try {
-            state.allPlayersData.live.raw = await fetchWithCache(
-                config.urls.bootstrap, 'fpl_bootstrap_live', 60);
-        } catch (e) {
-            console.warn('⚠️ Live bootstrap unavailable:', e.message);
-        }
+        jobs.push(
+            withTimeout(fetchWithCache(config.urls.bootstrap, 'fpl_bootstrap_live', 60), 'bootstrap')
+                .then(data => { state.allPlayersData.live.raw = data; })
+                .catch(e => console.warn('⚠️ Live bootstrap unavailable:', e.message))
+        );
     }
+
     if (!state.allPlayersData.live.fixtures) {
-        try {
-            const fixtures = await fetchWithCache(config.urls.fixtures, 'fpl_fixtures', 180);
-            state.allPlayersData.live.fixtures = fixtures;
-            state.allPlayersData.historical.fixtures = fixtures;
-        } catch (e) {
-            console.warn('⚠️ Fixtures unavailable:', e.message);
-        }
+        jobs.push(
+            withTimeout(fetchWithCache(config.urls.fixtures, 'fpl_fixtures', 180), 'fixtures')
+                .then(fixtures => {
+                    state.allPlayersData.live.fixtures = fixtures;
+                    state.allPlayersData.historical.fixtures = fixtures;
+                })
+                .catch(e => console.warn('⚠️ Fixtures unavailable:', e.message))
+        );
     }
+
+    await Promise.all(jobs);
+}
+
+// Fixtures arrive after the first paint, so backfill FDR and re-render once
+// they land rather than making the user wait for them.
+function applyFixturesToProcessedData(fixtures) {
+    let updated = false;
+    ['live', 'historical'].forEach(src => {
+        const processed = state.allPlayersData[src]?.processed;
+        if (!processed || !processed.length) return;
+        calculateRealFDR(processed, fixtures);
+        updated = true;
+    });
+    if (!updated) return;
+    console.log('🗓️ Fixtures arrived — FDR backfilled');
+    processChange();
 }
 
 async function fetchAndProcessData() {
@@ -1095,10 +1145,17 @@ async function fetchAndProcessData() {
                 }
             }
             if (needsFixtures) {
-                // Background fetch fixtures
-                const fixturesData = await fetchWithCache(fixturesUrl, fixturesCacheKey, 180);
-                state.allPlayersData.live.fixtures = fixturesData;
-                state.allPlayersData.historical.fixtures = fixturesData;
+                // Fixtures only feed the FDR column, so they must not hold up
+                // the page. Awaiting them meant a dead proxy blanked the whole
+                // table for 30 seconds even though the player data was local.
+                fetchWithCache(fixturesUrl, fixturesCacheKey, 180)
+                    .then(fixturesData => {
+                        if (!Array.isArray(fixturesData)) return;
+                        state.allPlayersData.live.fixtures = fixturesData;
+                        state.allPlayersData.historical.fixtures = fixturesData;
+                        applyFixturesToProcessedData(fixturesData);
+                    })
+                    .catch(e => console.warn('⚠️ Fixtures unavailable, FDR column disabled:', e.message));
             }
         }
 
@@ -1230,20 +1287,6 @@ function syncDataSourceButtons() {
 // Before the new season has meaningful data, every metric derived from minutes
 // or points is zero. Fall back to the completed season and say so, rather than
 // presenting an empty table as though it were the truth.
-async function applyPreSeasonDefault() {
-    if (state.currentDataSource !== 'live' || !currentSeasonIsTooEarly()) return false;
-
-    const played = (state.allPlayersData.live.raw?.events || [])
-        .filter(e => e.finished || e.finished_provisional).length;
-
-    console.log(`⏳ ${SEASON_CONFIG.seasonLabel} has ${played} finished GW(s) — defaulting to ${SEASON_CONFIG.previousSeasonLabel}`);
-    state.currentDataSource = 'historical';
-    syncDataSourceButtons();
-    showSeasonBanner(played);
-    await fetchAndProcessData();
-    return true;
-}
-
 function showSeasonBanner(playedGws) {
     const existing = document.getElementById('seasonBanner');
     if (existing) existing.remove();
@@ -4019,7 +4062,18 @@ function getTeamColor(name) {
     return palette[Math.abs(hash) % palette.length];
 }
 
+let _draftBackgroundLoad = null;
+
 async function loadDraftDataInBackground() {
+    // Called from both init() and fetchAndProcessData(); without this the whole
+    // draft load ran twice per page load, clearing each other's caches midway.
+    if (_draftBackgroundLoad) return _draftBackgroundLoad;
+    _draftBackgroundLoad = _loadDraftDataInBackground()
+        .finally(() => { _draftBackgroundLoad = null; });
+    return _draftBackgroundLoad;
+}
+
+async function _loadDraftDataInBackground() {
     // Load draft data silently in the background without showing loading overlay
     try {
         const detailsUrl = `${config.corsProxy}${encodeURIComponent(`https://draft.premierleague.com/api/league/${state.draft.leagueId}/details`)}`;
