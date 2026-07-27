@@ -90,8 +90,15 @@ const config = {
         bootstrap: 'https://fantasy.premierleague.com/api/bootstrap-static/',
         fixtures: 'https://fantasy.premierleague.com/api/fixtures/',
         draftLeagueDetails: (leagueId) => `https://draft.premierleague.com/api/league/${leagueId}/details`,
-        draftLeagueStandings: (leagueId) => `https://draft.premierleague.com/api/league/${leagueId}/standings`,
         draftEntryPicks: (entryId, gw) => `https://draft.premierleague.com/api/entry/${entryId}/event/${gw}`,
+        // Authoritative ownership for the league — replaces diffing rosters.
+        draftElementStatus: (leagueId) => `https://draft.premierleague.com/api/league/${leagueId}/element-status`,
+        // Real per-gameweek totals per manager.
+        draftEntryHistory: (entryId) => `https://draft.premierleague.com/api/entry/${entryId}/history`,
+        // Waiver / free-agent add-drop feed for the whole league.
+        draftTransactions: (leagueId) => `https://draft.premierleague.com/api/draft/league/${leagueId}/transactions`,
+        // The original draft board, pick by pick.
+        draftChoices: (leagueId) => `https://draft.premierleague.com/api/draft/${leagueId}/choices`,
         playerImage: (code) => `https://resources.premierleague.com/premierleague/photos/players/110x140/p${code}.png`,
         missingPlayerImage: 'https://resources.premierleague.com/premierleague/photos/players/110x140/Photo-Missing.png'
     },
@@ -276,6 +283,24 @@ const state = {
         // Player ID mapping between Draft API and Fantasy API
         draftToFplIdMap: new Map(), // Draft ID -> Fantasy ID
         fplToDraftIdMap: new Map(), // Fantasy ID -> Draft ID
+
+        // --- endpoints wired in 2026-07 ---
+        // league/{id}/element-status: the league's own answer to "who owns whom".
+        // ownershipByFplId maps FPL id -> owning league_entry id (null = free).
+        ownershipByFplId: new Map(),
+        ownershipLoaded: false,   // false => fall back to diffing rosters
+        draftHasHappened: false,  // element-status shows at least one owner
+        // entry/{id}/history: real per-gameweek totals, replacing an estimate.
+        historyByEntryId: new Map(),
+        // draft/{league}/choices and draft/league/{id}/transactions.
+        choices: null,
+        transactions: null,
+        // Draft element id -> web_name, straight from the draft bootstrap.
+        draftElementNames: new Map(),
+        // The draft endpoints identify a manager by `entry_id`, while
+        // league_entries and the standings use `id`. Keeping both directions
+        // explicit stopped the transaction feed labelling every row "unknown".
+        entryEntryIdToTeamName: new Map(),
     }
 };
 
@@ -694,6 +719,14 @@ async function buildDraftToFplMapping() {
         state.draft.draftToFplIdMap.clear();
         state.draft.fplToDraftIdMap.clear();
 
+        // Keep the Draft API's own name for every element. Players who left the
+        // league have no FPL entry to map to, and the transaction feed was
+        // rendering them as "#379" -- the draft bootstrap still knows the name.
+        state.draft.draftElementNames.clear();
+        for (const dp of draftData.elements) {
+            if (dp && dp.id) state.draft.draftElementNames.set(dp.id, dp.web_name);
+        }
+
         let exactMatches = 0;
         let nameMatches = 0;
         let fuzzyMatches = 0;
@@ -1014,6 +1047,9 @@ document.addEventListener('DOMContentLoaded', () => {
     // Clear caches written by an older schema before anything reads them.
     migrateCacheSchema();
 
+    // Collapse the filter panel and pick a row density before anything paints.
+    applyMobileDefaults();
+
     // Render season names immediately. init() runs only after sign-in, so
     // labelling there left the season toggle blank on the landing screen.
     applySeasonLabels();
@@ -1227,15 +1263,17 @@ async function fetchAndProcessData() {
         loadWatchlist();
         invalidateSignals();
         updateDashboardKPIs(); // Update dashboard KPIs
-        renderDraftBoard();    // "who to pick and why" panels
         processChange();
 
         // The trend window is a handful of localStorage-cached gameweek fetches.
         // Paint the table first, then fill the micro-charts in when it resolves.
         ensureTrendWindow().then(() => {
             if (!state.trendGws.length) return;
+            // Two signal rules read the gameweek window; drop verdicts decided
+            // before it landed so they are recomputed with it.
+            invalidateSignals();
             renderTable();
-            renderDraftBoard();
+            updateDashboardKPIs();
         });
 
         // Load draft data in background (for team filter)
@@ -1703,6 +1741,8 @@ function toggleWatchlistOnly() {
 
 function setRowMode(mode) {
     state.rowMode = mode === 'compact' ? 'compact' : 'trend';
+    // An explicit choice outranks the phone default for the rest of the session.
+    state._rowModeChosen = true;
     applyRowMode();
     renderTable();
     updateScoutingUi();
@@ -1733,6 +1773,29 @@ function syncDetailWidth() {
 
 window.addEventListener('resize', syncDetailWidth);
 
+/** True on phone-sized screens — the same breakpoint mobile.css uses. */
+function isNarrowScreen() {
+    return window.matchMedia('(max-width: 768px)').matches;
+}
+
+/**
+ * Phones open on the data, not on a screenful of dropdowns. The filter panel is
+ * a <details open> so that desktop and no-JS both get it expanded; this closes
+ * it on small screens, and only before the user has touched it.
+ */
+function applyMobileDefaults() {
+    const panel = document.getElementById('filtersPanel');
+    if (panel && !panel.dataset.userToggled) {
+        panel.open = !isNarrowScreen();
+        panel.addEventListener('toggle', () => { panel.dataset.userToggled = '1'; }, { once: true });
+    }
+    // Two micro-charts per row are unreadable at 390px and cost the width the
+    // real columns need.
+    if (isNarrowScreen() && state.rowMode === 'trend' && !state._rowModeChosen) {
+        state.rowMode = 'compact';
+    }
+}
+
 function updateScoutingUi() {
     const count = document.getElementById('watchlistCount');
     if (count) count.textContent = state.watchlist.size;
@@ -1752,6 +1815,30 @@ function updateScoutingUi() {
  * Ordered: the first match wins, so "unavailable" always beats "great form".
  * Every rule reads fields that preprocessPlayerData already computes.
  */
+/**
+ * How lopsided the recent points haul is: the share contributed by the single
+ * best gameweek in the window. One 15-point return inside five games is
+ * variance; the same total spread evenly is a level of performance.
+ * Returns null when the gameweek window has not loaded yet.
+ */
+function pointsConcentration(player) {
+    if (!state.trendGws.length) return null;
+    const values = getTrendSeries(player.id, 'pts', 'recent').map(pt => pt.value);
+    const total = values.reduce((a, b) => a + b, 0);
+    if (total <= 0) return null;
+    return Math.max(...values) / total;
+}
+
+/**
+ * One headline verdict per player, with the numbers that earned it.
+ * Ordered: the first match wins, so "unavailable" always beats "great form".
+ *
+ * On out-performing xG: scoring more than the model expects is not proof of
+ * luck. A striker who converts half-chances is doing something real, and over a
+ * full season of minutes that repeats. So the verdict splits in two — sustained
+ * over-conversion with genuine volume reads as finishing ability (יעיל), while
+ * a surplus built on thin underlying numbers or one big haul reads as a warning.
+ */
 const SIGNAL_RULES = [
     {
         key: 'out', label: 'לא זמין', tone: 'bad',
@@ -1760,10 +1847,31 @@ const SIGNAL_RULES = [
                    p.chance_of_playing_next_round !== null ? `${p.chance_of_playing_next_round}% סיכוי` : null]
     },
     {
-        key: 'trap', label: 'מלכודת', tone: 'bad',
-        // Scoring more than the underlying numbers justify, against a bad run.
-        test: p => p.xDiff >= 1.5 && (parseFloat(p.xGI_per90) || 0) < 0.35 && p.minutes >= 270,
-        why: p => [`xDiff ${p.xDiff.toFixed(1)} — מימוש יתר`, `xGI/90 ${(parseFloat(p.xGI_per90) || 0).toFixed(2)}`]
+        key: 'clinical', label: 'יעיל', tone: 'clinical',
+        // A real sample, real chance volume, and a persistent surplus: this is a
+        // finisher, and the surplus is a reason to want him rather than to worry.
+        test: p => p.xDiff >= 1.5 && p.minutes >= 900 && (parseFloat(p.xGI_per90) || 0) >= 0.35
+            && (pointsConcentration(p) === null || pointsConcentration(p) < 0.5),
+        why: p => [`מבקיע ${p.xDiff.toFixed(1)} מעל הצפי — לאורך ${Math.round(p.minutes / 90)} משחקים`,
+                   `xGI/90 ${(parseFloat(p.xGI_per90) || 0).toFixed(2)} — נפח אמיתי`]
+    },
+    {
+        key: 'overperf', label: 'מימוש יתר', tone: 'bad',
+        // Surplus without the underlying volume to support it, or a total that
+        // rests on a single gameweek.
+        test: p => {
+            if (p.xDiff < 1.5 || p.minutes < 270) return false;
+            const thin = (parseFloat(p.xGI_per90) || 0) < 0.30;
+            const conc = pointsConcentration(p);
+            return thin || (conc !== null && conc >= 0.5);
+        },
+        why: p => {
+            const conc = pointsConcentration(p);
+            return [`xDiff +${p.xDiff.toFixed(1)} בלי נתונים שתומכים`,
+                    conc !== null && conc >= 0.5
+                        ? `${Math.round(conc * 100)}% מהנקודות ממחזור אחד`
+                        : `xGI/90 ${(parseFloat(p.xGI_per90) || 0).toFixed(2)} — נמוך`];
+        }
     },
     {
         key: 'sell', label: 'למכור גבוה', tone: 'warn',
@@ -1779,15 +1887,17 @@ const SIGNAL_RULES = [
     },
     {
         key: 'claim', label: 'קח עכשיו', tone: 'good',
-        // Free agent who would start for most teams in the league. Reads the
-        // ownership Set rather than getDraftTeamForPlayer(), which walks every
-        // roster — this rule is evaluated for every player on every sort.
+        // Free agent who would start for most teams in the league.
         //
-        // Gated on the rosters having actually loaded: with an empty set every
-        // player is technically unowned, which turned "קח עכשיו" into a badge
-        // most of the table carried and told the user nothing.
-        test: p => state.draft.ownedElementIds.size > 0 &&
-            !state.draft.ownedElementIds.has(p.id) && p.draft_score >= 45 && p.minutes >= 270,
+        // Reads the ownership Set, which league/{id}/element-status fills from
+        // the league's own answer — getDraftTeamForPlayer() walks every roster,
+        // which is both O(teams x squad) per player per sort and wrong whenever
+        // element-status knows about ownership the picks requests missed.
+        //
+        // The size check comes first: until ownership loads every player looks
+        // unowned, and "קח עכשיו" would sit on all 600 rows.
+        test: p => state.draft.ownedElementIds.size > 0 && !state.draft.ownedElementIds.has(p.id)
+            && p.draft_score >= 45 && p.minutes >= 270,
         why: p => [`ציון ${p.draft_score.toFixed(0)} וחופשי`,
                    p.set_piece_priority && p.set_piece_priority.penalty === 1 ? 'פנדלים #1' : `נק׳/90 ${p.points_per_game_90.toFixed(1)}`]
     },
@@ -1832,7 +1942,8 @@ function signalFor(player) {
 }
 
 /** Rank used when sorting by the סיגנל column: actionable buckets first. */
-const SIGNAL_SORT_ORDER = ['claim', 'buylow', 'swing', 'hold', 'rotation', 'sell', 'trap', 'out'];
+const SIGNAL_SORT_ORDER = ['claim', 'buylow', 'swing', 'clinical', 'hold',
+    'rotation', 'sell', 'overperf', 'out'];
 function signalRank(player) {
     const i = SIGNAL_SORT_ORDER.indexOf(signalFor(player).key);
     return i < 0 ? SIGNAL_SORT_ORDER.length : i;
@@ -1903,6 +2014,87 @@ function fourthTrendMetric(player) {
  *  - live season -> getGameweekPoints(), which is localStorage-cached, so this
  *    is one round of fetches per season rather than one per render.
  */
+/**
+ * Per-appearance log for one player out of the committed season snapshot.
+ *
+ * `gwLogs` is columnar: one flat array per player, `logStride` numbers per
+ * appearance, named by `logFields`. Reading the stride and the field names out
+ * of the file rather than hardcoding them is what lets an older snapshot with a
+ * shorter layout keep decoding — a field the file never had reads as 0 instead
+ * of silently picking up the next appearance's numbers.
+ */
+function getMatchLog(player) {
+    const snap = state.allPlayersData[state.currentDataSource]?.raw?.__snapshot;
+    if (!snap || !snap.gwLogs) return [];
+    const flat = snap.gwLogs[player.id] || snap.gwLogs[String(player.id)];
+    if (!flat || !flat.length) return [];
+
+    const fields = snap.logFields || ['gw', 'points', 'minutes', 'xgi_x100', 'defcon_hit'];
+    const stride = snap.logStride || fields.length;
+    const at = (entry, name) => {
+        const i = fields.indexOf(name);
+        return i < 0 || i >= entry.length ? 0 : gwNum(entry[i]);
+    };
+
+    const log = [];
+    for (let i = 0; i + stride <= flat.length; i += stride) {
+        const e = flat.slice(i, i + stride);
+        log.push({
+            gw: at(e, 'gw'),
+            points: at(e, 'points'),
+            minutes: at(e, 'minutes'),
+            // Stored as an integer percentage of a goal involvement to keep the
+            // file small; 55 means 0.55 xGI.
+            xgi: at(e, 'xgi_x100') / 100,
+            defconHit: at(e, 'defcon_hit'),
+            bps: at(e, 'bps'),
+            saves: at(e, 'saves'),
+            defcon: at(e, 'defcon'),
+            goals: at(e, 'goals'),
+            assists: at(e, 'assists'),
+            bonus: at(e, 'bonus')
+        });
+    }
+    // The builder writes in file order; the app always reads oldest first.
+    return log.sort((a, b) => a.gw - b.gw);
+}
+
+/**
+ * Reshape the snapshot's per-player logs into the same
+ * `[{ gw, stats: Map(playerId -> gwStats) }]` shape the live gameweek fetches
+ * produce, so everything downstream is source-agnostic.
+ *
+ * A player who did not appear in a gameweek is simply absent from that map.
+ * Inserting a zero row would make "did not play" indistinguishable from "played
+ * and did nothing", and would drag every average down.
+ */
+function snapshotGameweekStats() {
+    const players = state.allPlayersData[state.currentDataSource]?.processed || [];
+    const byGw = new Map();
+
+    players.forEach(p => {
+        getMatchLog(p).forEach(m => {
+            if (!byGw.has(m.gw)) byGw.set(m.gw, new Map());
+            // Split the combined xGI back into halves that add to it exactly.
+            const half = m.xgi / 2;
+            byGw.get(m.gw).set(p.id, {
+                total_points: m.points,
+                minutes: m.minutes,
+                expected_goals: half,
+                expected_assists: half,
+                bps: m.bps,
+                bonus: m.bonus,
+                saves: m.saves,
+                goals_scored: m.goals,
+                assists: m.assists,
+                defensive_contribution: m.defcon
+            });
+        });
+    });
+
+    return [...byGw.keys()].sort((a, b) => a - b).map(gw => ({ gw, stats: byGw.get(gw) }));
+}
+
 async function ensureTrendWindow(n = state.trendWindow) {
     const source = state.currentDataSource;
 
@@ -2037,6 +2229,41 @@ function trendDelta(player, metricKey) {
     return value;
 }
 
+/**
+ * The bar strip. `labels` prints each gameweek's own figure above its bar, which
+ * is what turns a shape into something you can read a number off.
+ */
+function trendBarsHtml(series, scale, def, { labels = false, cls = '' } = {}) {
+    return `<span class="trend-bars ${cls}" dir="ltr">` + series.map((pt, i) => {
+        const h = Math.max(Math.min(pt.value / (scale || 1), 1) * 100, pt.played ? 8 : 0);
+        const c = ['trend-bar'];
+        if (i === series.length - 1) c.push('is-last');
+        if (!pt.played || pt.value === 0) c.push('is-blank');
+        return `<i class="${c.join(' ')}" style="height:${h.toFixed(0)}%"
+            title="מחזור ${pt.gw}: ${def.fmt(pt.value)}">${
+            labels ? `<b>${def.fmt(pt.value)}</b>` : ''}</i>`;
+    }).join('') + '</span>';
+}
+
+/**
+ * "▲ +3" on its own invites the question "more than what?". Naming the previous
+ * window's figure answers it inside the chip: 28, up from 25.
+ */
+function trendChangeHtml(now, before, def) {
+    const d = now - before;
+    const eps = def.agg === 'avg' ? 0.5 : 0.05;
+    // "מול <number>" keeps the Hebrew word outside the isolated numeric run.
+    // "מ-25" put a Hebrew letter, a hyphen and digits in one LTR run, where the
+    // hyphen can resolve to either side.
+    if (Math.abs(d) < eps) {
+        return `<span class="trend-delta trend-flat">ללא שינוי</span>
+            <span class="trend-vs">מול <span class="ni">${def.fmt(before)}</span></span>`;
+    }
+    return `<span class="trend-delta trend-${d > 0 ? 'up' : 'down'}">${
+        d > 0 ? '▲ +' : '▼ '}${def.fmt(Math.abs(d))}</span>
+        <span class="trend-vs">מול <span class="ni">${def.fmt(before)}</span></span>`;
+}
+
 /** One trend cell: window figure, delta vs the previous window, and the bars. */
 function trendCellHtml(player, metricKey, index) {
     const def = TREND_METRICS[metricKey];
@@ -2048,30 +2275,18 @@ function trendCellHtml(player, metricKey, index) {
     const recent = getTrendSeries(player.id, metricKey, 'recent');
     const now = summariseTrend(recent, def.agg);
     const before = summariseTrend(getTrendSeries(player.id, metricKey, 'prev'), def.agg);
-    const delta = now - before;
-    const dir = Math.abs(delta) < (def.agg === 'avg' ? 0.5 : 0.05) ? 'flat' : (delta > 0 ? 'up' : 'down');
-    const deltaText = dir === 'flat' ? '=' : `${delta > 0 ? '▲+' : '▼'}${def.fmt(Math.abs(delta))}`;
-
     const scale = (state.trendScales && state.trendScales[metricKey]) || 1;
-    let bars = '';
-    if (index < TREND_BAR_ROW_LIMIT) {
-        bars = `<div class="trend-bars" dir="ltr">` + recent.map((pt, i) => {
-            const h = Math.max(Math.min(pt.value / scale, 1) * 100, pt.played ? 4 : 0);
-            const cls = ['trend-bar'];
-            if (i === recent.length - 1) cls.push('is-last');
-            if (!pt.played || pt.value === 0) cls.push('is-blank');
-            return `<i class="${cls.join(' ')}" style="height:${h.toFixed(0)}%"
-                title="מחזור ${pt.gw}: ${def.fmt(pt.value)}"></i>`;
-        }).join('') + '</div>';
-    }
+    const bars = index < TREND_BAR_ROW_LIMIT
+        ? trendBarsHtml(recent, scale, def, { labels: true })
+        : '';
 
-    return `<td class="trend-cell trend-col" data-metric="${metricKey}">
-        <div class="trend-head">
-            <b class="trend-value">${def.fmt(now)}</b>
-            <span class="trend-delta trend-${dir}" title="מול ${state.trendWindow} המחזורים שלפני">${deltaText}</span>
-        </div>
-        ${bars}
-        <div class="trend-label">${def.label}${def.agg === 'avg' ? ' /משחק' : ` /${recent.length}`}</div>
+    return `<td class="trend-cell trend-col" data-metric="${metricKey}"
+        title="${def.fmt(now)} ב-${recent.length} המחזורים האחרונים, מול ${def.fmt(before)} ב-${recent.length} שלפניהם">
+        <span class="trend-main">
+            <span class="trend-value">${def.fmt(now)}</span>
+            ${bars}
+        </span>
+        <span class="trend-foot">${trendChangeHtml(now, before, def)}</span>
     </td>`;
 }
 
@@ -2103,6 +2318,104 @@ function toggleRowDetail(playerId, ev) {
     renderTable();
 }
 
+/* ------------------- the three stat boxes in the detail row ---------------- */
+
+const num1 = v => {
+    const n = parseFloat(v);
+    return Number.isFinite(n) ? n : null;
+};
+/** One stat line. `null` renders as an em dash rather than a misleading 0. */
+const statLine = (label, value, hint) =>
+    `<div class="box-row"${hint ? ` title="${escapeHtml(hint)}"` : ''}>
+        <dt>${label}</dt><dd>${value === null || value === undefined ? '—' : value}</dd>
+    </div>`;
+
+const fmt = (v, d = 2) => (num1(v) === null ? null : num1(v).toFixed(d));
+const pct = v => (num1(v) === null ? null : `${Math.round(num1(v))}%`);
+
+/**
+ * Attacking output: what the player creates and finishes, and how far his
+ * returns have run ahead of or behind the underlying numbers.
+ */
+function boxAttack(p) {
+    const ga = (p.goals_scored || 0) + (p.assists || 0);
+    return `<div class="stat-box">
+        <h5><span>⚽</span> תפוקה התקפית</h5>
+        <dl>
+            ${statLine('שערים / בישולים', `${p.goals_scored || 0} / ${p.assists || 0}`)}
+            ${statLine('סה״כ מעורבות', ga)}
+            ${statLine('xG / 90', fmt(p.expected_goals_per_90), 'שערים צפויים לכל 90 דקות')}
+            ${statLine('xA / 90', fmt(p.expected_assists_per_90), 'בישולים צפויים לכל 90 דקות')}
+            ${statLine('xGI / 90', fmt(p.xGI_per90), 'מעורבות צפויה בשערים לכל 90 דקות')}
+            ${statLine('xDiff', (num1(p.xDiff) === null ? null :
+                `<span class="${p.xDiff >= 0 ? 'xdiff-positive' : 'xdiff-negative'}">${
+                    p.xDiff > 0 ? '+' : ''}${num1(p.xDiff).toFixed(2)}</span>`),
+                'ההפרש בין התפוקה בפועל לצפויה — חיובי = מימוש מעל הצפי')}
+            ${statLine('ICT / 90', fmt(p.ict_index_per90, 1))}
+            ${statLine('בונוס / 90', fmt(p.bonus_per90))}
+        </dl>
+    </div>`;
+}
+
+/**
+ * Defence, goalkeeping and playing time — the half of the game the attacking
+ * box ignores, and the one that decides whether a defender is worth a slot.
+ */
+function boxDefence(p) {
+    const isGk = p.element_type === 1;
+    return `<div class="stat-box">
+        <h5><span>${isGk ? '🧤' : '🛡️'}</span> ${isGk ? 'שוער והגנה' : 'הגנה ודקות'}</h5>
+        <dl>
+            ${statLine('דקות', p.minutes)}
+            ${statLine('הופעות', p.appearances ?? null)}
+            ${statLine('אחוז הרכב', pct(num1(p.rotation_risk) === null ? null : p.rotation_risk * 100),
+                'אחוז המשחקים שבהם פתח בהרכב')}
+            ${isGk
+                ? statLine('הצלות / 90', fmt(p.saves_per_90, 1))
+                : statLine('DEFCON', p.defcon_hit_rate === null || p.defcon_hit_rate === undefined
+                    ? null : `${num1(p.defcon_hit_rate).toFixed(0)}%`,
+                    'אחוז המשחקים שבהם עבר את הסף לנקודות הגנה')}
+            ${isGk
+                ? statLine('פנדלים שעצר', p.penalties_saved ?? null)
+                : statLine('DC / 90', fmt(p.def_contrib_per90, 1), 'תרומה הגנתית לכל 90 דקות')}
+            ${statLine('שערים נקיים / 90', fmt(p.clean_sheets_per90))}
+            ${statLine('xGC / 90', fmt(p.expected_goals_conceded_per_90),
+                'שערים צפויים נגד לכל 90 דקות — ככל שנמוך יותר, סיכוי גבוה יותר לשער נקי')}
+            ${statLine('כרטיסים', `${p.yellow_cards || 0}🟨 ${p.red_cards || 0}🟥`)}
+        </dl>
+    </div>`;
+}
+
+/**
+ * What the player is worth in a draft: the league-relative numbers, the
+ * schedule, and FPL's own projection next to ours as a sanity check.
+ */
+function boxValue(p) {
+    const owner = getDraftTeamForPlayer(p.id);
+    const sp = p.set_piece_priority || {};
+    const pieces = [
+        sp.penalty === 1 ? 'פנדלים' : null,
+        sp.corner > 0 && sp.corner < 99 ? 'קרנות' : null,
+        sp.free_kick > 0 && sp.free_kick < 99 ? 'חופשיות' : null
+    ].filter(Boolean);
+    return `<div class="stat-box">
+        <h5><span>🎯</span> ערך לדראפט</h5>
+        <dl>
+            ${statLine('ציון דראפט', fmt(p.draft_score, 1))}
+            ${statLine('VORP', formatVorp(p.vorp), 'עדיפות על השחקן החופשי הטוב ביותר באותה עמדה')}
+            ${statLine('רמת החלפה', fmt(p.replacement_score, 2),
+                'נק׳ למשחק של השחקן שהיה מחליף אותו')}
+            ${statLine('חיזוי מחזור הבא', fmt(p.predicted_points_1_gw, 1))}
+            ${statLine('חיזוי FPL הרשמי', fmt(p.ep_next, 1),
+                'ep_next — החיזוי של FPL עצמה, כנקודת ייחוס לחיזוי שלנו')}
+            ${statLine('קושי 3 קרובים', num1(p.next_3_fdr) ? num1(p.next_3_fdr).toFixed(1) : null)}
+            ${statLine('נק׳ למשחק', fmt(p.points_per_game_90, 1))}
+            ${statLine('בעלות', owner ? escapeHtml(owner) : '🆓 חופשי')}
+            ${statLine('מצבים נייחים', pieces.length ? pieces.join(' · ') : null)}
+        </dl>
+    </div>`;
+}
+
 /**
  * The gameweek-by-gameweek log for one player: opponent, minutes, points and
  * the underlying numbers, newest last, plus the trends that do not earn a
@@ -2111,82 +2424,96 @@ function toggleRowDetail(playerId, ev) {
 function playerDetailRowHtml(player, colSpan) {
     const gws = state.trendGws;
     const extraKey = fourthTrendMetric(player);
-    const rows = gws.map(({ gw, stats }) => {
+    const signal = signalFor(player);
+    const watched = state.watchlist.has(player.id);
+    const owner = getDraftTeamForPlayer(player.id);
+
+    // The match log, oldest gameweek first so it reads the same direction as the
+    // bars in the summary beside it. The most recent row is marked, because that
+    // is the one being asked about.
+    const rows = gws.map(({ gw, stats }, idx) => {
         const s = stats.get(player.id);
         const fix = fixtureForGw(player.team, gw);
-        if (!s) {
-            return `<tr class="log-blank"><td>${gw}</td>
-                <td>${fix ? `${fix.opponent} ${fix.home ? '(ב)' : '(ח)'}` : '—'}</td>
-                <td colspan="6">לא שיחק</td></tr>`;
+        const opp = fix
+            ? `<span class="log-opp fdr-${fix.difficulty}">${fix.opponent}<em>${fix.home ? 'ב' : 'ח'}</em></span>`
+            : '<span class="log-opp">—</span>';
+        const last = idx === gws.length - 1 ? ' is-latest' : '';
+        if (!s || gwNum(s.minutes) === 0) {
+            return `<tr class="log-blank${last}"><th scope="row">${gw}</th><td>${opp}</td>
+                <td class="log-none" colspan="3">לא שיחק</td></tr>`;
         }
-        const mins = gwNum(s.minutes);
-        const xg = gwNum(s.expected_goals), xa = gwNum(s.expected_assists);
-        return `<tr class="${mins === 0 ? 'log-blank' : ''}">
-            <td class="log-gw">${gw}</td>
-            <td>${fix ? `<span class="log-opp fdr-${fix.difficulty}">${fix.opponent} ${fix.home ? '(ב)' : '(ח)'}</span>` : '—'}</td>
-            <td class="log-num">${mins}</td>
+        return `<tr class="${last}">
+            <th scope="row">${gw}</th>
+            <td>${opp}</td>
+            <td class="log-num">${gwNum(s.minutes)}</td>
             <td class="log-num log-pts">${gwNum(s.total_points)}</td>
-            <td class="log-num">${gwNum(s.goals_scored)}/${gwNum(s.assists)}</td>
-            <td class="log-num">${(xg + xa).toFixed(2)}</td>
-            <td class="log-num">${TREND_METRICS[extraKey].fmt(TREND_METRICS[extraKey].read(s, player))}</td>
-            <td class="log-num">${gwNum(s.bonus)}</td>
+            <td class="log-num">${gwNum(s.goals_scored)}<span class="log-sep">/</span>${gwNum(s.assists)}</td>
         </tr>`;
     }).join('');
 
-    const signal = signalFor(player);
-    const trends = ['mins', extraKey, 'bps'].filter((k, i, a) => a.indexOf(k) === i);
+    // One labelled line per metric: name, figure, change, shape. The floating
+    // unlabelled mini-charts were the part nobody could read.
+    const summary = ['pts', 'xgi', 'mins', extraKey]
+        .filter((k, i, a) => a.indexOf(k) === i)
+        .map(k => {
+            const def = TREND_METRICS[k];
+            const series = getTrendSeries(player.id, k, 'recent');
+            const now = summariseTrend(series, def.agg);
+            const before = summariseTrend(getTrendSeries(player.id, k, 'prev'), def.agg);
+            const scale = (state.trendScales && state.trendScales[k]) || 1;
+            return `<div class="sum-row">
+                <span class="sum-label">${def.label}</span>
+                <b class="sum-val">${def.fmt(now)}</b>
+                <span class="sum-change">${trendChangeHtml(now, before, def)}</span>
+                ${trendBarsHtml(series, scale, def, { labels: true, cls: 'is-large' })}
+                <span class="sum-unit">${def.agg === 'avg' ? 'ממוצע למשחק' : `סה״כ ב-${series.length} מחזורים`}</span>
+            </div>`;
+        }).join('');
 
     return `<tr class="detail-row" data-detail-for="${player.id}">
         <td colspan="${colSpan}">
-            <div class="detail-panel">
-                <section class="detail-log">
-                    <h4>${state.trendWindow} המחזורים האחרונים</h4>
-                    ${gws.length ? `<table class="match-log">
-                        <thead><tr><th>מח׳</th><th>יריב</th><th>דק׳</th><th>נק׳</th><th>ש/ב</th>
-                            <th>xG+xA</th><th>${TREND_METRICS[extraKey].label}</th><th>בונוס</th></tr></thead>
-                        <tbody>${rows}</tbody>
-                    </table>` : '<p class="detail-note">נתוני המחזורים עוד נטענים…</p>'}
-                </section>
-                <section class="detail-trends">
-                    <h4>טרנדים נוספים</h4>
-                    <div class="detail-trend-grid">
-                        ${trends.map(k => {
-                            const def = TREND_METRICS[k];
-                            const series = getTrendSeries(player.id, k, 'recent');
-                            const now = summariseTrend(series, def.agg);
-                            const before = summariseTrend(getTrendSeries(player.id, k, 'prev'), def.agg);
-                            const d = now - before;
-                            const scale = (state.trendScales && state.trendScales[k]) || 1;
-                            return `<div class="detail-trend">
-                                <div class="detail-trend-head"><span>${def.label}</span>
-                                    <b>${def.fmt(now)}</b>
-                                    <em class="trend-${Math.abs(d) < 0.5 ? 'flat' : d > 0 ? 'up' : 'down'}">${
-                                        Math.abs(d) < 0.5 ? '=' : `${d > 0 ? '▲+' : '▼'}${def.fmt(Math.abs(d))}`}</em></div>
-                                <div class="trend-bars is-large" dir="ltr">${series.map((pt, i) =>
-                                    `<i class="trend-bar ${i === series.length - 1 ? 'is-last' : ''} ${pt.value ? '' : 'is-blank'}"
-                                        style="height:${Math.max(Math.min(pt.value / scale, 1) * 100, pt.played ? 4 : 0).toFixed(0)}%"
-                                        title="מחזור ${pt.gw}: ${def.fmt(pt.value)}"></i>`).join('')}</div>
-                            </div>`;
-                        }).join('')}
-                    </div>
-                </section>
-                <section class="detail-verdict">
-                    <h4>המלצה</h4>
+            <div class="detail-card">
+                <header class="detail-bar">
+                    <span class="detail-who">${player.web_name}</span>
+                    <span class="detail-tags">
+                        <span class="detail-tag">${player.position_name}</span>
+                        <span class="detail-tag">${player.team_name}</span>
+                        <span class="detail-tag ${owner ? 'is-owned' : 'is-free'}">${owner || '🆓 חופשי'}</span>
+                    </span>
                     <span class="signal-badge signal-${signal.tone}">${signal.label}</span>
-                    ${signal.why.length ? `<ul class="detail-why">${signal.why.map(w => `<li>${w}</li>`).join('')}</ul>` : ''}
-                    <dl class="detail-kv">
-                        <div><dt>ציון דראפט</dt><dd>${player.draft_score.toFixed(1)}</dd></div>
-                        <div><dt>VORP</dt><dd>${formatVorp(player.vorp)}</dd></div>
-                        <div><dt>קושי 3 קרובים</dt><dd>${player.next_3_fdr > 0 ? player.next_3_fdr.toFixed(1) : '—'}</dd></div>
-                        <div><dt>xDiff</dt><dd>${player.xDiff.toFixed(2)}</dd></div>
-                        <div><dt>בעלות בדראפט</dt><dd>${getDraftTeamForPlayer(player.id) || 'חופשי'}</dd></div>
-                    </dl>
-                    <div class="detail-actions">
-                        <button class="detail-btn ${state.watchlist.has(player.id) ? 'is-on' : ''}"
-                            onclick="toggleWatch(${player.id}, event)">${state.watchlist.has(player.id) ? '★ במעקב' : '☆ הוסף למעקב'}</button>
-                    </div>
-                    <div class="detail-fixtures">${generateFixturesHTML(player)}</div>
-                </section>
+                    ${signal.why.length ? `<span class="detail-reason">${signal.why.join(' · ')}</span>` : ''}
+                    <span class="detail-spacer"></span>
+                    <button class="detail-btn ${watched ? 'is-on' : ''}"
+                        onclick="toggleWatch(${player.id}, event)">${watched ? '★ במעקב' : '☆ הוסף למעקב'}</button>
+                    <button class="detail-btn is-plain" onclick="toggleRowDetail(${player.id})">סגור ✕</button>
+                </header>
+
+                <div class="detail-body">
+                    <section class="detail-log">
+                        <h4>${gws.length} המחזורים האחרונים</h4>
+                        ${gws.length ? `<table class="match-log">
+                            <thead><tr>
+                                <th>מח׳</th><th>יריב</th><th>דק׳</th><th>נק׳</th><th>ש/ב</th>
+                            </tr></thead>
+                            <tbody>${rows}</tbody>
+                        </table>` : '<p class="detail-note">נתוני המחזורים נטענים…</p>'}
+                    </section>
+
+                    <section class="detail-sum">
+                        <h4>מגמה מול ${state.trendWindow} המחזורים שלפני</h4>
+                        ${summary}
+                        <div class="detail-next">
+                            <span class="detail-next-label">המשחקים הבאים</span>
+                            <span class="detail-fixtures">${generateFixturesHTML(player)}</span>
+                        </div>
+                    </section>
+
+                    <section class="detail-boxes">
+                        ${boxAttack(player)}
+                        ${boxDefence(player)}
+                        ${boxValue(player)}
+                    </section>
+                </div>
             </div>
         </td>
     </tr>`;
@@ -2202,12 +2529,7 @@ function miniSparkHtml(playerId, metricKey = 'pts') {
     const series = getTrendSeries(playerId, metricKey, 'recent');
     if (!series.length) return '';
     const scale = (state.trendScales && state.trendScales[metricKey]) || 1;
-    const total = series.reduce((s, pt) => s + pt.value, 0);
-    return `<span class="mini-spark" dir="ltr"
-        title="${def.label} לפי מחזור: ${series.map(pt => `${pt.gw}=${def.fmt(pt.value)}`).join(', ')}">
-        ${series.map((pt, i) => `<i class="${i === series.length - 1 ? 'is-last' : ''}${pt.value ? '' : ' is-blank'}"
-            style="height:${Math.max(Math.min(pt.value / scale, 1) * 100, pt.played ? 6 : 0).toFixed(0)}%"></i>`).join('')}
-        <em>${def.fmt(total)}</em></span>`;
+    return trendBarsHtml(series, scale, def, { cls: 'is-mini' });
 }
 
 function setTrendWindow(n) {
@@ -2247,10 +2569,10 @@ function createPlayerRowHtml(player, index) {
 
     const signal = signalFor(player);
     const watched = state.watchlist.has(player.id);
-    // Only the two trends worth a permanent column. Minutes, DEFCON/BPS/saves
-    // and the full match log live in the row that opens on click, where there is
-    // room to make them readable.
-    const trendKeys = ['pts', 'xgi'];
+    // One trend column only. Two side-by-side windows of bars with no labels were
+    // impossible to read at a glance; xG+xA already has a per-90 column, and its
+    // trend is labelled properly in the row that opens on click.
+    const trendKeys = ['pts'];
 
     const icons = generatePlayerIcons(player);
     const fixturesHTML = generateFixturesHTML(player);
@@ -2879,11 +3201,13 @@ function generateComparisonTableHTML(players) {
 
     // Player Cards with enhanced stats
     players.forEach((p, idx) => {
+        // Same four hues the table's position badges use, so a colour means the
+        // same thing everywhere in the app.
         const positionColors = {
-            'GKP': '#f59e0b',
-            'DEF': '#3b82f6',
-            'MID': '#10b981',
-            'FWD': '#ef4444'
+            'GKP': '#7a3cb8',
+            'DEF': '#1c6eb6',
+            'MID': '#0d8a5e',
+            'FWD': '#c0511a'
         };
         const posColor = positionColors[p.position_name] || '#6366f1';
 
@@ -2896,14 +3220,20 @@ function generateComparisonTableHTML(players) {
                 <div class="player-card-info">
                     <h3 class="player-name-ultimate">${p.web_name}</h3>
                     <p class="player-team-ultimate">${p.team_name}</p>
+                    <div class="cmp-tags">
+                        ${(() => { const o = getDraftTeamForPlayer(p.id);
+                            return `<span class="detail-tag ${o ? 'is-owned' : 'is-free'}">${o || '🆓 חופשי'}</span>`; })()}
+                        ${(() => { const sig = signalFor(p);
+                            return `<span class="signal-badge signal-${sig.tone}">${sig.label}</span>`; })()}
+                    </div>
                     
                     <!-- Quick Stats Grid -->
                     <div class="quick-stats-grid">
                         <div class="quick-stat">
-                            <span class="quick-stat-icon">💰</span>
+                            <span class="quick-stat-icon">💎</span>
                             <div class="quick-stat-content">
-                                <span class="quick-stat-label">מחיר</span>
-                                <span class="quick-stat-value">£${p.now_cost.toFixed(1)}M</span>
+                                <span class="quick-stat-label">VORP</span>
+                                <span class="quick-stat-value">${formatVorp(p.vorp)}</span>
                             </div>
                         </div>
                         <div class="quick-stat">
@@ -2949,22 +3279,22 @@ function generateComparisonTableHTML(players) {
     // Define comprehensive metrics (ordered by importance)
     const comprehensiveMetrics = [
         { name: 'ציון דראפט', key: 'draft_score', format: v => v.toFixed(1), icon: '⭐', reversed: false },
-        { name: 'העברות נטו', key: 'net_transfers_event', format: v => (v >= 0 ? '+' : '') + v, icon: '🔄', reversed: false },
+        { name: 'העברות נטו', key: 'net_transfers_event', format: v => (v >= 0 ? '+' : '') + v, icon: '🔄', reversed: false , neutral: true },
         { name: 'חיזוי למחזור הבא', key: 'predicted_points_1_gw', format: v => v.toFixed(1), icon: '🔮', reversed: false },
         { name: 'כושר', key: 'form', format: v => parseFloat(v || 0).toFixed(1), icon: '🔥', reversed: false },
         { name: 'נקודות/90', key: 'points_per_game_90', format: v => v.toFixed(1), icon: '📈', reversed: false },
         { name: 'נקודות כולל', key: 'total_points', format: v => v, icon: '🎯', reversed: false },
         { name: 'יציבות', key: 'stability_index', format: v => v.toFixed(0), icon: '📊', reversed: false },
+        { name: 'הרכב', key: 'rotation_risk', format: v => Math.round(v * 100) + '%', icon: '🔒', reversed: false },
         { name: 'xGI/90', key: 'xGI_per90', format: v => v.toFixed(2), icon: '⚽', reversed: false },
         { name: 'G+A', key: 'goals_scored_assists', format: v => v, icon: '🎯', reversed: false },
-        { name: 'מחיר', key: 'now_cost', format: v => '£' + v.toFixed(1) + 'M', icon: '💰', reversed: true },
-        { name: '% בעלות', key: 'selected_by_percent', format: v => v + '%', icon: '👥', reversed: false },
+        { name: '% בעלות', key: 'selected_by_percent', format: v => v + '%', icon: '👥', reversed: false , neutral: true },
         { name: 'דקות', key: 'minutes', format: v => v.toLocaleString(), icon: '⏱️', reversed: false },
         { name: 'בונוס/90', key: 'bonus_per90', format: v => v.toFixed(2), icon: '⭐', reversed: false },
         { name: 'דרימטים', key: 'dreamteam_count', format: v => v, icon: '🏆', reversed: false },
         { name: 'ICT/90', key: 'ict_index_per90', format: v => v.toFixed(1), icon: '🧬', reversed: false },
         { name: 'DC/90', key: 'def_contrib_per90', format: v => v.toFixed(1), icon: '🛡️', reversed: false },
-        { name: 'xDiff', key: 'xDiff', format: v => (v >= 0 ? '+' : '') + v.toFixed(2), icon: '📉', reversed: false },
+        { name: 'xDiff', key: 'xDiff', format: v => (v >= 0 ? '+' : '') + v.toFixed(2), icon: '📉', reversed: false , neutral: true },
         { name: 'CS/90', key: 'clean_sheets_per90', format: v => v.toFixed(2), icon: '🧤', reversed: false },
         { name: 'ספיגות/90', key: 'goals_conceded_per90', format: v => v.toFixed(2), icon: '🥅', reversed: true },
     ];
@@ -2980,6 +3310,10 @@ function generateComparisonTableHTML(players) {
 
         const maxVal = Math.max(...values);
         const minVal = Math.min(...values);
+        // A tie has no winner. Marking both sides best put two trophies on most
+        // rows of a two-player comparison, which reads as noise.
+        const tied = maxVal === minVal;
+        const competitive = !metric.neutral && !tied;
 
         html += `
             <div class="metric-comparison-row" style="animation-delay: ${idx * 0.03}s">
@@ -2992,9 +3326,16 @@ function generateComparisonTableHTML(players) {
 
         players.forEach((p, pIdx) => {
             const value = values[pIdx];
-            const isBest = metric.reversed ? (value === minVal) : (value === maxVal);
-            const isWorst = metric.reversed ? (value === maxVal) : (value === minVal);
-            const percentage = maxVal > minVal ? ((value - minVal) / (maxVal - minVal) * 100) : 50;
+            const isBest = competitive && (metric.reversed ? value === minVal : value === maxVal);
+            const isWorst = competitive && (metric.reversed ? value === maxVal : value === minVal);
+            // Share of the leader, so the bar shows how big the gap actually is.
+            // Normalising to (v-min)/(max-min) made every loser 0% and every
+            // winner 100%, which said nothing that the trophy did not already.
+            const ref = metric.reversed ? minVal : maxVal;
+            const pct = metric.reversed
+                ? (value !== 0 ? Math.abs(ref / value) * 100 : 100)
+                : (ref !== 0 ? Math.abs(value / ref) * 100 : 100);
+            const percentage = Math.max(Math.min(pct, 100), 4);
 
             html += `
                 <div class="metric-value-box ${isBest ? 'best-value' : ''} ${isWorst ? 'worst-value' : ''}">
@@ -3423,72 +3764,126 @@ function exportToCsv() {
 // DASHBOARD KPIs
 // ============================================
 
+/**
+ * The KPI strip. Each card names a question, shows the leader, and now also the
+ * runners-up: knowing who is second and third is most of the value, because the
+ * leader is usually already owned.
+ *
+ * `pick` returns a comparable number, or null when the player has no answer to
+ * this question at all — nulls are excluded rather than sorted last as zeros.
+ */
+const KPI_CARDS = [
+    {
+        id: 'hot-player', icon: '🔥', label: 'שחקן לוהט',
+        pick: p => p.minutes > 450 ? (parseFloat(p.form) || 0) : null,
+        fmt: (v, p) => `כושר ${v.toFixed(1)} · ${p.points_per_game_90.toFixed(1)} נק׳/90`,
+        short: v => v.toFixed(1)
+    },
+    {
+        id: 'best-draft', icon: '🏅', label: 'מלך הדראפט',
+        pick: p => p.draft_score,
+        fmt: v => `ציון ${v.toFixed(1)}`,
+        short: v => v.toFixed(1)
+    },
+    {
+        id: 'rising-minutes', icon: '📈', label: 'עולה בדקות',
+        // The earliest signal there is. Points, form and xG all lag behind a
+        // player winning his place; minutes do not. Requires him to be starting
+        // now, so this surfaces a new starter rather than a returning injury.
+        pick: p => {
+            const d = trendDelta(p, 'mins');
+            if (d === null || d < 8) return null;
+            const now = summariseTrend(getTrendSeries(p.id, 'mins', 'recent'), 'avg');
+            return now >= 70 ? d : null;
+        },
+        fmt: (v, p) => {
+            const now = summariseTrend(getTrendSeries(p.id, 'mins', 'recent'), 'avg');
+            return `${Math.round(now - v)} ← ${Math.round(now)} דק׳ למשחק`;
+        },
+        short: v => `+${Math.round(v)}`
+    },
+    {
+        id: 'top-scorer', icon: '⚽', label: 'מלך השערים',
+        pick: p => p.goals_scored,
+        fmt: v => `${v} שערים`,
+        short: v => String(v)
+    },
+    {
+        id: 'top-assister', icon: '🎯', label: 'מלך הבישולים',
+        pick: p => p.assists,
+        fmt: v => `${v} בישולים`,
+        short: v => String(v)
+    },
+    {
+        id: 'top-points', icon: '🏆', label: 'מוביל נקודות',
+        pick: p => p.total_points,
+        fmt: v => `${v} נקודות`,
+        short: v => String(v)
+    },
+    {
+        id: 'best-value', icon: '💎', label: 'הערך הגדול ביותר',
+        // VORP, not points-per-million: there is no budget in a draft league, so
+        // the only meaningful "value" is the gap to the freely available
+        // alternative at the same position.
+        // Not filtered to positive values. Once the league's rosters are known,
+        // replacement level is the best free agent, so if the strongest player
+        // at every position is unowned then nobody clears it and the card went
+        // blank -- which read as broken rather than as "the pool is wide open".
+        pick: p => (p.vorp === null || p.vorp === undefined) ? null : p.vorp,
+        fmt: (v, p) => v > 0
+            ? `+${v.toFixed(2)} נק׳ על החלופה החופשית`
+            : 'החלופה החופשית באותה עמדה חזקה לא פחות',
+        short: v => `${v > 0 ? '+' : ''}${v.toFixed(2)}`
+    }
+];
+
 function updateDashboardKPIs(dataToUse = null) {
-    // Use filtered/displayed data if available, otherwise use all processed data
+    const host = document.getElementById('dashboardKPIs');
+    if (!host) return;
+
     const data = dataToUse || state.displayedData || state.allPlayersData[state.currentDataSource].processed;
-    if (!data || data.length === 0) {
-        // Show "no data" state
-        document.getElementById('kpiHotPlayer').textContent = '-';
-        document.getElementById('kpiHotPlayerForm').textContent = 'אין נתונים';
-        document.getElementById('kpiBestDraft').textContent = '-';
-        document.getElementById('kpiBestDraftScore').textContent = 'אין נתונים';
-        document.getElementById('kpiTopScorer').textContent = '-';
-        document.getElementById('kpiTopScorerGoals').textContent = 'אין נתונים';
-        document.getElementById('kpiTopAssister').textContent = '-';
-        document.getElementById('kpiTopAssisterAssists').textContent = 'אין נתונים';
-        document.getElementById('kpiTopPoints').textContent = '-';
-        document.getElementById('kpiTopPointsValue').textContent = 'אין נתונים';
-        document.getElementById('kpiBestValue').textContent = '-';
-        document.getElementById('kpiBestValueRatio').textContent = 'אין נתונים';
+    if (!data || !data.length) {
+        host.innerHTML = '<div class="kpi-empty">אין נתונים להצגה בסינון הנוכחי</div>';
         return;
     }
 
-    // Hot player (best form - last 5 games average)
-    const withMinutes = data.filter(p => p.minutes > 450);
-    if (withMinutes.length > 0) {
-        const hotPlayer = withMinutes.reduce((max, p) => {
-            const form = parseFloat(p.form) || 0;
-            const maxForm = parseFloat(max.form) || 0;
-            return form > maxForm ? p : max;
-        }, withMinutes[0]);
+    const owned = state.draft.ownedElementIds;
+    host.innerHTML = KPI_CARDS.map(card => {
+        const ranked = data
+            .map(p => ({ p, v: card.pick(p) }))
+            .filter(x => x.v !== null && x.v !== undefined && Number.isFinite(x.v))
+            .sort((a, b) => b.v - a.v)
+            .slice(0, 3);
 
-        document.getElementById('kpiHotPlayer').textContent = hotPlayer.web_name;
-        document.getElementById('kpiHotPlayerForm').textContent = `כושר: ${parseFloat(hotPlayer.form).toFixed(1)} נק'/משחק`;
-    }
+        if (!ranked.length) {
+            return `<div class="kpi-card" data-kpi="${card.id}">
+                <div class="kpi-icon">${card.icon}</div>
+                <div class="kpi-content">
+                    <div class="kpi-label">${card.label}</div>
+                    <div class="kpi-value">–</div>
+                    <div class="kpi-subtext">אין מועמד בסינון הנוכחי</div>
+                </div></div>`;
+        }
 
-    // Best draft score
-    const bestDraft = data.reduce((max, p) => p.draft_score > max.draft_score ? p : max, data[0]);
-    document.getElementById('kpiBestDraft').textContent = bestDraft.web_name;
-    document.getElementById('kpiBestDraftScore').textContent = `ציון: ${bestDraft.draft_score.toFixed(1)}`;
+        const [first, ...rest] = ranked;
+        // A free-agent marker matters more than any of the numbers: the leader is
+        // usually taken, and the runner-up is the one you can actually get.
+        const freeMark = p => (owned.size > 0 && !owned.has(p.id)) ? '<span class="kpi-free">🆓</span>' : '';
 
-    // Top scorer
-    const topScorer = data.reduce((max, p) => p.goals_scored > max.goals_scored ? p : max, data[0]);
-    document.getElementById('kpiTopScorer').textContent = topScorer.web_name;
-    document.getElementById('kpiTopScorerGoals').textContent = `${topScorer.goals_scored} שערים`;
-
-    // Top assister
-    const topAssister = data.reduce((max, p) => p.assists > max.assists ? p : max, data[0]);
-    document.getElementById('kpiTopAssister').textContent = topAssister.web_name;
-    document.getElementById('kpiTopAssisterAssists').textContent = `${topAssister.assists} בישולים`;
-
-    // Top points
-    const topPoints = data.reduce((max, p) => p.total_points > max.total_points ? p : max, data[0]);
-    document.getElementById('kpiTopPoints').textContent = topPoints.web_name;
-    document.getElementById('kpiTopPointsValue').textContent = `${topPoints.total_points} נקודות`;
-
-    // Best value (points per million)
-    const withValue = data.filter(p => p.now_cost > 0 && p.total_points > 0);
-    if (withValue.length > 0) {
-        const bestValue = withValue.reduce((max, p) => {
-            const ratio = p.total_points / p.now_cost;
-            const maxRatio = max.total_points / max.now_cost;
-            return ratio > maxRatio ? p : max;
-        }, withValue[0]);
-
-        const ratio = (bestValue.total_points / bestValue.now_cost).toFixed(1);
-        document.getElementById('kpiBestValue').textContent = bestValue.web_name;
-        document.getElementById('kpiBestValueRatio').textContent = `${ratio} נק'/M`;
-    }
+        return `<div class="kpi-card" data-kpi="${card.id}">
+            <div class="kpi-icon">${card.icon}</div>
+            <div class="kpi-content">
+                <div class="kpi-label">${card.label}</div>
+                <div class="kpi-value">${escapeHtml(first.p.web_name)}${freeMark(first.p)}</div>
+                <div class="kpi-subtext">${card.fmt(first.v, first.p)}${miniSparkHtml(first.p.id, 'pts')}</div>
+                ${rest.length ? `<div class="kpi-runners">${rest.map((x, i) => `
+                    <span class="kpi-runner" title="${escapeHtml(x.p.team_name)} · ${card.fmt(x.v, x.p)}">
+                        <b>${i + 2}</b> ${escapeHtml(x.p.web_name)}${freeMark(x.p)}
+                        <em>${card.short(x.v)}</em>
+                    </span>`).join('')}</div>` : ''}
+            </div>
+        </div>`;
+    }).join('');
 }
 
 function getNestedValue(obj, path) {
@@ -3901,326 +4296,12 @@ function getChartConfig(data, xKey, yKey, xLabel, yLabel, quadLabels = {}, color
     };
 }
 
-// ============================================
-// FORM WINDOW — "last N matches"
-// ============================================
-// A season-long average is the wrong lens once matches are being played: it
-// keeps rewarding someone who was excellent in August and has since lost their
-// place. These recompute the panel inputs over a player's most recent
-// appearances, using the per-match log stored in the season snapshot.
-
-const FORM_WINDOWS = [
-    { id: 'season', label: 'כל העונה', matches: null },
-    { id: 'last10', label: '10 אחרונים', matches: 10 },
-    { id: 'last6', label: '6 אחרונים', matches: 6 },
-    { id: 'last3', label: '3 אחרונים', matches: 3 }
-];
-
-state.formWindow = 'season';
-
-/**
- * Per-match log for a player, oldest first. Comes from the snapshot; live
- * seasons fall back to season totals until the per-gameweek data has been
- * fetched.
- *
- * The snapshot writes its log as a flat number array to avoid repeating key
- * names ~20,000 times, so the field order is read from `logFields` rather than
- * hardcoded — an older cached snapshot with a shorter stride still decodes,
- * with the fields it lacks coming back undefined instead of misaligned.
- */
-function getMatchLog(player) {
-    const snap = state.allPlayersData[state.currentDataSource]?.raw?.__snapshot;
-    if (!snap || !snap.gwLogs) return null;
-    const flat = snap.gwLogs[player.id];
-    if (!flat || !flat.length) return null;
-
-    const stride = snap.logStride || 5;
-    const at = name => {
-        const i = (snap.logFields || []).indexOf(name);
-        return i < 0 ? null : i;
-    };
-    const iXgi = at('xgi_x100'), iBps = at('bps'), iSaves = at('saves'),
-        iDc = at('defcon'), iG = at('goals'), iA = at('assists'), iBonus = at('bonus');
-
-    const out = [];
-    for (let i = 0; i < flat.length; i += stride) {
-        const pick = idx => (idx === null ? 0 : flat[i + idx]);
-        out.push({
-            gw: flat[i], points: flat[i + 1], minutes: flat[i + 2],
-            xgi: (iXgi === null ? 0 : flat[i + iXgi]) / 100, defconHit: pick(at('defcon_hit')),
-            bps: pick(iBps), saves: pick(iSaves), defcon: pick(iDc),
-            goals: pick(iG), assists: pick(iA), bonus: pick(iBonus)
-        });
-    }
-    return out.sort((a, b) => a.gw - b.gw);
-}
-
-/**
- * Reshape the snapshot's per-match logs into the same `Map(playerId -> stats)`
- * per gameweek that `event/{gw}/live` returns, so the trend charts and the
- * match log have one consumer-side shape regardless of season.
- *
- * This is what makes the trend columns work on draft day: the 2026/27 season
- * has played nothing, so there is no live gameweek to fetch and the completed
- * season is the only per-match history that exists.
- */
-function snapshotGameweekStats() {
-    const snap = state.allPlayersData[state.currentDataSource]?.raw?.__snapshot;
-    if (!snap || !snap.gwLogs) return [];
-
-    const players = state.allPlayersData[state.currentDataSource]?.processed || [];
-    const byGw = new Map();
-    players.forEach(p => {
-        const log = getMatchLog(p);
-        if (!log) return;
-        log.forEach(m => {
-            if (!byGw.has(m.gw)) byGw.set(m.gw, new Map());
-            byGw.get(m.gw).set(p.id, {
-                total_points: m.points,
-                minutes: m.minutes,
-                // The snapshot stores xGI combined; splitting it evenly keeps
-                // `expected_goals + expected_assists` — the only way the trend
-                // metrics read it — exactly right.
-                expected_goals: m.xgi / 2,
-                expected_assists: m.xgi / 2,
-                bps: m.bps,
-                saves: m.saves,
-                defensive_contribution: m.defcon,
-                goals_scored: m.goals,
-                assists: m.assists,
-                bonus: m.bonus
-            });
-        });
-    });
-
-    return [...byGw.entries()]
-        .sort((a, b) => a[0] - b[0])
-        .map(([gw, stats]) => ({ gw, stats }));
-}
-
-/**
- * Recompute the window-sensitive metrics over the last N appearances.
- * Writes window_* fields, leaving the season-long values untouched so both
- * remain available.
- */
-function applyFormWindow(players, windowId = state.formWindow) {
-    const spec = FORM_WINDOWS.find(w => w.id === windowId) || FORM_WINDOWS[0];
-
-    players.forEach(p => {
-        if (!spec.matches) {
-            p.window_ppg = parseFloat(p.points_per_game) || 0;
-            p.window_defcon_rate = p.defcon_hit_rate;
-            p.window_xgi90 = p.xGI_per90;
-            p.window_minutes = p.minutes;
-            p.window_matches = p.appearances || 0;
-            p.window_points = p.total_points;
-            return;
-        }
-
-        const log = getMatchLog(p);
-        if (!log || !log.length) {
-            // No per-match data (live season before gameweek stats load).
-            p.window_ppg = null; p.window_defcon_rate = null; p.window_xgi90 = null;
-            p.window_minutes = 0; p.window_matches = 0; p.window_points = 0;
-            return;
-        }
-
-        const recent = log.slice(-spec.matches);
-        const mins = recent.reduce((s, m) => s + m.minutes, 0);
-        const pts = recent.reduce((s, m) => s + m.points, 0);
-        const xgi = recent.reduce((s, m) => s + m.xgi, 0);
-        const hits = recent.reduce((s, m) => s + m.defconHit, 0);
-
-        p.window_matches = recent.length;
-        p.window_minutes = mins;
-        p.window_points = pts;
-        p.window_ppg = recent.length ? Math.round((pts / recent.length) * 100) / 100 : 0;
-        p.window_xgi90 = mins > 0 ? Math.round((xgi / (mins / 90)) * 100) / 100 : 0;
-        // Goalkeepers are not DEFCON-eligible, so keep them null rather than 0%.
-        p.window_defcon_rate = p.defcon_hit_rate === null
-            ? null
-            : Math.round((hits / recent.length) * 1000) / 10;
-    });
-
-    return players;
-}
-
-function setFormWindow(windowId) {
-    state.formWindow = windowId;
-    const players = state.allPlayersData[state.currentDataSource]?.processed;
-    if (players) applyFormWindow(players, windowId);
-    renderDraftBoard();
-}
-
-// ============================================
-// DRAFT BOARD — "why pick this player"
-// ============================================
-// Each panel answers one concrete draft question with an explicit, stated
-// rule, so a recommendation can be argued with rather than taken on trust.
-// Pre-draft every player is available; once the league is loaded these
-// restrict themselves to genuine free agents.
-
-// `minMatches` scales with the window so a 3-match view is not judged against
-// a full-season sample size.
-const DRAFT_PANELS = [
-    {
-        id: 'value',
-        title: 'הערך הגדול ביותר',
-        subtitle: 'VORP — יתרון על החלופה החופשית',
-        icon: '💎',
-        accent: '#6366f1',
-        metric: p => p.vorp,
-        display: p => `+${p.vorp.toFixed(2)}`,
-        why: p => `חלופה בעמדה: ${p.replacement_score.toFixed(2)} נק'`,
-        eligible: (p, w) => p.vorp !== null && p.vorp > 0 && p.window_matches >= w.minMatches,
-        rank: (a, b) => b.vorp - a.vorp,
-        windowAware: false
-    },
-    {
-        id: 'form',
-        title: 'הכי חמים עכשיו',
-        subtitle: 'נקודות למשחק בחלון הנבחר',
-        icon: '🔥',
-        accent: '#ea580c',
-        metric: p => p.window_ppg,
-        display: p => `${p.window_ppg.toFixed(1)}`,
-        why: p => `${p.window_points} נק' ב-${p.window_matches} משחקים`,
-        eligible: (p, w) => p.window_ppg !== null && p.window_matches >= w.minMatches &&
-            p.window_minutes >= w.minMatches * 45,
-        rank: (a, b) => b.window_ppg - a.window_ppg,
-        windowAware: true
-    },
-    {
-        id: 'defcon',
-        title: 'מכונות DEFCON',
-        subtitle: 'עוברים את הסף בפועל, לא בממוצע',
-        icon: '🛡️',
-        accent: '#0891b2',
-        metric: p => p.window_defcon_rate,
-        display: p => `${p.window_defcon_rate.toFixed(0)}%`,
-        why: p => `${Math.round(p.window_defcon_rate * p.window_matches / 100)}/${p.window_matches} משחקים מעל הסף`,
-        eligible: (p, w) => p.window_defcon_rate !== null && p.window_defcon_rate >= 20 &&
-            p.window_matches >= w.minMatches,
-        rank: (a, b) => b.window_defcon_rate - a.window_defcon_rate,
-        windowAware: true
-    },
-    {
-        id: 'nailed',
-        title: 'בטוחים בהרכב',
-        subtitle: 'דקות יציבות — קריטי בדראפט',
-        icon: '🔒',
-        accent: '#059669',
-        metric: p => p.rotation_risk,
-        display: p => `${Math.round(p.rotation_risk * 100)}%`,
-        why: p => `${Math.round(p.window_minutes / Math.max(p.window_matches, 1))} דק' למשחק · ${p.window_ppg.toFixed(1)} נק'`,
-        eligible: (p, w) => p.rotation_risk !== null && p.rotation_risk >= 0.85 &&
-            p.window_matches >= w.minMatches && p.window_ppg > 3,
-        rank: (a, b) => (b.rotation_risk * b.window_ppg) - (a.rotation_risk * a.window_ppg),
-        windowAware: true
-    },
-    {
-        id: 'underlying',
-        title: 'המספרים מתחת לפני השטח',
-        subtitle: 'מייצרים יותר ממה שהמירו',
-        icon: '📈',
-        accent: '#d97706',
-        metric: p => p.window_xgi90,
-        display: p => `${p.window_xgi90.toFixed(2)}`,
-        why: p => `פער המרה ${p.xDiff.toFixed(1)} — צפוי לתקן`,
-        eligible: (p, w) => p.window_xgi90 !== null && p.window_xgi90 > 0.35 &&
-            p.xDiff < -1 && p.window_matches >= w.minMatches,
-        rank: (a, b) => b.window_xgi90 - a.window_xgi90,
-        windowAware: true
-    },
-    {
-        id: 'setpiece',
-        title: 'בעלי כדורים נייחים',
-        subtitle: 'פנדלים וקרנות = נקודות חוזרות',
-        icon: '🎯',
-        accent: '#be185d',
-        metric: p => p.draft_score,
-        display: p => {
-            const o = Math.min(p.set_piece_priority.penalty, p.set_piece_priority.corner,
-                p.set_piece_priority.free_kick);
-            return `#${o}`;
-        },
-        why: p => {
-            const bits = [];
-            if (p.set_piece_priority.penalty <= 2) bits.push(`פנדל #${p.set_piece_priority.penalty}`);
-            if (p.set_piece_priority.corner <= 2) bits.push(`קרן #${p.set_piece_priority.corner}`);
-            if (p.set_piece_priority.free_kick <= 2) bits.push(`חופשית #${p.set_piece_priority.free_kick}`);
-            return bits.join(' · ') || 'בעל כדורים נייחים';
-        },
-        eligible: (p, w) => Math.min(p.set_piece_priority.penalty, p.set_piece_priority.corner,
-            p.set_piece_priority.free_kick) <= 2 && p.window_matches >= w.minMatches,
-        rank: (a, b) => b.draft_score - a.draft_score,
-        windowAware: false
-    }
-];
-
-function renderDraftBoard() {
-    const host = document.getElementById('draftBoardPanels');
-    if (!host) return;
-
-    const players = state.allPlayersData[state.currentDataSource]?.processed || [];
-    if (!players.length) { host.innerHTML = ''; return; }
-
-    if (players[0].window_ppg === undefined) applyFormWindow(players);
-
-    const spec = FORM_WINDOWS.find(w => w.id === state.formWindow) || FORM_WINDOWS[0];
-    const win = { ...spec, minMatches: spec.matches ? Math.max(2, Math.ceil(spec.matches * 0.6)) : 10 };
-
-    const owned = state.draft.ownedElementIds;
-    const availableOnly = owned && owned.size > 0;
-    const pool = availableOnly ? players.filter(p => !owned.has(p.id)) : players;
-    // Injured or suspended players are never a recommendation.
-    const healthy = pool.filter(p => p.availability_factor > 0.5);
-
-    const cards = DRAFT_PANELS.map((panel, cardIdx) => {
-        const picks = healthy.filter(p => panel.eligible(p, win)).sort(panel.rank).slice(0, 3);
-        if (!picks.length) return '';
-
-        const rows = picks.map((p, i) => `
-            <li class="db-row" style="--i:${i}">
-                <span class="db-rank" style="--accent:${panel.accent}">${i + 1}</span>
-                <span class="db-player">
-                    <span class="db-name">${escapeHtml(p.web_name)}</span>
-                    <span class="db-meta">${p.position_name} · ${escapeHtml(p.team_name)}</span>
-                    <span class="db-why">${escapeHtml(panel.why(p))}</span>
-                </span>
-                ${miniSparkHtml(p.id, 'pts')}
-                <span class="db-value" style="--accent:${panel.accent}">${escapeHtml(panel.display(p))}</span>
-            </li>`).join('');
-
-        return `
-            <article class="db-card" style="--accent:${panel.accent}; --d:${cardIdx * 55}ms">
-                <header class="db-head">
-                    <span class="db-icon">${panel.icon}</span>
-                    <span>
-                        <span class="db-title">${panel.title}</span>
-                        <span class="db-sub">${panel.subtitle}${panel.windowAware && spec.matches ? ` · ${spec.label}` : ''}</span>
-                    </span>
-                </header>
-                <ul class="db-list">${rows}</ul>
-            </article>`;
-    }).filter(Boolean).join('');
-
-    if (!cards) { host.innerHTML = ''; return; }
-
-    const chips = FORM_WINDOWS.map(w => `
-        <button type="button" class="db-chip${w.id === state.formWindow ? ' is-on' : ''}"
-                onclick="setFormWindow('${w.id}')">${w.label}</button>`).join('');
-
-    host.innerHTML = `
-        <div class="db-bar">
-            <div class="db-heading"><span class="db-heading-dot"></span>למי כדאי לקחת</div>
-            <div class="db-controls">
-                <span class="db-scope">${availableOnly ? 'שחקנים חופשיים בלבד' : 'לפני הדראפט — כל השחקנים זמינים'}</span>
-                <div class="db-chips">${chips}</div>
-            </div>
-        </div>
-        <div class="db-grid">${cards}</div>`;
-}
+// The "למי כדאי לקחת" panel grid lived here (FORM_WINDOWS, applyFormWindow,
+// setFormWindow, DRAFT_PANELS, renderDraftBoard) and was removed on request.
+// Everything it computed — window_ppg, window_defcon_rate, window_xgi90 — was
+// read only by those panels, so it all went with them. The equivalent answers
+// now come from the KPI cards below the toolbar and the table's own signal
+// column. See git history if the panels are ever wanted back.
 
 function escapeHtml(value) {
     return String(value ?? '').replace(/[&<>"']/g, c => (
@@ -4278,7 +4359,13 @@ const REPLACEMENT_SLOTS = { GKP: 1, DEF: 4, MID: 4, FWD: 2 };
 function computeDraftMetrics(players) {
     const leagueSize = state.draft.details?.league_entries?.length || 8;
     const ownedIds = state.draft.ownedElementIds;
-    const haveOwnership = ownedIds && ownedIds.size > 0;
+    // Only treat ownership as known once the league says somebody owns somebody.
+    // element-status answers this directly; before the draft it correctly
+    // reports every player free, which is the pre-draft branch below, not a
+    // mid-season league where the best free agent sets replacement level.
+    const haveOwnership = state.draft.ownershipLoaded
+        ? state.draft.draftHasHappened
+        : !!(ownedIds && ownedIds.size > 0);
 
     // Points per APPEARANCE, not per 90 minutes. Per-90 divides by playing time,
     // so a substitute with 10 points in 100 minutes scores 9.0 -- higher than
@@ -4856,6 +4943,293 @@ function getTeamColor(name) {
 
 let _draftBackgroundLoad = null;
 
+/* ==========================================================================
+   DRAFT LEAGUE ENDPOINTS
+   Four endpoints the app used to ignore. Each replaces a guess with the
+   league's own answer. All go through the same cached+proxied path.
+   ========================================================================== */
+
+/** Draft element id -> FPL element id, falling back to the id itself. */
+function toFplId(draftElementId) {
+    return state.draft.draftToFplIdMap.get(draftElementId) || draftElementId;
+}
+
+/**
+ * league/{id}/element-status — who owns whom, according to the league.
+ *
+ * The app used to derive this by diffing every roster, which broke whenever a
+ * single picks request failed: those players silently became "free agents".
+ * This is one request and it is authoritative.
+ *
+ * Before the draft every owner is null. That is a real answer, not a failure,
+ * and it is what the API returns right now for the 2026/27 season — so
+ * `draftHasHappened` distinguishes "nobody owns anyone yet" from "we do not
+ * know", which are very different things to show a user.
+ */
+async function loadDraftElementStatus() {
+    const leagueId = state.draft.leagueId;
+    const url = config.corsProxy + encodeURIComponent(config.urls.draftElementStatus(leagueId));
+    try {
+        const data = await fetchWithCache(url, `fpl_draft_element_status_${leagueId}`, 5);
+        if (!data || !Array.isArray(data.element_status)) return false;
+
+        const owned = new Set();
+        state.draft.ownershipByFplId.clear();
+        data.element_status.forEach(row => {
+            const fplId = toFplId(row.element);
+            state.draft.ownershipByFplId.set(fplId, row.owner ?? null);
+            if (row.owner != null) owned.add(fplId);
+        });
+
+        state.draft.ownershipLoaded = true;
+        state.draft.draftHasHappened = owned.size > 0;
+        if (owned.size > 0) {
+            // Only replace the roster-derived set once there is something in it.
+            state.draft.ownedElementIds = owned;
+        }
+        console.log(`🧾 element-status: ${data.element_status.length} players, ${owned.size} owned`);
+        invalidateSignals();
+        return true;
+    } catch (e) {
+        console.warn('element-status unavailable, falling back to roster diffing:', e.message);
+        return false;
+    }
+}
+
+/**
+ * entry/{id}/history — real cumulative points per gameweek, per manager.
+ * This is the data the progress chart used to invent.
+ */
+async function loadEntryHistories(entries) {
+    const results = await mapWithConcurrency(entries, 4, async entry => {
+        const url = config.corsProxy + encodeURIComponent(config.urls.draftEntryHistory(entry.entry_id));
+        try {
+            const data = await fetchWithCache(url, `fpl_draft_history_${entry.entry_id}`, 30);
+            if (!data || !Array.isArray(data.history)) return null;
+            return { entryId: entry.id, history: data.history };
+        } catch (e) {
+            console.warn(`history for entry ${entry.entry_id} unavailable:`, e.message);
+            return null;
+        }
+    });
+
+    results.filter(Boolean).forEach(r => state.draft.historyByEntryId.set(r.entryId, r.history));
+    console.log(`📈 entry histories: ${state.draft.historyByEntryId.size}/${entries.length}`);
+    return state.draft.historyByEntryId;
+}
+
+/** draft/{league}/choices — the original draft board, pick by pick. */
+async function loadDraftChoices() {
+    const leagueId = state.draft.leagueId;
+    const url = config.corsProxy + encodeURIComponent(config.urls.draftChoices(leagueId));
+    try {
+        // Effectively immutable once the draft is done.
+        const data = await fetchWithCache(url, `fpl_draft_choices_${leagueId}`, 1440);
+        if (!data || !Array.isArray(data.choices)) return null;
+        state.draft.choices = data.choices;
+        console.log(`🎲 draft board: ${data.choices.length} picks`);
+        return data.choices;
+    } catch (e) {
+        console.warn('draft choices unavailable:', e.message);
+        return null;
+    }
+}
+
+/** draft/league/{id}/transactions — the waiver and free-agent feed. */
+async function loadDraftTransactions() {
+    const leagueId = state.draft.leagueId;
+    const url = config.corsProxy + encodeURIComponent(config.urls.draftTransactions(leagueId));
+    try {
+        const data = await fetchWithCache(url, `fpl_draft_transactions_${leagueId}`, 15);
+        if (!data || !Array.isArray(data.transactions)) return null;
+        state.draft.transactions = data.transactions;
+        console.log(`🔁 transactions: ${data.transactions.length}`);
+        return data.transactions;
+    } catch (e) {
+        console.warn('transactions unavailable:', e.message);
+        return null;
+    }
+}
+
+/* ---------------------- views over the new endpoints --------------------- */
+
+/**
+ * Team name for a manager id.
+ *
+ * The draft endpoints are inconsistent about which id they hand back:
+ * league_entries and the standings key on `id`, while transactions and choices
+ * use `entry_id`. Checking both is why the transaction feed stopped labelling
+ * almost every row "unknown".
+ */
+function teamNameForEntry(entryId) {
+    return state.draft.entryIdToTeamName.get(entryId)
+        || state.draft.entryEntryIdToTeamName.get(entryId)
+        || 'לא ידוע';
+}
+
+/**
+ * Display name for a Draft API element id. Prefers the processed FPL player,
+ * and falls back to the draft bootstrap's own name for players who have since
+ * left the league and so have no FPL entry to map onto.
+ */
+function playerNameForDraftElement(draftElementId) {
+    const p = getProcessedByElementId().get(toFplId(draftElementId));
+    if (p) return p.web_name;
+    return state.draft.draftElementNames.get(draftElementId) || `#${draftElementId}`;
+}
+
+/**
+ * The league's waiver and free-agent activity, newest first, plus who has been
+ * most active. Replaces guessing at market movement from ownership deltas.
+ */
+function renderTransactionsFeed() {
+    const container = document.getElementById('transactionsFeed');
+    if (!container) return;
+
+    const all = state.draft.transactions;
+    if (!Array.isArray(all)) {
+        container.innerHTML = '<p class="feed-empty">יומן התנועות עוד נטען…</p>';
+        return;
+    }
+    // 'a' = accepted. Denied waiver claims are noise in a market view.
+    const accepted = all.filter(t => t.result === 'a');
+    if (!accepted.length) {
+        container.innerHTML = '<p class="feed-empty">עוד לא בוצעו תנועות בליגה העונה</p>';
+        return;
+    }
+
+    const byEntry = new Map();
+    accepted.forEach(t => byEntry.set(t.entry, (byEntry.get(t.entry) || 0) + 1));
+    const busiest = [...byEntry.entries()].sort((a, b) => b[1] - a[1]).slice(0, 3);
+
+    const addCounts = new Map();
+    accepted.forEach(t => {
+        addCounts.set(t.element_in, (addCounts.get(t.element_in) || 0) + 1);
+    });
+    const trending = [...addCounts.entries()]
+        .filter(([, n]) => n > 1)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 5);
+
+    const recent = [...accepted].sort((a, b) => (b.event - a.event) || (b.index - a.index)).slice(0, 25);
+
+    container.innerHTML = `
+        <div class="feed-summary">
+            <div class="feed-stat"><span class="feed-stat-value">${accepted.length}</span>
+                <span class="feed-stat-label">תנועות שאושרו</span></div>
+            <div class="feed-stat"><span class="feed-stat-value">${byEntry.size}</span>
+                <span class="feed-stat-label">קבוצות פעילות</span></div>
+            ${busiest.length ? `<div class="feed-stat feed-stat-wide">
+                <span class="feed-stat-label">הכי פעילות</span>
+                <span class="feed-stat-value-sm">${busiest.map(([id, n]) =>
+                    `${escapeHtml(teamNameForEntry(id))} (${n})`).join(' · ')}</span></div>` : ''}
+        </div>
+
+        ${trending.length ? `<div class="feed-trending">
+            <h4>הכי מבוקשים</h4>
+            <div class="feed-chips">${trending.map(([id, n]) =>
+                `<span class="feed-chip">${escapeHtml(playerNameForDraftElement(id))}
+                    <b>${n}×</b></span>`).join('')}</div>
+        </div>` : ''}
+
+        <ol class="feed-list">
+            ${recent.map(t => `
+                <li class="feed-item">
+                    <span class="feed-gw">GW${t.event}</span>
+                    <span class="feed-team">${escapeHtml(teamNameForEntry(t.entry))}</span>
+                    <span class="feed-move">
+                        <span class="feed-in">▲ ${escapeHtml(playerNameForDraftElement(t.element_in))}</span>
+                        <span class="feed-out">▼ ${escapeHtml(playerNameForDraftElement(t.element_out))}</span>
+                    </span>
+                    <span class="feed-kind">${t.kind === 'w' ? 'וויוור' : 'שחקן חופשי'}</span>
+                </li>`).join('')}
+        </ol>`;
+}
+
+/**
+ * The original draft board with what each pick actually returned. Points come
+ * from the season the app is currently showing, so before a ball is kicked this
+ * reads as "what last season says about the picks we made".
+ */
+function renderDraftBoardHistory() {
+    const container = document.getElementById('draftBoardHistory');
+    if (!container) return;
+
+    const choices = state.draft.choices;
+    if (!Array.isArray(choices)) {
+        container.innerHTML = '<p class="feed-empty">לוח הדראפט עוד נטען…</p>';
+        return;
+    }
+    if (!choices.length) {
+        container.innerHTML = '<p class="feed-empty">הדראפט של העונה טרם התקיים</p>';
+        return;
+    }
+
+    const processedById = getProcessedByElementId();
+    const rows = choices.map(c => {
+        const fplId = toFplId(c.element);
+        const p = processedById.get(fplId);
+        return {
+            round: c.round, pick: c.pick, wasAuto: c.was_auto,
+            team: c.entry_name || teamNameForEntry(c.entry),
+            name: playerNameForDraftElement(c.element),
+            points: p ? (p.total_points || 0) : null,
+            pos: p ? p.position_name : ''
+        };
+    });
+
+    // Value over the pick slot: how a pick did against the others made near it.
+    const scored = rows.filter(r => r.points !== null).sort((a, b) => b.points - a.points);
+    const rankByPick = new Map(scored.map((r, i) => [`${r.round}:${r.pick}`, i + 1]));
+
+    const rounds = [...new Set(rows.map(r => r.round))].sort((a, b) => a - b);
+    const best = scored.slice(0, 3);
+    const worstEarly = scored.filter(r => r.round <= 3).slice(-3).reverse();
+
+    container.innerHTML = `
+        <div class="feed-summary">
+            <div class="feed-stat"><span class="feed-stat-value">${rows.length}</span>
+                <span class="feed-stat-label">בחירות</span></div>
+            <div class="feed-stat"><span class="feed-stat-value">${rounds.length}</span>
+                <span class="feed-stat-label">סבבים</span></div>
+            <div class="feed-stat"><span class="feed-stat-value">${rows.filter(r => r.wasAuto).length}</span>
+                <span class="feed-stat-label">בחירות אוטומטיות</span></div>
+        </div>
+
+        <div class="board-highlights">
+            <div class="board-col">
+                <h4>הבחירות ששילמו</h4>
+                <ol>${best.map(r => `<li><b>${escapeHtml(r.name)}</b> ${r.points} נק׳
+                    <span class="board-meta">סבב ${r.round} · ${escapeHtml(r.team)}</span></li>`).join('')}</ol>
+            </div>
+            <div class="board-col">
+                <h4>אכזבות הסבבים המוקדמים</h4>
+                <ol>${worstEarly.map(r => `<li><b>${escapeHtml(r.name)}</b> ${r.points} נק׳
+                    <span class="board-meta">סבב ${r.round} · ${escapeHtml(r.team)}</span></li>`).join('')}</ol>
+            </div>
+        </div>
+
+        <div class="board-rounds">
+            ${rounds.map(rd => `
+                <details class="board-round" ${rd <= 2 ? 'open' : ''}>
+                    <summary>סבב ${rd}</summary>
+                    <ol class="board-picks">
+                        ${rows.filter(r => r.round === rd).sort((a, b) => a.pick - b.pick).map(r => `
+                            <li class="board-pick">
+                                <span class="board-num">${r.pick}</span>
+                                <span class="board-player"><b>${escapeHtml(r.name)}</b>
+                                    <em>${escapeHtml(r.pos)}</em></span>
+                                <span class="board-team">${escapeHtml(r.team)}</span>
+                                <span class="board-points">${r.points === null ? '—' : `${r.points} נק׳`}</span>
+                                <span class="board-rank">${rankByPick.has(`${r.round}:${r.pick}`)
+                                    ? `#${rankByPick.get(`${r.round}:${r.pick}`)}` : ''}</span>
+                                ${r.wasAuto ? '<span class="board-auto" title="נבחר אוטומטית">⏱</span>' : ''}
+                            </li>`).join('')}
+                    </ol>
+                </details>`).join('')}
+        </div>`;
+}
+
 async function loadDraftDataInBackground() {
     // Called from both init() and fetchAndProcessData(); without this the whole
     // draft load ran twice per page load, clearing each other's caches midway.
@@ -4889,9 +5263,11 @@ async function _loadDraftDataInBackground() {
 
             // Build entryId to team name map
             state.draft.entryIdToTeamName.clear();
+            state.draft.entryEntryIdToTeamName.clear();
             details.league_entries.forEach(entry => {
                 if (entry && entry.id && entry.entry_name) {
                     state.draft.entryIdToTeamName.set(entry.id, entry.entry_name);
+                    if (entry.entry_id) state.draft.entryEntryIdToTeamName.set(entry.entry_id, entry.entry_name);
                 }
             });
 
@@ -4933,8 +5309,21 @@ async function _loadDraftDataInBackground() {
 
             await Promise.all(rosterPromises);
 
+            // The league's own ownership record. This belongs in the background
+            // path, not just the draft tab: VORP's replacement level and the
+            // "free agent" verdict both read it, and both are on the players
+            // table the user sees first.
+            await loadDraftElementStatus();
+
             // Populate team filter with draft teams
             populateTeamFilter();
+
+            // Ownership feeds VORP, so the metrics have to be recomputed before
+            // the table is repainted — otherwise the column keeps the pre-draft
+            // positional baseline all session.
+            const processed = state.allPlayersData[state.currentDataSource]?.processed;
+            if (processed) computeDraftMetrics(processed);
+            invalidateSignals();
 
             // Re-render table to update draft team column
             renderTable();
@@ -5001,9 +5390,7 @@ async function loadDraftLeague() {
         }
 
         const detailsCacheKey = `fpl_draft_details_${config.draftLeagueId}`;
-        const standingsCacheKey = `fpl_draft_standings_${config.draftLeagueId}`;
         localStorage.removeItem(detailsCacheKey);
-        localStorage.removeItem(standingsCacheKey);
 
         // 🔧 CRITICAL FIX: Also clear ALL picks cache to ensure fresh roster data
         console.log("🧹 Clearing old picks cache...");
@@ -5016,21 +5403,24 @@ async function loadDraftLeague() {
         });
 
         // Don't add proxy here - fetchWithCache will handle it with fallbacks
+        // There is no league/{id}/standings endpoint -- the Draft API 404s it.
+        // The standings live inside /details, and every consumer already falls
+        // back to details.standings, so the request was pure latency plus two
+        // red 404s in the console on every draft load.
         const detailsUrl = config.urls.draftLeagueDetails(config.draftLeagueId);
-        const standingsUrl = config.urls.draftLeagueStandings(config.draftLeagueId);
-
-        const [detailsData, standingsData] = await Promise.all([
-            fetchWithCache(config.corsProxy + encodeURIComponent(detailsUrl), detailsCacheKey, 5),
-            fetchWithCache(config.corsProxy + encodeURIComponent(standingsUrl), standingsCacheKey, 5).catch(() => null)
-        ]);
+        const detailsData = await fetchWithCache(
+            config.corsProxy + encodeURIComponent(detailsUrl), detailsCacheKey, 5);
 
         state.draft.details = detailsData;
-        state.draft.standings = standingsData;
+        state.draft.standings = null;
 
         console.log("--- Draft League Debug ---");
         console.log("1. Fetched Details Data:", JSON.parse(JSON.stringify(detailsData)));
 
-        state.draft.entryIdToTeamName = new Map((state.draft.details?.league_entries || []).filter(e => e && e.entry_name).map(e => [e.id, e.entry_name]));
+        const namedEntries = (state.draft.details?.league_entries || []).filter(e => e && e.entry_name);
+        state.draft.entryIdToTeamName = new Map(namedEntries.map(e => [e.id, e.entry_name]));
+        state.draft.entryEntryIdToTeamName = new Map(
+            namedEntries.filter(e => e.entry_id).map(e => [e.entry_id, e.entry_name]));
 
         // --- Final, reliable roster population method V4 ---
         try {
@@ -5107,6 +5497,24 @@ async function loadDraftLeague() {
             await Promise.all(picksPromises);
 
             console.log("3. Rosters Populated:", state.draft.rostersByEntryId.size, "teams.");
+
+            // The league's own ownership record. Overrides whatever the roster
+            // diffing concluded, because a single failed picks request used to
+            // turn a whole squad into "free agents".
+            await loadDraftElementStatus();
+
+            // Everything below is additive: the tabs that need it render when it
+            // arrives, and nothing blocks on it.
+            const entries = (state.draft.details?.league_entries || []).filter(e => e && e.id && e.entry_id);
+            Promise.allSettled([
+                loadEntryHistories(entries),
+                loadDraftChoices(),
+                loadDraftTransactions()
+            ]).then(() => {
+                renderProgressChart();
+                renderDraftBoardHistory();
+                renderTransactionsFeed();
+            });
 
             // "Free agent" is a signal input, so verdicts computed before the
             // rosters landed are stale — every player looked unowned.
@@ -5511,6 +5919,10 @@ function renderDraftStandings() {
         const diff = pf - pa;
 
         return {
+            // computeDraftTeamAggregates looks rows up by entry id. Without it
+            // that find() never matched, so every team's table points and wins
+            // came through as 0.
+            entry_id: s.league_entry,
             rank: s.rank,
             manager: entry.player_first_name + ' ' + entry.player_last_name,
             team: entry.entry_name,
@@ -5974,7 +6386,9 @@ function computeDraftTeamAggregates() {
                 totalXGI,
                 totalDefCon,
                 totalPointsFor,
-                totalPointsAgainst: 0, // TODO: Calculate from matches
+                // The league standings already carry this; it never needed
+                // recomputing from the match list.
+                totalPointsAgainst: standingsEntry ? (standingsEntry.pa || 0) : 0,
                 tablePoints,
                 wins
             }
@@ -6077,53 +6491,71 @@ function renderH2HCalendar() {
     container.innerHTML = html;
 }
 
+/**
+ * Cumulative points per manager, gameweek by gameweek.
+ *
+ * This used to plot `points_for / currentGW * (i+1) + random(±10)` — a straight
+ * line with noise sprinkled on it, presented as league history. Every "comeback"
+ * and "collapse" a reader saw in it was invented by Math.random(). It now reads
+ * entry/{id}/history, and shows an honest empty state when that is unavailable
+ * rather than falling back to a plausible-looking fabrication.
+ */
 function renderProgressChart() {
     const canvas = document.getElementById('progressChartCanvas');
     if (!canvas) return;
 
-    const standings = state.draft.standings?.standings || state.draft.details?.standings || [];
-    if (standings.length === 0) return;
+    const histories = state.draft.historyByEntryId;
+    const entries = state.draft.details?.league_entries || [];
 
-    // Get current gameweek
-    const currentGW = state.draft.details?.league?.current_event || getCurrentEventId();
+    const series = entries
+        .map(e => ({ entryId: e.id, name: e.entry_name, history: histories.get(e.id) }))
+        .filter(s => s.name && Array.isArray(s.history) && s.history.length);
 
-    // Create gameweek labels
-    const labels = Array.from({ length: currentGW }, (_, i) => `GW${i + 1}`);
+    const empty = document.getElementById('progressChartEmpty');
+    const setEmpty = msg => {
+        if (state.draft.charts.progress) {
+            state.draft.charts.progress.destroy();
+            state.draft.charts.progress = null;
+        }
+        canvas.style.display = 'none';
+        if (empty) { empty.style.display = 'block'; empty.textContent = msg; }
+    };
 
-    // Get team colors
-    const colorMap = {};
-    standings.forEach(s => {
-        const teamName = s.entry_name || s.league_entry?.entry_name;
-        if (teamName) colorMap[teamName] = getTeamColor(teamName);
-    });
+    if (!series.length) {
+        setEmpty(state.draft.details
+            ? 'היסטוריית המחזורים עוד נטענת — או שהעונה טרם התחילה'
+            : 'נתוני הליגה עוד נטענים');
+        return;
+    }
+    canvas.style.display = '';
+    if (empty) empty.style.display = 'none';
 
-    // Create datasets (one per team)
-    const datasets = standings
-        .filter(s => s.entry_name && s.entry_name.toLowerCase() !== 'average')
-        .map(s => {
-            const teamName = s.entry_name;
-            const color = colorMap[teamName];
+    const lastGw = Math.max(...series.flatMap(s => s.history.map(h => h.event)));
+    const labels = Array.from({ length: lastGw }, (_, i) => `GW${i + 1}`);
 
-            // Simulate cumulative points over gameweeks
-            // In real implementation, you'd fetch actual gameweek-by-gameweek data
-            const totalPoints = s.points_for || 0;
-            const pointsPerGW = totalPoints / currentGW;
-            const data = Array.from({ length: currentGW }, (_, i) =>
-                Math.round(pointsPerGW * (i + 1) + (Math.random() * 20 - 10)) // Add some variance
-            );
-
-            return {
-                label: teamName,
-                data: data,
-                borderColor: color,
-                backgroundColor: hexToRgba(color, 0.1),
-                borderWidth: 3,
-                tension: 0.4,
-                pointRadius: 4,
-                pointHoverRadius: 6,
-                fill: false
-            };
+    const datasets = series.map(s => {
+        const byEvent = new Map(s.history.map(h => [h.event, h.total_points]));
+        // A manager missing a gameweek keeps the previous cumulative total
+        // rather than dropping to zero and drawing a cliff that never happened.
+        let running = 0;
+        const data = labels.map((_, i) => {
+            const v = byEvent.get(i + 1);
+            if (v !== undefined) running = v;
+            return running;
         });
+        const color = getTeamColor(s.name);
+        return {
+            label: s.name,
+            data,
+            borderColor: color,
+            backgroundColor: hexToRgba(color, 0.1),
+            borderWidth: 3,
+            tension: 0.4,
+            pointRadius: 4,
+            pointHoverRadius: 6,
+            fill: false
+        };
+    });
 
     const ctx = canvas.getContext('2d');
 

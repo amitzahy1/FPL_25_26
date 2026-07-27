@@ -19,12 +19,26 @@ export const REPO_ROOT = ROOT;
 export function extractFunction(name, src = SCRIPT_SRC) {
     const start = src.indexOf(`function ${name}(`);
     if (start < 0) throw new Error(`function ${name} not found in script.js`);
+
+    // Step over the parameter list before looking for the body. A destructured
+    // parameter — `function f(a, { flag = false } = {})` — puts a brace inside
+    // the parentheses, and matching from the first `{` in the file truncated the
+    // function at the end of that parameter instead of the end of the body.
+    let paren = 0, i = src.indexOf('(', start);
+    for (; i < src.length; i++) {
+        if (src[i] === '(') paren++;
+        else if (src[i] === ')') {
+            paren--;
+            if (paren === 0) { i++; break; }
+        }
+    }
+
     let depth = 0;
-    for (let i = src.indexOf('{', start); i < src.length; i++) {
-        if (src[i] === '{') depth++;
-        else if (src[i] === '}') {
+    for (let j = src.indexOf('{', i); j < src.length; j++) {
+        if (src[j] === '{') depth++;
+        else if (src[j] === '}') {
             depth--;
-            if (depth === 0) return src.slice(start, i + 1);
+            if (depth === 0) return src.slice(start, j + 1);
         }
     }
     throw new Error(`unbalanced braces while extracting ${name}`);

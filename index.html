@@ -7,8 +7,8 @@
     <title>⚽ FPL Pro Analytics Hub</title>
     <!-- Inline so the tab icon needs no extra request; mirrors the header mark. -->
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='40' y2='40' gradientUnits='userSpaceOnUse'%3E%3Cstop stop-color='%2322D3EE'/%3E%3Cstop offset='.55' stop-color='%233B82F6'/%3E%3Cstop offset='1' stop-color='%236366F1'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='40' height='40' rx='9' fill='%230F172A'/%3E%3Cpath d='M20 5 8 9.7v9.9c0 7 4.9 12.4 12 14.1 7.1-1.7 12-7.1 12-14.1V9.7L20 5Z' fill='url(%23g)'/%3E%3Crect x='12.6' y='20.4' width='3.4' height='7' rx='1.2' fill='%23fff' fill-opacity='.95'/%3E%3Crect x='18.3' y='16.2' width='3.4' height='11.2' rx='1.2' fill='%23fff'/%3E%3Crect x='24' y='12' width='3.4' height='15.4' rx='1.2' fill='%23fff' fill-opacity='.95'/%3E%3C/svg%3E">
-    <link rel="stylesheet" href="style.css?v=2026.07.27.248">
-    <link rel="stylesheet" href="mobile.css?v=2026.07.27.248">
+    <link rel="stylesheet" href="style.css?v=2026.07.27.249">
+    <link rel="stylesheet" href="mobile.css?v=2026.07.27.249">
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.5.1"></script>
     <script
         src="https://cdnjs.cloudflare.com/ajax/libs/chartjs-plugin-annotation/2.2.1/chartjs-plugin-annotation.min.js"></script>
@@ -320,66 +320,19 @@
 
                 <!-- Removed Legend as requested -->
 
-                <!-- Draft board: who to pick and why (rendered by renderDraftBoard) -->
-                <div id="draftBoardPanels" style="margin: 6px 0 16px;"></div>
-
                 <!-- Dashboard KPIs -->
                 <div id="dashboardKPIs" class="dashboard-kpis">
-                    <div class="kpi-card" data-kpi="hot-player">
-                        <div class="kpi-icon">🔥</div>
-                        <div class="kpi-content">
-                            <div class="kpi-label">שחקן לוהט</div>
-                            <div class="kpi-value" id="kpiHotPlayer">-</div>
-                            <div class="kpi-subtext" id="kpiHotPlayerForm">-</div>
-                        </div>
-                    </div>
-
-                    <div class="kpi-card" data-kpi="best-draft">
-                        <div class="kpi-icon">🏅</div>
-                        <div class="kpi-content">
-                            <div class="kpi-label">מלך הדראפט</div>
-                            <div class="kpi-value" id="kpiBestDraft">-</div>
-                            <div class="kpi-subtext" id="kpiBestDraftScore">-</div>
-                        </div>
-                    </div>
-
-                    <div class="kpi-card" data-kpi="top-scorer">
-                        <div class="kpi-icon">⚽</div>
-                        <div class="kpi-content">
-                            <div class="kpi-label">מלך השערים</div>
-                            <div class="kpi-value" id="kpiTopScorer">-</div>
-                            <div class="kpi-subtext" id="kpiTopScorerGoals">-</div>
-                        </div>
-                    </div>
-
-                    <div class="kpi-card" data-kpi="top-assister">
-                        <div class="kpi-icon">🎯</div>
-                        <div class="kpi-content">
-                            <div class="kpi-label">מלך הבישולים</div>
-                            <div class="kpi-value" id="kpiTopAssister">-</div>
-                            <div class="kpi-subtext" id="kpiTopAssisterAssists">-</div>
-                        </div>
-                    </div>
-
-                    <div class="kpi-card" data-kpi="top-points">
-                        <div class="kpi-icon">🏆</div>
-                        <div class="kpi-content">
-                            <div class="kpi-label">מוביל נקודות</div>
-                            <div class="kpi-value" id="kpiTopPoints">-</div>
-                            <div class="kpi-subtext" id="kpiTopPointsValue">-</div>
-                        </div>
-                    </div>
-
-                    <div class="kpi-card" data-kpi="best-value">
-                        <div class="kpi-icon">💎</div>
-                        <div class="kpi-content">
-                            <div class="kpi-label">תמורה מיטבית</div>
-                            <div class="kpi-value" id="kpiBestValue">-</div>
-                            <div class="kpi-subtext" id="kpiBestValueRatio">-</div>
-                        </div>
-                    </div>
+                    <!-- Cards are rendered by updateDashboardKPIs() from KPI_CARDS, so a
+                         new question means one entry in that list, not seven lines here. -->
                 </div>
 
+                <!-- On a phone the filter stack is ~1000px tall, so it is a
+                     disclosure there and always-open on desktop (see mobile.css). -->
+                <details class="filters-wrap" id="filtersPanel" open>
+                    <summary class="filters-toggle">
+                        <span>🔍 חיפוש וסינון</span>
+                        <span class="filters-toggle-hint">הקש לפתיחה</span>
+                    </summary>
                 <div class="filters">
 
                     <div class="filter-group"><label>🔍 חיפוש שחקן:</label><input type="text" id="searchName"
@@ -533,6 +486,7 @@
                         </div>
                     </div>
                 </div>
+                </details>
 
                 <!-- TABLE VIEW WRAPPER -->
                 <div id="mainTableView">
@@ -548,12 +502,9 @@
                                     <th data-sort="signal_rank"
                                         title="המלצה אחת לשחקן, עם המספרים שהובילו אליה. מסודר: קח עכשיו → קנייה בזול → לו״ז מתהפך → ניטרלי → סיכון → למכור → מלכודת → לא זמין">
                                         סיגנל<span class="sort-indicator"></span></th>
-                                    <th class="trend-col" data-sort="trend_pts"
-                                        title="נקודות בכל אחד מהמחזורים האחרונים. המיון לפי כמות השינוי מול החלון הקודם">
-                                        נק׳ — טרנד<span class="sort-indicator"></span></th>
-                                    <th class="trend-col" data-sort="trend_xgi"
-                                        title="xG+xA בכל אחד מהמחזורים האחרונים — מה שהוא ייצר, לא מה שיצא לו">
-                                        xG+xA — טרנד<span class="sort-indicator"></span></th>
+                                    <th class="trend-col" data-sort="trend_pts" id="trendPtsHeader"
+                                        title="הנקודות בכל אחד מהמחזורים האחרונים, והשינוי מול החלון שלפניו. מיון = לפי כמות השינוי">
+                                        <span class="trend-head-label">נקודות לפי מחזור</span><span class="sort-indicator"></span></th>
                                     <th data-sort="draft_score" title="ציון דראפט משוקלל">ציון<span
                                             class="sort-indicator"></span></th>
                                     <th data-sort="vorp"
@@ -610,12 +561,15 @@
                 </div> <!-- End mainTableView -->
 
                 <!-- MAIN CHARTS VIEW WRAPPER -->
+                <!-- `display` was declared twice here (none, then grid); the second
+                     won, so the charts view rendered under the table on every page
+                     load. switchMainView() sets display:grid when it is selected. -->
                 <div id="mainChartsView"
-                    style="display: none; display: grid; grid-template-columns: repeat(auto-fit, minmax(400px, 1fr)); gap: 24px; padding-bottom: 40px;">
+                    style="display: none; grid-template-columns: repeat(auto-fit, minmax(min(100%, 400px), 1fr)); gap: 24px; padding-bottom: 40px;">
 
                     <!-- CHARTS VIEW WRAPPER (New Grid Layout) -->
                     <div class="charts-dashboard-grid"
-                        style="display: grid; grid-template-columns: repeat(auto-fit, minmax(450px, 1fr)); gap: 24px; margin-top: 24px; padding-bottom: 40px;">
+                        style="display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 450px), 1fr)); gap: 24px; margin-top: 24px; padding-bottom: 40px;">
 
                         <!-- Midfielders Matrix -->
                         <div class="chart-card"
@@ -951,10 +905,34 @@
                         </h3>
                         <div id="draftRecommendations"></div>
                     </div>
+
+                    <div style="margin-top: 28px;">
+                        <h3 class="section-title">
+                            <span style="font-size: 24px;">🔁</span> תנועות בליגה
+                        </h3>
+                        <p class="section-sub">מי נלקח, מי שוחרר, ומי הכי פעיל — מתוך יומן הוויוורים של הליגה</p>
+                        <div id="transactionsFeed"></div>
+                    </div>
+
+                    <div style="margin-top: 28px;">
+                        <h3 class="section-title">
+                            <span style="font-size: 24px;">🎲</span> לוח הדראפט — מבט לאחור
+                        </h3>
+                        <p class="section-sub">כל בחירה מול מה שהיא נתנה בפועל, לפי סבב</p>
+                        <div id="draftBoardHistory"></div>
+                    </div>
                 </div>
 
                 <div id="draft-analytics" class="draft-sub-content">
-                    <h3 class="section-title" style="margin-top:14px;">השוואת קבוצות</h3>
+                    <h3 class="section-title" style="margin-top:14px;">
+                        <span style="font-size: 24px;">📈</span> התקדמות נקודות לאורך העונה
+                    </h3>
+                    <div class="card" style="padding: 16px;">
+                        <canvas id="progressChartCanvas" height="120"></canvas>
+                        <p id="progressChartEmpty" class="chart-empty" style="display:none;"></p>
+                    </div>
+
+                    <h3 class="section-title" style="margin-top:24px;">השוואת קבוצות</h3>
                     <div id="draftComparison" class="card"></div>
 
                     <h3 class="section-title" style="margin-top:24px;">
@@ -1015,7 +993,7 @@
     <!-- Version query is bumped by scripts/stamp-version.mjs on every commit
          (npm run stamp). It was left at 4.0.0 for months, so returning
          visitors kept running a cached script.js and never saw fixes. -->
-    <script src="script.js?v=2026.07.27.248" defer></script>
+    <script src="script.js?v=2026.07.27.249" defer></script>
 </body>
 
 </html>

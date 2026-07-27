@@ -1991,10 +1991,22 @@ tbody tr:last-child td {
     text-align: center;
     margin-bottom: 24px;
     padding: 16px 12px;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    border-radius: 12px;
+    background: linear-gradient(135deg, var(--primary-dark) 0%, var(--primary-color) 55%, var(--secondary-color) 100%);
+    border-radius: var(--radius-md);
     color: white;
-    box-shadow: 0 6px 20px rgba(102, 126, 234, 0.3);
+    box-shadow: 0 6px 20px rgba(2, 132, 199, 0.28);
+}
+
+/* .modal-content h2 clips a gradient into the text and sets the fill to
+   transparent. Inside the coloured hero that renders the title as an unreadable
+   green smear, so the fill has to be handed back explicitly. */
+.comparison-hero-header .hero-title {
+    background: none;
+    -webkit-text-fill-color: #fff;
+    color: #fff;
+    border-bottom: none;
+    padding-bottom: 0;
+    font-size: 22px;
 }
 
 .hero-title-wrapper {
@@ -2057,7 +2069,7 @@ tbody tr:last-child td {
 
 .player-card-photo-wrapper {
     position: relative;
-    background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+    background: linear-gradient(135deg, #f1f5f9 0%, #dbe6ef 100%);
     padding: 12px;
     text-align: center;
     height: 100px;
@@ -2212,7 +2224,8 @@ tbody tr:last-child td {
 }
 
 .metric-row-name {
-    font-size: 12px;
+    font-size: 13.5px;
+    font-weight: 700;
 }
 
 .metric-row-values {
@@ -2236,21 +2249,28 @@ tbody tr:last-child td {
 }
 
 .metric-value-box.best-value {
-    border-color: #10b981;
-    background: linear-gradient(135deg, #d1fae5 0%, #a7f3d0 100%);
+    border-color: var(--primary-color);
+    background: #e9f4fb;
+    box-shadow: inset 0 0 0 1px rgba(2, 132, 199, .25);
 }
 
+/* Deliberately not styled as a failure: being second of two is not a defect. */
 .metric-value-box.worst-value {
-    border-color: #ef4444;
-    background: linear-gradient(135deg, #fee2e2 0%, #fecaca 100%);
+    border-color: #e2e8f0;
+    background: #fff;
 }
 
 .metric-value-number {
-    font-size: 14px;
-    font-weight: 700;
-    color: #1e293b;
+    font-size: 15.5px;
+    font-weight: 800;
+    color: #0f172a;
     margin-bottom: 6px;
     text-align: center;
+    /* Signed values such as "+0" and "-1.8" flip their sign to the wrong side
+       when they inherit the page's RTL direction. */
+    direction: ltr;
+    unicode-bidi: isolate;
+    font-variant-numeric: tabular-nums;
 }
 
 .metric-value-bar-container {
@@ -2263,25 +2283,23 @@ tbody tr:last-child td {
 
 .metric-value-bar {
     height: 100%;
-    background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+    background: #cbd5e1;
     border-radius: 3px;
     transition: width 0.6s ease;
 }
 
 .best-value .metric-value-bar {
-    background: linear-gradient(90deg, #10b981 0%, #059669 100%);
-}
-
-.worst-value .metric-value-bar {
-    background: linear-gradient(90deg, #ef4444 0%, #dc2626 100%);
+    background: linear-gradient(90deg, var(--secondary-color) 0%, var(--primary-color) 100%);
 }
 
 .best-badge {
     position: absolute;
     top: -8px;
     right: -8px;
-    font-size: 20px;
-    animation: bounce 1s infinite;
+    font-size: 15px;
+    /* A trophy that bounces on every winning row is nineteen bouncing trophies. */
+    animation: none;
+    filter: saturate(.9);
 }
 
 /* Fixtures Box */
@@ -5088,244 +5106,6 @@ canvas {
    DRAFT BOARD — "who to pick and why"
    ============================================ */
 
-.db-bar {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    flex-wrap: wrap;
-    gap: 10px;
-    margin: 4px 2px 12px;
-}
-
-.db-heading {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    font-size: 15px;
-    font-weight: 800;
-    color: #0f172a;
-    letter-spacing: -.2px;
-}
-
-.db-heading-dot {
-    width: 7px;
-    height: 7px;
-    border-radius: 50%;
-    background: #3b82f6;
-    box-shadow: 0 0 0 4px rgba(59, 130, 246, .16);
-}
-
-.db-controls {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    flex-wrap: wrap;
-}
-
-.db-scope {
-    font-size: 11px;
-    color: #94a3b8;
-    font-weight: 600;
-}
-
-.db-chips {
-    display: flex;
-    gap: 3px;
-    background: #f1f5f9;
-    padding: 3px;
-    border-radius: 10px;
-    border: 1px solid #e2e8f0;
-}
-
-.db-chip {
-    border: none;
-    background: transparent;
-    padding: 5px 11px;
-    border-radius: 7px;
-    font-size: 11.5px;
-    font-weight: 700;
-    color: #64748b;
-    cursor: pointer;
-    font-family: inherit;
-    transition: color .18s ease, background .18s ease;
-}
-
-.db-chip:hover:not(.is-on) {
-    color: #0f172a;
-    background: rgba(255, 255, 255, .75);
-}
-
-.db-chip.is-on {
-    background: #fff;
-    color: #2563eb;
-    box-shadow: 0 1px 3px rgba(15, 23, 42, .12);
-}
-
-.db-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(270px, 1fr));
-    gap: 12px;
-}
-
-.db-card {
-    position: relative;
-    background: #fff;
-    border: 1px solid #e8edf3;
-    border-radius: 14px;
-    padding: 13px 15px 9px;
-    overflow: hidden;
-    box-shadow: 0 1px 2px rgba(15, 23, 42, .04);
-    transition: transform .22s cubic-bezier(.22, 1, .36, 1), box-shadow .22s ease;
-    animation: dbCardIn .42s cubic-bezier(.22, 1, .36, 1) both;
-    animation-delay: var(--d, 0ms);
-}
-
-/* Accent rail rather than a top border: reads as part of the card. */
-.db-card::before {
-    content: '';
-    position: absolute;
-    inset-block-start: 0;
-    inset-inline: 0;
-    height: 3px;
-    background: linear-gradient(90deg, var(--accent), color-mix(in srgb, var(--accent) 35%, #fff));
-}
-
-.db-card:hover {
-    transform: translateY(-3px);
-    box-shadow: 0 12px 26px -14px rgba(15, 23, 42, .3);
-}
-
-@keyframes dbCardIn {
-    from { opacity: 0; transform: translateY(10px) scale(.985); }
-    to   { opacity: 1; transform: none; }
-}
-
-.db-head {
-    display: flex;
-    align-items: flex-start;
-    gap: 8px;
-    margin-bottom: 9px;
-}
-
-.db-icon {
-    font-size: 15px;
-    line-height: 1.2;
-    flex: none;
-}
-
-.db-title {
-    display: block;
-    font-size: 13px;
-    font-weight: 800;
-    color: #0f172a;
-    line-height: 1.25;
-}
-
-.db-sub {
-    display: block;
-    font-size: 10.5px;
-    color: #94a3b8;
-    font-weight: 600;
-    margin-top: 1px;
-}
-
-.db-list {
-    list-style: none;
-    margin: 0;
-    padding: 0;
-}
-
-.db-row {
-    display: flex;
-    align-items: center;
-    gap: 9px;
-    padding: 7px 0;
-    border-top: 1px solid #f1f5f9;
-    animation: dbRowIn .34s ease both;
-    animation-delay: calc(var(--d, 0ms) + 90ms + var(--i) * 55ms);
-}
-
-.db-row:first-child { border-top: none; }
-
-@keyframes dbRowIn {
-    from { opacity: 0; transform: translateX(6px); }
-    to   { opacity: 1; transform: none; }
-}
-
-.db-rank {
-    flex: none;
-    width: 19px;
-    height: 19px;
-    border-radius: 6px;
-    display: grid;
-    place-items: center;
-    font-size: 10px;
-    font-weight: 800;
-    color: var(--accent);
-    background: color-mix(in srgb, var(--accent) 12%, #fff);
-}
-
-.db-player {
-    min-width: 0;
-    flex: 1;
-    display: block;
-}
-
-.db-name {
-    font-size: 12.5px;
-    font-weight: 700;
-    color: #0f172a;
-}
-
-/* Name and club share one line and truncate together, otherwise a long club
-   name wraps under the player and the rows lose their rhythm. */
-.db-player > .db-name,
-.db-player > .db-meta {
-    display: inline;
-}
-
-.db-player {
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-}
-
-.db-meta {
-    font-size: 10.5px;
-    font-weight: 600;
-    color: #94a3b8;
-    margin-inline-start: 5px;
-}
-
-.db-why {
-    display: block;
-    font-size: 10.5px;
-    color: #64748b;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    margin-top: 1px;
-}
-
-.db-value {
-    flex: none;
-    font-size: 12.5px;
-    font-weight: 800;
-    color: var(--accent);
-    font-variant-numeric: tabular-nums;
-}
-
-@media (prefers-reduced-motion: reduce) {
-    .db-card, .db-row { animation: none; }
-    .db-card { transition: none; }
-}
-
-/* Six panels: a 3x2 grid reads better than auto-fit leaving one orphan card
-   on a wide screen, and the wider cards give the reason text room. */
-@media (min-width: 1080px) {
-    .db-grid { grid-template-columns: repeat(3, 1fr); }
-}
-
 /* Settings trigger: it was a 16px grey icon with no label and was genuinely
    hard to find. Now a labelled button. */
 .settings-trigger {
@@ -5505,6 +5285,7 @@ canvas {
 .signal-good  { background: #e7f4ec; color: #0e7a45; }
 .signal-info  { background: #e8f0fa; color: #1c57a8; }
 .signal-plum  { background: #f2eafa; color: #5c2e8f; }
+.signal-clinical { background: #e3f5f3; color: #0b6a63; }
 .signal-warn  { background: #fdf3e3; color: #a9620b; }
 .signal-bad   { background: #fbeae8; color: #b93229; }
 .signal-muted { background: #f1f5f9; color: #64748b; }
@@ -5554,15 +5335,19 @@ canvas {
     display: flex;
     align-items: flex-end;
     justify-content: center;
-    gap: 2px;
+    gap: 3px;
     height: 22px;
-    margin: 3px 0 2px;
+    /* room for the figure that sits above the tallest bar */
+    padding-top: 11px;
+    box-sizing: content-box;
 }
 
-.trend-bars.is-large { height: 40px; gap: 3px; }
+.trend-bars.is-large { height: 34px; gap: 4px; }
+.trend-bars.is-mini { height: 15px; gap: 2px; padding-top: 0; }
 
 .trend-bar {
-    width: 7px;
+    position: relative;
+    width: 9px;
     min-height: 2px;
     border-radius: 2px 2px 0 0;
     background: #bfdbfe;
@@ -5570,7 +5355,25 @@ canvas {
     transition: background .15s;
 }
 
-.trend-bars.is-large .trend-bar { width: 12px; }
+/* Each gameweek's own figure, directly above its bar. */
+.trend-bar b {
+    position: absolute;
+    bottom: 100%;
+    inset-inline: -6px;
+    margin-bottom: 2px;
+    font-size: 8.5px;
+    font-weight: 700;
+    color: #94a3b8;
+    text-align: center;
+    line-height: 1;
+    direction: ltr;
+    font-variant-numeric: tabular-nums;
+}
+
+.trend-bar.is-last b { color: #1d4ed8; }
+.trend-bars.is-large .trend-bar { width: 13px; }
+.trend-bars.is-large .trend-bar b { font-size: 9.5px; inset-inline: -7px; }
+.trend-bars.is-mini .trend-bar { width: 4px; }
 .trend-bar.is-last { background: #1d4ed8; }
 .trend-bar.is-blank { background: #e2e8f0; }
 
@@ -5594,166 +5397,207 @@ canvas {
 .player-row.is-open > td { background: #eff6ff; }
 .player-row.is-open > td:first-child { box-shadow: inset 3px 0 0 #1d4ed8; }
 
-/* --- expanded match log --- */
-.detail-row > td { padding: 0 !important; background: #f8fbff; border-bottom: 2px solid #1d4ed8; }
-
-.detail-panel {
-    display: grid;
-    grid-template-columns: minmax(340px, 1.3fr) minmax(240px, 1fr) minmax(240px, 1fr);
-    gap: 0;
+/* --- expanded match log ---------------------------------------------------
+   Two columns, one header strip, no duplication of what the row above already
+   shows. Every number carries a label; nothing floats unexplained.          */
+.detail-row > td {
+    padding: 0 !important;
+    background: #f4f8ff;
+    border-bottom: 2px solid #1d4ed8;
     text-align: start;
-    /* The row spans the table's full scroll width (~2550px), which pushed the
-       recommendation column off-screen. Pinning the panel to the start edge of
-       the scrollport and sizing it to the visible area keeps all three columns
-       readable without scrolling sideways. --detail-width is set from JS. */
-    position: sticky;
-    inset-inline-start: 0;
-    width: var(--detail-width, 100%);
-    box-sizing: border-box;
+    white-space: normal;
 }
 
-.detail-panel > section { padding: 14px 18px; border-inline-start: 1px solid #dbeafe; }
-.detail-panel > section:first-child { border-inline-start: none; }
+.detail-card { padding: 0; }
 
-.detail-panel h4 {
-    margin: 0 0 10px;
-    font-size: 13px;
+/* One strip: who, what the verdict is, and the actions. */
+.detail-bar {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    flex-wrap: wrap;
+    padding: 9px 14px;
+    background: #fff;
+    border-bottom: 1px solid #dbeafe;
+}
+
+.detail-who { font-size: 17px; font-weight: 800; color: #0f172a; }
+.detail-tags { display: flex; gap: 5px; }
+
+.detail-tag {
+    font-size: 11.5px;
+    font-weight: 700;
+    color: #475569;
+    background: #f1f5f9;
+    border-radius: 5px;
+    padding: 2px 7px;
+    white-space: nowrap;
+}
+
+.detail-tag.is-free { background: #e7f4ec; color: #0e7a45; }
+.detail-tag.is-owned { background: #eef2ff; color: #4338ca; }
+.detail-reason { font-size: 12.5px; color: #64748b; }
+.detail-spacer { flex: 1; }
+
+.detail-body {
+    display: grid;
+    /* The match log is a narrow reference strip; the width belongs to the three
+       stat boxes, which is where the numbers people actually compare live. */
+    grid-template-columns: minmax(230px, 0.72fr) minmax(230px, 0.85fr) minmax(430px, 2fr);
+    gap: 0;
+    align-items: start;
+}
+
+.detail-body > section { padding: 11px 14px 13px; }
+.detail-sum,
+.detail-boxes { border-inline-start: 1px solid #dbeafe; }
+
+.detail-body h4 {
+    margin: 0 0 7px;
+    font-size: 11.5px;
     font-weight: 800;
     color: #1d4ed8;
+    letter-spacing: .01em;
 }
 
 .detail-note { margin: 0; font-size: 13px; color: #64748b; }
 
+/* the log table */
 .match-log { width: 100%; border-collapse: collapse; font-size: 13.5px; }
 
-.match-log th {
+/* These headers sit inside #playersTable, whose global th rule is a sticky blue
+   gradient. Everything it sets has to be undone explicitly. */
+.match-log thead th {
     position: static;
-    background: transparent;
-    color: #64748b;
-    font-size: 11.5px;
+    top: auto;
+    z-index: auto;
+    background: #eef4ff;
+    background-image: none;
+    color: #475569;
+    font-size: 11px;
     font-weight: 800;
-    padding: 4px 6px;
+    letter-spacing: 0;
+    padding: 5px 7px;
     text-align: center;
+    border: none;
     border-bottom: 1px solid #dbeafe;
     cursor: default;
+    text-shadow: none;
+    white-space: nowrap;
 }
 
-.match-log th:hover { background: transparent; transform: none; }
+.match-log thead th:hover { background: #eef4ff; transform: none; }
+.match-log thead th:first-child { border-start-start-radius: 6px; }
+.match-log thead th:last-child { border-start-end-radius: 6px; }
+
+.match-log tbody th {
+    position: static;
+    background: transparent;
+    background-image: none;
+    color: #64748b;
+    font-size: 12px;
+    font-weight: 800;
+    padding: 5px 7px;
+    text-align: center;
+    border: none;
+    cursor: default;
+    text-shadow: none;
+}
 
 .match-log td {
-    padding: 5px 6px;
+    padding: 5px 7px;
     text-align: center;
-    border-bottom: 1px solid #eef4fb;
+    border: none;
+    border-bottom: 1px solid #e8eefb;
     color: #0f172a;
+    white-space: nowrap;
 }
 
-.match-log .log-gw { font-weight: 800; color: #64748b; font-size: 12px; }
-.match-log .log-num { font-variant-numeric: tabular-nums; direction: ltr; }
-.match-log .log-pts { font-weight: 800; font-size: 15px; }
-.match-log tr.log-blank td { color: #94a3b8; }
+.match-log tbody tr:nth-child(even) > * { background: #fbfdff; }
+.match-log tbody tr.is-latest > * { background: #eef4ff; }
+.match-log tbody tr.is-latest th { color: #1d4ed8; }
+.match-log tbody tr:last-child td { border-bottom: none; }
+
+.match-log .log-num { font-variant-numeric: tabular-nums; direction: ltr; unicode-bidi: isolate; }
+.match-log .log-pts { font-weight: 800; font-size: 15.5px; }
+.match-log .log-sep { color: #cbd5e1; margin: 0 1px; }
+.match-log .log-none { color: #94a3b8; font-size: 12.5px; }
+.match-log tr.log-blank td:not(.log-none) { color: #94a3b8; }
 
 .log-opp {
-    display: inline-block;
-    padding: 1px 6px;
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    padding: 1px 7px;
     border-radius: 5px;
     font-size: 12px;
     font-weight: 700;
+    direction: ltr;
 }
 
-.detail-trend-grid { display: grid; gap: 12px; }
+.log-opp em { font-style: normal; font-size: 10px; opacity: .7; }
 
-.detail-trend-head {
-    display: flex;
-    align-items: baseline;
-    gap: 7px;
-    font-size: 12.5px;
-    color: #64748b;
-    font-weight: 700;
+/* the summary column: label · figure · change · shape · unit */
+.sum-row {
+    display: grid;
+    grid-template-columns: 58px auto 1fr;
+    grid-template-areas: "label val bars" "label change bars" "label unit bars";
+    align-items: center;
+    gap: 1px 8px;
+    padding: 7px 0;
+    border-bottom: 1px dotted #dbeafe;
 }
 
-.detail-trend-head b { font-size: 16px; color: #0f172a; font-variant-numeric: tabular-nums; direction: ltr; }
-.detail-trend-head em { font-style: normal; font-size: 12px; font-weight: 800; direction: ltr; unicode-bidi: isolate; }
+.sum-change { grid-area: change; display: flex; align-items: center; gap: 4px; }
 
-.detail-why { margin: 8px 0 12px; padding-inline-start: 18px; font-size: 13px; color: #475569; line-height: 1.55; }
+.sum-row:last-of-type { border-bottom: none; }
+.sum-label { grid-area: label; font-size: 12.5px; font-weight: 700; color: #475569; }
 
-.detail-kv { margin: 0 0 12px; display: grid; gap: 0; }
-.detail-kv > div { display: flex; justify-content: space-between; gap: 10px; padding: 5px 0; border-bottom: 1px dotted #dbeafe; }
-.detail-kv > div:last-child { border-bottom: none; }
-.detail-kv dt { font-size: 12.5px; color: #64748b; font-weight: 600; margin: 0; }
-.detail-kv dd { margin: 0; font-size: 13.5px; font-weight: 800; color: #0f172a; font-variant-numeric: tabular-nums; direction: ltr; }
+.sum-val {
+    grid-area: val;
+    font-size: 17px;
+    font-weight: 800;
+    color: #0f172a;
+    font-variant-numeric: tabular-nums;
+    direction: ltr;
+}
 
-.detail-actions { display: flex; gap: 8px; margin-bottom: 10px; }
+.sum-delta {
+    grid-area: delta;
+    font-size: 12px;
+    font-weight: 800;
+    direction: ltr;
+    unicode-bidi: isolate;
+    white-space: nowrap;
+}
+
+.sum-unit { grid-area: unit; font-size: 10.5px; color: #94a3b8; font-weight: 600; }
+
+.sum-row .trend-bars { grid-area: bars; justify-content: flex-end; }
+
+.detail-next { margin-top: 9px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.detail-next-label { font-size: 11.5px; font-weight: 800; color: #64748b; }
+.detail-fixtures { display: flex; flex-wrap: wrap; gap: 4px; }
 
 .detail-btn {
     border: 1px solid #e8cf87;
     background: #fdf7e6;
     color: #8a6206;
     border-radius: 8px;
-    padding: 7px 13px;
+    padding: 6px 12px;
     font-family: inherit;
-    font-size: 13.5px;
+    font-size: 13px;
     font-weight: 800;
     cursor: pointer;
+    white-space: nowrap;
 }
 
 .detail-btn.is-on { background: #a16207; border-color: #a16207; color: #fff; }
-.detail-fixtures { display: flex; flex-wrap: wrap; gap: 4px; }
+.detail-btn.is-plain { background: #fff; border-color: #e2e8f0; color: #64748b; }
 
 @media (max-width: 1080px) {
-    .detail-panel { grid-template-columns: 1fr; }
-    .detail-panel > section { border-inline-start: none; border-top: 1px solid #dbeafe; }
-    .detail-panel > section:first-child { border-top: none; }
-}
-
-/* ==========================================================================
-   DRAFT BOARD — tighter frame, larger type
-   The cards were spending most of their height on padding while the numbers
-   that matter were set at 10.5-12.5px. Reversed.
-   ========================================================================== */
-.db-grid { gap: 10px; }
-.db-card { padding: 10px 13px 7px; border-radius: 12px; }
-.db-head { gap: 7px; margin-bottom: 7px; align-items: center; }
-.db-icon { font-size: 16px; }
-.db-title { font-size: 14.5px; }
-.db-sub { font-size: 11.5px; margin-top: 0; }
-.db-row { gap: 8px; padding: 6px 0; }
-.db-rank { width: 20px; height: 20px; font-size: 11px; }
-.db-name { font-size: 15px; font-weight: 800; }
-.db-meta { font-size: 12px; margin-inline-start: 6px; }
-.db-why { font-size: 12px; color: #556270; margin-top: 2px; }
-.db-value { font-size: 16px; }
-.db-heading { font-size: 16px; }
-.db-bar { margin: 4px 2px 10px; }
-
-/* Points over the recent window, inline in each draft-board row. */
-.mini-spark {
-    flex: none;
-    display: flex;
-    align-items: flex-end;
-    gap: 2px;
-    height: 20px;
-}
-
-.mini-spark i {
-    width: 5px;
-    min-height: 2px;
-    border-radius: 2px 2px 0 0;
-    background: #cbd5e1;
-    font-style: normal;
-}
-
-.mini-spark i.is-last { background: var(--accent, #1d4ed8); }
-.mini-spark i.is-blank { background: #eef2f7; }
-
-.mini-spark em {
-    align-self: center;
-    margin-inline-start: 4px;
-    font-style: normal;
-    font-size: 12px;
-    font-weight: 800;
-    color: #64748b;
-    font-variant-numeric: tabular-nums;
-    direction: ltr;
+    .detail-body { grid-template-columns: 1fr; }
+    .detail-sum { border-inline-start: none; border-top: 1px solid #dbeafe; }
 }
 
 /* The select checkbox was the browser default ~13px in a 40px column: a hard
@@ -5774,3 +5618,420 @@ canvas {
 #playersTable > tbody > tr.player-row > td:nth-child(2) { inset-inline-start: 48px; }
 #playersTable > thead > tr > th:nth-child(3),
 #playersTable > tbody > tr.player-row > td:nth-child(3) { inset-inline-start: 90px; }
+
+/* Trend cell: figure on top, shape in the middle, the comparison in words. */
+.trend-cell { min-width: 132px; padding: 4px 8px !important; text-align: center; }
+.trend-head-label { white-space: nowrap; }
+
+/* The window total sits beside the chart, not above it. */
+.trend-main { display: flex; align-items: flex-end; justify-content: center; gap: 8px; }
+
+.trend-value {
+    font-size: 18px;
+    font-weight: 800;
+    color: #0f172a;
+    font-variant-numeric: tabular-nums;
+    direction: ltr;
+    line-height: 1;
+}
+
+.trend-cell .trend-bars { height: 26px; margin: 0; }
+.trend-foot { display: flex; align-items: center; justify-content: center; gap: 4px; margin-top: 3px; }
+.trend-vs { font-size: 10.5px; color: #94a3b8; font-weight: 700; white-space: nowrap; }
+.trend-vs .ni { direction: ltr; unicode-bidi: isolate; font-variant-numeric: tabular-nums; }
+.trend-delta { font-size: 11.5px; }
+
+/* ==========================================================================
+   KPI CARDS — leader plus runners-up
+   Second and third place carry most of the value: the leader is usually
+   already on someone's roster.
+   ========================================================================== */
+.kpi-empty { grid-column: 1 / -1; padding: 18px; text-align: center; color: #64748b; font-size: 14px; }
+
+.kpi-value { display: flex; align-items: center; gap: 6px; }
+.kpi-free { font-size: 0.5em; -webkit-text-fill-color: initial; }
+
+.kpi-subtext { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+
+.kpi-runners {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 6px;
+    margin-top: 7px;
+    padding-top: 6px;
+    border-top: 1px dotted #cbd5e1;
+}
+
+.kpi-runner {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 12.5px;
+    color: #475569;
+    background: rgba(255, 255, 255, .6);
+    border-radius: 6px;
+    padding: 2px 6px;
+    white-space: nowrap;
+}
+
+.kpi-runner b {
+    font-size: 10px;
+    font-weight: 800;
+    color: #94a3b8;
+    background: #eef2f7;
+    border-radius: 4px;
+    padding: 0 4px;
+}
+
+.kpi-runner em {
+    font-style: normal;
+    font-weight: 800;
+    color: #0f172a;
+    font-variant-numeric: tabular-nums;
+    direction: ltr;
+}
+
+/* Points across the recent window, inline next to the leader's figure. */
+.mini-spark { display: inline-flex; align-items: flex-end; gap: 2px; height: 16px; }
+.kpi-subtext .trend-bars { height: 15px; padding-top: 0; }
+
+.mini-spark i {
+    width: 4px;
+    min-height: 2px;
+    border-radius: 2px 2px 0 0;
+    background: #cbd5e1;
+    font-style: normal;
+}
+
+.mini-spark i.is-last { background: #1d4ed8; }
+.mini-spark i.is-blank { background: #eef2f7; }
+.mini-spark em { display: none; }
+
+/* ==========================================================================
+   DRAFT MARKET & BOARD
+   Views over league/{id}/transactions and draft/{league}/choices. Both are
+   lists the eye scans for one thing — who moved, and what a pick returned —
+   so the numbers are set larger than the chrome around them.
+   ========================================================================== */
+
+.section-sub {
+    margin: -6px 0 14px;
+    font-size: 13px;
+    color: #64748b;
+}
+
+.chart-empty,
+.feed-empty {
+    margin: 0;
+    padding: 26px 14px;
+    text-align: center;
+    font-size: 13.5px;
+    color: #64748b;
+}
+
+.feed-summary {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-bottom: 14px;
+}
+
+.feed-stat {
+    flex: 1 1 130px;
+    background: #f8fafc;
+    border: 1px solid #e8eef6;
+    border-radius: 12px;
+    padding: 10px 14px;
+}
+
+.feed-stat-wide { flex: 2 1 280px; }
+
+.feed-stat-value {
+    display: block;
+    font-size: 22px;
+    font-weight: 800;
+    color: #0f172a;
+    font-variant-numeric: tabular-nums;
+}
+
+.feed-stat-value-sm {
+    display: block;
+    font-size: 13.5px;
+    font-weight: 700;
+    color: #0f172a;
+    margin-top: 2px;
+}
+
+.feed-stat-label {
+    font-size: 12px;
+    font-weight: 700;
+    color: #64748b;
+}
+
+.feed-trending { margin-bottom: 14px; }
+
+.feed-trending h4 {
+    margin: 0 0 7px;
+    font-size: 13px;
+    font-weight: 800;
+    color: #475569;
+}
+
+.feed-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+
+.feed-chip {
+    background: #eef4ff;
+    border: 1px solid #dbe6ff;
+    color: #1c3f8f;
+    border-radius: 999px;
+    padding: 4px 11px;
+    font-size: 13px;
+    font-weight: 700;
+}
+
+.feed-chip b { color: #0b2a6b; margin-inline-start: 3px; }
+
+.feed-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    border: 1px solid #e8eef6;
+    border-radius: 12px;
+    overflow: hidden;
+}
+
+.feed-item {
+    display: grid;
+    grid-template-columns: 58px minmax(120px, 1fr) minmax(220px, 1.6fr) 82px;
+    align-items: center;
+    gap: 10px;
+    padding: 9px 14px;
+    font-size: 13.5px;
+    border-bottom: 1px solid #f1f5f9;
+}
+
+.feed-item:last-child { border-bottom: none; }
+.feed-item:nth-child(odd) { background: #fbfdff; }
+
+.feed-gw {
+    font-size: 11.5px;
+    font-weight: 800;
+    color: #64748b;
+    background: #f1f5f9;
+    border-radius: 6px;
+    padding: 2px 6px;
+    text-align: center;
+}
+
+.feed-team { font-weight: 700; color: #0f172a; }
+
+.feed-move { display: flex; flex-wrap: wrap; gap: 4px 14px; }
+.feed-in { color: #0e7a45; font-weight: 700; }
+.feed-out { color: #b93229; }
+
+.feed-kind {
+    font-size: 11.5px;
+    font-weight: 700;
+    color: #64748b;
+    text-align: end;
+}
+
+/* --- draft board retrospective --- */
+
+.board-highlights {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 12px;
+    margin-bottom: 16px;
+}
+
+.board-col {
+    background: #f8fafc;
+    border: 1px solid #e8eef6;
+    border-radius: 12px;
+    padding: 12px 16px;
+}
+
+.board-col h4 {
+    margin: 0 0 8px;
+    font-size: 13px;
+    font-weight: 800;
+    color: #475569;
+}
+
+.board-col ol { margin: 0; padding-inline-start: 20px; }
+.board-col li { font-size: 14px; padding: 3px 0; color: #0f172a; }
+
+.board-meta {
+    display: block;
+    font-size: 11.5px;
+    font-weight: 600;
+    color: #64748b;
+}
+
+.board-round {
+    border: 1px solid #e8eef6;
+    border-radius: 12px;
+    margin-bottom: 8px;
+    background: #fff;
+}
+
+.board-round > summary {
+    cursor: pointer;
+    padding: 10px 14px;
+    font-weight: 800;
+    font-size: 14px;
+    color: #0f172a;
+    list-style: none;
+}
+
+.board-round > summary::-webkit-details-marker { display: none; }
+.board-round > summary::before { content: '▸ '; color: #94a3b8; }
+.board-round[open] > summary::before { content: '▾ '; }
+
+.board-picks { list-style: none; margin: 0; padding: 0 0 6px; }
+
+.board-pick {
+    display: grid;
+    grid-template-columns: 34px minmax(120px, 1.4fr) minmax(110px, 1fr) 78px 46px 22px;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 14px;
+    font-size: 13.5px;
+    border-top: 1px solid #f4f8fc;
+}
+
+.board-num {
+    font-size: 11.5px;
+    font-weight: 800;
+    color: #64748b;
+    background: #f1f5f9;
+    border-radius: 6px;
+    padding: 2px 0;
+    text-align: center;
+}
+
+.board-player b { color: #0f172a; }
+.board-player em {
+    font-style: normal;
+    font-size: 11.5px;
+    color: #64748b;
+    margin-inline-start: 5px;
+}
+
+.board-team { color: #475569; font-size: 12.5px; }
+
+.board-points {
+    font-weight: 800;
+    color: #0f172a;
+    font-variant-numeric: tabular-nums;
+    text-align: end;
+}
+
+.board-rank {
+    font-size: 11.5px;
+    font-weight: 700;
+    color: #94a3b8;
+    text-align: end;
+}
+
+.board-auto { font-size: 12px; color: #a16207; text-align: center; }
+
+@media (max-width: 720px) {
+    .feed-item { grid-template-columns: 52px 1fr; row-gap: 4px; }
+    .feed-move { grid-column: 1 / -1; }
+    .feed-kind { display: none; }
+    .board-pick { grid-template-columns: 30px 1fr 70px; row-gap: 2px; }
+    .board-team, .board-rank, .board-auto { display: none; }
+}
+
+/* Comparison cards: availability and verdict, in the same language the table
+   and the expanded row use. */
+.cmp-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+    justify-content: center;
+    margin: 6px 0 10px;
+}
+
+.cmp-tags .signal-badge { font-size: 11.5px; padding: 2px 8px; }
+.cmp-tags .detail-tag { font-size: 11.5px; }
+
+
+/* --- the three stat boxes --- */
+
+.detail-boxes {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 10px;
+}
+
+.stat-box {
+    background: #f8fbff;
+    border: 1px solid #e4edf9;
+    border-radius: 10px;
+    padding: 9px 11px 7px;
+    min-width: 0;
+}
+
+.stat-box h5 {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    margin: 0 0 6px;
+    font-size: 11.5px;
+    font-weight: 800;
+    color: #1d4ed8;
+}
+
+.stat-box h5 span { font-size: 13px; }
+
+.stat-box dl { margin: 0; }
+
+.box-row {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 2.5px 0;
+    border-bottom: 1px dotted #e4edf9;
+}
+
+.box-row:last-child { border-bottom: none; }
+
+.box-row dt {
+    margin: 0;
+    font-size: 11.5px;
+    font-weight: 600;
+    color: #64748b;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.box-row dd {
+    margin: 0;
+    font-size: 13px;
+    font-weight: 800;
+    color: #0f172a;
+    font-variant-numeric: tabular-nums;
+    direction: ltr;
+    unicode-bidi: isolate;
+    white-space: nowrap;
+}
+
+@media (max-width: 1280px) {
+    .detail-body { grid-template-columns: minmax(220px, 1fr) minmax(220px, 1fr); }
+    .detail-boxes {
+        grid-column: 1 / -1;
+        border-inline-start: none;
+        border-top: 1px solid #dbeafe;
+    }
+}
+
+@media (max-width: 860px) {
+    .detail-body { grid-template-columns: 1fr; }
+    .detail-sum { border-inline-start: none; border-top: 1px solid #dbeafe; }
+    .detail-boxes { grid-template-columns: 1fr; }
+}

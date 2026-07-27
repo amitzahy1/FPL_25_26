@@ -1,17 +1,25 @@
 /* Mobile Responsiveness for FPL Tool */
 
 @media (max-width: 768px) {
-    /* Main Layout */
+    /* Main Layout
+       The nav used to stack vertically inside a header fixed at 70px, so the
+       buttons spilled out over the page below. Two tabs fit side by side at
+       360px; the header just needs to stop pretending it is one line tall. */
     .main-nav {
-        flex-direction: column;
-        gap: 10px;
-        padding: 10px;
+        flex-direction: row;
+        gap: 6px;
+        padding: 0;
+        flex: 1 1 100%;
+        order: 3;
     }
 
     .nav-item {
-        width: 100%;
+        flex: 1 1 0;
+        min-width: 0;
         justify-content: center;
-        padding: 12px;
+        padding: 9px 8px;
+        font-size: 13.5px;
+        white-space: nowrap;
     }
 
     /* Draft Sub-Navigation - Horizontal Scroll */
@@ -209,3 +217,217 @@
     }
 }
 
+
+/* ==========================================================================
+   PHONE FIXES (2026-07)
+   Two things were actually broken at 390px: card grids whose items could not
+   shrink below their content, so text was clipped off the edge of the screen;
+   and a filter stack ~1000px tall, which put a full screen of dropdowns between
+   the user and the data.
+   ========================================================================== */
+
+/* --- the filter panel becomes a disclosure --- */
+
+.filters-toggle { display: none; }
+
+@media (max-width: 768px) {
+    .filters-wrap {
+        background: #fff;
+        border: 1px solid #e2e8f0;
+        border-radius: 12px;
+        margin: 12px 0;
+        overflow: hidden;
+    }
+
+    .filters-toggle {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        padding: 13px 15px;
+        font-size: 15px;
+        font-weight: 800;
+        color: #0f172a;
+        cursor: pointer;
+        list-style: none;
+        user-select: none;
+    }
+
+    .filters-toggle::-webkit-details-marker { display: none; }
+
+    .filters-toggle::after {
+        content: '▾';
+        color: #64748b;
+        font-size: 15px;
+        transition: transform .18s ease;
+    }
+
+    .filters-wrap[open] .filters-toggle::after { transform: rotate(180deg); }
+    .filters-wrap[open] .filters-toggle { border-bottom: 1px solid #f1f5f9; }
+
+    .filters-toggle-hint {
+        margin-inline-start: auto;
+        margin-inline-end: 6px;
+        font-size: 12px;
+        font-weight: 600;
+        color: #94a3b8;
+    }
+
+    .filters-wrap[open] .filters-toggle-hint { display: none; }
+
+    /* Two columns halves the height again once it is open. */
+    .filters {
+        display: grid !important;
+        grid-template-columns: 1fr 1fr;
+        gap: 9px !important;
+        padding: 12px !important;
+        margin: 0 !important;
+        box-shadow: none !important;
+        border: none !important;
+    }
+
+    .filter-group { min-width: 0; margin: 0 !important; }
+    .filter-group:first-child { grid-column: 1 / -1; }
+    .filter-group label { font-size: 12px !important; }
+    .filter-group input,
+    .filter-group select {
+        width: 100%;
+        min-width: 0;
+        font-size: 16px; /* iOS zooms the page in on anything smaller */
+        padding: 8px 10px !important;
+    }
+}
+
+/* --- card grids: let items shrink, and clip text instead of the layout --- */
+
+@media (max-width: 768px) {
+    .dashboard-kpis {
+        grid-template-columns: 1fr !important;
+        gap: 10px !important;
+        margin: 12px 0 !important;
+    }
+
+    .kpi-card { padding: 13px 15px !important; gap: 12px !important; min-width: 0; }
+    .kpi-card > * { min-width: 0; }
+    .kpi-content { min-width: 0; overflow: hidden; }
+
+    .kpi-label,
+    .kpi-value,
+    .kpi-subtext,
+    .kpi-runner {
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .kpi-runners { min-width: 0; flex-wrap: wrap; }
+
+    .db-grid { grid-template-columns: 1fr !important; gap: 10px !important; }
+    .db-card { min-width: 0; }
+    .db-row { min-width: 0; }
+    .db-name,
+    .db-why { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+    /* Anything laid out as a grid or flex row of cards gets the same treatment:
+       without min-width:0 a grid item refuses to shrink past its content. */
+    .feed-summary > *,
+    .board-highlights > *,
+    .detail-boxes > * { min-width: 0; }
+}
+
+/* --- the players table --- */
+
+@media (max-width: 768px) {
+    /* 35 columns on a 390px screen is a horizontal scroll no matter what; the
+       sticky name column just needs to stop eating two thirds of the width. */
+    #playersTable > thead > tr > th:nth-child(1),
+    #playersTable > tbody > tr > td:nth-child(1) { display: none; }
+
+    #playersTable > thead > tr > th:nth-child(2),
+    #playersTable > tbody > tr > td:nth-child(2) {
+        inset-inline-start: 0;
+        width: 30px;
+        min-width: 30px;
+    }
+
+    #playersTable > thead > tr > th:nth-child(3),
+    #playersTable > tbody > tr > td:nth-child(3) {
+        inset-inline-start: 30px;
+        min-width: 108px;
+        max-width: 108px;
+    }
+
+    .scout-controls { flex-wrap: wrap; gap: 6px; }
+    .scout-btn { font-size: 13px; padding: 6px 10px; }
+
+    /* The expanded row is pinned to the scrollport, so it must not also try to
+       hold three boxes side by side. */
+    .detail-body { grid-template-columns: 1fr !important; }
+    .detail-boxes { grid-template-columns: 1fr !important; border-inline-start: none; }
+    .detail-bar { flex-wrap: wrap; row-gap: 6px; }
+}
+
+/* --- the controls toolbar wraps instead of running off the screen ---
+   Its rows are laid out with inline styles, so overriding them needs the
+   same specificity plus !important. */
+@media (max-width: 768px) {
+    .controls-toolbar { padding: 12px !important; gap: 12px !important; }
+
+    .controls-toolbar > div,
+    .controls-toolbar > div > div {
+        flex-wrap: wrap !important;
+        gap: 8px !important;
+        min-width: 0;
+    }
+
+    /* The vertical rule between the view toggle and the scout controls only
+       reads as a separator when they are on one line. */
+    .controls-toolbar > div > div[style*="width: 1px"] { display: none !important; }
+
+    .controls-toolbar .action-btn { padding: 7px 11px !important; font-size: 13px; }
+    .toggle-group { flex-wrap: wrap; }
+}
+
+/* --- charts --- */
+@media (max-width: 768px) {
+    .charts-dashboard-grid {
+        grid-template-columns: 1fr !important;
+        gap: 12px !important;
+        min-width: 0;
+    }
+
+    .chart-card { min-width: 0; padding: 12px !important; }
+    .chart-card canvas { max-width: 100%; }
+    .chart-title { font-size: 14px !important; }
+    .matrix-grid { grid-template-columns: 1fr !important; }
+}
+
+
+/* --- header --- */
+@media (max-width: 768px) {
+    .app-header {
+        height: auto !important;
+        padding: 9px 12px !important;
+    }
+
+    .header-content {
+        flex-wrap: wrap;
+        gap: 9px;
+        align-items: center;
+    }
+
+    .brand-section { order: 1; gap: 8px; min-width: 0; }
+    .brand-logo { width: 34px; height: 34px; flex: none; }
+    .brand-logo svg { width: 21px; height: 21px; }
+    .brand-info h1 { font-size: 15px; }
+    .brand-subtitle { display: none; }
+
+    .user-actions { order: 2; margin-inline-start: auto; gap: 6px; }
+    .status-pill { padding: 5px 9px; font-size: 12px; }
+    .settings-trigger span { display: none; }
+    .settings-trigger { padding: 7px 9px; }
+
+    /* The sub-nav sticks below the header, which is no longer 70px tall. */
+    .draft-sub-nav-container { top: 0 !important; }
+}

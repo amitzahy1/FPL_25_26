@@ -51,6 +51,10 @@ function load(stateOver = {}) {
         'signalFor', 'signalRank', 'invalidateSignals',
         'gwDefensiveContribution', 'getTrendSeries', 'summariseTrend', 'trendDelta',
         'computeTrendScales', 'fourthTrendMetric', 'fixtureForGw',
+        // Two signal rules call this; without it in scope signalFor's try/catch
+        // swallows a ReferenceError and every rule silently fails to match.
+        'pointsConcentration',
+        'trendBarsHtml', 'trendChangeHtml',
         'trendPlayerIndex', 'getDraftTeamForPlayer'
     ], {}, [
         // Lookup tables and caches the above close over, pulled from the real
@@ -97,10 +101,30 @@ describe('signal verdicts', () => {
         assert.equal(fns.signalFor(p).key, 'out');
     });
 
-    test('over-performance with weak underlying numbers is a trap', () => {
+    test('over-performance on thin underlying numbers is a warning', () => {
         const { fns } = load();
         const p = makePlayer({ xDiff: 2.5, xGI_per90: 0.2, minutes: 900, next_3_fdr: 2 });
-        assert.equal(fns.signalFor(p).key, 'trap');
+        assert.equal(fns.signalFor(p).key, 'overperf');
+    });
+
+    test('beating xG over a full sample with real volume reads as finishing, not luck', () => {
+        // The distinction the single "trap" rule got wrong: a striker who buries
+        // half-chances across 13 games is good at finishing, not lucky.
+        const { fns } = load();
+        const p = makePlayer({ xDiff: 2.5, xGI_per90: 0.55, minutes: 1200, next_3_fdr: 2 });
+        assert.equal(fns.signalFor(p).key, 'clinical');
+    });
+
+    test('a surplus resting on one gameweek stays a warning even with volume', () => {
+        const player = makePlayer({ id: 9, xDiff: 2.5, xGI_per90: 0.55, minutes: 1200 });
+        const mk = (gw, pts) => ({ gw, stats: new Map([[9, gwStats({ total_points: pts })]]) });
+        const { fns } = load({
+            allPlayersData: { live: { processed: [player], raw: null, fixtures: null }, historical: {}, demo: {} },
+            // 16 of 20 points came from a single gameweek.
+            trendGws: [mk(6, 2), mk(7, 16), mk(8, 2)],
+            trendPrevGws: [mk(3, 2), mk(4, 2), mk(5, 2)]
+        });
+        assert.equal(fns.signalFor(player).key, 'overperf');
     });
 
     test('a big negative xDiff on a regular starter is a buy-low', () => {

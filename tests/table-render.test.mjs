@@ -78,11 +78,17 @@ function load(players, over = {}) {
         'getPercentileClass', 'signalFor', 'signalRank', 'invalidateSignals',
         'getTrendSeries', 'summariseTrend', 'trendDelta', 'gwDefensiveContribution',
         'fourthTrendMetric', 'fixtureForGw', 'getDraftTeamForPlayer', 'trendPlayerIndex',
-        'miniSparkHtml'
+        'pointsConcentration',
+        'miniSparkHtml',
+        'trendBarsHtml', 'trendChangeHtml',
+        // the three stat boxes in the expanded row
+        'boxAttack', 'boxDefence', 'boxValue'
     ], {}, [
         'WATCHLIST_KEY', 'TREND_BAR_ROW_LIMIT', 'SIGNAL_RULES', 'SIGNAL_SORT_ORDER',
         'HOLD_SIGNAL', '_signalCache', '_trendPlayerIndex', '_trendDeltaCache',
-        'gwNum', 'TREND_METRICS'
+        'gwNum', 'TREND_METRICS',
+        // arrow-function consts, so they load as declarations rather than names
+        'num1', 'statLine', 'fmt', 'pct'
     ]);
     fns.invalidateSignals();
     return { fns, state };
@@ -157,7 +163,11 @@ describe('player row renders', () => {
         // 6 points a week now against 2 before: an 12-point swing over 3 weeks.
         const cell = fns.trendCellHtml(players[0], 'pts', 0);
         assert.match(cell, /trend-up/);
-        assert.match(cell, /▲\+12/);
+        assert.match(cell, /▲ \+12/);
+        // The chip names the previous window's own figure, so "up by 3" cannot be
+        // read as "up compared to something unspecified".
+        assert.match(cell, /מול <span class="ni">6<\/span>/, 'the baseline is named, not implied');
+        assert.match(cell, /<b>6<\/b>/, 'each bar is labelled with its own gameweek figure');
     });
 
     test('trend cells wait for data instead of rendering zeros', () => {
