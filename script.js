@@ -95,12 +95,15 @@ const config = {
         playerImage: (code) => `https://resources.premierleague.com/premierleague/photos/players/110x140/p${code}.png`,
         missingPlayerImage: 'https://resources.premierleague.com/premierleague/photos/players/110x140/Photo-Missing.png'
     },
+    // Single ordered proxy list. Verified against production: thingproxy no
+    // longer resolves and dummy-cors-proxy.herokuapp.com 404s without CORS
+    // headers, so both are gone. Configure your own Cloudflare Worker in
+    // settings (see fpl-proxy-worker/) to skip the public ones entirely.
     corsProxy: 'https://api.allorigins.win/raw?url=',
     corsProxyFallbacks: [
-        'https://api.allorigins.win/raw?url=',
-        'https://thingproxy.freeboard.io/fetch/',
+        'https://api.codetabs.com/v1/proxy?quest=',
         'https://corsproxy.io/?',
-        'https://api.codetabs.com/v1/proxy?quest='
+        'https://cors-get-proxy.sirjosh.workers.dev/?url='
     ],
     // Resolved per read so a league change in settings takes effect without a code edit.
     get draftLeagueId() { return getLeagueId(); },
@@ -278,13 +281,107 @@ const charts = {
 // ROBUST FETCHING (Tiered Strategy)
 // ============================================
 
+// The local proxy tier only makes sense while developing.
+const IS_LOCAL_DEV = typeof window !== 'undefined' &&
+    ['localhost', '127.0.0.1', ''].includes(window.location.hostname);
+
+// Cache keys this app owns. Anything else in localStorage is left alone.
+const CACHE_KEY_PREFIXES = ['fpl_', 'draft_', 'fpl.v'];
+
+function isOwnedCacheKey(key) {
+    return CACHE_KEY_PREFIXES.some(p => key.startsWith(p)) &&
+        key !== 'fpl_custom_proxy' && key !== 'fpl_saved_filters' &&
+        key !== 'fpl.settings' && key !== 'fplToolActiveTab';
+}
+
+/**
+ * Drop the oldest cached payloads to make room. Returns true if anything was
+ * freed. Entries without a parseable timestamp are evicted first.
+ */
+function evictCacheEntries(keepKey) {
+    const entries = [];
+    for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (!key || key === keepKey || !isOwnedCacheKey(key)) continue;
+        let timestamp = 0;
+        try {
+            timestamp = JSON.parse(localStorage.getItem(key))?.timestamp || 0;
+        } catch (e) { /* unparseable: evict first */ }
+        entries.push({ key, timestamp });
+    }
+    if (!entries.length) return false;
+
+    entries.sort((a, b) => a.timestamp - b.timestamp);
+    // Free half the cache so we are not back here on the next write.
+    const toRemove = Math.max(1, Math.ceil(entries.length / 2));
+    entries.slice(0, toRemove).forEach(e => localStorage.removeItem(e.key));
+    console.log(`🧹 Evicted ${toRemove} cached entr${toRemove === 1 ? 'y' : 'ies'} to free space`);
+    return true;
+}
+
+/**
+ * One-time sweep of caches written by an older schema. Without this, stale
+ * multi-megabyte payloads sit in localStorage forever and keep the quota full.
+ */
+function migrateCacheSchema() {
+    const versionKey = 'fpl.cacheSchemaVersion';
+    const current = String(SEASON_CONFIG.cacheSchemaVersion);
+    if (localStorage.getItem(versionKey) === current) return;
+
+    const stale = [];
+    for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key && isOwnedCacheKey(key)) stale.push(key);
+    }
+    stale.forEach(k => localStorage.removeItem(k));
+    localStorage.setItem(versionKey, current);
+    if (stale.length) console.log(`🧹 Cleared ${stale.length} cache entries from an older schema`);
+}
+
 /**
  * Robust Fetch with tiered strategy:
  * 1. Local Proxy (http://localhost:8010) - Perfect reliability
  * 2. Custom Proxy (if configured)
  * 3. Public Proxies (rotation)
  */
-async function fetchWithCache(url, cacheKey, cacheDurationMinutes = 120, options = {}) {
+// Requests in flight, keyed by cache key. Several code paths ask for the same
+// payload at once (league details was being fetched three times concurrently on
+// every load); without this each one opens its own proxy walk.
+const _inflightRequests = new Map();
+
+function fetchWithCache(url, cacheKey, cacheDurationMinutes = 120, options = {}) {
+    const pending = _inflightRequests.get(cacheKey);
+    if (pending) return pending;
+
+    const promise = _fetchWithCacheUncoalesced(url, cacheKey, cacheDurationMinutes, options)
+        .finally(() => _inflightRequests.delete(cacheKey));
+    _inflightRequests.set(cacheKey, promise);
+    return promise;
+}
+
+/**
+ * Run tasks with a bounded number in flight. Public proxies rate-limit, so this
+ * stays modest -- but it is dramatically better than awaiting one at a time.
+ */
+async function mapWithConcurrency(items, limit, worker) {
+    const results = new Array(items.length);
+    let next = 0;
+    const runners = Array.from({ length: Math.min(limit, items.length) }, async () => {
+        while (true) {
+            const i = next++;
+            if (i >= items.length) return;
+            try {
+                results[i] = await worker(items[i], i);
+            } catch (e) {
+                results[i] = null;
+            }
+        }
+    });
+    await Promise.all(runners);
+    return results;
+}
+
+async function _fetchWithCacheUncoalesced(url, cacheKey, cacheDurationMinutes = 120, options = {}) {
     const { maxRetries = 3, retryDelay = 1000 } = options;
 
     // 1. Try Cache
@@ -309,11 +406,25 @@ async function fetchWithCache(url, cacheKey, cacheDurationMinutes = 120, options
     console.log(`🌐 Fetching fresh data for ${cacheKey}...`);
 
     const saveToCache = (data) => {
+        const payload = JSON.stringify({ timestamp: new Date().getTime(), data });
         try {
-            localStorage.setItem(cacheKey, JSON.stringify({ timestamp: new Date().getTime(), data }));
-            console.log(`💾 Cached data for ${cacheKey}`);
+            localStorage.setItem(cacheKey, payload);
         } catch (e) {
-            console.error("⚠️ Failed to write to localStorage", e);
+            // The bootstrap payload is over a megabyte, so the ~5 MB quota fills
+            // quickly. When it does, every write fails and nothing is ever
+            // cached again -- which is why the site refetched everything on
+            // each load. Evict the oldest entries and retry once.
+            if (evictCacheEntries(cacheKey)) {
+                try {
+                    localStorage.setItem(cacheKey, payload);
+                    console.log(`💾 Cached ${cacheKey} after eviction`);
+                    return;
+                } catch (e2) {
+                    console.warn(`⚠️ ${cacheKey} too large to cache; continuing without it`);
+                    return;
+                }
+            }
+            console.warn(`⚠️ Could not cache ${cacheKey}:`, e.name);
         }
     };
 
@@ -334,24 +445,27 @@ async function fetchWithCache(url, cacheKey, cacheDurationMinutes = 120, options
         }
     }
 
-    // 🟢 Tier 1: Local Proxy (The "Perfect" Solution)
-    // We try this silently first. If it works, great.
-    try {
-        const localProxyUrl = `http://localhost:8010/?url=${encodeURIComponent(originalUrl)}`;
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 1000); // Fast timeout check
+    // 🟢 Tier 1: Local Proxy — development only.
+    // On the deployed site localhost:8010 can never resolve, so attempting it
+    // cost a guaranteed failed request on every single fetch.
+    if (IS_LOCAL_DEV) {
+        try {
+            const localProxyUrl = `http://localhost:8010/?url=${encodeURIComponent(originalUrl)}`;
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 1000); // Fast timeout check
 
-        const response = await fetch(localProxyUrl, { signal: controller.signal });
-        clearTimeout(timeoutId);
+            const response = await fetch(localProxyUrl, { signal: controller.signal });
+            clearTimeout(timeoutId);
 
-        if (response.ok) {
-            const data = await response.json();
-            console.log(`🚀 Using Local Proxy (Perfect Connection)!`);
-            saveToCache(data);
-            return data;
+            if (response.ok) {
+                const data = await response.json();
+                console.log(`🚀 Using Local Proxy (Perfect Connection)!`);
+                saveToCache(data);
+                return data;
+            }
+        } catch (e) {
+            // Local proxy not running, ignore and move on
         }
-    } catch (e) {
-        // Local proxy not running, ignore and move on
     }
 
     // 🟢 Tier 2: Custom User Proxy (Cloudflare Worker)
@@ -374,14 +488,14 @@ async function fetchWithCache(url, cacheKey, cacheDurationMinutes = 120, options
         }
     }
 
-    // 🟠 Tier 3: Public Proxy Rotation (Scattershot)
-    const proxies = [
-        ...config.corsProxyFallbacks,
-        config.corsProxy,
-        'https://api.codetabs.com/v1/proxy?quest=',
-        'https://dummy-cors-proxy.herokuapp.com/',
-        'https://cors-get-proxy.sirjosh.workers.dev/?url='
-    ].filter(p => p !== customProxy);
+    // 🟠 Tier 3: Public proxy rotation.
+    // Kept in one ordered list (config.corsProxyFallbacks) instead of the three
+    // divergent copies that used to exist. Proxies observed failing in
+    // production have been removed: thingproxy.freeboard.io no longer resolves
+    // and dummy-cors-proxy.herokuapp.com returns 404 without CORS headers.
+    // Walking those cost several seconds before reaching a working one.
+    const proxies = [config.corsProxy, ...config.corsProxyFallbacks]
+        .filter(p => p && p !== customProxy);
 
     const uniqueProxies = [...new Set(proxies)];
 
@@ -810,12 +924,12 @@ async function init() {
     // Load data sources in sequence to ensure mapping works
     showLoading();
     try {
-        // 1. First load FPL data
+        // 1. Fetch the live calendar first, then pick the season, then do the
+        //    expensive work exactly once. Processing first and switching after
+        //    ran the entire pipeline twice.
+        await ensureLiveBootstrap();
+        applyPreSeasonDefault();
         await fetchAndProcessData();
-
-        // 1b. Pre-season / very early season: the live API has no played data
-        //     yet, so show the completed season instead of an empty table.
-        await applyPreSeasonDefault();
 
         // 2. Then build the Draft→FPL mapping
         await buildDraftToFplMapping();
@@ -840,6 +954,9 @@ async function init() {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
+    // Clear caches written by an older schema before anything reads them.
+    migrateCacheSchema();
+
     // Render season names immediately. init() runs only after sign-in, so
     // labelling there left the season toggle blank on the landing screen.
     applySeasonLabels();
@@ -919,6 +1036,36 @@ function currentSeasonIsTooEarly() {
     const live = state.allPlayersData.live.raw;
     if (!live || !live.events) return true;
     return live.events.filter(e => e.finished || e.finished_provisional).length < 5;
+}
+
+function finishedGameweekCount() {
+    const live = state.allPlayersData.live.raw;
+    if (!live || !live.events) return 0;
+    return live.events.filter(e => e.finished || e.finished_provisional).length;
+}
+
+// Fetch the live bootstrap and fixtures without processing or rendering.
+// Season selection depends on the gameweek calendar, so it has to be known
+// before any of the expensive work runs -- otherwise the whole pipeline
+// executes once for the live season and again for the snapshot.
+async function ensureLiveBootstrap() {
+    if (!state.allPlayersData.live.raw) {
+        try {
+            state.allPlayersData.live.raw = await fetchWithCache(
+                config.urls.bootstrap, 'fpl_bootstrap_live', 60);
+        } catch (e) {
+            console.warn('⚠️ Live bootstrap unavailable:', e.message);
+        }
+    }
+    if (!state.allPlayersData.live.fixtures) {
+        try {
+            const fixtures = await fetchWithCache(config.urls.fixtures, 'fpl_fixtures', 180);
+            state.allPlayersData.live.fixtures = fixtures;
+            state.allPlayersData.historical.fixtures = fixtures;
+        } catch (e) {
+            console.warn('⚠️ Fixtures unavailable:', e.message);
+        }
+    }
 }
 
 async function fetchAndProcessData() {
@@ -1011,7 +1158,58 @@ function switchDataSource(source) {
     if (source === state.currentDataSource) return;
     state.currentDataSource = source;
     syncDataSourceButtons();
+
+    // Selecting a season that has not been played yet must show nothing and
+    // say why. Leaving the previous season's charts on screen under the new
+    // season's label is worse than an empty view.
+    if (source === 'live' && currentSeasonIsTooEarly()) {
+        showEmptySeasonState();
+        return;
+    }
+
+    clearEmptySeasonState();
     fetchAndProcessData();
+}
+
+function showEmptySeasonState() {
+    const played = finishedGameweekCount();
+    state.displayedData = [];
+
+    // Charts hold their own canvases; without destroying them the old
+    // season's points stay visible.
+    Object.keys(charts).forEach(key => {
+        if (charts[key] && typeof charts[key].destroy === 'function') {
+            charts[key].destroy();
+            charts[key] = null;
+        }
+    });
+    if (window.Chart && Chart.instances) {
+        Object.values(Chart.instances).forEach(c => { try { c.destroy(); } catch (e) { } });
+    }
+
+    const body = document.getElementById('playersTableBody');
+    if (body) {
+        body.innerHTML = `<tr><td colspan="28" style="padding:28px; text-align:center; color:#475569;">
+            <div style="font-size:15px; font-weight:700; margin-bottom:6px;">אין עדיין נתונים לעונת ${SEASON_CONFIG.seasonLabel}</div>
+            <div style="font-size:13px;">${played === 0
+                ? 'העונה טרם התחילה — לכל השחקנים 0 דקות ו-0 נקודות.'
+                : `שוחקו ${played} מחזורים בלבד.`}
+                לניתוח לקראת הדראפט עברו ל-${SEASON_CONFIG.previousSeasonLabel}.</div>
+            <button class="control-button active" style="margin-top:14px;"
+                onclick="switchDataSource('historical')">הצג נתוני ${SEASON_CONFIG.previousSeasonLabel}</button>
+        </td></tr>`;
+    }
+
+    const grid = document.getElementById('dashboardKPIs');
+    if (grid) grid.innerHTML = '';
+
+    showSeasonBanner(played);
+    showToast(`אין נתוני ${SEASON_CONFIG.seasonLabel}`, 'העונה החדשה טרם החלה', 'warning', 4000);
+}
+
+function clearEmptySeasonState() {
+    const banner = document.getElementById('seasonBanner');
+    if (banner && state.currentDataSource === 'live') banner.remove();
 }
 
 function syncDataSourceButtons() {
@@ -1042,15 +1240,19 @@ async function applyPreSeasonDefault() {
 function showSeasonBanner(playedGws) {
     const existing = document.getElementById('seasonBanner');
     if (existing) existing.remove();
-    if (state.currentDataSource !== 'historical') return;
 
-    const msg = playedGws === 0
-        ? `עונת ${SEASON_CONFIG.seasonLabel} טרם התחילה — מוצגים נתוני ${SEASON_CONFIG.previousSeasonLabel} המלאים`
-        : `לעונת ${SEASON_CONFIG.seasonLabel} יש רק ${playedGws} מחזורים — מוצגים נתוני ${SEASON_CONFIG.previousSeasonLabel} המלאים`;
+    const showingPrevious = state.currentDataSource === 'historical';
+    const msg = showingPrevious
+        ? (playedGws === 0
+            ? `מוצגים נתוני ${SEASON_CONFIG.previousSeasonLabel} המלאים — עונת ${SEASON_CONFIG.seasonLabel} טרם התחילה`
+            : `מוצגים נתוני ${SEASON_CONFIG.previousSeasonLabel} המלאים — לעונת ${SEASON_CONFIG.seasonLabel} יש רק ${playedGws} מחזורים`)
+        : `עונת ${SEASON_CONFIG.seasonLabel} — ${playedGws} מחזורים שוחקו`;
 
     const banner = document.createElement('div');
     banner.id = 'seasonBanner';
-    banner.style.cssText = 'margin: 10px 0; padding: 10px 14px; border-radius: 8px; background: #fef3c7; border: 1px solid #fcd34d; color: #92400e; font-size: 13px; font-weight: 600;';
+    banner.style.cssText = showingPrevious
+        ? 'margin: 10px 0; padding: 10px 14px; border-radius: 8px; background: #fef3c7; border: 1px solid #fcd34d; color: #92400e; font-size: 13px; font-weight: 700;'
+        : 'margin: 10px 0; padding: 10px 14px; border-radius: 8px; background: #eff6ff; border: 1px solid #bfdbfe; color: #1e40af; font-size: 13px; font-weight: 700;';
     banner.textContent = `📅 ${msg}`;
 
     const anchor = document.getElementById('playersTabContent');
@@ -3997,48 +4199,46 @@ async function loadHistoricalLineups() {
     // Load lineups for GW 1 through current GW
     const gwsToLoad = Array.from({ length: currentGW }, (_, i) => i + 1);
 
-    console.log(`📊 Loading ${gwsToLoad.length} gameweeks for ${leagueEntries.length} teams...`);
+    const validEntries = leagueEntries.filter(e => e && e.entry_id && e.id);
 
-    for (const entry of leagueEntries) {
-        if (!entry || !entry.entry_id || !entry.id) continue;
-
-        const teamHistoricalLineups = {};
-
-        for (const gw of gwsToLoad) {
-            try {
-                const url = config.corsProxy + encodeURIComponent(config.urls.draftEntryPicks(entry.entry_id, gw));
-                const picksCacheKey = `fpl_draft_picks_historical_${entry.entry_id}_gw${gw}`;
-
-                const picksData = await fetchWithCache(url, picksCacheKey, 1440); // Cache for 24 hours
-
-                if (picksData && picksData.picks) {
-                    const picksWithFplIds = picksData.picks.map(pick => {
-                        const fplId = state.draft.draftToFplIdMap.size > 0
-                            ? state.draft.draftToFplIdMap.get(pick.element)
-                            : pick.element;
-
-                        return {
-                            fplId: fplId || pick.element,
-                            position: pick.position,
-                            originalDraftId: pick.element
-                        };
-                    });
-
-                    // Store lineup for this GW
-                    const starting = picksWithFplIds.filter(p => p.position <= 11).map(p => p.fplId);
-                    const bench = picksWithFplIds.filter(p => p.position > 11).map(p => p.fplId);
-
-                    teamHistoricalLineups[`gw${gw}`] = { starting, bench };
-                }
-            } catch (err) {
-                console.warn(`⚠️ Failed to load GW${gw} for ${entry.entry_name}:`, err.message);
-            }
-        }
-
-        state.draft.historicalLineups.set(entry.id, teamHistoricalLineups);
-        console.log(`✅ Loaded ${Object.keys(teamHistoricalLineups).length} GWs for ${entry.entry_name}`);
+    // One task per (team, gameweek). Previously these ran in nested sequential
+    // loops -- 8 teams x 38 gameweeks is over 300 round trips one after another,
+    // each potentially walking the proxy chain. That was the single biggest
+    // cause of the draft tab taking minutes to load.
+    const tasks = [];
+    for (const entry of validEntries) {
+        for (const gw of gwsToLoad) tasks.push({ entry, gw });
     }
+    console.log(`📊 Loading ${gwsToLoad.length} gameweeks x ${validEntries.length} teams (${tasks.length} requests, parallel)...`);
 
+    const byEntry = new Map(validEntries.map(e => [e.id, {}]));
+
+    await mapWithConcurrency(tasks, 6, async ({ entry, gw }) => {
+        try {
+            const url = config.corsProxy + encodeURIComponent(config.urls.draftEntryPicks(entry.entry_id, gw));
+            const picksCacheKey = `fpl_draft_picks_historical_${entry.entry_id}_gw${gw}`;
+            const picksData = await fetchWithCache(url, picksCacheKey, 1440); // Cache for 24 hours
+
+            if (picksData && picksData.picks) {
+                const picksWithFplIds = picksData.picks.map(pick => ({
+                    fplId: (state.draft.draftToFplIdMap.size > 0
+                        ? state.draft.draftToFplIdMap.get(pick.element)
+                        : pick.element) || pick.element,
+                    position: pick.position,
+                    originalDraftId: pick.element
+                }));
+
+                byEntry.get(entry.id)[`gw${gw}`] = {
+                    starting: picksWithFplIds.filter(p => p.position <= 11).map(p => p.fplId),
+                    bench: picksWithFplIds.filter(p => p.position > 11).map(p => p.fplId)
+                };
+            }
+        } catch (err) {
+            console.warn(`⚠️ Failed to load GW${gw} for ${entry.entry_name}:`, err.message);
+        }
+    });
+
+    byEntry.forEach((lineups, entryId) => state.draft.historicalLineups.set(entryId, lineups));
     console.log(`📚 Historical lineups loaded for ${state.draft.historicalLineups.size} teams`);
 }
 
