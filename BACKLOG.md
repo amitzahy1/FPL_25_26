@@ -14,15 +14,23 @@ Status as of the 2026/27 pre-season overhaul. Items are ordered by value, not by
 - [x] Dual-season data: completed 2025/26 snapshot + live 2026/27
 - [x] Fix inverted percentiles and the silently-zeroed metrics
 - [x] Regression test suite
-- [ ] Remove the fake auth and the hardcoded personal email
-- [ ] Deploy the Cloudflare Worker and make it the primary proxy
-- [ ] Cache-layer rework: versioned keys, quota guard, `data_checked` rule
+- [x] Remove the fake auth and the hardcoded personal email
+- [x] Cache-layer rework: quota eviction, schema migration, request coalescing
+- [x] New columns: VORP, DEFCON hit-rate, availability + rotation risk
+- [x] Draft board panels ("who to pick and why")
+- [x] Fix the smart filters (5 of 8 were no-ops; set-pieces matched everyone)
+- [x] Snapshot-first startup so the page never waits on the CORS proxies
+- [ ] **Deploy the Cloudflare Worker and make it the primary proxy.** Now the
+      highest-value item left: of the public proxies only
+      `cors-get-proxy.sirjosh.workers.dev` still works. allorigins is down and
+      codetabs/corsproxy return 413 for the 1.5 MB bootstrap. The live season
+      and the whole draft tab depend on this. `cd fpl-proxy-worker && npx
+      wrangler deploy`, then paste the URL into the settings dialog.
 - [ ] Prediction heuristic updated for 2026/27 (DEFCON term, availability
       multiplier, GK saves, BPS rework recalibration)
 - [ ] Wire the unused Draft endpoints: `element-status`, `entry/{id}/history`,
       `transactions`, `draft/{league}/choices`
-- [ ] New columns: VORP, DEFCON hit-rate, availability + rotation risk,
-      xGC and `ep_next`
+- [ ] Add xGC and `ep_next` columns
 
 ## Post-draft
 
