@@ -276,7 +276,6 @@ const state = {
         entryIdToTeamName: new Map(),
         allPicks: new Set(),
         ownedElementIds: new Set(),
-        teamAggregates: [],
         _standingsData: [],
         _standingsSort: null,
         charts: { analytics: {}, matrix: null, progress: null },
@@ -1852,8 +1851,8 @@ const SIGNAL_RULES = [
         // finisher, and the surplus is a reason to want him rather than to worry.
         test: p => p.xDiff >= 1.5 && p.minutes >= 900 && (parseFloat(p.xGI_per90) || 0) >= 0.35
             && (pointsConcentration(p) === null || pointsConcentration(p) < 0.5),
-        why: p => [`מבקיע ${p.xDiff.toFixed(1)} מעל הצפי — לאורך ${Math.round(p.minutes / 90)} משחקים`,
-                   `xGI/90 ${(parseFloat(p.xGI_per90) || 0).toFixed(2)} — נפח אמיתי`]
+        why: p => [`${p.xDiff.toFixed(1)} מעל הצפי ב-${Math.round(p.minutes / 90)} משחקים`,
+                   `xGI/90 ${(parseFloat(p.xGI_per90) || 0).toFixed(2)}`]
     },
     {
         key: 'overperf', label: 'מימוש יתר', tone: 'bad',
@@ -1971,11 +1970,11 @@ function gwDefensiveContribution(stats, elementType) {
  */
 const TREND_METRICS = {
     pts: {
-        label: 'נק׳', agg: 'sum', fmt: v => v.toFixed(0), unit: 'סה״כ',
+        label: 'נק׳', agg: 'sum', fmt: v => v.toFixed(0), unit: '',
         read: s => gwNum(s.total_points)
     },
     xgi: {
-        label: 'xG+xA', agg: 'sum', fmt: v => v.toFixed(2), unit: 'סה״כ',
+        label: 'xG+xA', agg: 'sum', fmt: v => v.toFixed(2), unit: '',
         // One decimal above a 13px bar; two collide with the neighbour.
         barFmt: v => v.toFixed(1),
         read: s => gwNum(s.expected_goals) + gwNum(s.expected_assists)
@@ -2280,13 +2279,16 @@ function trendCellHtml(player, metricKey, index) {
         ? trendBarsHtml(recent, scale, def, { labels: true })
         : '';
 
+    // No delta chip here. "▼ 5 קודם 41" needs the reader to hold a second,
+    // invisible five-gameweek window in their head; the bars show the direction
+    // on their own, and the expanded row states the comparison under a heading
+    // that names both windows.
     return `<td class="trend-cell trend-col" data-metric="${metricKey}"
-        title="${def.fmt(now)} ב-${recent.length} המחזורים האחרונים, מול ${def.fmt(before)} ב-${recent.length} שלפניהם">
+        title="${def.fmt(now)} ב-${recent.length} המחזורים האחרונים · ${def.fmt(before)} ב-${recent.length} שלפניהם. לחיצה על השורה פותחת את הפירוט">
         <span class="trend-main">
-            <span class="trend-value">${def.fmt(now)}<em>${def.unit || ''}</em></span>
+            <span class="trend-value">${def.fmt(now)}</span>
             ${bars}
         </span>
-        <span class="trend-foot">${trendChangeHtml(now, before, def)}</span>
     </td>`;
 }
 
@@ -2343,7 +2345,7 @@ function boxAttack(p) {
         <h5><span>⚽</span> תפוקה התקפית</h5>
         <dl>
             ${statLine('שערים / בישולים', `${p.goals_scored || 0} / ${p.assists || 0}`)}
-            ${statLine('סה״כ מעורבות', ga)}
+            ${statLine('מעורבות', ga)}
             ${statLine('xG / 90', fmt(p.expected_goals_per_90), 'שערים צפויים לכל 90 דקות')}
             ${statLine('xA / 90', fmt(p.expected_assists_per_90), 'בישולים צפויים לכל 90 דקות')}
             ${statLine('xGI / 90', fmt(p.xGI_per90), 'מעורבות צפויה בשערים לכל 90 דקות')}
@@ -2463,7 +2465,7 @@ function playerDetailRowHtml(player, colSpan) {
             const scale = (state.trendScales && state.trendScales[k]) || 1;
             return `<div class="sum-row">
                 <span class="sum-label">${def.label}</span>
-                <span class="sum-val"><b>${def.fmt(now)}</b><em>${def.unit || ''}</em></span>
+                <span class="sum-val"><b>${def.fmt(now)}</b>${def.unit ? `<em>${def.unit}</em>` : ''}</span>
                 <span class="sum-change">${trendChangeHtml(now, before, def)}</span>
                 ${trendBarsHtml(series, scale, def, { labels: true, cls: 'is-large' })}
             </div>`;
@@ -2893,16 +2895,13 @@ function processChange() {
                 aValue = -signalRank(a);
                 bValue = -signalRank(b);
             } else if (state.sortKey === 'trend_pts' || state.sortKey === 'trend_xgi') {
-                // Sort by the direction of travel, not the total: that is the
-                // question the column exists to answer.
+                // Sort by the figure the cell prints. It used to sort by the
+                // change against the previous window — a number that is no longer
+                // shown, so the ordering looked arbitrary.
                 const key = state.sortKey === 'trend_pts' ? 'pts' : 'xgi';
-                const delta = p => {
-                    const def = TREND_METRICS[key];
-                    return summariseTrend(getTrendSeries(p.id, key, 'recent'), def.agg)
-                        - summariseTrend(getTrendSeries(p.id, key, 'prev'), def.agg);
-                };
-                aValue = delta(a);
-                bValue = delta(b);
+                const total = p => summariseTrend(getTrendSeries(p.id, key, 'recent'), TREND_METRICS[key].agg);
+                aValue = total(a);
+                bValue = total(b);
             } else {
                 aValue = getNestedValue(a, state.sortKey);
                 bValue = getNestedValue(b, state.sortKey);
@@ -4559,63 +4558,152 @@ function predictPointsForFixture(player, fixture) {
     );
 
     // ============================================
-    // 🛡️ CLEAN SHEET BONUS (DEF/GKP)
+    // ⏱️ EXPECTED MINUTES — everything below scales by it
     // ============================================
-    let cleanSheetBonus = 0;
-    if (pos === 'GKP' || pos === 'DEF') {
-        const defStrength = isHome ? playerTeam.strength_defence_home : playerTeam.strength_defence_away;
-        const oppAttack = isHome ? opponentTeam.strength_attack_home : opponentTeam.strength_attack_away;
-        const csProb = (defStrength / Math.max(oppAttack, 1)) * 0.5; // Normalize
-        cleanSheetBonus = csProb * (pos === 'GKP' ? 4 : 4) * (isHome ? 1.1 : 0.9);
+    // starts/appearances where we have it, minutes-per-game otherwise. A player
+    // who plays 30 minutes off the bench cannot return a defender's clean sheet
+    // or a striker's xG, so scaling the concrete terms by expected minutes
+    // matters more than any weighting choice in the blend above.
+    const minutesPerGame = (player.minutes || 0) / Math.max(gamesPlayed, 1);
+    const startShare = Number.isFinite(player.rotation_risk) ? player.rotation_risk : null;
+    const expectedMinutes = startShare !== null
+        ? Math.min(90, startShare * 85 + (1 - startShare) * 20)
+        : Math.min(90, minutesPerGame);
+    const minuteShare = expectedMinutes / 90;
+
+    // ============================================
+    // 🚑 AVAILABILITY — injuries and suspensions
+    // ============================================
+    // The site computed availability_grade and then never used it here, so an
+    // injured player kept a full projection. `status` letters: a=available,
+    // d=doubtful, i=injured, s=suspended, u=unavailable, n=not in squad.
+    let availability = 1;
+    const status = player.status || 'a';
+    if (status === 'i' || status === 's' || status === 'u' || status === 'n') {
+        availability = 0;
+    } else {
+        const chance = player.chance_of_playing_next_round;
+        if (chance !== null && chance !== undefined) availability = Math.max(0, Math.min(1, chance / 100));
+        else if (status === 'd') availability = 0.6;
     }
 
     // ============================================
-    // ⚽ GOAL/ASSIST SCORING ADJUSTMENT
+    // 🎯 FIXTURE MULTIPLIER — centred on 1.0
     // ============================================
-    // Defenders and Midfielders get MORE points for goals!
-    // DEF goal = 6pts, MID goal = 5pts, FWD goal = 4pts
-    let goalValueBonus = 0;
-    const expectedGoals = (player.expected_goals_per_90 || 0) / 90;
-    const expectedAssists = (player.expected_assists_per_90 || 0) / 90;
+    // attack/defence ratio, damped so a dream fixture is worth roughly +35% and
+    // a nightmare roughly -25% rather than swinging the whole projection.
+    const rawRatio = attackScore / Math.max(defenseScore, 1);
+    const fixtureMultiplier = Math.max(0.75, Math.min(1.35, 1 + (rawRatio - 1) * 0.6));
 
-    if (pos === 'DEF') {
-        goalValueBonus = expectedGoals * 6 + expectedAssists * 3; // DEF: 6pts goal, 3pts assist
-    } else if (pos === 'MID') {
-        goalValueBonus = expectedGoals * 5 + expectedAssists * 3; // MID: 5pts goal, 3pts assist
-    } else if (pos === 'FWD') {
-        goalValueBonus = expectedGoals * 4 + expectedAssists * 3; // FWD: 4pts goal, 3pts assist
-    } else if (pos === 'GKP') {
-        goalValueBonus = expectedGoals * 6 + expectedAssists * 3; // GKP: 6pts goal (rare!), 3pts assist
+    // ============================================
+    // ⚽ GOALS AND ASSISTS
+    // ============================================
+    // expected_goals_per_90 is ALREADY per 90. The old code divided it by 90
+    // again, which made this whole term ~1/90th of its true size — the goal and
+    // assist contribution was effectively absent from every projection.
+    const xg90 = parseFloat(player.expected_goals_per_90) || 0;
+    const xa90 = parseFloat(player.expected_assists_per_90) || 0;
+    const GOAL_POINTS = { GKP: 10, DEF: 6, MID: 5, FWD: 4 };
+    const goalValueBonus = (
+        xg90 * (GOAL_POINTS[pos] || 4) + xa90 * 3
+    ) * minuteShare * fixtureMultiplier;
+
+    // ============================================
+    // 🛡️ CLEAN SHEET — from xGC where the API gives it
+    // ============================================
+    // Expected goals conceded is a far better clean-sheet estimate than a team
+    // strength ratio: P(0 goals) under a Poisson with mean xGC is exp(-xGC).
+    const CS_POINTS = { GKP: 4, DEF: 4, MID: 1, FWD: 0 };
+    let cleanSheetBonus = 0;
+    let concededPenalty = 0;
+    if (CS_POINTS[pos]) {
+        const xgc90 = parseFloat(player.expected_goals_conceded_per_90) || 0;
+        let csProb;
+        if (xgc90 > 0) {
+            // Adjust the player's season-long xGC for this specific opponent.
+            const oppAttack = isHome ? opponentTeam.strength_attack_home : opponentTeam.strength_attack_away;
+            const defStrength = isHome ? playerTeam.strength_defence_home : playerTeam.strength_defence_away;
+            const oppMultiplier = Math.max(0.7, Math.min(1.4, oppAttack / Math.max(defStrength, 1)));
+            csProb = Math.exp(-xgc90 * oppMultiplier);
+        } else {
+            const defStrength = isHome ? playerTeam.strength_defence_home : playerTeam.strength_defence_away;
+            const oppAttack = isHome ? opponentTeam.strength_attack_home : opponentTeam.strength_attack_away;
+            csProb = Math.max(0.05, Math.min(0.6, (defStrength / Math.max(oppAttack, 1)) * 0.32));
+        }
+        // A clean sheet only pays if the player lasts 60 minutes.
+        const sixtyPlus = Math.max(0, Math.min(1, (expectedMinutes - 45) / 30));
+        cleanSheetBonus = csProb * CS_POINTS[pos] * sixtyPlus * (isHome ? 1.05 : 0.95);
+
+        // -1 per 2 goals conceded, GKP/DEF only.
+        if (pos === 'GKP' || pos === 'DEF') {
+            const expectedConceded = (parseFloat(player.expected_goals_conceded_per_90) || 1.4) * minuteShare;
+            concededPenalty = -(expectedConceded / 2);
+        }
+    }
+
+    // ============================================
+    // 🧱 DEFENSIVE CONTRIBUTION (new for 2025/26, unchanged for 2026/27)
+    // ============================================
+    // +2 when a defender reaches 10 CBIT or a mid/forward 12 CBIRT. It is a
+    // per-match threshold, so the hit-rate is the expectation — and for a
+    // defensive midfielder it is worth more than his goal threat.
+    let defconBonus = 0;
+    if (pos !== 'GKP') {
+        const hitRate = player.defcon_hit_rate;
+        if (hitRate !== null && hitRate !== undefined) {
+            defconBonus = (hitRate / 100) * 2 * minuteShare;
+        } else {
+            // No per-match history: ramp off the per-90 rate around the threshold.
+            const dc90 = parseFloat(player.def_contrib_per90) || 0;
+            const threshold = pos === 'DEF' ? 10 : 12;
+            defconBonus = Math.max(0, Math.min(1, (dc90 - threshold * 0.6) / (threshold * 0.7))) * 2 * minuteShare;
+        }
+    }
+
+    // ============================================
+    // 🧤 GOALKEEPER SAVES — buffed by the 2026/27 BPS rework
+    // ============================================
+    let savesBonus = 0;
+    if (pos === 'GKP') {
+        const saves90 = parseFloat(player.saves_per_90) || 0;
+        savesBonus = (saves90 * minuteShare) / 3; // 1 point per 3 saves
     }
 
     // ============================================
     // ⭐ BONUS POINTS POTENTIAL
     // ============================================
+    // Historical bonus is the best available prior, but 2026/27 reweighted BPS
+    // (clearances/blocks/interceptions are worth less per point, goalkeeper
+    // saves more), so last season's rate is a slightly biased estimate.
     const bonusPerGame = (player.bonus || 0) / Math.max(gamesPlayed, 1);
-    const bonusPoints = bonusPerGame * 0.6; // Conservative estimate
+    const bonusPoints = bonusPerGame * 0.6 * minuteShare;
 
     // ============================================
-    // 🎯 PLAYING TIME PROBABILITY (Realistic Adjustment)
+    // 🎬 APPEARANCE POINTS
     // ============================================
-    // Only count players likely to start (minutes > 60 per game on average)
-    const minutesPerGame = (player.minutes || 0) / Math.max(gamesPlayed, 1);
-    let playingTimeFactor = 1.0;
-
-    if (minutesPerGame < 30) {
-        playingTimeFactor = 0.1; // Rarely plays - very low chance
-    } else if (minutesPerGame < 60) {
-        playingTimeFactor = 0.4; // Rotation risk - reduced chance
-    } else if (minutesPerGame < 75) {
-        playingTimeFactor = 0.7; // Occasional starter
-    } else {
-        playingTimeFactor = 1.0; // Regular starter
-    }
+    // 1 point for playing at all, 2 from 60 minutes.
+    const playsAtAll = Math.max(0, Math.min(1, expectedMinutes / 25));
+    const playsSixty = Math.max(0, Math.min(1, (expectedMinutes - 45) / 30));
+    const appearancePoints = playsAtAll + playsSixty;
 
     // ============================================
     // 🎲 FINAL PREDICTION
     // ============================================
-    const rawPrediction = (baseScore / 10) + cleanSheetBonus + goalValueBonus + bonusPoints + 2; // +2 for appearance
-    const predictedPoints = rawPrediction * playingTimeFactor;
+    // The blend above stays in as a form/momentum modifier, at a much smaller
+    // weight than before: it is a sentiment signal, while everything else here
+    // is an expected-points calculation.
+    const formModifier = (baseScore / 100) * 1.6;
+
+    const rawPrediction = appearancePoints
+        + goalValueBonus
+        + cleanSheetBonus
+        + concededPenalty
+        + defconBonus
+        + savesBonus
+        + bonusPoints
+        + formModifier;
+
+    const predictedPoints = rawPrediction * availability;
 
     return Math.max(0, Math.min(predictedPoints, 20)); // Cap at 20 points per game
 }
@@ -6982,7 +7070,7 @@ function renderDraftAnalytics(teamAggregates) {
                                 const playerIds = state.draft.rostersByEntryId.get(teamEntry.id) || [];
                                 const total = playerIds.length;
 
-                                return total > 15 ? `מציג 15 מתוך ${total} שחקנים` : `סה"כ ${total} שחקנים`;
+                                return total > 15 ? `מציג 15 מתוך ${total} שחקנים` : `${total} שחקנים`;
                             }
                         }
                     },
@@ -7670,7 +7758,7 @@ function renderCharts() {
             team: p.team_name
         }));
 
-        const config = getMatrixChartConfig(points, 'מחיר (£m)', 'סה״כ נקודות', {
+        const config = getMatrixChartConfig(points, 'מחיר (£m)', 'נקודות', {
             topRight: 'יהלומים (זול וטוב)',
             bottomLeft: 'יקר ולא יעיל'
         });

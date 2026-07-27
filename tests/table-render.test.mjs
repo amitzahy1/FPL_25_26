@@ -157,20 +157,17 @@ describe('player row renders', () => {
         assert.match(deep, /trend-value/, 'the window figure still shows');
     });
 
-    test('trend cells report a rise against the previous window', () => {
+    test('the cell prints each gameweek and their total, and nothing it cannot explain', () => {
         const players = [makePlayer()];
         const { fns } = load(players);
-        // 6 points a week now against 2 before: an 12-point swing over 3 weeks.
         const cell = fns.trendCellHtml(players[0], 'pts', 0);
-        assert.match(cell, /trend-up/);
-        // No "+" next to the arrow: the arrow already states the direction.
-        assert.match(cell, /▲ 12/);
-        assert.ok(!cell.includes('▲ +'), 'direction is stated once, not twice');
-        assert.match(cell, /<em>סה״כ<\/em>/, 'the figure says whether it is a total or an average');
-        // The chip names the previous window's own figure, so "up by 3" cannot be
-        // read as "up compared to something unspecified".
-        assert.match(cell, /קודם <span class="ni">6<\/span>/, 'the baseline is named, not implied');
-        assert.match(cell, /<b>6<\/b>/, 'each bar is labelled with its own gameweek figure');
+        assert.match(cell, /<b>6<\/b>/, 'each bar carries its own gameweek figure');
+        assert.match(cell, /trend-value">18</, '3 gameweeks of 6 points');
+        // A delta against a window that is not on screen cannot be read, so the
+        // cell must not print one.
+        assert.ok(!cell.includes('trend-delta'), 'no unexplainable change chip');
+        assert.ok(!cell.includes('סה״כ'), 'no unit word anywhere on this page');
+        assert.match(cell, /title="18 ב-3/, 'both windows are named in the tooltip');
     });
 
     test('trend cells wait for data instead of rendering zeros', () => {

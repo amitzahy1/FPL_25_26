@@ -5306,7 +5306,7 @@ canvas {
     line-height: 1.35;
 }
 
-.signal-why span { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 190px; }
+.signal-why span { display: block; white-space: normal; max-width: 210px; line-height: 1.3; }
 
 /* --- trend cells --- */
 .trend-cell { min-width: 96px; padding: 5px 8px !important; vertical-align: middle; }
@@ -5563,11 +5563,25 @@ canvas {
 
 .sum-val {
     grid-area: val;
+    display: flex;
+    align-items: baseline;
+    gap: 5px;
+}
+
+.sum-val b {
     font-size: 17px;
     font-weight: 800;
     color: #0f172a;
     font-variant-numeric: tabular-nums;
     direction: ltr;
+}
+
+/* Only the exception is marked: an unlabelled figure is the window's total. */
+.sum-val em {
+    font-style: normal;
+    font-size: 10.5px;
+    font-weight: 700;
+    color: #94a3b8;
 }
 
 .sum-delta {
@@ -5628,14 +5642,14 @@ canvas {
 #playersTable > tbody > tr.player-row > td:nth-child(3) { inset-inline-start: 90px; }
 
 /* Trend cell: figure on top, shape in the middle, the comparison in words. */
-.trend-cell { min-width: 132px; padding: 4px 8px !important; text-align: center; }
+.trend-cell { min-width: 112px; padding: 4px 8px !important; text-align: center; }
 .trend-head-label { white-space: nowrap; }
 
 /* The window total sits beside the chart, not above it. */
 .trend-main { display: flex; align-items: flex-end; justify-content: center; gap: 8px; }
 
 .trend-value {
-    font-size: 18px;
+    font-size: 14.5px;
     font-weight: 800;
     color: #0f172a;
     font-variant-numeric: tabular-nums;
