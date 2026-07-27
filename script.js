@@ -2616,14 +2616,16 @@ function createPlayerRowHtml(player, index) {
         <td class="${draftTeamClass}" title="${draftTeamDisplay}">${draftTeamDisplay}</td>
         <td data-tooltip="${config.columnTooltips.availability}">${formatAvailability(player)}</td>
         <td class="bold-cell ${getPercentileClass(player.draft_score, displayedValues.draft_score)}">${player.draft_score.toFixed(1)}</td>
+        <td class="bold-cell" data-tooltip="${config.columnTooltips.vorp}" style="color:${player.vorp > 0 ? '#059669' : player.vorp < 0 ? '#dc2626' : '#94a3b8'};">${formatVorp(player.vorp)}</td>
         <td class="${getPercentileClass(player.total_points, displayedValues.total_points)}">${player.total_points}</td>
         <td class="${getPercentileClass(player.points_per_game_90, displayedValues.points_per_game_90)}">${player.points_per_game_90.toFixed(1)}</td>
+        <td class="transfers-cell" data-tooltip="${config.columnTooltips.net_transfers_event}"><span class="${player.net_transfers_event >= 0 ? 'net-transfers-positive' : 'net-transfers-negative'}">${player.net_transfers_event.toLocaleString()}</span></td>
+        <td class="${getPercentileClass(parseFloat(player.selected_by_percent), displayedValues.selected_by_percent)}">${player.selected_by_percent}%</td>
         <td class="signal-cell">
             <span class="signal-badge signal-${signal.tone}">${signal.label}</span>
             ${signal.why.length ? `<span class="signal-why">${signal.why.map(w => `<span>${w}</span>`).join('')}</span>` : ''}
         </td>
         ${trendKeys.map(key => trendCellHtml(player, key, index)).join('')}
-        <td class="bold-cell" data-tooltip="${config.columnTooltips.vorp}" style="color:${player.vorp > 0 ? '#059669' : player.vorp < 0 ? '#dc2626' : '#94a3b8'};">${formatVorp(player.vorp)}</td>
         <td data-tooltip="${config.columnTooltips.defcon_hit_rate}">${formatDefconRate(player.defcon_hit_rate)}</td>
         <td class="${getPercentileClass(player.def_contrib_per90, displayedValues.def_contrib_per90)}" data-tooltip="${config.columnTooltips.def_contrib_per90}">${player.def_contrib_per90.toFixed(1)}</td>
         <td data-tooltip="${config.columnTooltips.rotation_risk}">${formatRotation(player.rotation_risk)}</td>
@@ -2635,8 +2637,6 @@ function createPlayerRowHtml(player, index) {
         <td class="${getPercentileClass(player.minutes, displayedValues.minutes)}">${player.minutes}</td>
         <td class="${getPercentileClass(parseFloat(player.bonus_per90) || 0, displayedValues.bonus_per90)}">${(parseFloat(player.bonus_per90) || 0).toFixed(2)}</td>
         <td class="${getPercentileClass(parseFloat(player.clean_sheets_per90) || 0, displayedValues.clean_sheets_per90)}">${(parseFloat(player.clean_sheets_per90) || 0).toFixed(2)}</td>
-        <td class="${getPercentileClass(parseFloat(player.selected_by_percent), displayedValues.selected_by_percent)}">${player.selected_by_percent}%</td>
-        <td class="transfers-cell" data-tooltip="${config.columnTooltips.net_transfers_event}"><span class="${player.net_transfers_event >= 0 ? 'net-transfers-positive' : 'net-transfers-negative'}">${player.net_transfers_event.toLocaleString()}</span></td>
         <td>${player.now_cost.toFixed(1)}</td>
         <td class="bold-cell stability-cell ${getPercentileClass(player.stability_index || 0, displayedValues.stability_index)}">${(player.stability_index || 0).toFixed(0)}</td>
         <td class="${getPercentileClass(parseFloat(player.ict_index_per90) || 0, displayedValues.ict_index_per90)}">${(parseFloat(player.ict_index_per90) || 0).toFixed(1)}</td>
@@ -3936,7 +3936,7 @@ function updateDashboardKPIs(dataToUse = null) {
             .map(p => ({ p, v: card.pick(p) }))
             .filter(x => x.v !== null && x.v !== undefined && Number.isFinite(x.v))
             .sort((a, b) => b.v - a.v)
-            .slice(0, 3);
+            .slice(0, 5);
 
         if (!ranked.length) {
             return `<div class="kpi-card" data-kpi="${card.id}">

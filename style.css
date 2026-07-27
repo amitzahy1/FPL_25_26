@@ -6166,3 +6166,30 @@ canvas {
 .trend-cell[data-metric="xgi"] .trend-bar { width: 14px; }
 .trend-cell[data-metric="xgi"] .trend-bar b { inset-inline: -6px; font-size: 9px; }
 .trend-cell[data-metric="pts"] { min-width: 116px; }
+
+/* ==========================================================================
+   KPI CARDS — five deep without growing taller
+   Three runners-up on their own lines each already made the strip tall; five
+   would have doubled it. The leader shrinks, the chrome tightens, and the
+   runners-up sit two or three to a line.
+   ========================================================================== */
+.dashboard-kpis { gap: 10px; }
+
+.kpi-card { padding: 11px 13px; gap: 9px; }
+.kpi-icon { font-size: 20px; }
+.kpi-label { font-size: 10.5px; letter-spacing: .02em; }
+.kpi-value { font-size: 1.32em; gap: 5px; }
+.kpi-subtext { font-size: 11px; gap: 6px; }
+
+.kpi-runners { margin-top: 5px; padding-top: 5px; gap: 3px 4px; }
+
+.kpi-runner {
+    font-size: 11.5px;
+    padding: 1px 5px;
+    gap: 3px;
+    border-radius: 5px;
+}
+
+.kpi-runner b { font-size: 9px; padding: 0 3px; }
+.kpi-subtext .trend-bars, .mini-spark { height: 13px; }
+.mini-spark i { width: 3px; }
