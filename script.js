@@ -985,7 +985,14 @@ async function processManualData() {
 
 // Main init function for real data
 async function init() {
-    Chart.register(ChartDataLabels);
+    // Chart.js comes from a CDN. If that request fails the charts are gone, but
+    // the table must not be: this line used to throw before a single row was
+    // rendered, so a CDN blip took down the whole page.
+    if (typeof Chart !== 'undefined' && typeof ChartDataLabels !== 'undefined') {
+        Chart.register(ChartDataLabels);
+    } else {
+        console.warn('Chart.js unavailable — charts disabled, table unaffected');
+    }
 
     applySeasonLabels();
 
@@ -1266,6 +1273,10 @@ async function fetchAndProcessData() {
 
         // The trend window is a handful of localStorage-cached gameweek fetches.
         // Paint the table first, then fill the micro-charts in when it resolves.
+        // The table has always opened sorted by ציון, but no header showed it, so
+        // it read as unsorted.
+        updateSortIndicators(state.sortKey);
+
         ensureTrendWindow().then(() => {
             if (!state.trendGws.length) return;
             // Two signal rules read the gameweek window; drop verdicts decided
@@ -1520,23 +1531,6 @@ function preprocessPlayerData(players, setPieceTakers) {
         if (p.element_type === 3 && cbitPer90 > 0.8) p.is_defensive_workhorse = true; // High workrate MID
         if (p.element_type === 4 && cbitPer90 > 0.4) p.is_defensive_workhorse = true; // High workrate FWD (rare)
 
-        return p;
-    });
-}
-
-function calculateFDR(players, fixtures, teamStrength) {
-    if (!fixtures || !fixtures.length) return players;
-
-    // Map team ID to next 3 fixtures difficulty
-    const teamFDR = {}; // teamId -> average difficulty
-    const nextGameweek = getNextGameweek(fixtures);
-
-    // Helper to find next 3 GWs for a team
-    // ... (This logic needs to be robust, for now simplified)
-
-    return players.map(p => {
-        // Placeholder until we implement full FDR logic with fixtures
-        // We can use 'teamStrength' to estimate opposition strength if full fixtures map is complex here
         return p;
     });
 }
@@ -1973,6 +1967,12 @@ const TREND_METRICS = {
         label: 'נק׳', agg: 'sum', fmt: v => v.toFixed(0), unit: '',
         read: s => gwNum(s.total_points)
     },
+    // Sits directly above xG+xA in the expanded row: what he actually produced,
+    // against what the chances were worth.
+    ga: {
+        label: 'G+A', agg: 'sum', fmt: v => v.toFixed(0), unit: '',
+        read: s => gwNum(s.goals_scored) + gwNum(s.assists)
+    },
     xgi: {
         label: 'xG+xA', agg: 'sum', fmt: v => v.toFixed(2), unit: '',
         // One decimal above a 13px bar; two collide with the neighbour.
@@ -2246,22 +2246,6 @@ function trendBarsHtml(series, scale, def, { labels = false, cls = '' } = {}) {
     }).join('') + '</span>';
 }
 
-/**
- * "▲ +3" on its own invites the question "more than what?". Naming the previous
- * window's figure answers it inside the chip: 28, up from 25.
- */
-function trendChangeHtml(now, before, def) {
-    const d = now - before;
-    const eps = def.agg === 'avg' ? 0.5 : 0.05;
-    // Nothing moved: naming a baseline identical to the figure on screen only
-    // added a third number to read.
-    if (Math.abs(d) < eps) return '<span class="trend-delta trend-flat">ללא שינוי</span>';
-    // The arrow states the direction, so "+" would say it twice. "קודם" names the
-    // previous window's own figure, which is what "compared to what?" was asking.
-    return `<span class="trend-delta trend-${d > 0 ? 'up' : 'down'}">${
-        d > 0 ? '▲' : '▼'} ${def.fmt(Math.abs(d))}</span>
-        <span class="trend-vs">קודם <span class="ni">${def.fmt(before)}</span></span>`;
-}
 
 /** One trend cell: window figure, delta vs the previous window, and the bars. */
 function trendCellHtml(player, metricKey, index) {
@@ -2455,18 +2439,16 @@ function playerDetailRowHtml(player, colSpan) {
 
     // One labelled line per metric: name, figure, change, shape. The floating
     // unlabelled mini-charts were the part nobody could read.
-    const summary = ['pts', 'xgi', 'mins', extraKey]
+    const summary = ['pts', 'ga', 'xgi', 'mins', extraKey]
         .filter((k, i, a) => a.indexOf(k) === i)
         .map(k => {
             const def = TREND_METRICS[k];
             const series = getTrendSeries(player.id, k, 'recent');
             const now = summariseTrend(series, def.agg);
-            const before = summariseTrend(getTrendSeries(player.id, k, 'prev'), def.agg);
             const scale = (state.trendScales && state.trendScales[k]) || 1;
             return `<div class="sum-row">
                 <span class="sum-label">${def.label}</span>
                 <span class="sum-val"><b>${def.fmt(now)}</b>${def.unit ? `<em>${def.unit}</em>` : ''}</span>
-                <span class="sum-change">${trendChangeHtml(now, before, def)}</span>
                 ${trendBarsHtml(series, scale, def, { labels: true, cls: 'is-large' })}
             </div>`;
         }).join('');
@@ -2501,7 +2483,7 @@ function playerDetailRowHtml(player, colSpan) {
                     </section>
 
                     <section class="detail-sum">
-                        <h4>מגמה מול ${state.trendWindow} המחזורים שלפני</h4>
+                        <h4>${state.trendWindow} המחזורים האחרונים <span class="h4-note">(לא כל העונה)</span></h4>
                         ${summary}
                         <div class="detail-next">
                             <span class="detail-next-label">המשחקים הבאים</span>
@@ -2510,6 +2492,8 @@ function playerDetailRowHtml(player, colSpan) {
                     </section>
 
                     <section class="detail-boxes">
+                        <h4 class="boxes-heading">כל העונה עד כה
+                            <span class="h4-note">${Math.round((player.minutes || 0) / 90)} משחקים · ${player.minutes || 0} דקות</span></h4>
                         ${boxAttack(player)}
                         ${boxDefence(player)}
                         ${boxValue(player)}
@@ -2655,6 +2639,26 @@ function createPlayerRowHtml(player, index) {
     </tr>`;
 }
 
+/**
+ * On a narrow screen the expanded panel is pinned to the scroll port (mobile.css)
+ * so it can be read without scrolling sideways through 35 columns. Its width has
+ * to match that scroll port, and only the layout knows how wide it is — 100vw
+ * overshoots by the page padding.
+ */
+function fitDetailPanel() {
+    const cards = document.querySelectorAll('#playersTable .detail-card');
+    if (!cards.length) return;
+    const pinned = window.innerWidth <= 768;
+    cards.forEach(card => {
+        // Walk up from the card rather than matching a fixed id, so this keeps
+        // working if the table ever moves inside the page.
+        const wrap = card.closest('.table-container');
+        card.style.width = pinned && wrap ? `${wrap.clientWidth}px` : '';
+    });
+}
+
+window.addEventListener('resize', fitDetailPanel);
+
 function renderTable() {
     const columnMapping = config.tableColumns;
 
@@ -2683,6 +2687,7 @@ function renderTable() {
             ? row + playerDetailRowHtml(player, colCount)
             : row;
     }).join('');
+    fitDetailPanel();
     updateScoutingUi();
     syncDetailWidth();
 
@@ -2869,18 +2874,7 @@ function processChange() {
         state.displayedData.sort((a, b) => {
             let aValue, bValue;
 
-            if (state.sortKey === 'signal_rank') {
-                // Verdict buckets, most actionable first (see SIGNAL_SORT_ORDER).
-                aValue = signalRank(a);
-                bValue = signalRank(b);
-            } else if (state.sortKey === 'trend_pts' || state.sortKey === 'trend_xgi') {
-                // Sort a trend column by its MOVEMENT, not its level — the point
-                // of the column is who is climbing, and the level is already
-                // available in the season columns next to it.
-                const metric = state.sortKey === 'trend_pts' ? 'pts' : 'xgi';
-                aValue = trendDelta(a, metric);
-                bValue = trendDelta(b, metric);
-            } else if (state.sortKey === 'net_transfers_event') {
+            if (state.sortKey === 'net_transfers_event') {
                 aValue = parseFloat(a.transfers_balance || a.net_transfers_event || 0);
                 bValue = parseFloat(b.transfers_balance || b.net_transfers_event || 0);
             } else if (state.sortKey === 'goals_scored_assists') {
@@ -4482,22 +4476,6 @@ function calculateAllPredictions(players) {
             ? next4Fixtures.reduce((total, fix) => total + predictPointsForFixture(p, fix), 0)
             : 0;
 
-        // ============================================
-        // 🤖 ML PREDICTION
-        // ============================================
-        // Calculate ML prediction using the trained model
-        if (typeof predictPlayerPoints === 'function') {
-            try {
-                const prediction = predictPlayerPoints(p);
-                // If model not ready yet (returns null), keep existing value or 0
-                p.ml_prediction = (prediction !== null && prediction !== undefined) ? prediction : (p.ml_prediction || 0);
-            } catch (error) {
-                console.warn('ML prediction failed for player:', p.web_name, error);
-                p.ml_prediction = 0;
-            }
-        } else {
-            p.ml_prediction = 0;
-        }
     });
 
     return players;
@@ -9500,7 +9478,7 @@ function renderNextRivalAnalysis(selectedOpponentId = null) {
 // TREND CHART RESTORATION
 // ============================================
 
-window.renderAllTeamsTrendChart = function (teamAggregates, mode = 'cumulative', highlightTeamIds = []) {
+function renderAllTeamsTrendChart(teamAggregates, mode = 'cumulative', highlightTeamIds = []) {
     console.log("📈 renderAllTeamsTrendChart() called with mode:", mode, "highlightTeamIds:", highlightTeamIds);
 
     if (!state.draft.details) {

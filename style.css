@@ -5548,15 +5548,13 @@ canvas {
 /* the summary column: label · figure · change · shape · unit */
 .sum-row {
     display: grid;
-    grid-template-columns: 58px auto 1fr;
-    grid-template-areas: "label val bars" "label change bars" "label unit bars";
+    grid-template-columns: 62px auto 1fr;
+    grid-template-areas: "label val bars";
     align-items: center;
-    gap: 1px 8px;
-    padding: 7px 0;
+    gap: 8px;
+    padding: 6px 0;
     border-bottom: 1px dotted #dbeafe;
 }
-
-.sum-change { grid-area: change; display: flex; align-items: center; gap: 4px; }
 
 .sum-row:last-of-type { border-bottom: none; }
 .sum-label { grid-area: label; font-size: 12.5px; font-weight: 700; color: #475569; }
@@ -6057,3 +6055,9 @@ canvas {
     .detail-sum { border-inline-start: none; border-top: 1px solid #dbeafe; }
     .detail-boxes { grid-template-columns: 1fr; }
 }
+
+/* Every block of numbers in the expanded row states the span it covers. */
+.h4-note { font-weight: 600; font-size: 10.5px; color: #94a3b8; }
+.boxes-heading { margin: 0 0 8px !important; }
+.detail-boxes { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-start; }
+.detail-boxes .boxes-heading { flex: 0 0 100%; }

@@ -1,0 +1,36 @@
+name: CI
+
+# main deploys straight to GitHub Pages on every push, so this is the only gate
+# between a bad commit and the live site.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+
+      - name: Install
+        run: npm install --no-audit --no-fund
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Unit tests
+        run: npm test
+
+      - name: Structural checks
+        run: npm run check
+
+      - name: Browser smoke test
+        run: npm run test:smoke

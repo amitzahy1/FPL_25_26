@@ -80,7 +80,7 @@ function load(players, over = {}) {
         'fourthTrendMetric', 'fixtureForGw', 'getDraftTeamForPlayer', 'trendPlayerIndex',
         'pointsConcentration',
         'miniSparkHtml',
-        'trendBarsHtml', 'trendChangeHtml',
+        'trendBarsHtml',
         // the three stat boxes in the expanded row
         'boxAttack', 'boxDefence', 'boxValue'
     ], {}, [
@@ -223,5 +223,62 @@ describe('draft-board sparkline', () => {
         const players = [makePlayer()];
         const { fns } = load(players, { trendGws: [], trendPrevGws: [] });
         assert.equal(fns.miniSparkHtml(1, 'pts'), '');
+    });
+});
+
+describe('sorting the trend column', () => {
+    /**
+     * The chain had two branches testing the same sort key, so the second was
+     * unreachable: clicking "נקודות לפי מחזור" ordered by movement against the
+     * previous window instead of by the total printed in the cell.
+     */
+    test('exactly one branch handles each computed sort key', () => {
+        const src = readFileSync(join(REPO_ROOT, 'script.js'), 'utf8');
+        for (const key of ['trend_pts', 'signal_rank']) {
+            // Only `if (...)` conditions count as branches; the same comparison
+            // also appears in a ternary inside a branch body.
+            const branches = (src.match(new RegExp(`if \\(state\\.sortKey === '${key}'`, 'g')) || []).length;
+            assert.equal(branches, 1,
+                `${key} is tested ${branches} times in the sort chain; only the first can ever run`);
+        }
+    });
+
+    test('the column sorts by the figure the cell prints', () => {
+        const src = readFileSync(join(REPO_ROOT, 'script.js'), 'utf8');
+        const i = src.indexOf("state.sortKey === 'trend_pts'");
+        const branch = src.slice(i, i + 600);
+        assert.ok(branch.includes('summariseTrend'), 'sorts by the window total');
+        assert.ok(!branch.includes('trendDelta'), 'not by a change the cell no longer shows');
+    });
+});
+
+describe('expanded row states its time spans', () => {
+    test('actual G+A sits with the expected figure it should be read against', () => {
+        const players = [makePlayer()];
+        const { fns } = load(players);
+        const html = fns.playerDetailRowHtml(players[0], 35);
+        const ga = html.indexOf('>G+A<');
+        const xgi = html.indexOf('>xG+xA<');
+        assert.ok(ga > 0 && xgi > 0, 'both rows are present');
+        assert.ok(ga < xgi, 'G+A comes first, so the pair reads together');
+    });
+
+    test('the season boxes and the gameweek window each name their span', () => {
+        const players = [makePlayer()];
+        const { fns } = load(players);
+        const html = fns.playerDetailRowHtml(players[0], 35);
+        assert.match(html, /כל העונה עד כה/, 'the season-to-date boxes say so');
+        assert.match(html, /המחזורים האחרונים/, 'the window says so');
+        // 3065 season minutes beside a 90-minute average with neither labelled was
+        // the reason this was unreadable.
+        assert.match(html, /10 משחקים · 900 דקות/);
+    });
+
+    test('no unexplainable change line survives in the summary', () => {
+        const players = [makePlayer()];
+        const { fns } = load(players);
+        const html = fns.playerDetailRowHtml(players[0], 35);
+        assert.ok(!html.includes('קודם'), 'no "previously N" against an off-screen window');
+        assert.ok(!html.includes('ללא שינוי'), 'no "no change" line');
     });
 });

@@ -341,31 +341,72 @@
 @media (max-width: 768px) {
     /* 35 columns on a 390px screen is a horizontal scroll no matter what; the
        sticky name column just needs to stop eating two thirds of the width. */
+    /* Scoped to .player-row: the expanded row's single colspan cell is also a
+       `td:nth-child(1)`, so an unscoped `display: none` hid the entire match log
+       and every stat box on mobile. */
     #playersTable > thead > tr > th:nth-child(1),
-    #playersTable > tbody > tr > td:nth-child(1) { display: none; }
+    #playersTable > tbody > tr.player-row > td:nth-child(1) { display: none; }
 
     #playersTable > thead > tr > th:nth-child(2),
-    #playersTable > tbody > tr > td:nth-child(2) {
+    #playersTable > tbody > tr.player-row > td:nth-child(2) {
         inset-inline-start: 0;
-        width: 30px;
-        min-width: 30px;
+        width: 28px;
+        min-width: 28px;
+        padding-inline: 2px;
     }
 
     #playersTable > thead > tr > th:nth-child(3),
-    #playersTable > tbody > tr > td:nth-child(3) {
-        inset-inline-start: 30px;
-        min-width: 108px;
-        max-width: 108px;
+    #playersTable > tbody > tr.player-row > td:nth-child(3) {
+        inset-inline-start: 28px;
+        min-width: 124px;
+        max-width: 124px;
     }
+
+    /* The decorative badges cost more width than the name they sit next to, and
+       everything they encode is spelled out in the row that opens on tap. */
+    #playersTable .player-name-icon { display: none; }
+    #playersTable .player-name-text { font-size: 13px; }
+    #playersTable .watch-star { font-size: 19px; padding: 0; }
 
     .scout-controls { flex-wrap: wrap; gap: 6px; }
     .scout-btn { font-size: 13px; padding: 6px 10px; }
 
-    /* The expanded row is pinned to the scrollport, so it must not also try to
-       hold three boxes side by side. */
-    .detail-body { grid-template-columns: 1fr !important; }
-    .detail-boxes { grid-template-columns: 1fr !important; border-inline-start: none; }
+    /* The colspan cell is as wide as all 35 columns, so its content sat far off
+       to the side and had to be scrolled to. Pinning it to the scroll port keeps
+       the whole panel readable at the viewport width. */
+    /* The pin goes on the inner div, not the cell: table layout ignores width on
+       a td, so the panel stayed as wide as all 35 columns and its content sat
+       off-screen. A block child honours both width and sticky. */
+    .detail-row > td { position: static; }
+
+    .detail-card {
+        position: sticky;
+        inset-inline-start: 0;
+        /* fitDetailPanel() sets the exact width; this is the fallback. */
+        max-width: 100vw;
+        box-sizing: border-box;
+    }
+
+    /* min-width:0 on the grid items: without it each track grows to its
+       content's min-content width and drags the whole panel wider than the pin. */
+    .detail-body { grid-template-columns: 1fr !important; min-width: 0; }
+    .detail-body > section { min-width: 0; border-inline-start: none; }
+    .detail-sum { border-top: 1px solid #dbeafe; }
+
+    .detail-boxes { flex-direction: column; border-inline-start: none; }
+    .detail-boxes > * { width: 100%; min-width: 0; box-sizing: border-box; }
+    .match-log { table-layout: fixed; }
+    .detail-log, .detail-sum, .detail-boxes { overflow-x: auto; }
     .detail-bar { flex-wrap: wrap; row-gap: 6px; }
+
+    /* Narrower label column and bars, so the figure is never pushed off-panel. */
+    .sum-row { grid-template-columns: 52px auto 1fr; gap: 6px; }
+    .sum-val b { font-size: 15.5px; }
+    .trend-bars.is-large { height: 28px; gap: 3px; }
+    .trend-bars.is-large .trend-bar { width: 10px; }
+    .trend-bars.is-large .trend-bar b { font-size: 8.5px; inset-inline: -5px; }
+    .match-log { font-size: 12.5px; }
+    .match-log thead th, .match-log td, .match-log tbody th { padding: 4px 3px; }
 }
 
 /* --- the controls toolbar wraps instead of running off the screen ---
