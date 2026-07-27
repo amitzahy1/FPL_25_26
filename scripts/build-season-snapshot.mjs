@@ -135,17 +135,27 @@ async function main() {
             if (num(r.defensive_contribution) >= threshold) { acc.defconHits++; hitDefcon = 1; }
         }
 
-        // Flat per-appearance log: [gw, points, minutes, xGI(x100), defconHit].
+        // Flat per-appearance log, LOG_STRIDE values per appearance:
+        // [gw, points, minutes, xGI(x100), defconHit, bps, saves, defCon,
+        //  goals, assists, bonus].
         // Flat rather than objects because the key names would otherwise repeat
         // roughly 20,000 times. This is what powers the "last N matches"
-        // window -- during a season, form over recent matches matters far more
-        // than a season-long average.
+        // window and the per-gameweek trend charts -- during a season, form
+        // over recent matches matters far more than a season-long average, and
+        // on draft day this file is the ONLY source of per-match history,
+        // because the new season has not played a gameweek yet.
         acc.log.push(
             gw,
             num(r.total_points),
             minutes,
             Math.round(num(r.expected_goal_involvements) * 100),
-            hitDefcon
+            hitDefcon,
+            num(r.bps),
+            num(r.saves),
+            num(r.defensive_contribution),
+            num(r.goals_scored),
+            num(r.assists),
+            num(r.bonus)
         );
     }
 
@@ -201,8 +211,9 @@ async function main() {
         teams,
         fields,
         rows,
-        logStride: 5,
-        logFields: ['gw', 'points', 'minutes', 'xgi_x100', 'defcon_hit'],
+        logStride: 11,
+        logFields: ['gw', 'points', 'minutes', 'xgi_x100', 'defcon_hit', 'bps', 'saves',
+            'defcon', 'goals', 'assists', 'bonus'],
         gwLogs
     };
 

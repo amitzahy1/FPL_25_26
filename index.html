@@ -5,8 +5,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>⚽ FPL Pro Analytics Hub</title>
-    <link rel="stylesheet" href="style.css">
-    <link rel="stylesheet" href="mobile.css">
+    <link rel="stylesheet" href="style.css?v=2026.07.27.247">
+    <link rel="stylesheet" href="mobile.css?v=2026.07.27.247">
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.5.1"></script>
     <script
         src="https://cdnjs.cloudflare.com/ajax/libs/chartjs-plugin-annotation/2.2.1/chartjs-plugin-annotation.min.js"></script>
@@ -424,10 +424,11 @@
                         </select></div>
 
                     <div class="filter-group"><label>הצג:</label><select id="showEntries" onchange="processChange()">
+                            <option value="20" selected>20 הראשונים</option>
                             <option value="50">50</option>
                             <option value="100">100</option>
                             <option value="200">200</option>
-                            <option value="all" selected>הכל</option>
+                            <option value="all">הכל</option>
                         </select></div>
 
                 </div>
@@ -464,6 +465,30 @@
                                 <button class="view-btn" onclick="switchMainView('charts')" id="btnViewCharts"
                                     style="padding: 8px 16px; border: none; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 6px; transition: all 0.2s;">📊
                                     גרפים</button>
+                            </div>
+
+                            <div style="width: 1px; height: 32px; background: #e2e8f0;"></div>
+
+                            <!-- Scouting controls: watchlist, row density, trend window -->
+                            <div class="scout-controls">
+                                <button class="scout-btn scout-watch" id="watchlistOnlyBtn" aria-pressed="false"
+                                    onclick="toggleWatchlistOnly()" title="הצג רק שחקנים שסימנת בכוכב">
+                                    ★ מעקב <span class="scout-count" id="watchlistCount">0</span>
+                                </button>
+                                <div class="scout-toggle">
+                                    <button class="scout-btn" data-row-mode="trend" aria-pressed="true"
+                                        onclick="setRowMode('trend')" title="שורות עם גרף מחזורים אחרונים">טרנד</button>
+                                    <button class="scout-btn" data-row-mode="compact" aria-pressed="false"
+                                        onclick="setRowMode('compact')" title="שורות צרות בלי גרפים">קומפקטי</button>
+                                </div>
+                                <label class="scout-field">חלון
+                                    <select id="trendWindowSelect" onchange="setTrendWindow(this.value)">
+                                        <option value="3">3 מחזורים</option>
+                                        <option value="5" selected>5 מחזורים</option>
+                                        <option value="6">6 מחזורים</option>
+                                        <option value="10">10 מחזורים</option>
+                                    </select>
+                                </label>
                             </div>
                         </div>
 
@@ -518,6 +543,15 @@
                                     <th>בחר</th>
                                     <th data-sort="rank">דירוג<span class="sort-indicator"></span></th>
                                     <th data-sort="web_name">שחקן<span class="sort-indicator"></span></th>
+                                    <th data-sort="signal_rank"
+                                        title="המלצה אחת לשחקן, עם המספרים שהובילו אליה. מסודר: קח עכשיו → קנייה בזול → לו״ז מתהפך → ניטרלי → סיכון → למכור → מלכודת → לא זמין">
+                                        סיגנל<span class="sort-indicator"></span></th>
+                                    <th class="trend-col" data-sort="trend_pts"
+                                        title="נקודות בכל אחד מהמחזורים האחרונים. המיון לפי כמות השינוי מול החלון הקודם">
+                                        נק׳ — טרנד<span class="sort-indicator"></span></th>
+                                    <th class="trend-col" data-sort="trend_xgi"
+                                        title="xG+xA בכל אחד מהמחזורים האחרונים — מה שהוא ייצר, לא מה שיצא לו">
+                                        xG+xA — טרנד<span class="sort-indicator"></span></th>
                                     <th data-sort="draft_score" title="ציון דראפט משוקלל">ציון<span
                                             class="sort-indicator"></span></th>
                                     <th data-sort="vorp"
@@ -981,7 +1015,7 @@
     <!-- Version query is bumped by scripts/stamp-version.mjs on every commit
          (npm run stamp). It was left at 4.0.0 for months, so returning
          visitors kept running a cached script.js and never saw fixes. -->
-    <script src="script.js?v=2026.07.27.246" defer></script>
+    <script src="script.js?v=2026.07.27.247" defer></script>
 </body>
 
 </html>

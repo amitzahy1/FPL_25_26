@@ -246,7 +246,11 @@ const state = {
     rowMode: 'trend',            // 'trend' = tall rows with per-GW micro-charts, 'compact' = classic
     trendWindow: 5,              // how many recent gameweeks each micro-chart covers
     trendGws: [],                // [{ gw, stats: Map(playerId -> gwStats) }] newest last
+    trendPrevGws: [],            // the window before it, so deltas have a baseline
+    trendScales: {},             // per-metric bar ceilings, league-wide
+    trendKey: null,              // "<source>:<gws>" — what trendGws currently holds
     trendLoading: false,
+    openRowId: null,             // the player whose match log is expanded
     // Advanced filters
     searchQuery: '',
     priceRange: { min: 4, max: 15 },
@@ -1146,10 +1150,15 @@ function applyFixturesToProcessedData(fixtures) {
         const processed = state.allPlayersData[src]?.processed;
         if (!processed || !processed.length) return;
         calculateRealFDR(processed, fixtures);
+        // Predictions need the fixture list too. Players are processed before
+        // the fixtures arrive — they are deliberately not blocking the first
+        // paint — so calculateAllPredictions found none and left every xPts
+        // unset, which the table rendered as a column of 0.0.
+        calculateAllPredictions(processed);
         updated = true;
     });
     if (!updated) return;
-    console.log('🗓️ Fixtures arrived — FDR backfilled');
+    console.log('🗓️ Fixtures arrived — FDR and xPts backfilled');
     processChange();
 }
 
@@ -1215,9 +1224,19 @@ async function fetchAndProcessData() {
 
         document.getElementById('lastUpdated').textContent = `עדכון אחרון: ${new Date().toLocaleString('he-IL')}`;
         populateTeamFilter();
+        loadWatchlist();
+        invalidateSignals();
         updateDashboardKPIs(); // Update dashboard KPIs
         renderDraftBoard();    // "who to pick and why" panels
         processChange();
+
+        // The trend window is a handful of localStorage-cached gameweek fetches.
+        // Paint the table first, then fill the micro-charts in when it resolves.
+        ensureTrendWindow().then(() => {
+            if (!state.trendGws.length) return;
+            renderTable();
+            renderDraftBoard();
+        });
 
         // Load draft data in background (for team filter)
         loadDraftDataInBackground();
@@ -1635,24 +1654,603 @@ function getPercentileClass(value, values, reversed = false) {
     }
 }
 
-function createPlayerRowHtml(player, index) {
-    // Calculate percentile classes for displayed data
-    const displayedValues = {
-        draft_score: state.displayedData.map(p => p.draft_score),
-        stability_index: state.displayedData.map(p => p.stability_index || 0),
-        predicted_points_1_gw: state.displayedData.map(p => p.predicted_points_1_gw),
-        total_points: state.displayedData.map(p => p.total_points),
-        points_per_game_90: state.displayedData.map(p => p.points_per_game_90),
-        selected_by_percent: state.displayedData.map(p => parseFloat(p.selected_by_percent)),
-        dreamteam_count: state.displayedData.map(p => p.dreamteam_count),
-        def_contrib_per90: state.displayedData.map(p => p.def_contrib_per90),
-        goals_assists: state.displayedData.map(p => (p.goals_scored || 0) + (p.assists || 0)),
-        xGI_per90: state.displayedData.map(p => parseFloat(p.xGI_per90) || 0),
-        minutes: state.displayedData.map(p => p.minutes),
-        ict_index_per90: state.displayedData.map(p => parseFloat(p.ict_index_per90) || 0),
-        bonus_per90: state.displayedData.map(p => parseFloat(p.bonus_per90) || 0),
-        clean_sheets_per90: state.displayedData.map(p => parseFloat(p.clean_sheets_per90) || 0)
+/* ==========================================================================
+   SCOUTING VIEW
+   Watchlist, signal badges, and per-gameweek trend cells. The trend data is
+   free: getGameweekPoints() already caches the full `stats` object per player
+   per gameweek in localStorage, so nothing new is fetched from the API.
+   ========================================================================== */
+
+const WATCHLIST_KEY = 'fpl_watchlist';
+// Micro-charts cost ~5 DOM nodes per cell. Past this many rows the trend cells
+// keep the number and the delta but drop the bars, so "הצג: הכל" stays usable.
+const TREND_BAR_ROW_LIMIT = 50;
+
+function loadWatchlist() {
+    try {
+        const raw = JSON.parse(localStorage.getItem(WATCHLIST_KEY) || '[]');
+        // Element ids start at 1. Number(null) is 0 and Number.isFinite(0) is
+        // true, so a plain finite check silently admitted a phantom id 0.
+        state.watchlist = new Set(raw.map(Number).filter(n => Number.isInteger(n) && n > 0));
+    } catch (e) {
+        console.warn('watchlist: unreadable, starting empty', e);
+        state.watchlist = new Set();
+    }
+    return state.watchlist;
+}
+
+function saveWatchlist() {
+    try {
+        localStorage.setItem(WATCHLIST_KEY, JSON.stringify([...state.watchlist]));
+    } catch (e) { console.warn('watchlist: could not save', e); }
+}
+
+function toggleWatch(playerId, ev) {
+    if (ev) ev.stopPropagation();
+    const id = Number(playerId);
+    if (state.watchlist.has(id)) state.watchlist.delete(id); else state.watchlist.add(id);
+    saveWatchlist();
+    // Only re-filter when the watchlist filter is on; otherwise repaint so the
+    // star flips without rebuilding the dataset.
+    if (state.watchlistOnly) processChange();
+    else { renderTable(); updateScoutingUi(); }
+}
+
+function toggleWatchlistOnly() {
+    state.watchlistOnly = !state.watchlistOnly;
+    processChange();
+}
+
+function setRowMode(mode) {
+    state.rowMode = mode === 'compact' ? 'compact' : 'trend';
+    applyRowMode();
+    renderTable();
+    updateScoutingUi();
+}
+
+/** Show/hide the trend columns and set the row-height class on the table. */
+function applyRowMode() {
+    const table = document.getElementById('playersTable');
+    if (!table) return;
+    // One class on the table; CSS hides `.trend-col` in compact mode. Setting
+    // `hidden` on each cell from here instead would only ever reach the cells
+    // that already exist — the rows are rebuilt after this runs, so the new
+    // ones kept their trend cells while the headers stayed hidden, and the
+    // columns drifted out of alignment.
+    table.classList.toggle('trend-mode', state.rowMode === 'trend');
+}
+
+/**
+ * The expanded row spans the table's full scroll width, so its panel is sized
+ * to the visible part of the scroll container instead and pinned there by CSS.
+ * Without this the recommendation column sat ~900px off-screen.
+ */
+function syncDetailWidth() {
+    const container = document.querySelector('#mainTableView .table-container');
+    if (!container) return;
+    container.style.setProperty('--detail-width', `${container.clientWidth}px`);
+}
+
+window.addEventListener('resize', syncDetailWidth);
+
+function updateScoutingUi() {
+    const count = document.getElementById('watchlistCount');
+    if (count) count.textContent = state.watchlist.size;
+    const only = document.getElementById('watchlistOnlyBtn');
+    if (only) only.setAttribute('aria-pressed', String(state.watchlistOnly));
+    document.querySelectorAll('[data-row-mode]').forEach(btn => {
+        btn.setAttribute('aria-pressed', String(btn.dataset.rowMode === state.rowMode));
+    });
+    const win = document.getElementById('trendWindowSelect');
+    if (win) win.value = String(state.trendWindow);
+}
+
+/* ---------------------------- signal badges ------------------------------ */
+
+/**
+ * One headline verdict per player, with the numbers that earned it.
+ * Ordered: the first match wins, so "unavailable" always beats "great form".
+ * Every rule reads fields that preprocessPlayerData already computes.
+ */
+const SIGNAL_RULES = [
+    {
+        key: 'out', label: 'לא זמין', tone: 'bad',
+        test: p => p.availability_grade && p.availability_grade !== 'available',
+        why: p => [p.news ? String(p.news).slice(0, 48) : 'ספק השתתפות',
+                   p.chance_of_playing_next_round !== null ? `${p.chance_of_playing_next_round}% סיכוי` : null]
+    },
+    {
+        key: 'trap', label: 'מלכודת', tone: 'bad',
+        // Scoring more than the underlying numbers justify, against a bad run.
+        test: p => p.xDiff >= 1.5 && (parseFloat(p.xGI_per90) || 0) < 0.35 && p.minutes >= 270,
+        why: p => [`xDiff ${p.xDiff.toFixed(1)} — מימוש יתר`, `xGI/90 ${(parseFloat(p.xGI_per90) || 0).toFixed(2)}`]
+    },
+    {
+        key: 'sell', label: 'למכור גבוה', tone: 'warn',
+        test: p => p.xDiff >= 2 && p.next_3_fdr >= 3.4,
+        why: p => [`xDiff +${p.xDiff.toFixed(1)}`, `לו״ז 3 קרובים ${p.next_3_fdr.toFixed(1)}`]
+    },
+    {
+        key: 'buylow', label: 'קנייה בזול', tone: 'info',
+        // Producing far more than the returns show — the gap usually closes.
+        test: p => p.xDiff <= -1.5 && p.minutes >= 360,
+        why: p => [`xDiff ${p.xDiff.toFixed(1)} — צפוי לתיקון`,
+                   `${(parseFloat(p.xGI_per90) || 0).toFixed(2)} xGI/90`]
+    },
+    {
+        key: 'claim', label: 'קח עכשיו', tone: 'good',
+        // Free agent who would start for most teams in the league. Reads the
+        // ownership Set rather than getDraftTeamForPlayer(), which walks every
+        // roster — this rule is evaluated for every player on every sort.
+        //
+        // Gated on the rosters having actually loaded: with an empty set every
+        // player is technically unowned, which turned "קח עכשיו" into a badge
+        // most of the table carried and told the user nothing.
+        test: p => state.draft.ownedElementIds.size > 0 &&
+            !state.draft.ownedElementIds.has(p.id) && p.draft_score >= 45 && p.minutes >= 270,
+        why: p => [`ציון ${p.draft_score.toFixed(0)} וחופשי`,
+                   p.set_piece_priority && p.set_piece_priority.penalty === 1 ? 'פנדלים #1' : `נק׳/90 ${p.points_per_game_90.toFixed(1)}`]
+    },
+    {
+        key: 'swing', label: 'לו״ז מתהפך', tone: 'plum',
+        test: p => p.next_3_fdr > 0 && p.next_3_fdr <= 2.4 && p.minutes >= 270,
+        why: p => [`לו״ז 3 קרובים ${p.next_3_fdr.toFixed(1)}`, `חיזוי ${(p.predicted_points_1_gw || 0).toFixed(1)}`]
+    },
+    {
+        key: 'rotation', label: 'סיכון סיבוב', tone: 'warn',
+        test: p => Number.isFinite(p.rotation_risk) && p.rotation_risk < 0.6 && p.minutes >= 180,
+        why: p => [`פתח ב-${Math.round(p.rotation_risk * 100)}% מהמשחקים`]
+    }
+];
+
+const HOLD_SIGNAL = { key: 'hold', label: 'ניטרלי', tone: 'muted', why: [] };
+
+/**
+ * Cached per player. Every rule reads fields that only change when the data is
+ * reprocessed or the draft rosters arrive, so `invalidateSignals()` is called
+ * from those two places rather than recomputing on every sort and render.
+ */
+const _signalCache = new Map();
+function invalidateSignals() { _signalCache.clear(); }
+
+function signalFor(player) {
+    const hit = _signalCache.get(player.id);
+    if (hit) return hit;
+
+    let result = HOLD_SIGNAL;
+    for (const rule of SIGNAL_RULES) {
+        let matched = false;
+        try { matched = !!rule.test(player); } catch (e) { matched = false; }
+        if (!matched) continue;
+        let why = [];
+        try { why = (rule.why(player) || []).filter(Boolean).slice(0, 2); } catch (e) { why = []; }
+        result = { key: rule.key, label: rule.label, tone: rule.tone, why };
+        break;
+    }
+    _signalCache.set(player.id, result);
+    return result;
+}
+
+/** Rank used when sorting by the סיגנל column: actionable buckets first. */
+const SIGNAL_SORT_ORDER = ['claim', 'buylow', 'swing', 'hold', 'rotation', 'sell', 'trap', 'out'];
+function signalRank(player) {
+    const i = SIGNAL_SORT_ORDER.indexOf(signalFor(player).key);
+    return i < 0 ? SIGNAL_SORT_ORDER.length : i;
+}
+
+/* ------------------------- per-gameweek trends --------------------------- */
+
+const gwNum = v => {
+    const n = parseFloat(v);
+    return Number.isFinite(n) ? n : 0;
+};
+
+/** Official DEFCON for a single gameweek, mirroring preprocessPlayerData. */
+function gwDefensiveContribution(stats, elementType) {
+    if (stats.defensive_contribution !== undefined && stats.defensive_contribution !== null) {
+        return gwNum(stats.defensive_contribution);
+    }
+    return gwNum(stats.clearances_blocks_interceptions) + gwNum(stats.tackles) +
+        (elementType === 3 || elementType === 4 ? gwNum(stats.recoveries) : 0);
+}
+
+/**
+ * The metrics that get a micro-chart. `agg` is how the window is summarised:
+ * 'sum' for things that accumulate (points, xGI), 'avg' for rates (minutes).
+ */
+const TREND_METRICS = {
+    pts: {
+        label: 'נק׳', agg: 'sum', fmt: v => v.toFixed(0),
+        read: s => gwNum(s.total_points)
+    },
+    xgi: {
+        label: 'xG+xA', agg: 'sum', fmt: v => v.toFixed(2),
+        read: s => gwNum(s.expected_goals) + gwNum(s.expected_assists)
+    },
+    mins: {
+        label: 'דקות', agg: 'avg', fmt: v => v.toFixed(0),
+        read: s => gwNum(s.minutes)
+    },
+    dc: {
+        label: 'DC', agg: 'avg', fmt: v => v.toFixed(1),
+        read: (s, p) => gwDefensiveContribution(s, p.element_type)
+    },
+    bps: {
+        label: 'BPS', agg: 'avg', fmt: v => v.toFixed(0),
+        read: s => gwNum(s.bps)
+    },
+    saves: {
+        label: 'הצלות', agg: 'avg', fmt: v => v.toFixed(1),
+        read: s => gwNum(s.saves)
+    }
+};
+
+/** The fourth trend column depends on what the position is scored for. */
+function fourthTrendMetric(player) {
+    if (player.element_type === 1) return 'saves';
+    if (player.element_type === 2) return 'dc';
+    return 'bps';
+}
+
+/**
+ * Load the last 2*n completed gameweeks: the recent n drive the bars, the n
+ * before them give the delta something honest to compare against.
+ *
+ * Two sources, same output shape:
+ *  - completed season (the snapshot) -> read straight out of the committed
+ *    per-match logs. No network, and it is the only history that exists on
+ *    draft day, when the new season has not played a single gameweek.
+ *  - live season -> getGameweekPoints(), which is localStorage-cached, so this
+ *    is one round of fetches per season rather than one per render.
+ */
+async function ensureTrendWindow(n = state.trendWindow) {
+    const source = state.currentDataSource;
+
+    // --- completed-season snapshot -------------------------------------
+    if (state.allPlayersData[source]?.raw?.__snapshot) {
+        const all = snapshotGameweekStats();
+        if (!all.length) return state.trendGws;
+        const recent = all.slice(-n);
+        const prev = all.slice(Math.max(0, all.length - 2 * n), all.length - n);
+        const wanted = `${source}:${[...prev, ...recent].map(t => t.gw).join(',')}`;
+        if (state.trendKey === wanted) return state.trendGws;
+        state.trendPrevGws = prev;
+        state.trendGws = recent;
+        state.trendKey = wanted;
+        computeTrendScales();
+        return state.trendGws;
+    }
+
+    // --- live season ----------------------------------------------------
+    const completed = getCompletedGWCount();
+    if (!completed) return state.trendGws;
+
+    const recent = [];
+    for (let gw = Math.max(1, completed - n + 1); gw <= completed; gw++) recent.push(gw);
+    const prev = [];
+    for (let gw = Math.max(1, completed - 2 * n + 1); gw < recent[0]; gw++) prev.push(gw);
+
+    const wanted = `${source}:${[...prev, ...recent].join(',')}`;
+    if (state.trendKey === wanted) return state.trendGws;
+    if (state.trendLoading) return state.trendGws;
+
+    state.trendLoading = true;
+    try {
+        const all = [...prev, ...recent];
+        const maps = await Promise.all(all.map(gw => getGameweekPoints(gw)));
+        const loaded = all.map((gw, i) => ({ gw, stats: maps[i] })).filter(t => t.stats);
+        state.trendPrevGws = loaded.filter(t => prev.includes(t.gw));
+        state.trendGws = loaded.filter(t => recent.includes(t.gw));
+        state.trendKey = loaded.length ? wanted : null;
+        computeTrendScales();
+    } catch (e) {
+        console.warn('trends: could not load the gameweek window', e);
+    } finally {
+        state.trendLoading = false;
+    }
+    return state.trendGws;
+}
+
+/**
+ * Bar heights are scaled to a league-wide ceiling (95th percentile of all
+ * single-gameweek values in the window), not to each player's own maximum —
+ * otherwise a player who scored 2,1,2,1,2 looks identical to one on 12,9,11,8,10.
+ */
+function computeTrendScales() {
+    const players = (state.allPlayersData[state.currentDataSource].processed) || [];
+    const byId = new Map(players.map(p => [p.id, p]));
+    const scales = {};
+    Object.entries(TREND_METRICS).forEach(([key, def]) => {
+        const values = [];
+        state.trendGws.forEach(({ stats }) => {
+            stats.forEach((s, id) => {
+                const p = byId.get(id);
+                if (!p) return;
+                const v = def.read(s, p);
+                if (v > 0) values.push(v);
+            });
+        });
+        if (!values.length) { scales[key] = 1; return; }
+        values.sort((a, b) => a - b);
+        scales[key] = values[Math.floor(values.length * 0.95)] || values[values.length - 1] || 1;
+    });
+    scales.mins = 90; // minutes have a real ceiling
+    state.trendScales = scales;
+}
+
+/**
+ * Player lookup by element id for the active season, rebuilt only when the
+ * season changes. getTrendSeries is called a few thousand times per sort, and
+ * a linear .find() inside it made sorting quadratic.
+ */
+let _trendPlayerIndex = { source: null, size: 0, byId: new Map() };
+function trendPlayerIndex() {
+    const source = state.currentDataSource;
+    const players = (state.allPlayersData[source] && state.allPlayersData[source].processed) || [];
+    if (_trendPlayerIndex.source !== source || _trendPlayerIndex.size !== players.length) {
+        _trendPlayerIndex = { source, size: players.length, byId: new Map(players.map(p => [p.id, p])) };
+    }
+    return _trendPlayerIndex.byId;
+}
+
+/** Per-gameweek values for one player and metric, oldest first. */
+function getTrendSeries(playerId, metricKey, window = 'recent') {
+    const def = TREND_METRICS[metricKey];
+    if (!def) return [];
+    const gws = window === 'prev' ? (state.trendPrevGws || []) : state.trendGws;
+    const player = trendPlayerIndex().get(Number(playerId)) || { element_type: 3 };
+    return gws.map(({ gw, stats }) => {
+        const s = stats.get(Number(playerId));
+        return { gw, value: s ? def.read(s, player) : 0, played: !!s };
+    });
+}
+
+function summariseTrend(series, agg) {
+    if (!series.length) return 0;
+    const total = series.reduce((sum, pt) => sum + pt.value, 0);
+    return agg === 'avg' ? total / series.length : total;
+}
+
+/**
+ * How much a metric moved between the previous window and the current one.
+ * This is what the trend columns sort on: the column exists to answer "who is
+ * climbing", and the raw level is already in the season columns beside it.
+ * Cached per (player, metric) because sorting asks for it O(n log n) times and
+ * the answer cannot change until the window is rebuilt.
+ */
+let _trendDeltaCache = { key: null, values: new Map() };
+function trendDelta(player, metricKey) {
+    const def = TREND_METRICS[metricKey];
+    if (!def || !state.trendGws.length) return null;
+    if (_trendDeltaCache.key !== state.trendKey) {
+        _trendDeltaCache = { key: state.trendKey, values: new Map() };
+    }
+    const cacheKey = `${player.id}:${metricKey}`;
+    if (_trendDeltaCache.values.has(cacheKey)) return _trendDeltaCache.values.get(cacheKey);
+
+    const now = summariseTrend(getTrendSeries(player.id, metricKey, 'recent'), def.agg);
+    const before = summariseTrend(getTrendSeries(player.id, metricKey, 'prev'), def.agg);
+    // A player with no history in either window has no trend to rank, which is
+    // different from a trend of zero — nulls sort to the bottom.
+    const value = (now === 0 && before === 0) ? null : now - before;
+    _trendDeltaCache.values.set(cacheKey, value);
+    return value;
+}
+
+/** One trend cell: window figure, delta vs the previous window, and the bars. */
+function trendCellHtml(player, metricKey, index) {
+    const def = TREND_METRICS[metricKey];
+    if (!def) return '<td class="trend-cell trend-col">–</td>';
+    if (!state.trendGws.length) {
+        return `<td class="trend-cell trend-col trend-empty" title="נתוני המחזורים נטענים">…</td>`;
+    }
+
+    const recent = getTrendSeries(player.id, metricKey, 'recent');
+    const now = summariseTrend(recent, def.agg);
+    const before = summariseTrend(getTrendSeries(player.id, metricKey, 'prev'), def.agg);
+    const delta = now - before;
+    const dir = Math.abs(delta) < (def.agg === 'avg' ? 0.5 : 0.05) ? 'flat' : (delta > 0 ? 'up' : 'down');
+    const deltaText = dir === 'flat' ? '=' : `${delta > 0 ? '▲+' : '▼'}${def.fmt(Math.abs(delta))}`;
+
+    const scale = (state.trendScales && state.trendScales[metricKey]) || 1;
+    let bars = '';
+    if (index < TREND_BAR_ROW_LIMIT) {
+        bars = `<div class="trend-bars" dir="ltr">` + recent.map((pt, i) => {
+            const h = Math.max(Math.min(pt.value / scale, 1) * 100, pt.played ? 4 : 0);
+            const cls = ['trend-bar'];
+            if (i === recent.length - 1) cls.push('is-last');
+            if (!pt.played || pt.value === 0) cls.push('is-blank');
+            return `<i class="${cls.join(' ')}" style="height:${h.toFixed(0)}%"
+                title="מחזור ${pt.gw}: ${def.fmt(pt.value)}"></i>`;
+        }).join('') + '</div>';
+    }
+
+    return `<td class="trend-cell trend-col" data-metric="${metricKey}">
+        <div class="trend-head">
+            <b class="trend-value">${def.fmt(now)}</b>
+            <span class="trend-delta trend-${dir}" title="מול ${state.trendWindow} המחזורים שלפני">${deltaText}</span>
+        </div>
+        ${bars}
+        <div class="trend-label">${def.label}${def.agg === 'avg' ? ' /משחק' : ` /${recent.length}`}</div>
+    </td>`;
+}
+
+/* --------------------- expanded row: the match log ---------------------- */
+
+/** Which finished fixture a team played in a given gameweek, if we know. */
+function fixtureForGw(teamId, gw) {
+    const fixtures = state.allPlayersData.live.fixtures || state.allPlayersData.historical.fixtures;
+    if (!fixtures) return null;
+    const fix = fixtures.find(f => f.event === gw && (f.team_h === teamId || f.team_a === teamId));
+    if (!fix) return null;
+    const home = fix.team_h === teamId;
+    const oppId = home ? fix.team_a : fix.team_h;
+    return {
+        home,
+        opponent: (state.teamsData[oppId] && state.teamsData[oppId].short_name) || '—',
+        difficulty: home ? fix.team_h_difficulty : fix.team_a_difficulty
     };
+}
+
+function toggleRowDetail(playerId, ev) {
+    if (ev) {
+        // Never hijack a click meant for a control inside the row.
+        const t = ev.target;
+        if (t.closest('button, input, a, select, label')) return;
+    }
+    const id = Number(playerId);
+    state.openRowId = state.openRowId === id ? null : id;
+    renderTable();
+}
+
+/**
+ * The gameweek-by-gameweek log for one player: opponent, minutes, points and
+ * the underlying numbers, newest last, plus the trends that do not earn a
+ * permanent column in the table.
+ */
+function playerDetailRowHtml(player, colSpan) {
+    const gws = state.trendGws;
+    const extraKey = fourthTrendMetric(player);
+    const rows = gws.map(({ gw, stats }) => {
+        const s = stats.get(player.id);
+        const fix = fixtureForGw(player.team, gw);
+        if (!s) {
+            return `<tr class="log-blank"><td>${gw}</td>
+                <td>${fix ? `${fix.opponent} ${fix.home ? '(ב)' : '(ח)'}` : '—'}</td>
+                <td colspan="6">לא שיחק</td></tr>`;
+        }
+        const mins = gwNum(s.minutes);
+        const xg = gwNum(s.expected_goals), xa = gwNum(s.expected_assists);
+        return `<tr class="${mins === 0 ? 'log-blank' : ''}">
+            <td class="log-gw">${gw}</td>
+            <td>${fix ? `<span class="log-opp fdr-${fix.difficulty}">${fix.opponent} ${fix.home ? '(ב)' : '(ח)'}</span>` : '—'}</td>
+            <td class="log-num">${mins}</td>
+            <td class="log-num log-pts">${gwNum(s.total_points)}</td>
+            <td class="log-num">${gwNum(s.goals_scored)}/${gwNum(s.assists)}</td>
+            <td class="log-num">${(xg + xa).toFixed(2)}</td>
+            <td class="log-num">${TREND_METRICS[extraKey].fmt(TREND_METRICS[extraKey].read(s, player))}</td>
+            <td class="log-num">${gwNum(s.bonus)}</td>
+        </tr>`;
+    }).join('');
+
+    const signal = signalFor(player);
+    const trends = ['mins', extraKey, 'bps'].filter((k, i, a) => a.indexOf(k) === i);
+
+    return `<tr class="detail-row" data-detail-for="${player.id}">
+        <td colspan="${colSpan}">
+            <div class="detail-panel">
+                <section class="detail-log">
+                    <h4>${state.trendWindow} המחזורים האחרונים</h4>
+                    ${gws.length ? `<table class="match-log">
+                        <thead><tr><th>מח׳</th><th>יריב</th><th>דק׳</th><th>נק׳</th><th>ש/ב</th>
+                            <th>xG+xA</th><th>${TREND_METRICS[extraKey].label}</th><th>בונוס</th></tr></thead>
+                        <tbody>${rows}</tbody>
+                    </table>` : '<p class="detail-note">נתוני המחזורים עוד נטענים…</p>'}
+                </section>
+                <section class="detail-trends">
+                    <h4>טרנדים נוספים</h4>
+                    <div class="detail-trend-grid">
+                        ${trends.map(k => {
+                            const def = TREND_METRICS[k];
+                            const series = getTrendSeries(player.id, k, 'recent');
+                            const now = summariseTrend(series, def.agg);
+                            const before = summariseTrend(getTrendSeries(player.id, k, 'prev'), def.agg);
+                            const d = now - before;
+                            const scale = (state.trendScales && state.trendScales[k]) || 1;
+                            return `<div class="detail-trend">
+                                <div class="detail-trend-head"><span>${def.label}</span>
+                                    <b>${def.fmt(now)}</b>
+                                    <em class="trend-${Math.abs(d) < 0.5 ? 'flat' : d > 0 ? 'up' : 'down'}">${
+                                        Math.abs(d) < 0.5 ? '=' : `${d > 0 ? '▲+' : '▼'}${def.fmt(Math.abs(d))}`}</em></div>
+                                <div class="trend-bars is-large" dir="ltr">${series.map((pt, i) =>
+                                    `<i class="trend-bar ${i === series.length - 1 ? 'is-last' : ''} ${pt.value ? '' : 'is-blank'}"
+                                        style="height:${Math.max(Math.min(pt.value / scale, 1) * 100, pt.played ? 4 : 0).toFixed(0)}%"
+                                        title="מחזור ${pt.gw}: ${def.fmt(pt.value)}"></i>`).join('')}</div>
+                            </div>`;
+                        }).join('')}
+                    </div>
+                </section>
+                <section class="detail-verdict">
+                    <h4>המלצה</h4>
+                    <span class="signal-badge signal-${signal.tone}">${signal.label}</span>
+                    ${signal.why.length ? `<ul class="detail-why">${signal.why.map(w => `<li>${w}</li>`).join('')}</ul>` : ''}
+                    <dl class="detail-kv">
+                        <div><dt>ציון דראפט</dt><dd>${player.draft_score.toFixed(1)}</dd></div>
+                        <div><dt>VORP</dt><dd>${formatVorp(player.vorp)}</dd></div>
+                        <div><dt>קושי 3 קרובים</dt><dd>${player.next_3_fdr > 0 ? player.next_3_fdr.toFixed(1) : '—'}</dd></div>
+                        <div><dt>xDiff</dt><dd>${player.xDiff.toFixed(2)}</dd></div>
+                        <div><dt>בעלות בדראפט</dt><dd>${getDraftTeamForPlayer(player.id) || 'חופשי'}</dd></div>
+                    </dl>
+                    <div class="detail-actions">
+                        <button class="detail-btn ${state.watchlist.has(player.id) ? 'is-on' : ''}"
+                            onclick="toggleWatch(${player.id}, event)">${state.watchlist.has(player.id) ? '★ במעקב' : '☆ הוסף למעקב'}</button>
+                    </div>
+                    <div class="detail-fixtures">${generateFixturesHTML(player)}</div>
+                </section>
+            </div>
+        </td>
+    </tr>`;
+}
+
+/**
+ * A bare bar strip, no numbers — for tight spots like the draft-board rows.
+ * Returns '' before the gameweek window has loaded so nothing jumps around.
+ */
+function miniSparkHtml(playerId, metricKey = 'pts') {
+    if (!state.trendGws.length) return '';
+    const def = TREND_METRICS[metricKey];
+    const series = getTrendSeries(playerId, metricKey, 'recent');
+    if (!series.length) return '';
+    const scale = (state.trendScales && state.trendScales[metricKey]) || 1;
+    const total = series.reduce((s, pt) => s + pt.value, 0);
+    return `<span class="mini-spark" dir="ltr"
+        title="${def.label} לפי מחזור: ${series.map(pt => `${pt.gw}=${def.fmt(pt.value)}`).join(', ')}">
+        ${series.map((pt, i) => `<i class="${i === series.length - 1 ? 'is-last' : ''}${pt.value ? '' : ' is-blank'}"
+            style="height:${Math.max(Math.min(pt.value / scale, 1) * 100, pt.played ? 6 : 0).toFixed(0)}%"></i>`).join('')}
+        <em>${def.fmt(total)}</em></span>`;
+}
+
+function setTrendWindow(n) {
+    state.trendWindow = parseInt(n, 10) || 5;
+    state.trendGws = [];
+    state.trendPrevGws = [];
+    ensureTrendWindow().then(() => { renderTable(); updateScoutingUi(); });
+}
+
+/** Percentile baselines for the whole filtered league, computed once. */
+function buildPercentileBase(rows) {
+    return {
+        draft_score: rows.map(p => p.draft_score),
+        stability_index: rows.map(p => p.stability_index || 0),
+        predicted_points_1_gw: rows.map(p => p.predicted_points_1_gw),
+        total_points: rows.map(p => p.total_points),
+        points_per_game_90: rows.map(p => p.points_per_game_90),
+        selected_by_percent: rows.map(p => parseFloat(p.selected_by_percent)),
+        dreamteam_count: rows.map(p => p.dreamteam_count),
+        def_contrib_per90: rows.map(p => p.def_contrib_per90),
+        goals_assists: rows.map(p => (p.goals_scored || 0) + (p.assists || 0)),
+        xGI_per90: rows.map(p => parseFloat(p.xGI_per90) || 0),
+        minutes: rows.map(p => p.minutes),
+        ict_index_per90: rows.map(p => parseFloat(p.ict_index_per90) || 0),
+        bonus_per90: rows.map(p => parseFloat(p.bonus_per90) || 0),
+        clean_sheets_per90: rows.map(p => parseFloat(p.clean_sheets_per90) || 0)
+    };
+}
+
+function createPlayerRowHtml(player, index) {
+    // Percentiles are measured against the whole filtered league (set in
+    // processChange before the top-N slice), so a top-20 view still shows a
+    // top-20 player as elite rather than as merely average among his peers.
+    const displayedValues = state.percentileBase && state.percentileBase.draft_score
+        ? state.percentileBase
+        : buildPercentileBase(state.displayedData);
+
+    const signal = signalFor(player);
+    const watched = state.watchlist.has(player.id);
+    // Only the two trends worth a permanent column. Minutes, DEFCON/BPS/saves
+    // and the full match log live in the row that opens on click, where there is
+    // room to make them readable.
+    const trendKeys = ['pts', 'xgi'];
 
     const icons = generatePlayerIcons(player);
     const fixturesHTML = generateFixturesHTML(player);
@@ -1681,11 +2279,15 @@ function createPlayerRowHtml(player, index) {
         fdrBadge = `<div class="fdr-badge" style="background-color:${color}; color:${textColor}; padding:2px 6px; border-radius:4px; font-weight:bold; display:inline-block; min-width:30px; text-align:center;">${player.next_3_fdr.toFixed(1)}</div>`;
     }
 
-    return `<tr>
+    return `<tr class="player-row ${state.openRowId === player.id ? 'is-open' : ''}"
+        data-player-id="${player.id}" onclick="toggleRowDetail(${player.id}, event)"
+        title="לחיצה פותחת את המשחקים האחרונים">
         <td><input type="checkbox" class="player-select" data-player-id="${player.id}" ${isChecked}></td>
-        <td>${index + 1}</td>
+        <td class="rank-cell" title="דירוג במאגר הדראפט כולו, לפי ציון">${player.rank || index + 1}</td>
         <td class="name-cell">
             <div class="player-name-wrapper">
+                <button class="watch-star ${watched ? 'is-on' : ''}" onclick="toggleWatch(${player.id}, event)"
+                    aria-pressed="${watched}" title="${watched ? 'הסר מהמעקב' : 'הוסף למעקב'}">${watched ? '★' : '☆'}</button>
                 <span class="player-name-icon">${nameBadges}</span>
                 <span class="player-name-text">${player.web_name}</span>
                 ${player.availability_grade !== 'available' ?
@@ -1693,6 +2295,11 @@ function createPlayerRowHtml(player, index) {
             : ''}
             </div>
         </td>
+        <td class="signal-cell">
+            <span class="signal-badge signal-${signal.tone}">${signal.label}</span>
+            ${signal.why.length ? `<span class="signal-why">${signal.why.map(w => `<span>${w}</span>`).join('')}</span>` : ''}
+        </td>
+        ${trendKeys.map(key => trendCellHtml(player, key, index)).join('')}
         <td class="bold-cell ${getPercentileClass(player.draft_score, displayedValues.draft_score)}">${player.draft_score.toFixed(1)}</td>
         <td class="bold-cell" data-tooltip="${config.columnTooltips.vorp}" style="color:${player.vorp > 0 ? '#059669' : player.vorp < 0 ? '#dc2626' : '#94a3b8'};">${formatVorp(player.vorp)}</td>
         <td data-tooltip="${config.columnTooltips.defcon_hit_rate}">${formatDefconRate(player.defcon_hit_rate)}</td>
@@ -1746,7 +2353,15 @@ function renderTable() {
         return;
     }
 
-    tbody.innerHTML = state.displayedData.map((player, index) => createPlayerRowHtml(player, index)).join('');
+    applyRowMode();
+    tbody.innerHTML = state.displayedData.map((player, index) => {
+        const row = createPlayerRowHtml(player, index);
+        return state.openRowId === player.id
+            ? row + playerDetailRowHtml(player, colCount)
+            : row;
+    }).join('');
+    updateScoutingUi();
+    syncDetailWidth();
 
     // Update KPIs based on displayed/filtered data
     updateDashboardKPIs(state.displayedData);
@@ -1913,6 +2528,15 @@ function processChange() {
         }
     }
 
+    if (state.watchlistOnly) {
+        filteredData = filteredData.filter(p => state.watchlist.has(p.id));
+        if (!filteredData.length) {
+            state.quickFilterNotice = state.watchlist.size
+                ? 'אף שחקן מרשימת המעקב לא עובר את הסינון הנוכחי'
+                : 'רשימת המעקב ריקה — לחץ על ☆ ליד שם של שחקן';
+        }
+    }
+
     state.displayedData = filteredData;
     if (state.activeQuickFilterName) applyQuickFilter(state.activeQuickFilterName);
 
@@ -1922,7 +2546,18 @@ function processChange() {
         state.displayedData.sort((a, b) => {
             let aValue, bValue;
 
-            if (state.sortKey === 'net_transfers_event') {
+            if (state.sortKey === 'signal_rank') {
+                // Verdict buckets, most actionable first (see SIGNAL_SORT_ORDER).
+                aValue = signalRank(a);
+                bValue = signalRank(b);
+            } else if (state.sortKey === 'trend_pts' || state.sortKey === 'trend_xgi') {
+                // Sort a trend column by its MOVEMENT, not its level — the point
+                // of the column is who is climbing, and the level is already
+                // available in the season columns next to it.
+                const metric = state.sortKey === 'trend_pts' ? 'pts' : 'xgi';
+                aValue = trendDelta(a, metric);
+                bValue = trendDelta(b, metric);
+            } else if (state.sortKey === 'net_transfers_event') {
                 aValue = parseFloat(a.transfers_balance || a.net_transfers_event || 0);
                 bValue = parseFloat(b.transfers_balance || b.net_transfers_event || 0);
             } else if (state.sortKey === 'goals_scored_assists') {
@@ -1931,6 +2566,22 @@ function processChange() {
             } else if (state.sortKey === 'xGI_per90') {
                 aValue = parseFloat(a.xGI_per90 || 0);
                 bValue = parseFloat(b.xGI_per90 || 0);
+            } else if (state.sortKey === 'signal_rank') {
+                // Ascending rank = most actionable first, so invert to keep the
+                // "desc" default meaning "show me the opportunities".
+                aValue = -signalRank(a);
+                bValue = -signalRank(b);
+            } else if (state.sortKey === 'trend_pts' || state.sortKey === 'trend_xgi') {
+                // Sort by the direction of travel, not the total: that is the
+                // question the column exists to answer.
+                const key = state.sortKey === 'trend_pts' ? 'pts' : 'xgi';
+                const delta = p => {
+                    const def = TREND_METRICS[key];
+                    return summariseTrend(getTrendSeries(p.id, key, 'recent'), def.agg)
+                        - summariseTrend(getTrendSeries(p.id, key, 'prev'), def.agg);
+                };
+                aValue = delta(a);
+                bValue = delta(b);
             } else {
                 aValue = getNestedValue(a, state.sortKey);
                 bValue = getNestedValue(b, state.sortKey);
@@ -1965,8 +2616,18 @@ function processChange() {
         });
     }
 
-    // THEN limit to 50
+    // Percentile colouring is calibrated on the whole filtered league, captured
+    // here BEFORE the top-N slice. Scoping it to the visible rows made a top-20
+    // view paint its best players as merely average.
+    state.percentileBase = buildPercentileBase(state.displayedData);
+
+    // THEN limit to the requested number of rows
     if (showEntries !== 'all') state.displayedData = state.displayedData.slice(0, parseInt(showEntries));
+
+    // An expanded row that got filtered out should not stay logically open.
+    if (state.openRowId !== null && !state.displayedData.some(p => p.id === state.openRowId)) {
+        state.openRowId = null;
+    }
 
     renderTable();
 
@@ -1986,55 +2647,55 @@ const QUICK_FILTERS = {
     set_pieces: {
         filter: p => Math.min(p.set_piece_priority.penalty, p.set_piece_priority.corner,
             p.set_piece_priority.free_kick) <= 3,
-        sort: (a, b) => a.set_piece_priority.penalty - b.set_piece_priority.penalty
+        sortKey: 'set_piece_priority.penalty', sortDirection: 'asc'
     },
     attacking_defenders: {
         filter: p => p.position_name === 'DEF' && p.minutes > 300,
-        sort: (a, b) => b.xGI_per90 - a.xGI_per90
+        sortKey: 'xGI_per90'
     },
     differentials: {
         filter: p => parseFloat(p.selected_by_percent) < 10 && p.draft_score > 40,
-        sort: (a, b) => b.draft_score - a.draft_score
+        sortKey: 'draft_score'
     },
     bonus_magnets: {
         filter: p => p.minutes > 450 && p.bonus_per90 > 0.25,
-        sort: (a, b) => b.bonus_per90 - a.bonus_per90
+        sortKey: 'bonus_per90'
     },
     // "form > 0" matched essentially the whole league. Require a genuinely
     // strong recent return from someone who is actually playing.
     form_kings: {
         filter: p => parseFloat(p.form) >= 4.5 && p.minutes > 450,
-        sort: (a, b) => parseFloat(b.form) - parseFloat(a.form)
+        sortKey: 'points_per_game_90'
     },
     // Good underlying numbers against a soft run of fixtures.
     easy_fixtures_ppg: {
         filter: p => p.next_3_fdr > 0 && p.next_3_fdr <= 2.7 && p.minutes > 450,
-        sort: (a, b) => (b.points_per_game_90 || 0) - (a.points_per_game_90 || 0)
+        sortKey: 'points_per_game_90'
     },
     // Creating more than they have converted: candidates to improve.
     underperformers: {
         filter: p => p.minutes > 600 && p.xDiff < -1.5,
-        sort: (a, b) => a.xDiff - b.xDiff
+        sortKey: 'xDiff', sortDirection: 'asc'
     },
     // Underperforming AND being bought — the market expects a correction.
     trending_underachievers: {
         filter: p => p.minutes > 450 && p.xDiff < 0 && p.net_transfers_event > 0,
-        sort: (a, b) => b.net_transfers_event - a.net_transfers_event
+        sortKey: 'net_transfers_event'
     },
     // Reliable starters: high share of appearances as a starter.
     nailed_starters: {
         filter: p => p.rotation_risk !== null && p.rotation_risk >= 0.85 && p.minutes > 600,
-        sort: (a, b) => (b.points_per_game_90 || 0) - (a.points_per_game_90 || 0)
+        sortKey: 'points_per_game_90'
     },
     // The DEFCON specialists: players who actually clear the threshold often.
     defcon_kings: {
         filter: p => p.defcon_hit_rate !== null && p.defcon_hit_rate >= 25,
-        sort: (a, b) => (b.defcon_hit_rate || 0) - (a.defcon_hit_rate || 0)
+        sortKey: 'defcon_hit_rate'
     },
     // Best value relative to what is freely available at the same position.
     best_value: {
         filter: p => p.vorp !== null && p.vorp > 0,
-        sort: (a, b) => (b.vorp || 0) - (a.vorp || 0)
+        sortKey: 'vorp'
     }
 };
 
@@ -2072,7 +2733,38 @@ function applyQuickFilter(filterName) {
 
     state.quickFilterNotice = null;
     state.displayedData = state.displayedData.filter(spec.filter);
-    if (spec.sort) state.displayedData.sort(spec.sort);
+    // No sorting here: processChange() sorts by state.sortKey immediately after
+    // this returns, which discarded whatever this used to do. Each filter names
+    // a `sortKey` instead and toggleQuickFilter() applies it, so the order and
+    // the header indicator finally agree.
+}
+
+/**
+ * Set the sort explicitly, without the click-to-toggle behaviour.
+ * Callers that are not a header click (quick filters, resets) must use this:
+ * sortTable('draft_score') on a table already sorted by draft_score flips it to
+ * ascending, which is how every quick filter used to open on the *worst*
+ * players in its category.
+ */
+function setSort(key, direction) {
+    state.sortKey = key;
+    state.sortDirection = direction;
+    updateSortIndicators(key);
+    processChange();
+}
+
+function updateSortIndicators(key) {
+    document.querySelectorAll('#playersTable thead th[data-sort]').forEach(th => {
+        const indicator = th.querySelector('.sort-indicator');
+        if (!indicator) return;
+        indicator.textContent = '';
+        if (th.dataset.sort === key) {
+            th.classList.add('sorted');
+            indicator.textContent = state.sortDirection === 'desc' ? '▼' : '▲';
+        } else {
+            th.classList.remove('sorted');
+        }
+    });
 }
 
 function sortTable(key) {
@@ -2083,7 +2775,10 @@ function sortTable(key) {
         // Default to DESC for performance metrics
         // ASC for text columns: rank, web_name, team_name, draft_team, position_name
         const ascColumns = ['rank', 'web_name', 'team_name', 'draft_team', 'position_name',
-            'next_3_fdr', 'set_piece_priority.penalty', 'set_piece_priority.corner', 'set_piece_priority.free_kick'];
+            'next_3_fdr', 'set_piece_priority.penalty', 'set_piece_priority.corner', 'set_piece_priority.free_kick',
+            // Rank 0 is the most actionable verdict, so ascending puts the
+            // players worth doing something about at the top.
+            'signal_rank'];
         if (ascColumns.includes(key)) {
             state.sortDirection = 'asc';
         } else {
@@ -2091,19 +2786,7 @@ function sortTable(key) {
         }
     }
 
-    // Update Indicators
-    document.querySelectorAll('#playersTable thead th[data-sort]').forEach(th => {
-        const indicator = th.querySelector('.sort-indicator');
-        if (indicator) {
-            indicator.textContent = '';
-            if (th.dataset.sort === key) {
-                th.classList.add('sorted');
-                indicator.textContent = state.sortDirection === 'desc' ? '▼' : '▲';
-            } else {
-                th.classList.remove('sorted');
-            }
-        }
-    });
+    updateSortIndicators(key);
 
     // TRIGGER RE-SORT BY CALLING processChange()
     processChange();
@@ -2160,8 +2843,12 @@ function toggleQuickFilter(button, filterName) {
         });
         document.getElementById('minMinutes').value = '0'; // Often quick filters need low minutes
 
-        processChange();
-        sortTable('draft_score'); // Sort by Draft Score/Quality by default when filtering
+        // Open every quick filter on its best players. Each filter may name the
+        // column that makes its own category legible; the rest fall back to
+        // draft rank order (draft_score desc), which is what "the top 20 in this
+        // category" means.
+        const spec = QUICK_FILTERS[filterName] || {};
+        setSort(spec.sortKey || 'draft_score', spec.sortDirection || 'desc');
     }
 }
 
@@ -2356,57 +3043,56 @@ function generateComparisonTableHTML(players) {
     return html;
 }
 
-window.compareSelectedPlayers = function () {
-    console.log('🔍 compareSelectedPlayers called');
-    console.log('📊 Selected players:', state.selectedForComparison);
-    console.log('📊 Selected count:', state.selectedForComparison.size);
+/**
+ * The ticked checkboxes are the only selection the user can see, but the state
+ * Set is what the comparison reads. They drift apart whenever the table
+ * re-renders between ticking a box and pressing השוואה — which is why the
+ * button reported "select at least two players" with two boxes visibly ticked.
+ * Reconcile from the DOM first; off-screen selections stay in the Set.
+ */
+function syncComparisonSelection() {
+    document.querySelectorAll('.player-select:checked').forEach(cb => {
+        const id = parseInt(cb.dataset.playerId, 10);
+        if (Number.isInteger(id)) state.selectedForComparison.add(id);
+    });
+    return state.selectedForComparison;
+}
+
+function compareSelectedPlayers() {
+    syncComparisonSelection();
 
     if (state.selectedForComparison.size < 2) {
-        showToast('בחר שחקנים', 'יש לבחור לפחות שני שחקנים להשוואה', 'warning', 3000);
-        console.warn('⚠️ Not enough players selected');
+        showToast('בחר שחקנים',
+            `יש לבחור לפחות שני שחקנים להשוואה (נבחרו ${state.selectedForComparison.size})`,
+            'warning', 3000);
         return;
     }
 
-    console.log('📦 Current data source:', state.currentDataSource);
-    console.log('📦 Available data:', state.allPlayersData[state.currentDataSource] ? 'Yes' : 'No');
-
-    if (!state.allPlayersData[state.currentDataSource] || !state.allPlayersData[state.currentDataSource].processed) {
-        console.error('❌ No player data available!');
-        showToast('שגיאה', 'לא נמצאו נתוני שחקנים', 'error', 3000);
+    const source = state.allPlayersData[state.currentDataSource];
+    if (!source || !source.processed) {
+        showToast('שגיאה', 'נתוני השחקנים עוד לא נטענו', 'error', 3000);
         return;
     }
 
-    const players = state.allPlayersData[state.currentDataSource].processed.filter(p => state.selectedForComparison.has(p.id));
-    console.log('✅ Players to compare:', players.length, players.map(p => p.web_name));
-
+    // Look the players up in the full processed set, not in displayedData: a
+    // selection made before filtering must still resolve.
+    const players = source.processed.filter(p => state.selectedForComparison.has(p.id));
     if (players.length < 2) {
-        console.error('❌ Could not find selected players in data!');
-        showToast('שגיאה', 'לא ניתן למצוא את השחקנים שנבחרו', 'error', 3000);
+        showToast('שגיאה', 'לא ניתן למצוא את השחקנים שנבחרו בנתונים', 'error', 3000);
         return;
     }
 
     const contentDiv = document.getElementById('compareContent');
-    if (!contentDiv) {
-        console.error('❌ compareContent not found!');
-        showToast('שגיאה', 'אלמנט ההשוואה לא נמצא', 'error', 3000);
-        return;
-    }
-
-    console.log('🎨 Generating comparison table...');
-    const tableHTML = generateComparisonTableHTML(players);
-    contentDiv.innerHTML = tableHTML;
-
     const modal = document.getElementById('compareModal');
-    if (!modal) {
-        console.error('❌ compareModal not found!');
-        showToast('שגיאה', 'חלון ההשוואה לא נמצא', 'error', 3000);
+    if (!contentDiv || !modal) {
+        showToast('שגיאה', 'חלון ההשוואה חסר בדף', 'error', 3000);
         return;
     }
 
+    contentDiv.innerHTML = generateComparisonTableHTML(players);
     modal.style.display = 'block';
     document.body.style.overflow = 'hidden'; // Prevent background scrolling
-    console.log('✅ Modal opened successfully!');
-};
+}
 
 function getMetricValueClass(value, values, reversed) {
     const numericValues = values.filter(v => typeof v === 'number');
@@ -2728,143 +3414,11 @@ function exportToCsv() {
 /**
  * Compare selected players in a modal
  */
-function compareSelectedPlayers() {
-    // Get all checked checkboxes
-    const checkboxes = document.querySelectorAll('.player-select:checked');
-
-    if (checkboxes.length === 0) {
-        showToast('לא נבחרו שחקנים', 'אנא בחר לפחות שחקן אחד להשוואה', 'warning', 3000);
-        return;
-    }
-
-    if (checkboxes.length > 5) {
-        showToast('יותר מדי שחקנים', 'ניתן להשוות עד 5 שחקנים בו-זמנית', 'warning', 3000);
-        return;
-    }
-
-    // Get player IDs
-    const playerIds = Array.from(checkboxes).map(cb => parseInt(cb.dataset.playerId));
-
-    // Get player data
-    const players = playerIds
-        .map(id => state.displayedData.find(p => p.id === id))
-        .filter(Boolean);
-
-    if (players.length === 0) {
-        showToast('שגיאה', 'לא נמצאו נתוני שחקנים', 'error', 3000);
-        return;
-    }
-
-    // Create modal
-    const modal = document.createElement('div');
-    modal.id = 'compareModal';
-    modal.style.cssText = `
-        position: fixed;
-        top: 0;
-        left: 0;
-        width: 100%;
-        height: 100%;
-        background: rgba(0, 0, 0, 0.7);
-        backdrop-filter: blur(4px);
-        display: flex;
-        justify-content: center;
-        align-items: center;
-        z-index: 10000;
-        padding: 20px;
-    `;
-
-    // Comparison metrics
-    const metrics = [
-        { key: 'draft_score', label: '🏆 ציון דראפט', format: (v) => v?.toFixed(1) || '0' },
-        { key: 'predicted_points_1_gw', label: '📈 חיזוי GW הבא', format: (v) => v?.toFixed(1) || '0' },
-        { key: 'total_points', label: '⚽ סה"כ נקודות', format: (v) => v || '0' },
-        { key: 'points_per_game_90', label: '📊 נק\'/משחק', format: (v) => v?.toFixed(1) || '0' },
-        { key: 'form', label: '🔥 כושר', format: (v) => v || '0' },
-        { key: 'now_cost', label: '💰 מחיר', format: (v) => `£${(v / 10).toFixed(1)}m` },
-        { key: 'selected_by_percent', label: '👥 נבחר %', format: (v) => `${v}%` },
-        { key: 'expected_goal_involvements', label: '🎯 xGI', format: (v) => parseFloat(v || 0).toFixed(2) },
-        { key: 'goals_scored', label: '⚽ שערים', format: (v) => v || '0' },
-        { key: 'assists', label: '🅰️ בישולים', format: (v) => v || '0' },
-        { key: 'clean_sheets', label: '🛡️ משחקי אפס', format: (v) => v || '0' },
-        { key: 'bonus', label: '⭐ בונוס', format: (v) => v || '0' },
-        { key: 'minutes', label: '⏱️ דקות', format: (v) => v || '0' },
-        { key: 'ict_index', label: '📈 ICT', format: (v) => v || '0' },
-        { key: 'def_contrib_per90', label: '🛡️ DC/90', format: (v) => v?.toFixed(1) || '0' }
-    ];
-
-    let tableHTML = `
-        <div style="background: white; border-radius: 16px; max-width: 1000px; width: 100%; max-height: 90vh; overflow: auto; box-shadow: 0 20px 60px rgba(0,0,0,0.3);">
-            <div style="position: sticky; top: 0; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 24px; border-radius: 16px 16px 0 0; z-index: 100;">
-                <div style="display: flex; justify-content: space-between; align-items: center;">
-                    <h2 style="margin: 0; color: white; font-size: 24px; font-weight: 900;">⚖️ השוואת שחקנים</h2>
-                    <button onclick="document.getElementById('compareModal').remove()" style="background: rgba(255,255,255,0.2); border: none; color: white; font-size: 24px; width: 40px; height: 40px; border-radius: 50%; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.2s;">✕</button>
-                </div>
-            </div>
-            
-            <div style="padding: 24px;">
-                <div style="overflow-x: auto;">
-                    <table style="width: 100%; border-collapse: collapse;">
-                        <thead>
-                            <tr style="background: #f8fafc; border-bottom: 2px solid #e2e8f0;">
-                                <th style="padding: 16px; text-align: right; font-weight: 800; color: #0f172a; position: sticky; right: 0; background: #f8fafc; z-index: 10;">מדד</th>
-                                ${players.map(p => `
-                                    <th style="padding: 16px; text-align: center; min-width: 150px;">
-                                        <div style="display: flex; flex-direction: column; align-items: center; gap: 8px;">
-                                            <img src="${getPlayerImageUrl(p)}" 
-                                                 onerror="this.src='${config.urls.missingPlayerImage}'" 
-                                                 style="width: 60px; height: 60px; border-radius: 50%; border: 3px solid #e2e8f0; object-fit: cover;">
-                                            <div style="font-weight: 800; color: #0f172a; font-size: 14px;">${p.web_name}</div>
-                                            <div style="font-size: 11px; color: #64748b; font-weight: 600;">${p.team_name} • ${p.position_short}</div>
-                                        </div>
-                                    </th>
-                                `).join('')}
-                            </tr>
-                        </thead>
-                        <tbody>
-    `;
-
-    metrics.forEach((metric, idx) => {
-        const bgColor = idx % 2 === 0 ? '#ffffff' : '#f8fafc';
-        const values = players.map(p => parseFloat(p[metric.key]) || 0);
-        const maxValue = Math.max(...values);
-
-        tableHTML += `
-            <tr style="background: ${bgColor}; border-bottom: 1px solid #e2e8f0;">
-                <td style="padding: 14px; font-weight: 700; color: #475569; position: sticky; right: 0; background: ${bgColor}; z-index: 10;">${metric.label}</td>
-                ${players.map(p => {
-            const value = parseFloat(p[metric.key]) || 0;
-            const isBest = value === maxValue && maxValue > 0;
-            return `
-                        <td style="padding: 14px; text-align: center; font-weight: ${isBest ? '900' : '600'}; color: ${isBest ? '#10b981' : '#0f172a'}; font-size: 15px; ${isBest ? 'background: linear-gradient(135deg, #d1fae5 0%, #a7f3d0 100%);' : ''}">
-                            ${metric.format(p[metric.key])}
-                            ${isBest ? ' 👑' : ''}
-                        </td>
-                    `;
-        }).join('')}
-            </tr>
-        `;
-    });
-
-    tableHTML += `
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-        </div>
-    `;
-
-    modal.innerHTML = tableHTML;
-
-    // Close on background click
-    modal.addEventListener('click', (e) => {
-        if (e.target === modal) {
-            modal.remove();
-        }
-    });
-
-    document.body.appendChild(modal);
-}
-
+// The second, never-reachable definition of compareSelectedPlayers() lived
+// here: ~150 lines that built their own modal from scratch. Two declarations
+// of the same name meant only one ever ran, and the dead one read fine, so a
+// bug fixed in it changed nothing. The live implementation is above and uses
+// the #compareModal markup already in index.html.
 // ============================================
 // DASHBOARD KPIs
 // ============================================
@@ -3365,9 +3919,14 @@ const FORM_WINDOWS = [
 state.formWindow = 'season';
 
 /**
- * Per-match log for a player, newest last: {gw, points, minutes, xgi, defconHit}.
- * Comes from the snapshot; live seasons fall back to season totals until the
- * per-gameweek data has been fetched.
+ * Per-match log for a player, oldest first. Comes from the snapshot; live
+ * seasons fall back to season totals until the per-gameweek data has been
+ * fetched.
+ *
+ * The snapshot writes its log as a flat number array to avoid repeating key
+ * names ~20,000 times, so the field order is read from `logFields` rather than
+ * hardcoded — an older cached snapshot with a shorter stride still decodes,
+ * with the fields it lacks coming back undefined instead of misaligned.
  */
 function getMatchLog(player) {
     const snap = state.allPlayersData[state.currentDataSource]?.raw?.__snapshot;
@@ -3376,14 +3935,67 @@ function getMatchLog(player) {
     if (!flat || !flat.length) return null;
 
     const stride = snap.logStride || 5;
+    const at = name => {
+        const i = (snap.logFields || []).indexOf(name);
+        return i < 0 ? null : i;
+    };
+    const iXgi = at('xgi_x100'), iBps = at('bps'), iSaves = at('saves'),
+        iDc = at('defcon'), iG = at('goals'), iA = at('assists'), iBonus = at('bonus');
+
     const out = [];
     for (let i = 0; i < flat.length; i += stride) {
+        const pick = idx => (idx === null ? 0 : flat[i + idx]);
         out.push({
             gw: flat[i], points: flat[i + 1], minutes: flat[i + 2],
-            xgi: flat[i + 3] / 100, defconHit: flat[i + 4]
+            xgi: (iXgi === null ? 0 : flat[i + iXgi]) / 100, defconHit: pick(at('defcon_hit')),
+            bps: pick(iBps), saves: pick(iSaves), defcon: pick(iDc),
+            goals: pick(iG), assists: pick(iA), bonus: pick(iBonus)
         });
     }
     return out.sort((a, b) => a.gw - b.gw);
+}
+
+/**
+ * Reshape the snapshot's per-match logs into the same `Map(playerId -> stats)`
+ * per gameweek that `event/{gw}/live` returns, so the trend charts and the
+ * match log have one consumer-side shape regardless of season.
+ *
+ * This is what makes the trend columns work on draft day: the 2026/27 season
+ * has played nothing, so there is no live gameweek to fetch and the completed
+ * season is the only per-match history that exists.
+ */
+function snapshotGameweekStats() {
+    const snap = state.allPlayersData[state.currentDataSource]?.raw?.__snapshot;
+    if (!snap || !snap.gwLogs) return [];
+
+    const players = state.allPlayersData[state.currentDataSource]?.processed || [];
+    const byGw = new Map();
+    players.forEach(p => {
+        const log = getMatchLog(p);
+        if (!log) return;
+        log.forEach(m => {
+            if (!byGw.has(m.gw)) byGw.set(m.gw, new Map());
+            byGw.get(m.gw).set(p.id, {
+                total_points: m.points,
+                minutes: m.minutes,
+                // The snapshot stores xGI combined; splitting it evenly keeps
+                // `expected_goals + expected_assists` — the only way the trend
+                // metrics read it — exactly right.
+                expected_goals: m.xgi / 2,
+                expected_assists: m.xgi / 2,
+                bps: m.bps,
+                saves: m.saves,
+                defensive_contribution: m.defcon,
+                goals_scored: m.goals,
+                assists: m.assists,
+                bonus: m.bonus
+            });
+        });
+    });
+
+    return [...byGw.entries()]
+        .sort((a, b) => a[0] - b[0])
+        .map(([gw, stats]) => ({ gw, stats }));
 }
 
 /**
@@ -3576,6 +4188,7 @@ function renderDraftBoard() {
                     <span class="db-meta">${p.position_name} · ${escapeHtml(p.team_name)}</span>
                     <span class="db-why">${escapeHtml(panel.why(p))}</span>
                 </span>
+                ${miniSparkHtml(p.id, 'pts')}
                 <span class="db-value" style="--accent:${panel.accent}">${escapeHtml(panel.display(p))}</span>
             </li>`).join('');
 
@@ -4495,6 +5108,11 @@ async function loadDraftLeague() {
 
             console.log("3. Rosters Populated:", state.draft.rostersByEntryId.size, "teams.");
 
+            // "Free agent" is a signal input, so verdicts computed before the
+            // rosters landed are stale — every player looked unowned.
+            invalidateSignals();
+            if (state.displayedData && state.displayedData.length) renderTable();
+
         } catch (debugError) {
             console.error("CRITICAL ERROR during roster population:", debugError);
             // Don't return, try to render what we have
@@ -4615,8 +5233,12 @@ async function getGameweekPoints(gw) {
         });
 
         // Fill in missing values from bootstrap if available
-        if (statsMap.size > 0 && state.allPlayersData.live.raw) {
-            const bootstrapMap = new Map(state.allPlayersData.live.raw.map(p => [p.id, p]));
+        // bootstrap-static returns an object; `.raw` is that object, not the
+        // element array. Mapping over it threw, and the throw was swallowed by
+        // the catch below — so every live gameweek fetch silently returned null.
+        const bootstrapElements = state.allPlayersData.live.raw?.elements;
+        if (statsMap.size > 0 && Array.isArray(bootstrapElements)) {
+            const bootstrapMap = new Map(bootstrapElements.map(p => [p.id, p]));
 
             statsMap.forEach((stats, playerId) => {
                 const bootstrapPlayer = bootstrapMap.get(playerId);

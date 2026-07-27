@@ -31,12 +31,56 @@ export function extractFunction(name, src = SCRIPT_SRC) {
 }
 
 /**
+ * Extract a top-level `const name = <expr>;` by scanning to the semicolon at
+ * bracket depth 0, skipping strings, template literals and comments so a `;`
+ * inside any of them does not end the declaration early.
+ */
+export function extractDeclaration(name, src = SCRIPT_SRC) {
+    const decl = new RegExp(`^(?:const|let|var)\\s+${name}\\s*=`, 'm');
+    const at = src.search(decl);
+    if (at < 0) throw new Error(`declaration ${name} not found in script.js`);
+
+    let depth = 0;
+    for (let i = src.indexOf('=', at) + 1; i < src.length; i++) {
+        const c = src[i], next = src[i + 1];
+        if (c === '/' && next === '/') { i = src.indexOf('\n', i); if (i < 0) break; continue; }
+        if (c === '/' && next === '*') { i = src.indexOf('*/', i) + 1; continue; }
+        if (c === '"' || c === "'" || c === '`') {
+            const quote = c;
+            for (i++; i < src.length; i++) {
+                if (src[i] === '\\') { i++; continue; }
+                if (src[i] === quote) break;
+                // A `${...}` in a template can itself contain the quote char.
+                if (quote === '`' && src[i] === '$' && src[i + 1] === '{') {
+                    let d = 1;
+                    for (i += 2; i < src.length && d > 0; i++) {
+                        if (src[i] === '{') d++;
+                        else if (src[i] === '}') d--;
+                    }
+                    i--;
+                }
+            }
+            continue;
+        }
+        if (c === '{' || c === '[' || c === '(') depth++;
+        else if (c === '}' || c === ']' || c === ')') depth--;
+        else if (c === ';' && depth === 0) return src.slice(at, i + 1);
+    }
+    throw new Error(`unterminated declaration ${name}`);
+}
+
+/**
  * Evaluate the named functions in one shared scope and return them.
  * `globals` are installed on globalThis first (state, config, ...).
+ * `deps` names top-level consts the functions close over (lookup tables, keys);
+ * they are pulled from the same source so the tests cannot drift from it.
  */
-export function loadFunctions(names, globals = {}) {
+export function loadFunctions(names, globals = {}, deps = []) {
     Object.assign(globalThis, globals);
-    const body = names.map(n => extractFunction(n)).join('\n');
+    const body = [
+        ...deps.map(n => extractDeclaration(n)),
+        ...names.map(n => extractFunction(n))
+    ].join('\n');
     const factory = new Function(`${body}\nreturn { ${names.join(', ')} };`);
     return factory();
 }

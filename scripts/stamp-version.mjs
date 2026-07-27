@@ -31,21 +31,41 @@ function nextVersion() {
 }
 
 const version = nextVersion();
-const html = readFileSync(INDEX, 'utf8');
-const TAG = /(<script src="script\.js\?v=)([^"]*)(")/;
+let html = readFileSync(INDEX, 'utf8');
 
-const match = html.match(TAG);
-if (!match) {
-    console.error('No script.js version tag found in index.html — nothing stamped.');
+// The stylesheets need this as much as the script does: a release that changes
+// both shipped new markup against cached CSS, which looks like a layout bug
+// rather than a caching one. `?v=` is optional in the pattern so a first run
+// adds it.
+const ASSETS = [
+    { name: 'script.js', tag: /(<script src="script\.js)(\?v=[^"]*)?(")/ },
+    { name: 'style.css', tag: /(<link rel="stylesheet" href="style\.css)(\?v=[^"]*)?(")/ },
+    { name: 'mobile.css', tag: /(<link rel="stylesheet" href="mobile\.css)(\?v=[^"]*)?(")/ }
+];
+
+const stamped = [];
+const missing = [];
+
+for (const asset of ASSETS) {
+    const match = html.match(asset.tag);
+    if (!match) { missing.push(asset.name); continue; }
+    if (match[2] === `?v=${version}`) continue;   // already current
+    html = html.replace(asset.tag, `$1?v=${version}$3`);
+    stamped.push(`${asset.name} ${match[2] ? match[2].slice(3) : '(none)'} -> ${version}`);
+}
+
+if (missing.length === ASSETS.length) {
+    console.error('No asset tags found in index.html — nothing stamped.');
     process.exit(1);
 }
+if (missing.length) console.warn(`Not found in index.html, skipped: ${missing.join(', ')}`);
 
 // Re-running on the same commit yields the same version. That is a no-op, not
 // a failure -- treating it as one made the script look broken.
-if (match[2] === version) {
-    console.log(`script.js?v=${version} already current`);
+if (!stamped.length) {
+    console.log(`All assets already at v=${version}`);
     process.exit(0);
 }
 
-writeFileSync(INDEX, html.replace(TAG, `$1${version}$3`));
-console.log(`Stamped script.js?v=${match[2]} -> ${version}`);
+writeFileSync(INDEX, html);
+stamped.forEach(line => console.log(`Stamped ${line}`));
