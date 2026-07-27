@@ -1971,27 +1971,29 @@ function gwDefensiveContribution(stats, elementType) {
  */
 const TREND_METRICS = {
     pts: {
-        label: 'נק׳', agg: 'sum', fmt: v => v.toFixed(0),
+        label: 'נק׳', agg: 'sum', fmt: v => v.toFixed(0), unit: 'סה״כ',
         read: s => gwNum(s.total_points)
     },
     xgi: {
-        label: 'xG+xA', agg: 'sum', fmt: v => v.toFixed(2),
+        label: 'xG+xA', agg: 'sum', fmt: v => v.toFixed(2), unit: 'סה״כ',
+        // One decimal above a 13px bar; two collide with the neighbour.
+        barFmt: v => v.toFixed(1),
         read: s => gwNum(s.expected_goals) + gwNum(s.expected_assists)
     },
     mins: {
-        label: 'דקות', agg: 'avg', fmt: v => v.toFixed(0),
+        label: 'דקות', agg: 'avg', fmt: v => v.toFixed(0), unit: 'ממוצע',
         read: s => gwNum(s.minutes)
     },
     dc: {
-        label: 'DC', agg: 'avg', fmt: v => v.toFixed(1),
+        label: 'DC', agg: 'avg', fmt: v => v.toFixed(1), unit: 'ממוצע',
         read: (s, p) => gwDefensiveContribution(s, p.element_type)
     },
     bps: {
-        label: 'BPS', agg: 'avg', fmt: v => v.toFixed(0),
+        label: 'BPS', agg: 'avg', fmt: v => v.toFixed(0), unit: 'ממוצע',
         read: s => gwNum(s.bps)
     },
     saves: {
-        label: 'הצלות', agg: 'avg', fmt: v => v.toFixed(1),
+        label: 'הצלות', agg: 'avg', fmt: v => v.toFixed(1), unit: 'ממוצע',
         read: s => gwNum(s.saves)
     }
 };
@@ -2241,7 +2243,7 @@ function trendBarsHtml(series, scale, def, { labels = false, cls = '' } = {}) {
         if (!pt.played || pt.value === 0) c.push('is-blank');
         return `<i class="${c.join(' ')}" style="height:${h.toFixed(0)}%"
             title="מחזור ${pt.gw}: ${def.fmt(pt.value)}">${
-            labels ? `<b>${def.fmt(pt.value)}</b>` : ''}</i>`;
+            labels ? `<b>${(def.barFmt || def.fmt)(pt.value)}</b>` : ''}</i>`;
     }).join('') + '</span>';
 }
 
@@ -2252,16 +2254,14 @@ function trendBarsHtml(series, scale, def, { labels = false, cls = '' } = {}) {
 function trendChangeHtml(now, before, def) {
     const d = now - before;
     const eps = def.agg === 'avg' ? 0.5 : 0.05;
-    // "מול <number>" keeps the Hebrew word outside the isolated numeric run.
-    // "מ-25" put a Hebrew letter, a hyphen and digits in one LTR run, where the
-    // hyphen can resolve to either side.
-    if (Math.abs(d) < eps) {
-        return `<span class="trend-delta trend-flat">ללא שינוי</span>
-            <span class="trend-vs">מול <span class="ni">${def.fmt(before)}</span></span>`;
-    }
+    // Nothing moved: naming a baseline identical to the figure on screen only
+    // added a third number to read.
+    if (Math.abs(d) < eps) return '<span class="trend-delta trend-flat">ללא שינוי</span>';
+    // The arrow states the direction, so "+" would say it twice. "קודם" names the
+    // previous window's own figure, which is what "compared to what?" was asking.
     return `<span class="trend-delta trend-${d > 0 ? 'up' : 'down'}">${
-        d > 0 ? '▲ +' : '▼ '}${def.fmt(Math.abs(d))}</span>
-        <span class="trend-vs">מול <span class="ni">${def.fmt(before)}</span></span>`;
+        d > 0 ? '▲' : '▼'} ${def.fmt(Math.abs(d))}</span>
+        <span class="trend-vs">קודם <span class="ni">${def.fmt(before)}</span></span>`;
 }
 
 /** One trend cell: window figure, delta vs the previous window, and the bars. */
@@ -2283,7 +2283,7 @@ function trendCellHtml(player, metricKey, index) {
     return `<td class="trend-cell trend-col" data-metric="${metricKey}"
         title="${def.fmt(now)} ב-${recent.length} המחזורים האחרונים, מול ${def.fmt(before)} ב-${recent.length} שלפניהם">
         <span class="trend-main">
-            <span class="trend-value">${def.fmt(now)}</span>
+            <span class="trend-value">${def.fmt(now)}<em>${def.unit || ''}</em></span>
             ${bars}
         </span>
         <span class="trend-foot">${trendChangeHtml(now, before, def)}</span>
@@ -2463,10 +2463,9 @@ function playerDetailRowHtml(player, colSpan) {
             const scale = (state.trendScales && state.trendScales[k]) || 1;
             return `<div class="sum-row">
                 <span class="sum-label">${def.label}</span>
-                <b class="sum-val">${def.fmt(now)}</b>
+                <span class="sum-val"><b>${def.fmt(now)}</b><em>${def.unit || ''}</em></span>
                 <span class="sum-change">${trendChangeHtml(now, before, def)}</span>
                 ${trendBarsHtml(series, scale, def, { labels: true, cls: 'is-large' })}
-                <span class="sum-unit">${def.agg === 'avg' ? 'ממוצע למשחק' : `סה״כ ב-${series.length} מחזורים`}</span>
             </div>`;
         }).join('');
 
@@ -4949,9 +4948,53 @@ let _draftBackgroundLoad = null;
    league's own answer. All go through the same cached+proxied path.
    ========================================================================== */
 
-/** Draft element id -> FPL element id, falling back to the id itself. */
+/**
+ * Draft element id -> the element id of the player in the dataset on screen.
+ *
+ * This is the cross-season join, and getting it wrong is silent: the draft
+ * league is a 2026/27 league, so its elements map to 2026/27 FPL ids, while the
+ * table before the season starts is showing the 2025/26 snapshot, whose ids are
+ * last season's. FPL reassigns element ids every year, so joining on id across
+ * that boundary attributes one player's ownership to an unrelated player. It
+ * did: element-status and the rosters agreed on only 75 of ~134 players, and
+ * Haaland came out unowned.
+ *
+ * `code` is the stable per-player key, so the hop is
+ *     draft element -> live FPL element -> code -> displayed element.
+ *
+ * Returns null when the player cannot be resolved. Callers must treat that as
+ * "unknown", never as an id — the previous fallback returned the draft id
+ * itself, which then collided with whichever unrelated player happened to hold
+ * that number.
+ */
+let _ownershipResolver = { key: null, codeByLiveId: null, idByCode: null };
+
+function ownershipResolver() {
+    const source = state.currentDataSource;
+    const processed = state.allPlayersData[source]?.processed || [];
+    const live = state.allPlayersData.live?.raw?.elements || [];
+    const key = `${source}:${processed.length}:${live.length}`;
+    if (_ownershipResolver.key !== key) {
+        _ownershipResolver = {
+            key,
+            codeByLiveId: new Map(live.map(p => [p.id, p.code])),
+            idByCode: new Map(processed.filter(p => p.code).map(p => [p.code, p.id]))
+        };
+    }
+    return _ownershipResolver;
+}
+
 function toFplId(draftElementId) {
-    return state.draft.draftToFplIdMap.get(draftElementId) || draftElementId;
+    const liveId = state.draft.draftToFplIdMap.get(draftElementId);
+    if (!liveId) return null;
+
+    const { codeByLiveId, idByCode } = ownershipResolver();
+    // Same season on both sides: the live id is already the displayed id.
+    if (state.currentDataSource === 'live') return liveId;
+
+    const code = codeByLiveId.get(liveId);
+    if (code === undefined) return null;
+    return idByCode.get(code) ?? null;
 }
 
 /**
@@ -4974,12 +5017,18 @@ async function loadDraftElementStatus() {
         if (!data || !Array.isArray(data.element_status)) return false;
 
         const owned = new Set();
+        let unresolved = 0;
         state.draft.ownershipByFplId.clear();
         data.element_status.forEach(row => {
             const fplId = toFplId(row.element);
+            // An element we cannot resolve to the dataset on screen is unknown,
+            // not unowned and certainly not "owned under some other player's
+            // id". Skipping keeps the set honest.
+            if (fplId === null) { unresolved++; return; }
             state.draft.ownershipByFplId.set(fplId, row.owner ?? null);
             if (row.owner != null) owned.add(fplId);
         });
+        if (unresolved) console.log(`   ${unresolved} draft elements not resolvable to the current season's data`);
 
         state.draft.ownershipLoaded = true;
         state.draft.draftHasHappened = owned.size > 0;
@@ -5073,7 +5122,8 @@ function teamNameForEntry(entryId) {
  * left the league and so have no FPL entry to map onto.
  */
 function playerNameForDraftElement(draftElementId) {
-    const p = getProcessedByElementId().get(toFplId(draftElementId));
+    const fplId = toFplId(draftElementId);
+    const p = fplId === null ? null : getProcessedByElementId().get(fplId);
     if (p) return p.web_name;
     return state.draft.draftElementNames.get(draftElementId) || `#${draftElementId}`;
 }
@@ -5168,7 +5218,7 @@ function renderDraftBoardHistory() {
     const processedById = getProcessedByElementId();
     const rows = choices.map(c => {
         const fplId = toFplId(c.element);
-        const p = processedById.get(fplId);
+        const p = fplId === null ? null : processedById.get(fplId);
         return {
             round: c.round, pick: c.pick, wasAuto: c.was_auto,
             team: c.entry_name || teamNameForEntry(c.entry),
@@ -5280,11 +5330,13 @@ async function _loadDraftDataInBackground() {
                     try {
                         const picksData = await fetchWithCache(picksUrl, picksCacheKey, 30);
                         if (picksData && picksData.picks) {
-                            // Convert picks to FPL IDs and preserve position info
-                            const picksWithFplIds = picksData.picks.map(pick => ({
-                                fplId: state.draft.draftToFplIdMap.get(pick.element) || pick.element,
-                                position: pick.position
-                            }));
+                            // Resolve to the dataset on screen. `|| pick.element`
+                            // used to stand in for a failed lookup, which quietly
+                            // handed the slot to whichever player happened to hold
+                            // that id -- see toFplId for why the seasons differ.
+                            const picksWithFplIds = picksData.picks
+                                .map(pick => ({ fplId: toFplId(pick.element), position: pick.position }))
+                                .filter(p => p.fplId !== null);
 
                             // Extract all FPL IDs for roster
                             const fplPlayerIds = picksWithFplIds.map(p => p.fplId);
@@ -5446,19 +5498,14 @@ async function loadDraftLeague() {
                     if (picksData && picksData.picks) {
                         console.log(`   ✅ Received ${picksData.picks.length} picks for ${entry.entry_name}`);
 
-                        // 2. Map to FPL IDs
-                        const picksWithFplIds = picksData.picks.map(pick => {
-                            // Try mapping, fallback to original if no map
-                            const fplId = state.draft.draftToFplIdMap.size > 0
-                                ? state.draft.draftToFplIdMap.get(pick.element)
-                                : pick.element;
-
-                            return {
-                                fplId: fplId || pick.element,
+                        // 2. Resolve to the dataset on screen (see toFplId).
+                        const picksWithFplIds = picksData.picks
+                            .map(pick => ({
+                                fplId: toFplId(pick.element),
                                 position: pick.position,
                                 originalDraftId: pick.element
-                            };
-                        });
+                            }))
+                            .filter(p => p.fplId !== null);
 
                         // 3. Extract roster
                         const fplPlayerIds = picksWithFplIds.map(p => p.fplId);
@@ -5822,13 +5869,13 @@ async function loadHistoricalLineups() {
             const picksData = await fetchWithCache(url, picksCacheKey, 1440); // Cache for 24 hours
 
             if (picksData && picksData.picks) {
-                const picksWithFplIds = picksData.picks.map(pick => ({
-                    fplId: (state.draft.draftToFplIdMap.size > 0
-                        ? state.draft.draftToFplIdMap.get(pick.element)
-                        : pick.element) || pick.element,
-                    position: pick.position,
-                    originalDraftId: pick.element
-                }));
+                const picksWithFplIds = picksData.picks
+                    .map(pick => ({
+                        fplId: toFplId(pick.element),
+                        position: pick.position,
+                        originalDraftId: pick.element
+                    }))
+                    .filter(p => p.fplId !== null);
 
                 byEntry.get(entry.id)[`gw${gw}`] = {
                     starting: picksWithFplIds.filter(p => p.position <= 11).map(p => p.fplId),

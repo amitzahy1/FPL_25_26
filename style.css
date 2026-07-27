@@ -2189,9 +2189,11 @@ tbody tr:last-child td {
 
 /* Metrics Comparison Table - GRID LAYOUT for better space usage */
 .metrics-comparison-table {
-    display: grid;
-    grid-template-columns: repeat(2, 1fr);
-    gap: 8px;
+    /* One metric per row. Two columns meant reading zig-zag and made the modal
+       twice as wide as it was tall, which is the wrong shape for a scroll. */
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
 }
 
 .metric-comparison-row {
@@ -3929,7 +3931,13 @@ th {
     border-radius: 24px !important;
     box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25) !important;
     border: 1px solid rgba(255, 255, 255, 0.1) !important;
-    overflow: hidden; /* Ensure headers dont spill */
+    /* Was `overflow: hidden` to stop headers spilling past the rounded corners.
+       The shorthand also killed the `overflow-y: auto` set above, so any modal
+       taller than 95vh clipped its content with no way to scroll to it — the
+       comparison screen lost roughly 1400px of metrics. Clip sideways only. */
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior: contain;
 }
 
 .player-compare-card {

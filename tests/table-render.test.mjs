@@ -163,10 +163,13 @@ describe('player row renders', () => {
         // 6 points a week now against 2 before: an 12-point swing over 3 weeks.
         const cell = fns.trendCellHtml(players[0], 'pts', 0);
         assert.match(cell, /trend-up/);
-        assert.match(cell, /▲ \+12/);
+        // No "+" next to the arrow: the arrow already states the direction.
+        assert.match(cell, /▲ 12/);
+        assert.ok(!cell.includes('▲ +'), 'direction is stated once, not twice');
+        assert.match(cell, /<em>סה״כ<\/em>/, 'the figure says whether it is a total or an average');
         // The chip names the previous window's own figure, so "up by 3" cannot be
         // read as "up compared to something unspecified".
-        assert.match(cell, /מול <span class="ni">6<\/span>/, 'the baseline is named, not implied');
+        assert.match(cell, /קודם <span class="ni">6<\/span>/, 'the baseline is named, not implied');
         assert.match(cell, /<b>6<\/b>/, 'each bar is labelled with its own gameweek figure');
     });
 
