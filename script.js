@@ -1217,6 +1217,10 @@ async function init() {
         // 1. First load FPL data
         await fetchAndProcessData();
 
+        // 1b. Pre-season / very early season: the live API has no played data
+        //     yet, so show the completed season instead of an empty table.
+        await applyPreSeasonDefault();
+
         // 2. Then build the Draft→FPL mapping
         await buildDraftToFplMapping();
 
@@ -1250,6 +1254,73 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 });
 
+// ============================================
+// COMPLETED-SEASON SNAPSHOT
+// ============================================
+// Loads data/season-<id>.json (built by scripts/build-season-snapshot.mjs) and
+// reshapes it into the same structure bootstrap-static returns, so every
+// downstream consumer works unchanged.
+//
+// This is what makes the tool usable on draft day: the new season's API reports
+// every player at zero until GW1 is played.
+
+let _seasonSnapshotPromise = null;
+
+async function loadSeasonSnapshot(seasonId = SEASON_CONFIG.previousSeasonId) {
+    if (_seasonSnapshotPromise) return _seasonSnapshotPromise;
+
+    _seasonSnapshotPromise = (async () => {
+        const res = await fetch(`data/season-${seasonId}.json`);
+        if (!res.ok) throw new Error(`Season snapshot ${seasonId} unavailable (HTTP ${res.status})`);
+        const snap = await res.json();
+
+        const idx = Object.fromEntries(snap.fields.map((f, i) => [f, i]));
+        const elements = snap.rows.map(row => {
+            const p = {};
+            snap.fields.forEach((f, i) => { p[f] = row[i]; });
+            // Fields that only exist for a live season. A finished season has no
+            // transfer churn or injury news, and points-per-game is the honest
+            // stand-in for "form" once every match has been played.
+            p.status = 'a';
+            p.news = '';
+            p.news_added = null;
+            p.chance_of_playing_next_round = 100;
+            p.chance_of_playing_this_round = 100;
+            p.form = p.points_per_game;
+            p.event_points = 0;
+            p.transfers_in_event = 0;
+            p.transfers_out_event = 0;
+            p.interceptions = 0; // already included inside clearances_blocks_interceptions
+            p.photo = `${p.code}.jpg`;
+            p.ep_next = null;
+            return p;
+        });
+
+        const events = Array.from({ length: snap.totalGameweeks }, (_, i) => ({
+            id: i + 1,
+            finished: true,
+            finished_provisional: true,
+            data_checked: true,
+            is_current: i + 1 === snap.totalGameweeks,
+            is_next: false,
+            is_previous: false
+        }));
+
+        console.log(`📚 Season ${seasonId} snapshot: ${elements.length} players, ${snap.totalGameweeks} GWs`);
+        return { elements, teams: snap.teams, events, __snapshot: snap, __seasonId: seasonId };
+    })();
+
+    return _seasonSnapshotPromise;
+}
+
+// True while the current season has too little played data to be worth showing.
+// Before that point the table must default to the completed season.
+function currentSeasonIsTooEarly() {
+    const live = state.allPlayersData.live.raw;
+    if (!live || !live.events) return true;
+    return live.events.filter(e => e.finished || e.finished_provisional).length < 5;
+}
+
 async function fetchAndProcessData() {
     showLoading('טוען נתוני שחקנים...');
     try {
@@ -1257,9 +1328,7 @@ async function fetchAndProcessData() {
         const needsFixtures = !state.allPlayersData.live.fixtures;
 
         if (needsData || needsFixtures) {
-            const dataUrl = state.currentDataSource === 'live'
-                ? config.corsProxy + encodeURIComponent(config.urls.bootstrap)
-                : 'FPL_Bootstrap_static.json';
+            const dataUrl = config.corsProxy + encodeURIComponent(config.urls.bootstrap);
             const dataCacheKey = `fpl_bootstrap_${state.currentDataSource}`;
 
             const fixturesUrl = config.corsProxy + encodeURIComponent(config.urls.fixtures);
@@ -1270,8 +1339,7 @@ async function fetchAndProcessData() {
                     // Main data fetch - Robust auto-retry
                     state.allPlayersData.live.raw = await fetchWithCache(dataUrl, dataCacheKey, 60);
                 } else {
-                    const response = await fetch(dataUrl); // Local file, no cache
-                    state.allPlayersData.historical.raw = await response.json();
+                    state.allPlayersData.historical.raw = await loadSeasonSnapshot();
                 }
             }
             if (needsFixtures) {
@@ -1342,9 +1410,51 @@ async function fetchAndProcessData() {
 function switchDataSource(source) {
     if (source === state.currentDataSource) return;
     state.currentDataSource = source;
-    document.getElementById('historicalDataBtn').classList.toggle('active', source === 'historical');
-    document.getElementById('liveDataBtn').classList.toggle('active', source === 'live');
+    syncDataSourceButtons();
     fetchAndProcessData();
+}
+
+function syncDataSourceButtons() {
+    const src = state.currentDataSource;
+    const hist = document.getElementById('historicalDataBtn');
+    const live = document.getElementById('liveDataBtn');
+    if (hist) hist.classList.toggle('active', src === 'historical');
+    if (live) live.classList.toggle('active', src === 'live');
+}
+
+// Before the new season has meaningful data, every metric derived from minutes
+// or points is zero. Fall back to the completed season and say so, rather than
+// presenting an empty table as though it were the truth.
+async function applyPreSeasonDefault() {
+    if (state.currentDataSource !== 'live' || !currentSeasonIsTooEarly()) return false;
+
+    const played = (state.allPlayersData.live.raw?.events || [])
+        .filter(e => e.finished || e.finished_provisional).length;
+
+    console.log(`⏳ ${SEASON_CONFIG.seasonLabel} has ${played} finished GW(s) — defaulting to ${SEASON_CONFIG.previousSeasonLabel}`);
+    state.currentDataSource = 'historical';
+    syncDataSourceButtons();
+    showSeasonBanner(played);
+    await fetchAndProcessData();
+    return true;
+}
+
+function showSeasonBanner(playedGws) {
+    const existing = document.getElementById('seasonBanner');
+    if (existing) existing.remove();
+    if (state.currentDataSource !== 'historical') return;
+
+    const msg = playedGws === 0
+        ? `עונת ${SEASON_CONFIG.seasonLabel} טרם התחילה — מוצגים נתוני ${SEASON_CONFIG.previousSeasonLabel} המלאים`
+        : `לעונת ${SEASON_CONFIG.seasonLabel} יש רק ${playedGws} מחזורים — מוצגים נתוני ${SEASON_CONFIG.previousSeasonLabel} המלאים`;
+
+    const banner = document.createElement('div');
+    banner.id = 'seasonBanner';
+    banner.style.cssText = 'margin: 10px 0; padding: 10px 14px; border-radius: 8px; background: #fef3c7; border: 1px solid #fcd34d; color: #92400e; font-size: 13px; font-weight: 600;';
+    banner.textContent = `📅 ${msg}`;
+
+    const anchor = document.getElementById('playersTabContent');
+    if (anchor) anchor.prepend(banner);
 }
 
 function getPositionName(elementTypeId) {
@@ -1363,25 +1473,58 @@ function preprocessPlayerData(players, setPieceTakers) {
         const mins = p.minutes || 0;
         const mins90 = mins / 90;
 
-        p.defensive_contribution_per_90 = mins > 0 ? ((p.interceptions || 0) + (p.tackles || 0) + (p.clearances_blocks_interceptions || 0)) / mins90 : 0;
-        // xGI from raw data is total. We want per 90.
-        // Usually expected_goal_involvements_per_90 exists, but we can recalc to be sure.
-        p.xGI_per90 = mins > 0 ? (parseFloat(p.expected_goal_involvements) || 0) / mins90 : 0;
+        // Prefer the API's own per-90 field; only derive from totals when it is
+        // absent. Recomputing everything by hand was the source of several silent
+        // zeros, and the API value is the authoritative one.
+        const per90 = (nativeValue, total) => {
+            const native = parseFloat(nativeValue);
+            if (Number.isFinite(native) && native !== 0) return native;
+            return mins > 0 ? (parseFloat(total) || 0) / mins90 : 0;
+        };
 
-        // Other per 90s requested
+        // Official DEFCON. The hand-rolled version double-counted interceptions
+        // (clearances_blocks_interceptions already contains them) and never
+        // counted recoveries, which MID/FWD need for the CBIRT threshold.
+        p.defensive_contribution_per_90 = per90(
+            p.defensive_contribution_per_90,
+            p.defensive_contribution !== undefined && p.defensive_contribution !== null
+                ? p.defensive_contribution
+                : (p.clearances_blocks_interceptions || 0) + (p.tackles || 0) +
+                  (p.element_type === 3 || p.element_type === 4 ? (p.recoveries || 0) : 0)
+        );
+
+        p.xGI_per90 = per90(p.expected_goal_involvements_per_90, p.expected_goal_involvements);
+        p.expected_goals_per_90 = per90(p.expected_goals_per_90, p.expected_goals);
+        p.expected_assists_per_90 = per90(p.expected_assists_per_90, p.expected_assists);
+        p.expected_goals_conceded_per_90 = per90(p.expected_goals_conceded_per_90, p.expected_goals_conceded);
+        p.saves_per_90 = per90(p.saves_per_90, p.saves);
+
         p.ict_index_per90 = mins > 0 ? (parseFloat(p.ict_index) || 0) / mins90 : 0;
         p.bonus_per90 = mins > 0 ? (p.bonus || 0) / mins90 : 0;
         p.influence_per90 = mins > 0 ? (parseFloat(p.influence) || 0) / mins90 : 0;
         p.creativity_per90 = mins > 0 ? (parseFloat(p.creativity) || 0) / mins90 : 0;
         p.threat_per90 = mins > 0 ? (parseFloat(p.threat) || 0) / mins90 : 0;
-        p.goals_conceded_per90 = mins > 0 ? (p.goals_conceded || 0) / mins90 : 0;
-        p.clean_sheets_per90 = mins > 0 ? (p.clean_sheets || 0) / mins90 : 0;
-        p.expected_goals_conceded_per_90 = mins > 0 ? (parseFloat(p.expected_goals_conceded) || 0) / mins90 : 0; // if available in raw
+        p.goals_conceded_per90 = per90(p.goals_conceded_per_90, p.goals_conceded);
+        p.clean_sheets_per90 = per90(p.clean_sheets_per_90, p.clean_sheets);
         p.def_contrib_per90 = p.defensive_contribution_per_90 || 0; // Alias for consistent naming
+
+        // calculateAdvancedScores looks these up with an underscore before the 90.
+        // Without the aliases they resolved to undefined, silently zeroing the
+        // quality term of draft_score and breaking the goalkeeper matrix.
+        p.creativity_per_90 = p.creativity_per90;
+        p.threat_per_90 = p.threat_per90;
+        p.clean_sheets_per_90 = p.clean_sheets_per90;
+        p.influence_per_90 = p.influence_per90;
+        p.goals_conceded_per_90 = p.goals_conceded_per90;
 
         p.net_transfers_event = (p.transfers_in_event || 0) - (p.transfers_out_event || 0);
         p.xDiff = ((p.goals_scored || 0) + (p.assists || 0)) - (parseFloat(p.expected_goal_involvements) || 0);
-        p.now_cost = p.now_cost / 10;
+        // Guarded: this mutates in place, so running preprocess twice over the
+        // same objects would divide the price again.
+        if (!p.__costScaled) {
+            p.now_cost = p.now_cost / 10;
+            p.__costScaled = true;
+        }
         p.team_name = state.teamsData[p.team] ? state.teamsData[p.team].name : 'Unknown';
         p.position_name = getPositionName(p.element_type);
 
@@ -3261,8 +3404,12 @@ function calculatePercentiles(players, metric, isAscending = false) {
     const n = sortedPlayers.length;
     sortedPlayers.forEach((p, i) => {
         if (!p.percentiles) p.percentiles = {};
-        const percentile = (i / (n - 1)) * 100;
-        p.percentiles[metric] = percentile;
+        // The sort above puts the BEST value for this metric first (respecting
+        // isAscending, where ascending means "lower is better", e.g. price).
+        // A percentile of 100 must therefore go to index 0. Assigning i/(n-1)
+        // gave the best player 0 and the worst 100, inverting every
+        // percentile-driven term in draft_score.
+        p.percentiles[metric] = n > 1 ? ((n - 1 - i) / (n - 1)) * 100 : 100;
     });
 }
 
