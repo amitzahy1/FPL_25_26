@@ -1,21 +1,43 @@
-# Large data files
-# Fantasy-Premier-League/ (Removed to fix CI build)
+# Dependencies / build output
+node_modules/
+dist/
+
+# Vendored upstream dataset. The completed-season snapshot under data/ is built
+# from it on demand (scripts/build-season-snapshot.mjs), so the 252 MB clone
+# does not belong in the repo.
+Fantasy-Premier-League/
+
+# Generated ML/analysis intermediates
 historical_data.csv
 features_data.csv
-
-# Model files (optional - they're large)
 *.pkl
 
-# System files
+# Backups and scratch files, previously committed by the
+# edit-a-huge-file-then-copy-it workflow.
+*.bak
+*.backup
+*.backup-*
+*backup*/
+temp_*.js
+*.zip
+
+# API response dumps. Saving a blocked or errored fetch under a .json name is
+# how a corporate firewall page containing session cookies got into the repo.
+draft_league.json
+draft_static.json
+draft_bootstrap.json
+fpl_live.json
+fpl_fixtures.json
+fpl_sample_live.json
+fpl_bootstrap*.json
+
+# System / editor
 .DS_Store
 .cursor/
 
-# Logs
+# Logs and Python cache
 training_log.txt
 *.log
-
-# Python cache
 __pycache__/
 *.pyc
 *.pyo
-

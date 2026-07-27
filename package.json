@@ -1,0 +1,16 @@
+{
+  "name": "fpl-draft-analytics-hub",
+  "version": "5.0.0",
+  "private": true,
+  "type": "module",
+  "description": "FPL Draft league analytics dashboard",
+  "scripts": {
+    "test": "node --test tests/",
+    "build:season": "node scripts/build-season-snapshot.mjs",
+    "serve": "python3 -m http.server 8000",
+    "proxy": "node local_proxy.js"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
