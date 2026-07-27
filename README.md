@@ -103,3 +103,20 @@ ES modules is the top engineering item in [BACKLOG.md](BACKLOG.md).
   better (price).
 - Cached API responses live in `localStorage`. Clear it from the settings
   dialog if data looks stale.
+
+## Development
+
+```bash
+npm install          # eslint + puppeteer (dev only)
+npm run verify       # lint + unit tests + structural checks + browser smoke test
+npm test             # unit tests only
+npm run test:smoke   # loads the real page with the API and all proxies blocked
+npm run build:season # regenerate data/season-<id>.json from vaastav's dataset
+npm run stamp        # bump the ?v= cache-buster before committing
+npm run serve        # static server on :8000
+```
+
+CI runs the same four gates on every push to `main`. The site deploys from the
+repo root on `main`, so a red build means the broken commit is already live —
+run `npm run verify` before pushing.
+
