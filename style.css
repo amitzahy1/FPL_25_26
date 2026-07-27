@@ -5321,3 +5321,34 @@ canvas {
 @media (min-width: 1080px) {
     .db-grid { grid-template-columns: repeat(3, 1fr); }
 }
+
+/* Settings trigger: it was a 16px grey icon with no label and was genuinely
+   hard to find. Now a labelled button. */
+.settings-trigger {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 7px 12px;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    background: #f8fafc;
+    color: #475569;
+    font-family: inherit;
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: background .18s ease, color .18s ease, border-color .18s ease;
+}
+
+.settings-trigger:hover {
+    background: #eff6ff;
+    border-color: #bfdbfe;
+    color: #2563eb;
+}
+
+.settings-trigger svg { flex: none; }
+
+@media (max-width: 640px) {
+    .settings-trigger span { display: none; }
+    .settings-trigger { padding: 7px 9px; }
+}

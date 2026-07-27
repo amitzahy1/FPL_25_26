@@ -95,15 +95,19 @@ const config = {
         playerImage: (code) => `https://resources.premierleague.com/premierleague/photos/players/110x140/p${code}.png`,
         missingPlayerImage: 'https://resources.premierleague.com/premierleague/photos/players/110x140/Photo-Missing.png'
     },
-    // Single ordered proxy list. Verified against production: thingproxy no
-    // longer resolves and dummy-cors-proxy.herokuapp.com 404s without CORS
-    // headers, so both are gone. Configure your own Cloudflare Worker in
-    // settings (see fpl-proxy-worker/) to skip the public ones entirely.
-    corsProxy: 'https://api.allorigins.win/raw?url=',
+    // Our own Cloudflare Worker (source in fpl-proxy-worker/) is the default.
+    // It is the only proxy that reliably serves the ~1.5 MB bootstrap: the
+    // public ones return 413 Payload Too Large, and allorigins is down. It is
+    // also edge-cached, so it is faster than all of them.
+    //
+    // Kept as one ordered list rather than the three divergent copies that
+    // used to exist. A custom URL set in settings still overrides this.
+    corsProxy: 'https://fpl-proxy.amitzahy1.workers.dev/?url=',
     corsProxyFallbacks: [
         'https://api.codetabs.com/v1/proxy?quest=',
         'https://corsproxy.io/?',
-        'https://cors-get-proxy.sirjosh.workers.dev/?url='
+        'https://cors-get-proxy.sirjosh.workers.dev/?url=',
+        'https://api.allorigins.win/raw?url='
     ],
     // Resolved per read so a league change in settings takes effect without a code edit.
     get draftLeagueId() { return getLeagueId(); },
@@ -228,10 +232,21 @@ const state = {
     aggregatedCache: {}, // { 3: [...], 5: [...] }
     historicalPoints: {}, // GW -> Map(elementId -> stats)
     displayedData: [],
+    // Percentile baselines are computed once per render from the whole filtered
+    // league, BEFORE the top-N slice. Scoping them to the visible rows made
+    // every cell in a top-20 view look average.
+    percentileBase: [],
     sortKey: 'draft_score',
     sortDirection: 'desc',
     activeQuickFilterName: null,
     selectedForComparison: new Set(),
+    // --- scouting view ---
+    watchlist: new Set(),        // player ids, persisted in localStorage
+    watchlistOnly: false,        // filter the table down to the watchlist
+    rowMode: 'trend',            // 'trend' = tall rows with per-GW micro-charts, 'compact' = classic
+    trendWindow: 5,              // how many recent gameweeks each micro-chart covers
+    trendGws: [],                // [{ gw, stats: Map(playerId -> gwStats) }] newest last
+    trendLoading: false,
     // Advanced filters
     searchQuery: '',
     priceRange: { min: 4, max: 15 },
@@ -433,21 +448,33 @@ async function _fetchWithCacheUncoalesced(url, cacheKey, cacheDurationMinutes = 
         }
     };
 
-    // Extract original URL
+    // Callers pass URLs already prefixed with a proxy, so recover the real
+    // target before choosing which proxy to use. The list is derived from the
+    // live config rather than hardcoded: when it was a fixed list, adding our
+    // own Worker meant its prefix was not stripped, and the request became
+    // worker(worker(fpl-url)) -- which the Worker rejects as 403 because the
+    // inner URL is not an FPL domain. That silently killed the fixtures fetch.
     let originalUrl = url;
     const knownProxies = [
-        'https://corsproxy.io/?',
-        'https://api.allorigins.win/raw?url=',
+        config.corsProxy,
+        ...config.corsProxyFallbacks,
+        localStorage.getItem('fpl_custom_proxy'),
         'https://cors-anywhere.herokuapp.com/',
-        'https://thingproxy.freeboard.io/fetch/',
-        'https://api.codetabs.com/v1/proxy?quest='
-    ];
+        'https://thingproxy.freeboard.io/fetch/'
+    ].filter(Boolean);
 
     for (const proxy of knownProxies) {
         if (url.startsWith(proxy)) {
             originalUrl = decodeURIComponent(url.substring(proxy.length));
             break;
         }
+    }
+
+    // A custom proxy may be stored as a bare origin; normalise that too.
+    const customBase = localStorage.getItem('fpl_custom_proxy');
+    if (customBase && originalUrl.startsWith(customBase)) {
+        const q = originalUrl.indexOf('url=');
+        if (q >= 0) originalUrl = decodeURIComponent(originalUrl.slice(q + 4));
     }
 
     // 🟢 Tier 1: Local Proxy — development only.
