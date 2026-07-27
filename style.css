@@ -6251,3 +6251,39 @@ canvas {
     -webkit-text-fill-color: currentColor;
     letter-spacing: -.3px;
 }
+
+/* ==========================================================================
+   COLUMNS MENU
+   A secondary control does not need its own full-width row above the table.
+   It sits with the other actions and opens over the page instead of pushing it.
+   ========================================================================== */
+.cols-menu { position: relative; }
+.cols-menu > summary { list-style: none; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
+.cols-menu > summary::-webkit-details-marker { display: none; }
+.cols-menu[open] > summary { background: #eef2f7; border-color: #94a3b8; }
+
+.cols-count {
+    font-size: 11.5px;
+    font-weight: 800;
+    color: var(--primary-dark);
+    background: #e9f4fb;
+    border-radius: 100px;
+    padding: 0 6px;
+}
+
+.cols-panel {
+    position: absolute;
+    z-index: 30;
+    inset-inline-start: 0;
+    margin-top: 6px;
+    display: grid;
+    gap: 4px;
+    min-width: 168px;
+    padding: 8px;
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    box-shadow: 0 12px 28px -10px rgba(15, 23, 42, .3);
+}
+
+.cols-panel .optional-chip { width: 100%; text-align: start; border-radius: 7px; padding: 6px 10px; }

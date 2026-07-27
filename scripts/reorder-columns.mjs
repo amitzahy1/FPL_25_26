@@ -27,10 +27,10 @@ export const ORDER = [
     // then by how much each moves a decision
     'defcon_hit_rate', 'def_contrib_per90',
     'xGI_per90', 'goals_scored_assists',
-    'next_3_fdr', 'fixtures', 'bonus_per90', 'clean_sheets_per90', 'now_cost',
+    'next_3_fdr', 'fixtures',
     // off by default, so switching one on appends instead of splitting the table
     'stability_index', 'ict_index_per90', 'dreamteam_count',
-    'xDiff', 'rotation_risk', 'minutes',
+    'xDiff', 'rotation_risk', 'minutes', 'bonus_per90', 'clean_sheets_per90', 'now_cost',
     'set_piece_priority.penalty', 'set_piece_priority.corner', 'set_piece_priority.free_kick',
 ];
 

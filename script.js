@@ -2632,15 +2632,15 @@ function createPlayerRowHtml(player, index) {
         <td class="${getPercentileClass((player.goals_scored || 0) + (player.assists || 0), displayedValues.goals_assists)}">${(player.goals_scored || 0) + (player.assists || 0)}</td>
         <td class="fdr-cell">${fdrBadge}</td>
         <td class="fixtures-cell">${fixturesHTML}</td>
-        <td class="${getPercentileClass(parseFloat(player.bonus_per90) || 0, displayedValues.bonus_per90)}">${(parseFloat(player.bonus_per90) || 0).toFixed(2)}</td>
-        <td class="${getPercentileClass(parseFloat(player.clean_sheets_per90) || 0, displayedValues.clean_sheets_per90)}">${(parseFloat(player.clean_sheets_per90) || 0).toFixed(2)}</td>
-        <td>${player.now_cost.toFixed(1)}</td>
         <td class="bold-cell stability-cell ${getPercentileClass(player.stability_index || 0, displayedValues.stability_index)}">${(player.stability_index || 0).toFixed(0)}</td>
         <td class="${getPercentileClass(parseFloat(player.ict_index_per90) || 0, displayedValues.ict_index_per90)}">${(parseFloat(player.ict_index_per90) || 0).toFixed(1)}</td>
         <td class="${getPercentileClass(player.dreamteam_count, displayedValues.dreamteam_count)}">${player.dreamteam_count}</td>
         <td class="${player.xDiff >= 0 ? 'xdiff-positive' : 'xdiff-negative'}" data-tooltip="${config.columnTooltips.xDiff}">${player.xDiff.toFixed(2)}</td>
         <td data-tooltip="${config.columnTooltips.rotation_risk}">${formatRotation(player.rotation_risk)}</td>
         <td class="${getPercentileClass(player.minutes, displayedValues.minutes)}">${player.minutes}</td>
+        <td class="${getPercentileClass(parseFloat(player.bonus_per90) || 0, displayedValues.bonus_per90)}">${(parseFloat(player.bonus_per90) || 0).toFixed(2)}</td>
+        <td class="${getPercentileClass(parseFloat(player.clean_sheets_per90) || 0, displayedValues.clean_sheets_per90)}">${(parseFloat(player.clean_sheets_per90) || 0).toFixed(2)}</td>
+        <td>${player.now_cost.toFixed(1)}</td>
         <td class="${player.set_piece_priority.penalty === 1 ? 'set-piece-yes' : 'set-piece-no'}">${player.set_piece_priority.penalty === 1 ? '🎯 (1)' : '–'}</td>
         <td class="${player.set_piece_priority.corner > 0 ? 'set-piece-yes' : 'set-piece-no'}">${player.set_piece_priority.corner > 0 ? `(${player.set_piece_priority.corner})` : '–'}</td>
         <td class="${player.set_piece_priority.free_kick > 0 ? 'set-piece-yes' : 'set-piece-no'}">${player.set_piece_priority.free_kick > 0 ? `(${player.set_piece_priority.free_kick})` : '–'}</td>
@@ -2684,7 +2684,10 @@ const OPTIONAL_COLUMNS = [
     { key: 'set_piece_priority.free_kick', label: 'חופשית' },
     { key: 'xDiff', label: 'xDiff' },
     { key: 'rotation_risk', label: 'הרכב' },
-    { key: 'minutes', label: 'דקות' }
+    { key: 'minutes', label: 'דקות' },
+    { key: 'bonus_per90', label: 'בונוס/90' },
+    { key: 'clean_sheets_per90', label: 'CS/90' },
+    { key: 'now_cost', label: 'מחיר' }
 ];
 
 const OPTIONAL_COLUMNS_KEY = 'fpl_optional_columns';
@@ -2729,12 +2732,17 @@ function applyOptionalColumns() {
     const span = heads.length - hide.size;
     document.querySelectorAll('#playersTable .detail-row > td').forEach(td => { td.colSpan = span; });
 
+    const count = document.getElementById('colsCount');
+    if (count) {
+        count.textContent = state.shownOptional.size ? `+${state.shownOptional.size}` : '';
+    }
+
     const host = document.getElementById('optionalCols');
     if (host) {
         host.innerHTML = OPTIONAL_COLUMNS.map(c => {
             const on = state.shownOptional.has(c.key);
             return `<button class="optional-chip" aria-pressed="${on}"
-                onclick="toggleOptionalColumn('${c.key}')"
+                onclick="event.stopPropagation();toggleOptionalColumn('${c.key}')"
                 title="${on ? 'הסתר' : 'הצג'} את עמודת ${c.label}">${on ? '✓ ' : '+ '}${c.label}</button>`;
         }).join('');
     }
