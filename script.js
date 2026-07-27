@@ -2,433 +2,29 @@
 // AUTHENTICATION & USER MANAGEMENT
 // ============================================
 
+// ============================================
+// APP ENTRY
+// ============================================
+// This is a public, read-only analytics tool over public FPL endpoints.
+//
+// There was previously a "login" here, but it never contacted Google: it
+// waited 1.5s and fabricated a user object hardcoded to one email address,
+// which was also the entire access-control check. It gated nothing, and it
+// published a personal email in a public repository. Removed rather than
+// repaired, since there is nothing private to protect.
+
 const auth = {
     user: null,
     isDemo: false,
-    googleClientId: 'YOUR_GOOGLE_CLIENT_ID', // Replace with your actual Google Client ID
-    allowedEmail: 'redacted@users.noreply.github.com', // Only this email can access real data
 
     init() {
-        // Check if user is already logged in (from localStorage)
-        const savedUser = localStorage.getItem('fpl_user');
-        if (savedUser) {
-            this.user = JSON.parse(savedUser);
-            // Check if user is authorized
-            if (this.user.email === this.allowedEmail) {
-                this.showApp();
-            } else {
-                // Unauthorized user - force demo mode
-                this.user.name = this.user.name || 'משתמש';
-                this.isDemo = true;
-                this.showApp();
-            }
-        } else {
-            this.showLoginScreen();
-        }
-    },
-
-    showLoginScreen() {
-        document.getElementById('loginScreen').style.display = 'flex';
-        document.getElementById('mainApp').style.display = 'none';
-
-        // Setup Google Sign-In button
-        document.getElementById('googleSignInBtn').addEventListener('click', () => {
-            this.googleSignIn();
-        });
-
-        // Setup Demo Mode button
-        document.getElementById('demoModeBtn').addEventListener('click', () => {
-            this.enterDemoMode();
-        });
-    },
-
-    showApp() {
-        document.getElementById('loginScreen').style.display = 'none';
-        document.getElementById('mainApp').style.display = 'block';
-
-        // Show user info
-        if (this.user) {
-            const userInfo = document.getElementById('userInfo');
-            userInfo.style.display = 'flex';
-
-            // Set user photo or create initial circle
-            const userPhoto = document.getElementById('userPhoto');
-            if (this.user.picture && this.user.picture !== 'https://via.placeholder.com/40') {
-                userPhoto.src = this.user.picture;
-                userPhoto.style.display = 'block';
-                userPhoto.onerror = () => {
-                    // If image fails to load, hide it and show initial
-                    userPhoto.style.display = 'none';
-                    this.createUserInitial(this.user.name);
-                };
-            } else {
-                userPhoto.style.display = 'none';
-                this.createUserInitial(this.user.name);
-            }
-
-            document.getElementById('userName').textContent = this.user.name;
-            // Show appropriate mode badge
-            if (this.isDemo && this.user.email === 'demo@fpl.com') {
-                document.getElementById('userMode').textContent = '🎭 מצב דמו';
-            } else if (this.isDemo) {
-                document.getElementById('userMode').textContent = '👁️ תצוגה בלבד';
-            } else {
-                document.getElementById('userMode').textContent = '✅ גישה מלאה';
-            }
-
-            // Setup logout button
-            document.getElementById('logoutBtn').addEventListener('click', () => {
-                this.logout();
-            });
-        }
-
-        // Load data based on mode
-        if (this.isDemo) {
-            // Demo mode: show fabricated data with real player names
-            loadDemoData();
-        } else {
-            // Full access: show real data
-            init();
-        }
-    },
-
-    createUserInitial(name) {
-        // Remove existing initial if any
-        const existingInitial = document.querySelector('.user-initial');
-        if (existingInitial) existingInitial.remove();
-
-        // Create initial circle
-        const initial = document.createElement('div');
-        initial.className = 'user-initial';
-        initial.textContent = name.charAt(0).toUpperCase();
-
-        // Insert before user details
-        const userInfo = document.getElementById('userInfo');
-        const userDetails = userInfo.querySelector('.user-details');
-        userInfo.insertBefore(initial, userDetails);
-    },
-
-    googleSignIn() {
-        // For demo purposes, simulate Google Sign-In
-        // In production, use Google Identity Services
-        showToast('התחברות', 'מתחבר עם Google...', 'info', 2000);
-
-        setTimeout(() => {
-            // Simulate Google Sign-In response
-            // In production, this will come from Google Identity Services
-            const googleUser = {
-                name: 'Amit Zahy',
-                email: 'redacted@users.noreply.github.com', // Change this to test different users
-                picture: 'https://via.placeholder.com/40'
-            };
-
-            this.user = googleUser;
-
-            // Check if user is authorized for real data
-            if (this.user.email === this.allowedEmail) {
-                this.isDemo = false;
-                localStorage.setItem('fpl_user', JSON.stringify(this.user));
-                showToast('הצלחה!', `ברוך הבא ${this.user.name}! גישה מלאה לנתונים אמיתיים`, 'success', 3000);
-            } else {
-                this.isDemo = true;
-                localStorage.setItem('fpl_user', JSON.stringify(this.user));
-                showToast('גישה מוגבלת', `שלום ${this.user.name}! תוצג תצוגה עם שמות אמיתיים ונתונים מפוברקים`, 'warning', 4000);
-            }
-
-            this.showApp();
-        }, 1500);
-    },
-
-    enterDemoMode() {
-        this.user = {
-            name: 'משתמש דמו',
-            email: 'demo@fpl.com',
-            picture: 'https://via.placeholder.com/40'
-        };
-        this.isDemo = true;
-        showToast('מצב דמו', 'נכנסת למצב דמו - נתונים אמיתיים בדף הדראפט בלבד', 'info', 3000);
-        this.showApp();
-        // Force navigate to draft tab in demo mode and load data
-        setTimeout(() => {
-            showTab('draft');
-            // Ensure draft data is loaded
-            if (!state.draft.details || !state.draft.details.league_entries) {
-                loadDraftLeague();
-            }
-        }, 500);
-    },
-
-    logout() {
-        localStorage.removeItem('fpl_user');
-        this.user = null;
-        this.isDemo = false;
-        showToast('התנתקות', 'התנתקת בהצלחה', 'info', 2000);
-        setTimeout(() => {
-            location.reload();
-        }, 1000);
+        const login = document.getElementById('loginScreen');
+        const app = document.getElementById('mainApp');
+        if (login) login.style.display = 'none';
+        if (app) app.style.display = 'block';
+        init();
     }
 };
-
-// ============================================
-// DEMO DATA GENERATOR
-// ============================================
-
-function generateDemoPlayer(id, name, teamName, position, price) {
-    // Map team names to IDs (simple hash)
-    const teamMap = {
-        'Liverpool': 1, 'Man City': 2, 'Arsenal': 3, 'Spurs': 4,
-        'Chelsea': 5, 'Man Utd': 6, 'Newcastle': 7, 'Aston Villa': 8,
-        'Brighton': 9, 'Brentford': 10, 'West Ham': 11, 'Wolves': 12,
-        'Crystal Palace': 13, 'Fulham': 14, 'Bournemouth': 15, 'Everton': 16,
-        "Nott'm Forest": 17, 'Luton': 18, 'Burnley': 19, 'Sheffield Utd': 20
-    };
-
-    // Helper function to convert to number
-    const toNum = (value) => parseFloat(value);
-
-    return {
-        id,
-        web_name: name,
-        team: teamMap[teamName] || id % 20 + 1,
-        team_name: teamName,
-        position_name: position,
-        now_cost: price,
-        total_points: Math.floor(Math.random() * 150) + 20,
-        form: toNum((Math.random() * 8 + 2).toFixed(1)),
-        points_per_game_90: toNum((Math.random() * 8 + 1).toFixed(1)),
-        selected_by_percent: toNum((Math.random() * 40 + 5).toFixed(1)),
-        minutes: Math.floor(Math.random() * 2000) + 500,
-        goals_scored: Math.floor(Math.random() * 20),
-        assists: Math.floor(Math.random() * 15),
-        clean_sheets: Math.floor(Math.random() * 10),
-        bonus: Math.floor(Math.random() * 20),
-        ict_index: toNum((Math.random() * 30 + 5).toFixed(1)),
-        expected_goal_involvements: toNum((Math.random() * 15 + 2).toFixed(2)),
-        xGI_per90: toNum((Math.random() * 1.2 + 0.1).toFixed(2)),
-        def_contrib_per90: toNum((Math.random() * 8 + 1).toFixed(1)),
-        xDiff: toNum((Math.random() * 4 - 2).toFixed(2)),
-        dreamteam_count: Math.floor(Math.random() * 8),
-        net_transfers_event: Math.floor(Math.random() * 200) - 100,
-        draft_score: toNum((Math.random() * 80 + 20).toFixed(1)),
-        predicted_points_1_gw: toNum((Math.random() * 8 + 2).toFixed(1)),
-        predicted_points_4_gw: toNum((Math.random() * 30 + 10).toFixed(1)),
-        code: Math.floor(Math.random() * 100000),
-        creativity: toNum((Math.random() * 100 + 10).toFixed(1)),
-        threat: toNum((Math.random() * 100 + 10).toFixed(1)),
-        influence: toNum((Math.random() * 100 + 10).toFixed(1)),
-        saves: Math.floor(Math.random() * 50),
-        goals_conceded: Math.floor(Math.random() * 30),
-        // Additional fields that might be needed
-        creativity_per_90: toNum((Math.random() * 10 + 2).toFixed(1)),
-        threat_per_90: toNum((Math.random() * 10 + 2).toFixed(1)),
-        influence_per_90: toNum((Math.random() * 10 + 2).toFixed(1)),
-        saves_per_90: toNum((Math.random() * 5 + 1).toFixed(1)),
-        clean_sheets_per_90: toNum((Math.random() * 0.5).toFixed(2)),
-        expected_goals: toNum((Math.random() * 10 + 1).toFixed(2)),
-        expected_assists: toNum((Math.random() * 8 + 1).toFixed(2)),
-        expected_goals_per_90: toNum((Math.random() * 0.8).toFixed(2)),
-        expected_assists_per_90: toNum((Math.random() * 0.6).toFixed(2)),
-        // Component scores (will be recalculated but provide defaults)
-        base_score: toNum((Math.random() * 50 + 20).toFixed(1)),
-        quality_score: toNum((Math.random() * 50 + 20).toFixed(1)),
-        performance_score: toNum((Math.random() * 50 + 20).toFixed(1)),
-        ga_per_game: toNum((Math.random() * 1.5).toFixed(2)),
-        xgi_per_game: toNum((Math.random() * 1.2).toFixed(2)),
-        // Percentiles object (will be populated by calculateAdvancedScores)
-        percentiles: {},
-        set_piece_priority: {
-            penalty: Math.random() > 0.8 ? 1 : 0,
-            corner: Math.random() > 0.7 ? 1 : 0,
-            free_kick: Math.random() > 0.7 ? 1 : 0
-        }
-    };
-}
-
-function loadDemoData() {
-    showLoading('טוען נתוני דמו...');
-
-    setTimeout(() => {
-        // Create comprehensive demo dataset with real names but fake stats
-        const demoPlayers = [
-            // Liverpool
-            generateDemoPlayer(1, 'Salah', 'Liverpool', 'MID', 13.0),
-            generateDemoPlayer(2, 'Alexander-Arnold', 'Liverpool', 'DEF', 7.5),
-            generateDemoPlayer(3, 'Van Dijk', 'Liverpool', 'DEF', 6.5),
-            generateDemoPlayer(4, 'Alisson', 'Liverpool', 'GKP', 5.5),
-            generateDemoPlayer(5, 'Díaz', 'Liverpool', 'MID', 8.0),
-            generateDemoPlayer(6, 'Núñez', 'Liverpool', 'FWD', 7.5),
-            generateDemoPlayer(7, 'Szoboszlai', 'Liverpool', 'MID', 7.0),
-            generateDemoPlayer(8, 'Robertson', 'Liverpool', 'DEF', 6.5),
-
-            // Man City
-            generateDemoPlayer(9, 'Haaland', 'Man City', 'FWD', 15.0),
-            generateDemoPlayer(10, 'De Bruyne', 'Man City', 'MID', 12.5),
-            generateDemoPlayer(11, 'Foden', 'Man City', 'MID', 9.5),
-            generateDemoPlayer(12, 'Ederson', 'Man City', 'GKP', 5.5),
-            generateDemoPlayer(13, 'Walker', 'Man City', 'DEF', 6.0),
-            generateDemoPlayer(14, 'Rodri', 'Man City', 'MID', 6.5),
-            generateDemoPlayer(15, 'Grealish', 'Man City', 'MID', 7.0),
-            generateDemoPlayer(16, 'Dias', 'Man City', 'DEF', 6.0),
-
-            // Arsenal
-            generateDemoPlayer(17, 'Saka', 'Arsenal', 'MID', 9.5),
-            generateDemoPlayer(18, 'Ødegaard', 'Arsenal', 'MID', 8.5),
-            generateDemoPlayer(19, 'Martinelli', 'Arsenal', 'MID', 7.5),
-            generateDemoPlayer(20, 'Gabriel', 'Arsenal', 'DEF', 6.0),
-            generateDemoPlayer(21, 'Saliba', 'Arsenal', 'DEF', 6.0),
-            generateDemoPlayer(22, 'Raya', 'Arsenal', 'GKP', 5.0),
-            generateDemoPlayer(23, 'Jesus', 'Arsenal', 'FWD', 8.0),
-            generateDemoPlayer(24, 'Rice', 'Arsenal', 'MID', 6.5),
-
-            // Spurs
-            generateDemoPlayer(25, 'Son', 'Spurs', 'MID', 10.0),
-            generateDemoPlayer(26, 'Maddison', 'Spurs', 'MID', 7.5),
-            generateDemoPlayer(27, 'Richarlison', 'Spurs', 'FWD', 7.0),
-            generateDemoPlayer(28, 'Vicario', 'Spurs', 'GKP', 5.0),
-            generateDemoPlayer(29, 'Romero', 'Spurs', 'DEF', 5.5),
-            generateDemoPlayer(30, 'Pedro Porro', 'Spurs', 'DEF', 5.5),
-
-            // Chelsea
-            generateDemoPlayer(31, 'Palmer', 'Chelsea', 'MID', 11.0),
-            generateDemoPlayer(32, 'Jackson', 'Chelsea', 'FWD', 7.5),
-            generateDemoPlayer(33, 'Enzo', 'Chelsea', 'MID', 6.0),
-            generateDemoPlayer(34, 'Sánchez', 'Chelsea', 'GKP', 4.5),
-            generateDemoPlayer(35, 'James', 'Chelsea', 'DEF', 6.0),
-            generateDemoPlayer(36, 'Gallagher', 'Chelsea', 'MID', 5.5),
-
-            // Man Utd
-            generateDemoPlayer(37, 'B.Fernandes', 'Man Utd', 'MID', 8.5),
-            generateDemoPlayer(38, 'Rashford', 'Man Utd', 'MID', 7.0),
-            generateDemoPlayer(39, 'Højlund', 'Man Utd', 'FWD', 7.0),
-            generateDemoPlayer(40, 'Onana', 'Man Utd', 'GKP', 5.0),
-            generateDemoPlayer(41, 'Martínez', 'Man Utd', 'DEF', 5.5),
-
-            // Newcastle
-            generateDemoPlayer(42, 'Isak', 'Newcastle', 'FWD', 8.5),
-            generateDemoPlayer(43, 'Gordon', 'Newcastle', 'MID', 7.5),
-            generateDemoPlayer(44, 'Trippier', 'Newcastle', 'DEF', 6.5),
-            generateDemoPlayer(45, 'Pope', 'Newcastle', 'GKP', 5.0),
-            generateDemoPlayer(46, 'Bruno G.', 'Newcastle', 'MID', 6.5),
-
-            // Aston Villa
-            generateDemoPlayer(47, 'Watkins', 'Aston Villa', 'FWD', 9.0),
-            generateDemoPlayer(48, 'Bailey', 'Aston Villa', 'MID', 6.5),
-            generateDemoPlayer(49, 'Martínez', 'Aston Villa', 'GKP', 5.0),
-            generateDemoPlayer(50, 'Digne', 'Aston Villa', 'DEF', 5.0),
-
-            // Brighton
-            generateDemoPlayer(51, 'Mitoma', 'Brighton', 'MID', 6.5),
-            generateDemoPlayer(52, 'Ferguson', 'Brighton', 'FWD', 6.0),
-            generateDemoPlayer(53, 'Steele', 'Brighton', 'GKP', 4.5),
-
-            // Brentford
-            generateDemoPlayer(54, 'Mbeumo', 'Brentford', 'MID', 7.0),
-            generateDemoPlayer(55, 'Toney', 'Brentford', 'FWD', 7.5),
-            generateDemoPlayer(56, 'Flekken', 'Brentford', 'GKP', 4.5),
-
-            // West Ham
-            generateDemoPlayer(57, 'Bowen', 'West Ham', 'MID', 7.5),
-            generateDemoPlayer(58, 'Paquetá', 'West Ham', 'MID', 6.5),
-            generateDemoPlayer(59, 'Antonio', 'West Ham', 'FWD', 6.0),
-
-            // Wolves
-            generateDemoPlayer(60, 'Cunha', 'Wolves', 'MID', 6.5),
-            generateDemoPlayer(61, 'Hwang', 'Wolves', 'FWD', 5.5),
-
-            // Crystal Palace
-            generateDemoPlayer(62, 'Eze', 'Crystal Palace', 'MID', 7.0),
-            generateDemoPlayer(63, 'Olise', 'Crystal Palace', 'MID', 6.5),
-
-            // Fulham
-            generateDemoPlayer(64, 'Willian', 'Fulham', 'MID', 6.0),
-            generateDemoPlayer(65, 'Jiménez', 'Fulham', 'FWD', 6.0),
-
-            // Bournemouth
-            generateDemoPlayer(66, 'Solanke', 'Bournemouth', 'FWD', 7.5),
-            generateDemoPlayer(67, 'Kluivert', 'Bournemouth', 'MID', 5.5),
-
-            // Everton
-            generateDemoPlayer(68, 'Calvert-Lewin', 'Everton', 'FWD', 6.0),
-            generateDemoPlayer(69, 'McNeil', 'Everton', 'MID', 5.5),
-
-            // Nott'm Forest
-            generateDemoPlayer(70, 'Gibbs-White', "Nott'm Forest", 'MID', 6.0),
-            generateDemoPlayer(71, 'Wood', "Nott'm Forest", 'FWD', 6.5),
-
-            // Luton
-            generateDemoPlayer(72, 'Adebayo', 'Luton', 'FWD', 5.5),
-            generateDemoPlayer(73, 'Townsend', 'Luton', 'MID', 5.0),
-
-            // Burnley
-            generateDemoPlayer(74, 'Foster', 'Burnley', 'FWD', 5.5),
-            generateDemoPlayer(75, 'Brownhill', 'Burnley', 'MID', 5.0),
-
-            // Sheffield Utd
-            generateDemoPlayer(76, 'McBurnie', 'Sheffield Utd', 'FWD', 5.5),
-            generateDemoPlayer(77, 'Hamer', 'Sheffield Utd', 'MID', 5.5),
-        ];
-
-        // Process demo data
-        state.allPlayersData.demo = {
-            raw: demoPlayers,
-            processed: demoPlayers,
-            fixtures: []
-        };
-        state.currentDataSource = 'demo';
-        state.displayedData = demoPlayers;
-
-        // Create fake teams data
-        const teams = [...new Set(demoPlayers.map(p => p.team_name))];
-        state.teamsData = {};
-        teams.forEach((team, idx) => {
-            state.teamsData[idx + 1] = {
-                id: idx + 1,
-                name: team,
-                short_name: team.substring(0, 3).toUpperCase()
-            };
-        });
-
-        // Create fake team strength data
-        state.teamStrengthData = {};
-        teams.forEach((team, idx) => {
-            state.teamStrengthData[idx + 1] = {
-                attack: Math.random() * 1000 + 500,
-                defense: Math.random() * 1000 + 500
-            };
-        });
-
-        // Calculate scores with fake data
-        calculateAdvancedScores(demoPlayers);
-
-        // Update UI
-        renderTable();
-        updateDashboardKPIs(demoPlayers);
-
-        // Setup event listeners and tooltips
-        setupEventListeners();
-        initializeTooltips();
-
-        hideLoading();
-
-        showToast('מצב דמו', 'נתוני דמו נטענו בהצלחה - כל המספרים מפוברקים!', 'success', 3000);
-
-        // Show demo banner
-        const header = document.querySelector('.header');
-        const demoBanner = document.createElement('div');
-        demoBanner.style.cssText = `
-            background: linear-gradient(135deg, #f59e0b 0%, #ea580c 100%);
-            color: white;
-            padding: 12px 20px;
-            border-radius: 8px;
-            margin-top: 16px;
-            text-align: center;
-            font-weight: 600;
-            box-shadow: 0 4px 12px rgba(245, 158, 11, 0.3);
-        `;
-        demoBanner.innerHTML = '🎭 מצב דמו - כל הנתונים מפוברקים לחלוטין! | התחבר עם Google לגישה לנתונים אמיתיים';
-        header.appendChild(demoBanner);
-    }, 1000);
-}
 
 // ============================================
 // SEASON CONFIG
@@ -2185,49 +1781,9 @@ function toggleQuickFilter(button, filterName) {
     }
 }
 
-function exportToCsv() {
-    const headers = ['Rank', 'Player', 'Draft Score', 'Stability', 'Prediction Score', 'Quality Score', 'xPts (4GW)', 'Team', 'Pos', 'Price', 'Pts', 'PPG', 'Sel %', 'DreamTeam', 'Net TF (GW)', 'DC/90', 'G+A', 'xGI', 'Mins', 'xDiff', 'ICT', 'Bonus', 'CS', 'Pen', 'Cor', 'FK'];
-    let csvContent = headers.join(',') + '\n';
-
-    state.displayedData.forEach((p, i) => {
-        const row = [
-            i + 1,
-            p.web_name.replace(/,/g, ''),
-            p.draft_score.toFixed(2),
-            (p.stability_index || 0).toFixed(0),
-            p.base_score.toFixed(2),
-            p.quality_score.toFixed(2),
-            (p.predicted_points_4_gw || 0).toFixed(2),
-            p.team_name,
-            p.position_name,
-            p.now_cost,
-            p.total_points,
-            p.points_per_game_90.toFixed(2),
-            p.selected_by_percent,
-            p.dreamteam_count,
-            p.net_transfers_event,
-            p.def_contrib_per90.toFixed(2),
-            (p.goals_scored || 0) + (p.assists || 0),
-            (p.expected_goal_involvements || 0).toFixed(2),
-            p.minutes,
-            p.xDiff.toFixed(2),
-            p.ict_index,
-            p.bonus,
-            p.clean_sheets,
-            p.set_piece_priority.penalty,
-            p.set_piece_priority.corner,
-            p.set_piece_priority.free_kick,
-        ];
-        csvContent += row.join(',') + '\n';
-    });
-
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement('a');
-    link.href = URL.createObjectURL(blob);
-    link.download = 'fpl_players_data.csv';
-    link.click();
-}
-
+// exportToCsv: the earlier English-header definition was silently shadowed by
+// the later one (last declaration wins for a classic script), so it was dead
+// code. Removed; the live implementation is below.
 function generateComparisonTableHTML(players) {
     // 🎨 ULTIMATE PLAYER COMPARISON - COMPLETE MAKEOVER
 
@@ -5970,12 +5526,6 @@ function switchMainView(viewName) {
 }
 
 function showTab(tabName) {
-    // In demo mode, only allow draft tab
-    if (auth.isDemo && tabName === 'players') {
-        showToast('מצב דמו', 'דף נתוני שחקנים זמין רק למשתמשים רשומים', 'warning', 3000);
-        return;
-    }
-
     document.querySelectorAll('.nav-item').forEach(btn => btn.classList.remove('active'));
     const activeBtn = document.getElementById(`nav-${tabName}`);
     if (activeBtn) activeBtn.classList.add('active');
@@ -7865,10 +7415,7 @@ function renderNextRivalAnalysis(selectedOpponentId = null) {
             `;
         }
 
-        // Only show recommendations for authorized users
-        if (auth.user && auth.user.email === auth.allowedEmail) {
-            html += recommendationsHtml;
-        }
+        html += recommendationsHtml;
 
         // ============================================
         // KEY INSIGHTS SUMMARY
