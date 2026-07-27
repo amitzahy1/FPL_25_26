@@ -495,10 +495,10 @@
                                 style="display: flex; background: #f8fafc; padding: 4px; border-radius: 10px; border: 1px solid #e2e8f0;">
                                 <button class="source-toggle-btn active" id="liveDataBtn"
                                     onclick="switchDataSource('live')"
-                                    style="padding: 8px 16px; border: none; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; transition: all 0.2s;">2025/26</button>
+                                    style="padding: 8px 16px; border: none; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; transition: all 0.2s;"></button>
                                 <button class="source-toggle-btn" id="historicalDataBtn"
                                     onclick="switchDataSource('historical')"
-                                    style="padding: 8px 16px; border: none; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; transition: all 0.2s;">2024/25</button>
+                                    style="padding: 8px 16px; border: none; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; transition: all 0.2s;"></button>
                             </div>
 
                             <div style="width: 1px; height: 32px; background: #e2e8f0;"></div>
@@ -744,6 +744,13 @@
                         <span class="close"
                             onclick="document.getElementById('settingsModal').style.display='none'">&times;</span>
                         <h2>⚙️ הגדרות</h2>
+
+                        <div class="settings-group">
+                            <label>🏆 מזהה ליגת הדראפט:</label>
+                            <input type="text" id="leagueIdInput" inputmode="numeric" placeholder="689"
+                                style="width: 100%; padding: 8px;">
+                            <small>המזהה מתחלף בכל עונה. אפשר גם להעביר אותו בכתובת: <code>?league=12345</code></small>
+                        </div>
 
                         <div class="settings-group">
                             <label>🌐 Custom FPL Proxy (Cloudflare Worker):</label>

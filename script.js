@@ -431,6 +431,61 @@ function loadDemoData() {
 }
 
 // ============================================
+// SEASON CONFIG
+// ============================================
+// Single source of truth for everything that changes at season rollover.
+// The draft league gets a brand-new ID every season, so it is resolved at
+// runtime rather than hardcoded: ?league=NNN wins, then a saved setting,
+// then the default below.
+
+const SEASON_CONFIG = {
+    seasonLabel: '2026/27',
+    previousSeasonLabel: '2025/26',
+    previousSeasonId: '2025-26',
+    defaultLeagueId: 689,
+    totalGameweeks: 38,
+    cacheSchemaVersion: 5,
+    settingsKey: 'fpl.settings'
+};
+
+function readSettings() {
+    try {
+        return JSON.parse(localStorage.getItem(SEASON_CONFIG.settingsKey)) || {};
+    } catch (e) {
+        return {};
+    }
+}
+
+function writeSettings(patch) {
+    const next = { ...readSettings(), ...patch };
+    try {
+        localStorage.setItem(SEASON_CONFIG.settingsKey, JSON.stringify(next));
+    } catch (e) {
+        console.error('Could not persist settings', e);
+    }
+    return next;
+}
+
+// Precedence: URL ?league= > saved setting > season default.
+// A league id passed in the URL is persisted so the link only has to be used once.
+function getLeagueId() {
+    let fromUrl = null;
+    try {
+        fromUrl = new URLSearchParams(window.location.search).get('league');
+    } catch (e) {
+        fromUrl = null;
+    }
+    if (fromUrl && /^\d+$/.test(fromUrl)) {
+        const id = parseInt(fromUrl, 10);
+        if (readSettings().leagueId !== id) writeSettings({ leagueId: id });
+        return id;
+    }
+    const saved = readSettings().leagueId;
+    if (Number.isInteger(saved) && saved > 0) return saved;
+    return SEASON_CONFIG.defaultLeagueId;
+}
+
+// ============================================
 // ORIGINAL CONFIG
 // ============================================
 
@@ -451,7 +506,8 @@ const config = {
         'https://corsproxy.io/?',
         'https://api.codetabs.com/v1/proxy?quest='
     ],
-    draftLeagueId: 689,
+    // Resolved per read so a league change in settings takes effect without a code edit.
+    get draftLeagueId() { return getLeagueId(); },
     setPieceTakers: {}, // DEPRECATED: Now automated via API in preprocessPlayerData
     tableColumns: [
         'rank', 'web_name', 'draft_score', 'stability_index', 'predicted_points_1_gw', 'next_3_fdr', 'team_name', 'draft_team',
@@ -578,7 +634,10 @@ const state = {
     selectedTeams: [],
     savedFilters: null,
     draft: {
-        leagueId: 689,
+        // Same resolved value as config.draftLeagueId — these were two
+        // independent hardcoded copies that different code paths read.
+        get leagueId() { return getLeagueId(); },
+        set leagueId(id) { writeSettings({ leagueId: parseInt(id, 10) }); },
         details: null,
         standings: null,
         rostersByEntryId: new Map(),
@@ -1056,6 +1115,8 @@ function showToast(title, message, type = 'info', duration = 4000) {
 
 function openSettings() {
     document.getElementById('customProxyInput').value = localStorage.getItem('fpl_custom_proxy') || '';
+    const leagueInput = document.getElementById('leagueIdInput');
+    if (leagueInput) leagueInput.value = getLeagueId();
     document.getElementById('settingsModal').style.display = 'block';
 }
 
@@ -1063,12 +1124,53 @@ function saveSettings() {
     const url = document.getElementById('customProxyInput').value.trim();
     if (url) {
         localStorage.setItem('fpl_custom_proxy', url);
-        showToast('הגדרות נשמרו', 'Custom Proxy עודכן בהצלחה', 'success');
     } else {
         localStorage.removeItem('fpl_custom_proxy');
-        showToast('הגדרות נשמרו', 'Custom Proxy הוסר', 'info');
     }
+
+    const leagueInput = document.getElementById('leagueIdInput');
+    const previousLeagueId = getLeagueId();
+    let leagueChanged = false;
+    if (leagueInput) {
+        const raw = leagueInput.value.trim();
+        if (/^\d+$/.test(raw)) {
+            const id = parseInt(raw, 10);
+            if (id !== previousLeagueId) {
+                writeSettings({ leagueId: id });
+                leagueChanged = true;
+            }
+        } else if (raw !== '') {
+            showToast('שגיאה', 'מזהה ליגה חייב להיות מספר', 'error');
+            return;
+        }
+    }
+
     document.getElementById('settingsModal').style.display = 'none';
+
+    if (leagueChanged) {
+        // Cached draft data belongs to the old league — drop it before reloading.
+        clearDraftCaches();
+        showToast('הגדרות נשמרו', 'מזהה הליגה עודכן, טוען מחדש...', 'success');
+        setTimeout(() => window.location.reload(), 800);
+    } else {
+        showToast('הגדרות נשמרו', 'ההגדרות עודכנו בהצלחה', 'success');
+    }
+}
+
+// Remove every cached draft payload (league-scoped keys carry the league id,
+// but picks/standings caches do not, so sweep them all).
+function clearDraftCaches() {
+    Object.keys(localStorage)
+        .filter(k => k.startsWith('fpl_draft_') || k.startsWith('draft_'))
+        .forEach(k => localStorage.removeItem(k));
+}
+
+// Season names are rendered from SEASON_CONFIG so a rollover is a one-line change.
+function applySeasonLabels() {
+    const live = document.getElementById('liveDataBtn');
+    const prev = document.getElementById('historicalDataBtn');
+    if (live) live.textContent = SEASON_CONFIG.seasonLabel;
+    if (prev) prev.textContent = SEASON_CONFIG.previousSeasonLabel;
 }
 
 async function processManualData() {
@@ -1106,6 +1208,8 @@ async function processManualData() {
 // Main init function for real data
 async function init() {
     Chart.register(ChartDataLabels);
+
+    applySeasonLabels();
 
     // Load data sources in sequence to ensure mapping works
     showLoading();
@@ -1361,7 +1465,7 @@ function calculateRealFDR(players, fixtures) {
 
     // Group fixtures by team
     const teamFixtures = {};
-    const nextGameweek = fixtures.find(f => !f.finished && f.event)?.event || 38;
+    const nextGameweek = fixtures.find(f => !f.finished && f.event)?.event || SEASON_CONFIG.totalGameweeks;
 
     // Pre-process fixtures to map by team
     fixtures.forEach(f => {
@@ -3679,7 +3783,7 @@ async function loadDraftDataInBackground() {
             state.draft.details = details;
 
             // Process draft data to get owned players
-            const currentGW = details.league?.current_event || 10;
+            const currentGW = details.league?.current_event || getCurrentEventId();
 
             // Build entryId to team name map
             state.draft.entryIdToTeamName.clear();
@@ -4809,7 +4913,7 @@ function renderH2HCalendar() {
         return;
     }
 
-    const currentGW = state.draft.details?.league?.current_event || 10;
+    const currentGW = state.draft.details?.league?.current_event || getCurrentEventId();
 
     // Group matches by gameweek and sort
     const matchesByGW = {};
@@ -4821,7 +4925,7 @@ function renderH2HCalendar() {
 
     // Show only last 3 GWs and next 3 GWs
     const gwsToShow = [];
-    for (let i = Math.max(1, currentGW - 2); i <= Math.min(currentGW + 3, 38); i++) {
+    for (let i = Math.max(1, currentGW - 2); i <= Math.min(currentGW + 3, SEASON_CONFIG.totalGameweeks); i++) {
         if (matchesByGW[i]) gwsToShow.push(i);
     }
 
@@ -4872,7 +4976,7 @@ function renderProgressChart() {
     if (standings.length === 0) return;
 
     // Get current gameweek
-    const currentGW = state.draft.details?.league?.current_event || 10;
+    const currentGW = state.draft.details?.league?.current_event || getCurrentEventId();
 
     // Create gameweek labels
     const labels = Array.from({ length: currentGW }, (_, i) => `GW${i + 1}`);
