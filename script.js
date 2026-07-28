@@ -3304,9 +3304,13 @@ function positionShortlistFilters() {
     const out = {};
     for (const pos of ['GKP', 'DEF', 'MID', 'FWD']) {
         out[`best_${pos.toLowerCase()}_5`] = {
+            // Projected points, not points-above-replacement. Within a single
+            // position the two orderings are identical — the baseline is a
+            // constant — and the projection is the one that still says something
+            // when every startable player at the position is already owned.
             filter: p => p.position_name === pos && isAvailableToDraft(p)
-                && (p.minutes || 0) >= 450 && draftValueOf(p, 'now') > 0,
-            sortKey: 'value_now', sortDirection: 'desc'
+                && (p.minutes || 0) >= 450 && projectedPointsOf(p, 'now') > 0,
+            sortKey: 'points_next_5', sortDirection: 'desc'
         };
     }
     return out;
@@ -4455,9 +4459,9 @@ function draftValue(p, horizonId = 'season') {
 
     let out = null;
     const proj = projectedLevel(p, horizon);
-    const replacement = p.replacement_score === null || p.replacement_score === undefined
-        ? state.draft.replacementByPos[p.position_name]
-        : p.replacement_score;
+    // replacementByPos, not p.replacement_score: see computeDraftMetrics for why
+    // the index needs the slot rule and VORP needs the best free agent.
+    const replacement = state.draft.replacementByPos[p.position_name];
 
     if (proj && Number.isFinite(replacement)) {
         const exp = expectedMatches(p, horizon);
@@ -4467,10 +4471,20 @@ function draftValue(p, horizonId = 'season') {
         // "confidence × value" fudge would distort the unit instead.
         const apps = proj.matches ? (p.appearances || proj.matches) : (p.appearances || 0);
         const shrink = VALUE_TUNING.shrinkK ? apps / (apps + VALUE_TUNING.shrinkK) : 1;
-        const edge = (proj.level * tilt - replacement) * shrink;
+        // Shrinking the level *toward the replacement level* rather than toward
+        // zero is the same arithmetic for the edge and the honest statement for
+        // the projection: with little evidence, assume he is ordinary for his
+        // position, not that he scores nothing.
+        const levelAdj = shrink * (proj.level * tilt) + (1 - shrink) * replacement;
+        const edge = levelAdj - replacement;
         out = {
             value: edge * exp.matches,
+            // What he is projected to score outright, not relative to anyone.
+            // Within one position that ordering is the whole answer, and unlike
+            // the edge it survives every roster state.
+            points: levelAdj * exp.matches,
             edge,
+            levelAdj,
             level: proj.level,
             replacement,
             tilt,
@@ -4489,6 +4503,12 @@ function draftValueOf(p, horizonId = 'season') {
     return v ? v.value : null;
 }
 
+/** Projected points over a horizon, with no baseline subtracted. */
+function projectedPointsOf(p, horizonId = 'now') {
+    const v = draftValue(p, horizonId);
+    return v ? v.points : null;
+}
+
 /**
  * Copy both horizons onto the players as plain fields.
  *
@@ -4503,7 +4523,9 @@ function applyValueIndex(players) {
         || (state.allPlayersData[state.currentDataSource] || {}).processed
         || [];
     for (const p of list) {
-        p.value_now = draftValueOf(p, 'now');
+        const now = draftValue(p, 'now');
+        p.value_now = now ? now.value : null;
+        p.points_next_5 = now ? now.points : null;
         p.value_season = draftValueOf(p, 'season');
     }
     return list.length;
@@ -4523,29 +4545,35 @@ const DRAFT_PANELS = [
         // No horizon claim in the caption: on the finished-season tab there is no
         // "rest of season" left, so the caption states the unit and the why line
         // states the actual number of matches it was multiplied by.
-        valueLabel: 'נק׳ מעל החלופה לעונה',
+        // The headline is the projection, not the edge over the baseline.
+        //
+        // The edge is the better *ranking* — the backtest says so plainly — but as
+        // a headline it asks the reader to know what a replacement-level player
+        // is before the number means anything, and post-draft it goes negative
+        // for most of the pool, which reads as broken rather than as informative.
+        // "34 points over the rest of the season" needs no such preamble. The edge
+        // is still on the row, in words, and scarcity has its own panel beside
+        // this one — "הערך הגדול ביותר", which is exactly that question.
+        valueLabel: 'נק׳ צפויות לעונה',
         // Its own metric is already position-relative, so the elite-median chip
         // would be comparing a comparison.
         noBenchmark: true,
-        metric: p => draftValueOf(p, 'season'),
-        fmt: v => `${v > 0 ? '+' : ''}${Math.round(v)}`,
-        display(p) { return this.fmt(this.metric(p)); },
+        metric: p => projectedPointsOf(p, 'season'),
+        fmt: v => Math.round(v).toString(),
+        display(p) { return this.fmt(this.metric(p) || 0); },
         why: p => {
             const v = draftValue(p, 'season');
             const now = draftValue(p, 'now');
             if (!v) return '';
             const bits = [
-                `${v.level.toFixed(2)} נק׳/משחק מול ${v.replacement.toFixed(2)} של החלופה`,
-                `${Math.round(v.matches)} משחקים צפויים`
+                `${v.levelAdj.toFixed(2)} נק׳/משחק × ${Math.round(v.matches)} משחקים צפויים`,
+                `${v.value >= 0 ? '+' : ''}${Math.round(v.value)} מול שחקן מחליף בעמדה`
             ];
-            if (now) bits.push(`ב-5 הבאים: ${now.value > 0 ? '+' : ''}${now.value.toFixed(1)}`);
+            if (now) bits.push(`${Math.round(now.points)} נק׳ ב-5 הבאים`);
             return bits.join(' · ');
         },
-        eligible: p => {
-            const v = draftValue(p, 'season');
-            return !!v && v.value > 0 && (p.minutes || 0) >= 450;
-        },
-        rank: (a, b) => (draftValueOf(b, 'season') || 0) - (draftValueOf(a, 'season') || 0),
+        eligible: p => (projectedPointsOf(p, 'season') || 0) > 0 && (p.minutes || 0) >= 450,
+        rank: (a, b) => (projectedPointsOf(b, 'season') || 0) - (projectedPointsOf(a, 'season') || 0),
         windowAware: true
     },
     {
@@ -4667,28 +4695,40 @@ const DRAFT_PANELS = [
         id: 'setpiece',
         title: 'בעלי כדורים נייחים',
         subtitle: 'פנדלים וקרנות = נקודות חוזרות',
-        valueLabel: 'נק׳ מעל החלופה',
+        valueLabel: 'שערים + בישולים בעונה',
         icon: '🎯',
         accent: '#be185d',
-        metric: p => draftValueOf(p, 'season') || 0,
-        // Twice wrong before this. First `#${setPieceOrder(p)}`, which the
-        // eligibility rule pins to 1 or 2 for every row, so the figure never
-        // varied. Then draft_score under the caption "ציון דראפט", which reads as
-        // a draft *ranking* and is nothing of the sort — it is this app's own
-        // internal composite. The honest column is the one the rest of the board
-        // now ranks on, in points, and the duties stay on the why line.
-        fmt: v => `${v > 0 ? '+' : ''}${Math.round(v)}`,
-        display(p) { return this.fmt(this.metric(p) || 0); },
+        // Three wrong figures preceded this one, and the last was the worst.
+        //
+        //  1. `#${setPieceOrder(p)}` — the eligibility rule pins that to 1 or 2,
+        //     so it read "#1" on nearly every row and never varied.
+        //  2. draft_score captioned "ציון דראפט", which reads as a draft ranking
+        //     and is nothing of the sort — it is this app's internal composite.
+        //  3. points above the baseline, which for a set-piece taker at a weak
+        //     club is legitimately negative: the card showed -5, -9, -13 and
+        //     asked the reader to hold "replacement level" in their head to
+        //     understand why.
+        //
+        // What a set-piece taker is for is returns, so the figure is returns. The
+        // one thing this cannot be is points *from* set pieces: FPL publishes who
+        // takes them and nothing whatsoever about which goals came from them —
+        // not in the bootstrap, not in the draft API, not in the per-gameweek
+        // logs. Inventing that number would be worse than not having it.
+        metric: p => (p.goals_scored || 0) + (p.assists || 0),
+        fmt: v => v.toFixed(0),
+        display(p) { return this.fmt(this.metric(p)); },
         why: p => {
             const bits = [];
             if (p.set_piece_priority.penalty <= 2) bits.push(`פנדל #${p.set_piece_priority.penalty}`);
             if (p.set_piece_priority.corner <= 2) bits.push(`קרן #${p.set_piece_priority.corner}`);
             if (p.set_piece_priority.free_kick <= 2) bits.push(`חופשית #${p.set_piece_priority.free_kick}`);
-            return bits.join(' · ') || 'בעל כדורים נייחים';
+            const out = [`${p.goals_scored || 0} שערים · ${p.assists || 0} בישולים`];
+            if (bits.length) out.push(bits.join(' · '));
+            return out.join(' · ');
         },
         eligible: p => setPieceOrder(p) <= 2 && p.minutes > 450,
-        rank: (a, b) => (draftValueOf(b, 'season') || 0) - (draftValueOf(a, 'season') || 0),
-        windowAware: true
+        rank: (a, b) => ((b.goals_scored || 0) + (b.assists || 0))
+            - ((a.goals_scored || 0) + (a.assists || 0))
     }
 ];
 
@@ -5306,6 +5346,21 @@ function computeDraftMetrics(players) {
             .sort((a, b) => scoreOf(b) - scoreOf(a));
         if (!atPos.length) return;
 
+        // Two different baselines, deliberately.
+        //
+        // VORP answers "what do I lose if I skip him *right now*", so once the
+        // rosters are known its baseline is literally the best free agent. The
+        // value index cannot use that: with the best free agent as the bar, no
+        // free agent can be above it — the best one is exactly zero by
+        // construction and everyone else is negative, which silently emptied
+        // every shortlist the moment the league's rosters loaded.
+        //
+        // So the index keeps the slot rule all season: the level of a startable
+        // player at this position in an eight-team league. It does not move when
+        // somebody else drafts, which is what makes two positions comparable.
+        const slotIdx = Math.min(leagueSize * (REPLACEMENT_SLOTS[pos] || 2), atPos.length - 1);
+        state.draft.replacementByPos[pos] = Math.round(scoreOf(atPos[slotIdx]) * 100) / 100;
+
         let replacementScore;
         if (haveOwnership) {
             // Mid-season: replacement level is literally the best free agent.
@@ -5317,12 +5372,6 @@ function computeDraftMetrics(players) {
             const idx = Math.min(leagueSize * (REPLACEMENT_SLOTS[pos] || 2), atPos.length - 1);
             replacementScore = scoreOf(atPos[idx]);
         }
-
-        // Kept per position as well as per player: atPos only holds players past
-        // the 900-minute bar, so a squad player has no replacement_score of his
-        // own, and the value index still has to be able to price him against the
-        // level his position replaces at.
-        state.draft.replacementByPos[pos] = Math.round(replacementScore * 100) / 100;
 
         atPos.forEach(p => {
             p.replacement_score = Math.round(replacementScore * 100) / 100;

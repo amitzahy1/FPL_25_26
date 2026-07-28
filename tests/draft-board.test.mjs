@@ -66,7 +66,13 @@ function loadBoard(players, over = {}) {
         trendKey: 'live:5:38',
         trendGws: gws.map(gw => ({ gw, stats: new Map(players.map(p => [p.id, gwStats()])) })),
         trendPrevGws: gws.map(gw => ({ gw, stats: new Map(players.map(p => [p.id, gwStats()])) })),
-        draft: { ownedElementIds: new Set(), replacementByPos: {}, draftHasHappened: false },
+        // The value index prices everyone against the slot-rule baseline for his
+        // position — never against p.replacement_score, which becomes "the best
+        // free agent" post-draft and would make every free agent non-positive.
+        draft: {
+            ownedElementIds: new Set(), draftHasHappened: false,
+            replacementByPos: { GKP: 3, DEF: 3, MID: 3, FWD: 3 }
+        },
         ...over
     };
     globalThis.state = state;
@@ -130,7 +136,7 @@ describe('window aggregates', () => {
 function valuePlayer(over = {}) {
     return makePlayer({
         points_per_game: '6.0', appearances: 30, minutes: 2700, starts: 30,
-        rotation_risk: 1, availability_factor: 1, replacement_score: 3,
+        rotation_risk: 1, availability_factor: 1,
         xDiff: 0, next_3_fdr: 3,
         ...over
     });
@@ -210,23 +216,39 @@ describe('the value index', () => {
 
     test('is measured against the replacement level of his own position', () => {
         // Identical rates; the scarce position is the one worth spending on.
-        const mid = valuePlayer({ id: 1, position_name: 'MID', replacement_score: 5 });
-        const fwd = valuePlayer({ id: 2, position_name: 'FWD', element_type: 4, replacement_score: 2 });
-        const board = loadBoard([mid, fwd]);
+        const mid = valuePlayer({ id: 1, position_name: 'MID' });
+        const fwd = valuePlayer({ id: 2, position_name: 'FWD', element_type: 4 });
+        const board = loadBoard([mid, fwd], {
+            draft: {
+                ownedElementIds: new Set(), draftHasHappened: false,
+                replacementByPos: { MID: 5, FWD: 2 }
+            }
+        });
 
         assert.ok(board.draftValueOf(fwd, 'season') > board.draftValueOf(mid, 'season'),
             'the same six points a match are worth more where the alternative is worse');
     });
 
-    test('falls back to the position\'s replacement level for a squad player', () => {
-        // computeDraftMetrics only scores players past 900 minutes, so a squad
-        // player has no replacement_score of his own.
-        const p = valuePlayer({ replacement_score: undefined, appearances: 8, minutes: 700 });
-        const board = loadBoard([p], {
-            draft: { ownedElementIds: new Set(), replacementByPos: { MID: 3 }, draftHasHappened: false }
-        });
+    test('ignores p.replacement_score, which means something else post-draft', () => {
+        // The bug this pins: once the rosters load, replacement_score is the best
+        // *free agent* at the position, so no free agent can be above it — the
+        // best one is exactly zero and the rest are negative. Every shortlist
+        // emptied itself the moment the league's data arrived.
+        const p = valuePlayer({ replacement_score: 6.0 });
+        const board = loadBoard([p]);
         const v = board.draftValue(p, 'season');
-        assert.equal(v.replacement, 3, 'priced against his position, not dropped');
+        assert.equal(v.replacement, 3, 'the slot-rule baseline, not the best free agent');
+        assert.ok(v.value > 0, 'a genuinely good free agent must still read as worth taking');
+    });
+
+    test('projects points outright as well as above the baseline', () => {
+        const p = valuePlayer();
+        const board = loadBoard([p]);
+        const v = board.draftValue(p, 'now');
+        // Same level, same matches; the projection just keeps the baseline in.
+        assert.ok(v.points > v.value, 'the projection includes what the baseline scores too');
+        assert.equal(Math.round(v.points - v.value), Math.round(v.replacement * v.matches));
+        assert.ok(v.points > 0, 'a projection is a positive number in every roster state');
     });
 
     test('the short horizon leans on form, the season horizon on the season', () => {

@@ -138,6 +138,7 @@ describe('smart filters', () => {
         // figure off the fixture.
         return new Function(`const SEASON_CONFIG = { seasonLabel: '2026/27', previousSeasonLabel: '2025/26' };
             const draftValueOf = (p) => p.__now === undefined ? 0 : p.__now;
+            const projectedPointsOf = (p) => p.__now === undefined ? 0 : p.__now;
             ${SCRIPT_SRC.slice(start, end)}
             return { QUICK_FILTERS, newcomerSets, newcomerUnavailable, isAvailableToDraft };`)();
     };
@@ -193,7 +194,10 @@ describe('smart filters', () => {
         for (const [name, pos] of [['best_gkp_5', 'GKP'], ['best_def_5', 'DEF'],
             ['best_mid_5', 'MID'], ['best_fwd_5', 'FWD']]) {
             const spec = fns.QUICK_FILTERS[name];
-            assert.equal(spec.sortKey, 'value_now', `${name} must sort on the short horizon`);
+            // points_next_5, not value_now: within one position the baseline is a
+            // constant, so both order identically — and only the projection is
+            // still positive once every startable player there is owned.
+            assert.equal(spec.sortKey, 'points_next_5', `${name} must sort on the short horizon`);
             assert.equal(spec.sortDirection, 'desc', `${name} must put the best pick first`);
             assert.ok(spec.filter(player({ position_name: pos })), `${name} must match a ${pos}`);
             const otherPos = pos === 'GKP' ? 'FWD' : 'GKP';
