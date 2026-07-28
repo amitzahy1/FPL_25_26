@@ -13,7 +13,30 @@ because Cloudflare caches at the edge.
 `wrangler deploy` needs Node 22 and a terminal login, so use the dashboard
 instead — it is copy-paste only.
 
-## Steps
+## ⚠️ If you already deployed this Worker — update it
+
+The version deployed before 2026-07-28 gated requests with a string prefix, so
+`https://fantasy.premierleague.com.attacker.example/…` passed the whitelist. It
+was an open proxy. **Pushing to GitHub does not redeploy the Worker** — until you
+paste the new code in, the old one is still running.
+
+1. Open **https://dash.cloudflare.com/** → **Compute (Workers)** → `fpl-proxy`.
+2. **Edit code**, select everything, paste the current
+   [`worker.js`](worker.js) over it, **Deploy**.
+3. Confirm it took: this should return `403`, not JSON —
+   ```bash
+   curl -s -o /dev/null -w '%{http_code}\n' \
+     'https://fpl-proxy.<your-subdomain>.workers.dev/?url=https%3A%2F%2Ffantasy.premierleague.com.example.com%2Fx'
+   ```
+   and this should still return `200`:
+   ```bash
+   curl -s -o /dev/null -w '%{http_code}\n' \
+     'https://fpl-proxy.<your-subdomain>.workers.dev/?url=https%3A%2F%2Ffantasy.premierleague.com%2Fapi%2Fbootstrap-static%2F'
+   ```
+
+Nothing else changes — same URL, same settings, no client change needed.
+
+## First-time setup
 
 1. Open **https://dash.cloudflare.com/** and sign in (free account is fine).
 2. In the sidebar choose **Compute (Workers)** → **Create** → **Start with Hello World** → **Create Worker**.
@@ -42,10 +65,18 @@ and the console should no longer show `413` or `ERR_NAME_NOT_RESOLVED`.
 
 ## Safety
 
-The Worker only forwards to `fantasy.premierleague.com` and
-`draft.premierleague.com` and returns `403` for anything else, so publishing
-the URL cannot turn it into an open proxy. It holds no credentials — both APIs
-are public and read-only.
+The Worker forwards only to the hostnames `fantasy.premierleague.com` and
+`draft.premierleague.com`, over https, by GET, and returns `403` for anything
+else. It holds no credentials — both APIs are public and read-only.
+
+That claim depends entirely on *how* the hostname is checked, which is why it is
+checked on the parsed `URL.hostname` and not with `startsWith` on the raw string.
+A prefix test also accepts `https://fantasy.premierleague.com.attacker.example/…`
+and `https://fantasy.premierleague.com@attacker.example/…`, which is exactly an
+open proxy — someone else's traffic on your IP and your quota. This file used to
+claim publishing the URL "cannot turn it into an open proxy" while the code did
+the prefix test; `tests/proxy-worker.test.mjs` now pins both lookalike hostnames
+so the claim and the code cannot drift apart again.
 
 The free plan allows 100,000 requests/day. This site uses a few dozen per
 page load, and responses are edge-cached for 5 minutes.
