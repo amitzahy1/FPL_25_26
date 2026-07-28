@@ -116,6 +116,32 @@ if (chips.length && qf) {
         `modal(s) nested inside a tab, so they cannot open from the other one: ${nested.join(', ')}`);
 }
 
+// 9. names typed by other people in the league must never reach innerHTML raw.
+//    `entry_name` and the manager names come from the Draft API, which means a
+//    league-mate types them — a team called `<img src=x onerror=…>` would have
+//    executed in the standings table. This catches new interpolation sites, which
+//    is how the fifteen that existed got there one at a time.
+{
+    const AUTHORED = /(entry_name|player_first_name|player_last_name|\bs\.manager\b|\bs\.team\b)/;
+    const offenders = [];
+    js.split('\n').forEach((line, i) => {
+        // Only template interpolations; `${...}` is the only way these reach markup.
+        const interps = line.match(/\$\{[^}]*\}/g) || [];
+        for (const expr of interps) {
+            if (!AUTHORED.test(expr)) continue;
+            if (expr.includes('escapeHtml')) continue;
+            // getTeamLogo maps a name to a fixed emoji and never echoes it back.
+            if (/getTeamLogo\([^)]*\)\s*\}$/.test(expr)) continue;
+            // textContent is assigned as text, never parsed as markup.
+            if (/\.textContent\s*=/.test(line)) continue;
+            if (/console\.(log|warn|error)/.test(line)) continue;
+            offenders.push(`${i + 1}: ${expr}`);
+        }
+    });
+    check(offenders.length === 0,
+        `league-authored name interpolated without escapeHtml():\n      ${offenders.join('\n      ')}`);
+}
+
 if (failures.length) {
     console.error('Structural checks FAILED:');
     failures.forEach(f => console.error(`  - ${f}`));

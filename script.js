@@ -5179,8 +5179,8 @@ function sortTableDraft(field) {
         tbody.innerHTML = standingsData.map(s => `
             <tr>
                 <td>${s.rank}</td>
-                <td>${s.manager}</td>
-                <td>${s.team}</td>
+                <td>${escapeHtml(s.manager)}</td>
+                <td>${escapeHtml(s.team)}</td>
                 <td>${s.wins}</td>
                 <td>${s.draws}</td>
                 <td>${s.losses}</td>
@@ -6376,8 +6376,8 @@ function renderDraftStandings() {
         return `
         <tr>
             <td>${s.rank}</td>
-            <td>${s.manager}</td>
-            <td><span style="font-size: 18px; margin-left: 6px;">${teamLogo}</span>${s.team}</td>
+            <td>${escapeHtml(s.manager)}</td>
+            <td><span style="font-size: 18px; margin-left: 6px;">${teamLogo}</span>${escapeHtml(s.team)}</td>
             <td>${s.wins}</td>
             <td>${s.draws}</td>
             <td>${s.losses}</td>
@@ -8881,14 +8881,14 @@ function renderH2HHistory() {
                 <div style="display: flex; align-items: center; gap: 8px;">
                     <label style="font-size: 14px; font-weight: 600; color: #3b82f6;">קבוצה 1:</label>
                     <select id="h2hTeam1" onchange="renderH2HHistory()" style="padding: 10px 16px; border-radius: 8px; border: 2px solid #3b82f6; font-size: 14px; font-weight: 600; color: #334155; cursor: pointer; background: white;">
-                        ${entries.map(e => `<option value="${e.id}" ${e.id === myTeam.id ? 'selected' : ''}>${e.entry_name}</option>`).join('')}
+                        ${entries.map(e => `<option value="${e.id}" ${e.id === myTeam.id ? 'selected' : ''}>${escapeHtml(e.entry_name)}</option>`).join('')}
                     </select>
                 </div>
                 <span style="font-size: 24px; color: #cbd5e1;">⚔️</span>
                 <div style="display: flex; align-items: center; gap: 8px;">
                     <label style="font-size: 14px; font-weight: 600; color: #ef4444;">קבוצה 2:</label>
                     <select id="h2hTeam2" onchange="renderH2HHistory()" style="padding: 10px 16px; border-radius: 8px; border: 2px solid #ef4444; font-size: 14px; font-weight: 600; color: #334155; cursor: pointer; background: white;">
-                        ${entries.filter(e => e.id !== myTeam.id).map(e => `<option value="${e.id}">${e.entry_name}</option>`).join('')}
+                        ${entries.filter(e => e.id !== myTeam.id).map(e => `<option value="${e.id}">${escapeHtml(e.entry_name)}</option>`).join('')}
                     </select>
                 </div>
             </div>
@@ -8942,7 +8942,7 @@ function renderH2HHistory() {
     html += `
         <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-bottom: 24px;">
             <div style="background: linear-gradient(135deg, #3b82f6 0%, #60a5fa 100%); padding: 20px; border-radius: 12px; text-align: center; color: white;">
-                <div style="font-size: 14px; opacity: 0.9; margin-bottom: 4px;">נצחונות ${team1.entry_name}</div>
+                <div style="font-size: 14px; opacity: 0.9; margin-bottom: 4px;">נצחונות ${escapeHtml(team1.entry_name)}</div>
                 <div style="font-size: 36px; font-weight: 900;">${team1Wins}</div>
             </div>
             <div style="background: linear-gradient(135deg, #64748b 0%, #94a3b8 100%); padding: 20px; border-radius: 12px; text-align: center; color: white;">
@@ -8950,7 +8950,7 @@ function renderH2HHistory() {
                 <div style="font-size: 36px; font-weight: 900;">${draws}</div>
             </div>
             <div style="background: linear-gradient(135deg, #ef4444 0%, #f87171 100%); padding: 20px; border-radius: 12px; text-align: center; color: white;">
-                <div style="font-size: 14px; opacity: 0.9; margin-bottom: 4px;">נצחונות ${team2.entry_name}</div>
+                <div style="font-size: 14px; opacity: 0.9; margin-bottom: 4px;">נצחונות ${escapeHtml(team2.entry_name)}</div>
                 <div style="font-size: 36px; font-weight: 900;">${team2Wins}</div>
             </div>
         </div>
@@ -8967,9 +8967,9 @@ function renderH2HHistory() {
                     <thead>
                         <tr style="background: #f8fafc; border-bottom: 2px solid #e2e8f0;">
                             <th style="padding: 12px; text-align: center; font-weight: 700; color: #475569; font-size: 13px;">מחזור</th>
-                            <th style="padding: 12px; text-align: right; font-weight: 700; color: #475569; font-size: 13px;">${team1.entry_name}</th>
+                            <th style="padding: 12px; text-align: right; font-weight: 700; color: #475569; font-size: 13px;">${escapeHtml(team1.entry_name)}</th>
                             <th style="padding: 12px; text-align: center; font-weight: 700; color: #475569; font-size: 13px;">תוצאה</th>
-                            <th style="padding: 12px; text-align: left; font-weight: 700; color: #475569; font-size: 13px;">${team2.entry_name}</th>
+                            <th style="padding: 12px; text-align: left; font-weight: 700; color: #475569; font-size: 13px;">${escapeHtml(team2.entry_name)}</th>
                             <th style="padding: 12px; text-align: center; font-weight: 700; color: #475569; font-size: 13px;">מנצח</th>
                         </tr>
                     </thead>
@@ -8985,9 +8985,9 @@ function renderH2HHistory() {
         html += `
             <tr style="border-bottom: 1px solid #f1f5f9; ${idx % 2 === 0 ? 'background: #fafafa;' : 'background: white;'}">
                 <td style="padding: 14px; text-align: center; font-weight: 700; color: #3b82f6; font-size: 15px;">GW${m.event}</td>
-                <td style="padding: 14px; text-align: right; font-weight: 600; color: #334155; font-size: 14px;">${getTeamLogo(team1.entry_name)} ${team1.entry_name}</td>
+                <td style="padding: 14px; text-align: right; font-weight: 600; color: #334155; font-size: 14px;">${getTeamLogo(team1.entry_name)} ${escapeHtml(team1.entry_name)}</td>
                 <td style="padding: 14px; text-align: center; font-weight: 900; color: #0f172a; font-size: 16px;">${score1} - ${score2}</td>
-                <td style="padding: 14px; text-align: left; font-weight: 600; color: #334155; font-size: 14px;">${team2.entry_name} ${getTeamLogo(team2.entry_name)}</td>
+                <td style="padding: 14px; text-align: left; font-weight: 600; color: #334155; font-size: 14px;">${escapeHtml(team2.entry_name)} ${getTeamLogo(team2.entry_name)}</td>
                 <td style="padding: 14px; text-align: center;">
                     <span style="background: ${winnerColor}; color: white; padding: 4px 12px; border-radius: 12px; font-weight: 700; font-size: 12px; white-space: nowrap;">
                         ${winner === 'תיקו' ? '🤝 תיקו' : '🏆 ' + winner}
@@ -9222,6 +9222,9 @@ function populateMyTeamSelector() {
         if (!entry.entry_name) return;
         const option = document.createElement('option');
         option.value = entry.id;
+        // textContent, so this needs no escaping — the browser never parses it as
+        // markup. It is the one place a league-authored name is interpolated raw
+        // on purpose; if this ever becomes innerHTML it needs escapeHtml().
         option.textContent = `${entry.player_first_name} ${entry.player_last_name} (${entry.entry_name})`;
         select.appendChild(option);
     });
@@ -9716,7 +9719,7 @@ function renderNextRivalAnalysis(selectedOpponentId = null) {
                     <select id="rivalMyTeamSelect" onchange="updateMyTeamForRival(this.value)" style="padding: 8px 16px; border-radius: 8px; border: 2px solid #3b82f6; font-size: 13px; font-weight: 600; color: #334155; cursor: pointer; background: white;">
                         ${entries.map(e => `
                             <option value="${e.id}" ${String(e.id) === String(myTeam.id) ? 'selected' : ''}>
-                                ${e.entry_name}
+                                ${escapeHtml(e.entry_name)}
                             </option>
                         `).join('')}
                     </select>
@@ -9727,7 +9730,7 @@ function renderNextRivalAnalysis(selectedOpponentId = null) {
                     <select id="rivalOpponentSelect" onchange="renderNextRivalAnalysis(this.value)" style="padding: 8px 16px; border-radius: 8px; border: 2px solid #ef4444; font-size: 13px; font-weight: 600; color: #334155; cursor: pointer; background: white;">
                         ${entries.filter(e => e.id !== myTeam.id).map(e => `
                             <option value="${e.id}" ${String(e.id) === String(opponentData.opponentId) ? 'selected' : ''}>
-                                ${e.entry_name}
+                                ${escapeHtml(e.entry_name)}
                             </option>
                         `).join('')}
                     </select>
@@ -10352,7 +10355,7 @@ function renderAllTeamsTrendChart(teamAggregates, mode = 'cumulative', highlight
         // Add color indicator circle
         const colorCircle = `<span style="display: inline-block; width: 12px; height: 12px; border-radius: 50%; background: ${teamColor}; border: 2px solid white; box-shadow: 0 0 0 1px #e2e8f0;"></span>`;
 
-        label.innerHTML = `<input type="checkbox" value="${e.id}" ${isChecked ? 'checked' : ''} onchange="toggleTrendTeam('${e.id}')" style="accent-color: #3b82f6;">${colorCircle}<span style="font-size: 18px;">${teamLogo}</span><span style="${isMyTeam ? 'font-weight: 700; color: #0f172a;' : ''}">${isMyTeam ? '👤 ' : ''}${e.entry_name}</span>`;
+        label.innerHTML = `<input type="checkbox" value="${e.id}" ${isChecked ? 'checked' : ''} onchange="toggleTrendTeam('${e.id}')" style="accent-color: #3b82f6;">${colorCircle}<span style="font-size: 18px;">${teamLogo}</span><span style="${isMyTeam ? 'font-weight: 700; color: #0f172a;' : ''}">${isMyTeam ? '👤 ' : ''}${escapeHtml(e.entry_name)}</span>`;
         teamList.appendChild(label);
     });
 
