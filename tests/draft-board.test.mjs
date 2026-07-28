@@ -35,12 +35,13 @@ function gwStats(over = {}) {
 const FUNCTIONS = [
     'windowStats', 'windowMinMatches', 'setPieceOrder', 'defconRateFor',
     'draftBoardPool', 'panelPicks', 'getTrendSeries', 'summariseTrend',
-    'trendPlayerIndex', 'gwDefensiveContribution'
+    'trendPlayerIndex', 'gwDefensiveContribution',
+    'playerScore', 'buildDropOffLadder', 'dropOffFor'
 ];
 
 const DEPS = [
     'DEFCON_THRESHOLD', 'TREND_METRICS', 'DRAFT_PANELS',
-    '_windowStatsCache', '_trendPlayerIndex', 'gwNum'
+    '_windowStatsCache', '_trendPlayerIndex', '_dropOff', 'gwNum'
 ];
 
 /**
@@ -180,13 +181,77 @@ describe('panel rules', () => {
     test('the value panel needs a replacement level to compare against', () => {
         const board = loadBoard([
             makePlayer({ id: 1, vorp: 2, replacement_score: null }),
-            makePlayer({ id: 2, vorp: 2, replacement_score: 3 })
+            makePlayer({ id: 2, vorp: 2, replacement_score: 3 }),
+            makePlayer({ id: 3, vorp: 1, replacement_score: 3 })
         ]);
         assert.deepEqual(
             board.panelPicks(panel(board, 'value'), board.draftBoardPool().players, 3)
                 .map(p => p.id),
             [2],
-            'the reason line prints replacement_score, so a pick without one cannot be explained');
+            'the reason line prints a score, so a pick without one cannot be explained');
+    });
+
+    /**
+     * The bug this whole panel was rewritten for. computeDraftMetrics sets
+     * replacement level to the best free agent at each position, so in a
+     * free-agent pool every VORP is <= 0 and the best is exactly 0. The panel
+     * used to gate on `vorp > 0`, which in that pool can never match — the most
+     * important card on the board vanished the moment the draft data loaded.
+     */
+    test('the value panel survives a pool where every VORP is zero or negative', () => {
+        // Exactly the post-draft shape: the best free agent sits at replacement
+        // level, everyone behind him is worse.
+        const board = loadBoard([
+            makePlayer({ id: 1, position_name: 'MID', vorp: 0, replacement_score: 4.0 }),
+            makePlayer({ id: 2, position_name: 'MID', vorp: -0.8, replacement_score: 4.0 }),
+            makePlayer({ id: 3, position_name: 'MID', vorp: -1.5, replacement_score: 4.0 }),
+            makePlayer({ id: 4, position_name: 'FWD', vorp: 0, replacement_score: 3.5 }),
+            makePlayer({ id: 5, position_name: 'FWD', vorp: -2.0, replacement_score: 3.5 })
+        ], { draft: { ownedElementIds: new Set([99]) } });
+
+        const pool = board.draftBoardPool().players;
+        assert.ok(pool.every(p => p.vorp <= 0), 'fixture must reproduce the real shape');
+
+        const picks = board.panelPicks(panel(board, 'value'), pool, 3);
+        assert.ok(picks.length > 0,
+            'the panel must still recommend somebody when no VORP is positive');
+        // FWD gap is 2.0, MID gap is 0.8 — the biggest drop-off leads.
+        assert.deepEqual(picks.map(p => p.id), [4, 1, 2]);
+        for (const p of picks) {
+            assert.ok(board.dropOffFor(p) > 0, `${p.id} should have a real gap`);
+            assert.ok(/\d/.test(panel(board, 'value').display(p)), 'the figure must be a number');
+        }
+    });
+
+    test('the drop-off is measured against the next player at the same position', () => {
+        const board = loadBoard([
+            makePlayer({ id: 1, position_name: 'DEF', element_type: 2, vorp: 2, replacement_score: 3 }), // 5.0
+            makePlayer({ id: 2, position_name: 'DEF', element_type: 2, vorp: 1, replacement_score: 3 }), // 4.0
+            makePlayer({ id: 3, position_name: 'MID', vorp: 0.5, replacement_score: 3 })                // 3.5
+        ]);
+        board.draftBoardPool();
+        assert.equal(board.playerScore({ vorp: 2, replacement_score: 3 }), 5);
+        assert.equal(board.dropOffFor({ id: 1 }), 1, 'DEF 5.0 over the next DEF at 4.0');
+        assert.equal(board.dropOffFor({ id: 2 }), null, 'last man at his position has no fallback');
+        assert.equal(board.dropOffFor({ id: 3 }), null, 'the only MID has no fallback');
+    });
+
+    test('the ladder is rebuilt when the pool changes, not cached per player', () => {
+        // Same player, two different pools: his fallback is whoever else is there.
+        const shallow = loadBoard([
+            makePlayer({ id: 1, vorp: 2, replacement_score: 3 }),
+            makePlayer({ id: 2, vorp: 0, replacement_score: 3 })
+        ]);
+        shallow.draftBoardPool();
+        assert.equal(shallow.dropOffFor({ id: 1 }), 2);
+
+        const deep = loadBoard([
+            makePlayer({ id: 1, vorp: 2, replacement_score: 3 }),
+            makePlayer({ id: 2, vorp: 1.8, replacement_score: 3 })
+        ]);
+        deep.draftBoardPool();
+        assert.ok(Math.abs(deep.dropOffFor({ id: 1 }) - 0.2) < 1e-9,
+            'a deeper position means a smaller gap, so the ladder must follow the pool');
     });
 
     test('a non-taker is not a set-piece specialist', () => {
@@ -222,15 +287,20 @@ describe('panel rules', () => {
     });
 
     test('picks come back best-first', () => {
+        // Scores 6.1 / 5.1 / 4.6 / 4.1 at one position, so the gaps are
+        // 1.0 / 0.5 / 0.5 / none. Ordered by gap, id 1 leads and id 4 — the last
+        // man, with nothing behind him to be better than — drops out.
         const board = loadBoard([
-            makePlayer({ id: 1, vorp: 1.0 }),
-            makePlayer({ id: 2, vorp: 3.0 }),
-            makePlayer({ id: 3, vorp: 2.0 })
+            makePlayer({ id: 1, vorp: 3.0 }),
+            makePlayer({ id: 2, vorp: 2.0 }),
+            makePlayer({ id: 3, vorp: 1.5 }),
+            makePlayer({ id: 4, vorp: 1.0 })
         ]);
-        assert.deepEqual(
-            board.panelPicks(panel(board, 'value'), board.draftBoardPool().players, 3)
-                .map(p => p.id),
-            [2, 3, 1]);
+        const picks = board.panelPicks(panel(board, 'value'), board.draftBoardPool().players, 4);
+        assert.equal(picks[0].id, 1, 'the biggest drop-off leads');
+        assert.ok(!picks.some(p => p.id === 4), 'the last man at a position has no fallback');
+        const gaps = picks.map(p => board.dropOffFor(p));
+        assert.deepEqual([...gaps].sort((a, b) => b - a), gaps, 'sorted by gap, descending');
     });
 
     test('a rule that throws drops the player instead of the panel', () => {

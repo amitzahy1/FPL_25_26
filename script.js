@@ -4004,14 +4004,27 @@ const DRAFT_PANELS = [
     {
         id: 'value',
         title: 'הערך הגדול ביותר',
-        subtitle: 'VORP — יתרון על החלופה החופשית',
+        subtitle: 'הפער מהחלופה הבאה באותה עמדה',
         icon: '💎',
         accent: '#6366f1',
-        metric: p => p.vorp,
-        display: p => `+${p.vorp.toFixed(2)}`,
-        why: p => `חלופה בעמדה: ${p.replacement_score.toFixed(2)} נק׳ למשחק`,
-        eligible: p => p.vorp !== null && p.vorp > 0 && p.replacement_score !== null,
-        rank: (a, b) => b.vorp - a.vorp
+        // Not raw `vorp`, and emphatically not `vorp > 0`.
+        //
+        // computeDraftMetrics sets replacement level to the best free agent at
+        // each position, so once the league's rosters load every free agent's
+        // VORP is <= 0 *by construction* — the best one is exactly 0. This panel
+        // draws from free agents only, so `vorp > 0` could never match and the
+        // most important card on the board silently disappeared the moment the
+        // draft data arrived. Verified against the live league: 225 free agents
+        // with a VORP, 0 of them positive, maximum 0.00.
+        //
+        // The number that survives both regimes is the drop-off to the *next*
+        // available player at the same position — which is what "יתרון על
+        // החלופה" always meant: take him, or your fallback is this much worse.
+        metric: p => dropOffFor(p),
+        display: p => `+${dropOffFor(p).toFixed(2)}`,
+        why: p => `${playerScore(p).toFixed(2)} נק׳/משחק · הבא בתור: ${(playerScore(p) - dropOffFor(p)).toFixed(2)}`,
+        eligible: p => dropOffFor(p) !== null && dropOffFor(p) > 0,
+        rank: (a, b) => dropOffFor(b) - dropOffFor(a)
     },
     {
         id: 'form',
@@ -4131,15 +4144,57 @@ function draftBoardPool() {
     const freeAgentsOnly = owned && owned.size > 0;
     const pos = (document.getElementById('positionFilter') || {}).value || '';
 
-    return {
-        freeAgentsOnly,
-        position: pos,
-        players: players.filter(p =>
-            (!freeAgentsOnly || !owned.has(p.id)) &&
-            (!pos || p.position_name === pos) &&
-            // Injured or suspended players are never a recommendation.
-            p.availability_factor > 0.5)
-    };
+    const pool = players.filter(p =>
+        (!freeAgentsOnly || !owned.has(p.id)) &&
+        (!pos || p.position_name === pos) &&
+        // Injured or suspended players are never a recommendation.
+        p.availability_factor > 0.5);
+
+    buildDropOffLadder(pool);
+    return { freeAgentsOnly, position: pos, players: pool };
+}
+
+/**
+ * A player's own scoring rate, reconstructed from the two fields
+ * computeDraftMetrics stores: vorp is the gap to replacement level, and
+ * replacement_score is that level, both in points per appearance.
+ */
+function playerScore(p) {
+    if (p.vorp === null || p.vorp === undefined) return null;
+    if (p.replacement_score === null || p.replacement_score === undefined) return null;
+    return p.vorp + p.replacement_score;
+}
+
+/**
+ * How much better each player is than the next one available at his position.
+ *
+ * Rebuilt per pool rather than cached per player: the answer depends on who else
+ * is in the pool, so it changes when rosters load and when the position filter
+ * moves. Every caller goes through draftBoardPool(), which builds this first.
+ */
+let _dropOff = new Map();
+function buildDropOffLadder(pool) {
+    _dropOff = new Map();
+    const byPosition = new Map();
+    for (const p of pool) {
+        const score = playerScore(p);
+        if (score === null) continue;
+        if (!byPosition.has(p.position_name)) byPosition.set(p.position_name, []);
+        byPosition.get(p.position_name).push({ id: p.id, score });
+    }
+    for (const ranked of byPosition.values()) {
+        ranked.sort((a, b) => b.score - a.score);
+        ranked.forEach(({ id, score }, i) => {
+            // The last man at a position has no fallback to be better than.
+            const next = ranked[i + 1];
+            _dropOff.set(id, next ? score - next.score : null);
+        });
+    }
+}
+
+function dropOffFor(p) {
+    const v = _dropOff.get(p.id);
+    return v === undefined ? null : v;
 }
 
 function panelPicks(panel, pool, limit) {
