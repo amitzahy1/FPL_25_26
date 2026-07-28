@@ -97,7 +97,7 @@ ES modules is the top engineering item in [BACKLOG.md](BACKLOG.md).
 
 Three blocks, in reading order:
 
-1. **`למי כדאי לקחת`** — six panels, each answering one draft question by an
+1. **`את מי לקחת עכשיו`** — a wide answer card over six panels, each answering one draft question by an
    explicit rule, with the reason printed under every pick: VORP, form over the
    selected window, DEFCON hit-rate, market movement, underlying numbers, and
    set-piece duty. The pool is only players you can actually get — free agents
@@ -107,6 +107,11 @@ Three blocks, in reading order:
    pick carries the grey `פי X מהעילית` — how it compares to the median of the
    twenty best players *at the same position* on that same metric.
    Defined by `DRAFT_PANELS` in `script.js`; a new question is one entry there.
+   The card at the top is `הבחירה הכי שווה` — the value index, described below.
+   Two of the chips beside the table, `⬆️ קבוצות שעלו` and `🆕 חדשים בליגה`, are
+   for players with no previous-season data at all; both are derived by diffing
+   this season's bootstrap against the committed snapshot, so nothing needs
+   updating each August, and both only apply on the current-season tab.
 2. **The table** — sortable and filterable, including by `סיגנל`, the one-verdict
    column. Twelve columns are optional and remembered per browser.
 3. **`גרפים`** — eight cards, ordered by how directly each answers a decision,
@@ -121,6 +126,44 @@ Three blocks, in reading order:
   midfielders and forwards 12 CBIRT, for +2 points. Because it is a per-match
   threshold, the snapshot records a *hit-rate* — the share of appearances that
   cleared it — rather than a season average, which would misrepresent it.
+- **The value index** (`draftValue`) answers "who is most worth taking" in the
+  unit the question already has — points:
+
+      שווי = (רמה חזויה − רמת החלפה בעמדה) × משחקים צפויים
+
+  Position-relative by construction, which is what makes a defender and a
+  forward comparable; a weighted sum of percentiles never is. Points are counted
+  once, as the level, so the things that *produced* them (G+A, xGI, bonus,
+  DEFCON) do not also get their own weights. Nothing that has no meaning in a
+  draft goes in — not ownership (only one team can own anyone) and not price
+  (there is no budget). Every term is printed next to the figure on the card.
+
+  The constants live in `VALUE_TUNING` and `VALUE_HORIZONS`, and
+  `npm run backtest` is what set them: it replays the finished season, ranks
+  players from the gameweeks before a cutoff using the site's own functions, and
+  scores that against what they actually scored after it. Two findings changed
+  the formula:
+
+  - **Five-match form makes the projection worse.** Monotonically, at every
+    weight, on both horizons — ρ .295 ignoring it against .247 leaning on it. The
+    weight is now small and kept only for the case the backtest cannot see: a
+    player whose role changed.
+  - **`rotation_risk` was the wrong volume term.** It is starts ÷ appearances, so
+    a man who features in 12 of 20 gameweeks and starts all 12 scores the same
+    1.0 as someone who starts every week. Appearances ÷ gameweeks is worth about
+    +0.07 ρ over it.
+
+  Where it ends up, against the three things you could sort by instead
+  (mean over cutoffs GW15/20/25/30, target: points above replacement):
+
+  | | value index | total points | points/app | last-5 form |
+  |---|---|---|---|---|
+  | next 5 GWs | **.293** | .148 | .196 | .067 |
+  | rest of season | **.373** | .194 | .241 | .140 |
+
+  On *raw* future points the baselines win by a distance (.51 for total points
+  against .17), and that is the design: raw points rewards whoever accumulates,
+  which is exactly the question a replacement level is there to remove.
 - **The top-20 benchmark** (`benchmarkMedian`): the median of the twenty best
   players at a position on one metric. Median, so a single outlier cannot move
   the bar; twenty, because that is roughly how many players per position get
@@ -137,6 +180,8 @@ Three blocks, in reading order:
 ```bash
 npm install          # eslint + puppeteer (dev only)
 npm run verify       # lint + unit tests + structural checks + browser smoke test
+npm run backtest     # score the value index against what players actually scored
+SWEEP=1 npm run backtest   # sweep each hand-set constant in VALUE_TUNING
 npm test             # unit tests only
 npm run test:smoke   # loads the real page with the API and all proxies blocked
 npm run build:season # regenerate data/season-<id>.json from vaastav's dataset

@@ -111,7 +111,7 @@ try {
     check(board.rows > 0 && board.whys === board.rows,
         `every one of ${board.rows} picks carries a reason`);
     check(board.emptyWhys === 0, 'no pick has a blank reason line');
-    check(board.heading.includes('למי כדאי לקחת'), 'board names the question it answers');
+    check(board.heading.includes('את מי לקחת'), 'board names the question it answers');
 
     // THE POST-DRAFT PATH.
     //

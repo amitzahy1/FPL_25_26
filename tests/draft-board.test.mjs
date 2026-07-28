@@ -37,13 +37,18 @@ const FUNCTIONS = [
     'draftBoardPool', 'panelPicks', 'getTrendSeries', 'summariseTrend',
     'trendPlayerIndex', 'gwDefensiveContribution',
     'playerScore', 'buildDropOffLadder', 'dropOffFor',
-    'benchmarkMedian', 'panelBenchmark'
+    'benchmarkMedian', 'panelBenchmark',
+    'seasonMatchesLeft', 'seasonPointsPerApp', 'projectedLevel', 'expectedMatches',
+    'fixtureTilt', 'draftValue', 'draftValueOf', 'getCompletedGWCount'
 ];
 
 const DEPS = [
     'DEFCON_THRESHOLD', 'TREND_METRICS', 'DRAFT_PANELS',
     '_windowStatsCache', '_trendPlayerIndex', '_dropOff', 'gwNum',
-    'BENCH_TOP_N', 'BENCH_MIN_MINUTES', '_panelBenchCache'
+    'BENCH_TOP_N', 'BENCH_MIN_MINUTES', '_panelBenchCache',
+    'VALUE_TUNING', 'VALUE_HORIZONS', '_valueCache',
+    // fixtureTilt reads next_3_fdr through it; it is an arrow-function const.
+    'num1'
 ];
 
 /**
@@ -61,7 +66,7 @@ function loadBoard(players, over = {}) {
         trendKey: 'live:5:38',
         trendGws: gws.map(gw => ({ gw, stats: new Map(players.map(p => [p.id, gwStats()])) })),
         trendPrevGws: gws.map(gw => ({ gw, stats: new Map(players.map(p => [p.id, gwStats()])) })),
-        draft: { ownedElementIds: new Set() },
+        draft: { ownedElementIds: new Set(), replacementByPos: {}, draftHasHappened: false },
         ...over
     };
     globalThis.state = state;
@@ -114,6 +119,145 @@ describe('window aggregates', () => {
 
         assert.equal(board.windowStats(def).dcRate, 100);
         assert.equal(board.windowStats(mid).dcRate, 0);
+    });
+});
+
+/**
+ * A player the value index can actually price: it needs a season rate, an
+ * appearance count to shrink by, and a start share to convert a level into
+ * matches.
+ */
+function valuePlayer(over = {}) {
+    return makePlayer({
+        points_per_game: '6.0', appearances: 30, minutes: 2700, starts: 30,
+        rotation_risk: 1, availability_factor: 1, replacement_score: 3,
+        xDiff: 0, next_3_fdr: 3,
+        ...over
+    });
+}
+
+describe('the value index', () => {
+    test('is points over replacement times matches, and says so', () => {
+        const p = valuePlayer();
+        const board = loadBoard([p]);
+        const v = board.draftValue(p, 'season');
+
+        assert.equal(v.replacement, 3);
+        // Season rate 6 and window rate 6 agree, so the blend is 6 either way.
+        assert.equal(Math.round(v.level * 100) / 100, 6);
+        // 38 matches: a finished season prices a full one rather than zero.
+        assert.equal(v.span, 38);
+        assert.equal(v.matches, 38, 'starts every match and is fully available');
+        assert.equal(Math.round(v.value), Math.round(v.edge * v.matches),
+            'the headline number is the edge times the matches, nothing else');
+        assert.ok(v.value > 90 && v.value < 100, `expected ~96 points, got ${v.value}`);
+    });
+
+    test('a small sample is shrunk toward zero rather than trusted', () => {
+        const veteran = valuePlayer({ id: 1 });
+        const cameo = valuePlayer({ id: 2, appearances: 3, minutes: 270 });
+        const board = loadBoard([veteran, cameo]);
+
+        const a = board.draftValue(veteran, 'season');
+        const b = board.draftValue(cameo, 'season');
+        assert.ok(a.edge > b.edge * 2,
+            'three matches at the same rate is not the same evidence as thirty');
+        assert.ok(b.value > 0, 'shrunk, not erased');
+    });
+
+    test('a rotation risk costs matches, not level', () => {
+        const nailed = valuePlayer({ id: 1, rotation_risk: 1 });
+        const rotated = valuePlayer({ id: 2, rotation_risk: 0.5 });
+        const board = loadBoard([nailed, rotated]);
+
+        const a = board.draftValue(nailed, 'season');
+        const b = board.draftValue(rotated, 'season');
+        assert.equal(Math.round(a.level * 100), Math.round(b.level * 100),
+            'the level is what he does when he plays');
+        assert.equal(Math.round(b.matches), Math.round(a.matches / 2));
+        assert.ok(b.value < a.value * 0.55);
+    });
+
+    test('volume is how often he features, not whether he starts when he does', () => {
+        // The bug this pins: rotation_risk is starts/appearances, so a player who
+        // features in half the gameweeks and starts every one of them scores 1.0
+        // on it — identical to a man who starts all 20. Ranking on it cost 0.07
+        // Spearman in the backtest; appearances/gameweeks is the term that works.
+        const everyWeek = valuePlayer({ id: 1, appearances: 20, rotation_risk: 1 });
+        const halfTheWeeks = valuePlayer({ id: 2, appearances: 10, rotation_risk: 1 });
+        const benchedOften = valuePlayer({ id: 3, appearances: 20, rotation_risk: 0.5 });
+        const board = loadBoard([everyWeek, halfTheWeeks, benchedOften], {});
+        // 20 finished gameweeks, which is what getCompletedGWCount reads.
+        board.state.allPlayersData.live.raw = { events: Array.from({ length: 20 }, () => ({ finished: true })) };
+
+        const full = board.draftValue(everyWeek, 'now');
+        const half = board.draftValue(halfTheWeeks, 'now');
+        const benched = board.draftValue(benchedOften, 'now');
+
+        assert.equal(full.playRate, 1);
+        assert.equal(half.playRate, 0.5);
+        assert.equal(Math.round(half.matches * 100), Math.round(full.matches * 50),
+            'appearing half the weeks halves the matches');
+        assert.equal(benched.matches, full.matches,
+            'coming off the bench sometimes is not the same as missing gameweeks');
+    });
+
+    test('an injured player is worth nothing, however good his rate', () => {
+        const p = valuePlayer({ availability_factor: 0 });
+        const board = loadBoard([p]);
+        assert.equal(board.draftValue(p, 'season').value, 0);
+    });
+
+    test('is measured against the replacement level of his own position', () => {
+        // Identical rates; the scarce position is the one worth spending on.
+        const mid = valuePlayer({ id: 1, position_name: 'MID', replacement_score: 5 });
+        const fwd = valuePlayer({ id: 2, position_name: 'FWD', element_type: 4, replacement_score: 2 });
+        const board = loadBoard([mid, fwd]);
+
+        assert.ok(board.draftValueOf(fwd, 'season') > board.draftValueOf(mid, 'season'),
+            'the same six points a match are worth more where the alternative is worse');
+    });
+
+    test('falls back to the position\'s replacement level for a squad player', () => {
+        // computeDraftMetrics only scores players past 900 minutes, so a squad
+        // player has no replacement_score of his own.
+        const p = valuePlayer({ replacement_score: undefined, appearances: 8, minutes: 700 });
+        const board = loadBoard([p], {
+            draft: { ownedElementIds: new Set(), replacementByPos: { MID: 3 }, draftHasHappened: false }
+        });
+        const v = board.draftValue(p, 'season');
+        assert.equal(v.replacement, 3, 'priced against his position, not dropped');
+    });
+
+    test('the short horizon leans on form, the season horizon on the season', () => {
+        const p = valuePlayer();
+        const board = loadBoard([p]);
+        // A hot window: 12 points a match against a season rate of 6.
+        board.state.trendGws.forEach(g => g.stats.set(p.id, gwStats({ total_points: 12 })));
+
+        const now = board.draftValue(p, 'now');
+        const season = board.draftValue(p, 'season');
+        assert.ok(now.level > season.level,
+            'five matches of form move the short horizon more than the long one');
+        assert.equal(now.span, 5, 'and it only spans five matches');
+        assert.ok(now.value < season.value, 'five matches cannot outweigh a season of them');
+    });
+
+    test('fixture difficulty tilts the short horizon only', () => {
+        const easy = valuePlayer({ id: 1, next_3_fdr: 2 });
+        const hard = valuePlayer({ id: 2, next_3_fdr: 4 });
+        const board = loadBoard([easy, hard]);
+
+        assert.ok(board.draftValue(easy, 'now').value > board.draftValue(hard, 'now').value);
+        assert.equal(board.draftValue(easy, 'season').tilt, 1,
+            'over a season every schedule evens out; applying it there invents precision');
+    });
+
+    test('says nothing rather than something wrong with no appearances', () => {
+        const p = valuePlayer({ appearances: 0, minutes: 0, points_per_game: '0.0' });
+        const board = loadBoard([p]);
+        assert.equal(board.draftValue(p, 'season'), null);
+        assert.equal(board.draftValueOf(p, 'season'), null);
     });
 });
 

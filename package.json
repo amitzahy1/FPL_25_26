@@ -13,7 +13,8 @@
     "lint": "eslint .",
     "check": "node scripts/check-structure.mjs",
     "test:smoke": "node tests/smoke/smoke.mjs",
-    "verify": "npm run lint && npm test && npm run check && npm run test:smoke"
+    "verify": "npm run lint && npm test && npm run check && npm run test:smoke",
+    "backtest": "node scripts/backtest-value.mjs"
   },
   "engines": {
     "node": ">=20"

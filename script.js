@@ -265,6 +265,9 @@ const state = {
     // league, BEFORE the top-N slice. Scoping them to the visible rows made
     // every cell in a top-20 view look average.
     percentileBase: [],
+    // Set to a quick-filter name while that filter is deliberately viewing a
+    // season with no gameweeks played yet; null the rest of the time.
+    seasonOverrideFor: null,
     sortKey: 'draft_score',
     sortDirection: 'desc',
     activeQuickFilterName: null,
@@ -309,6 +312,10 @@ const state = {
         // --- endpoints wired in 2026-07 ---
         // league/{id}/element-status: the league's own answer to "who owns whom".
         // ownershipByFplId maps FPL id -> owning league_entry id (null = free).
+        // Replacement level per position, in points per appearance — set by
+        // computeDraftMetrics, read by the value index for players who are
+        // themselves below its minutes bar.
+        replacementByPos: {},
         ownershipByFplId: new Map(),
         ownershipLoaded: false,   // false => fall back to diffing rosters
         draftHasHappened: false,  // element-status shows at least one owner
@@ -317,6 +324,11 @@ const state = {
         // draft/{league}/choices and draft/league/{id}/transactions.
         choices: null,
         transactions: null,
+        // The Draft API's own pre-draft ranking (draft_rank): FPL's published
+        // opinion of every player's quality, 1 = best. Keyed by the stable player
+        // code, which joins exactly, with the id map as a fallback.
+        draftRankByCode: new Map(),
+        draftRankByFplId: new Map(),
         // Draft element id -> web_name, straight from the draft bootstrap.
         draftElementNames: new Map(),
         // The draft endpoints identify a manager by `entry_id`, while
@@ -749,8 +761,14 @@ async function buildDraftToFplMapping() {
         // league have no FPL entry to map to, and the transaction feed was
         // rendering them as "#379" -- the draft bootstrap still knows the name.
         state.draft.draftElementNames.clear();
+        state.draft.draftRankByCode.clear();
         for (const dp of draftData.elements) {
-            if (dp && dp.id) state.draft.draftElementNames.set(dp.id, dp.web_name);
+            if (!dp || !dp.id) continue;
+            state.draft.draftElementNames.set(dp.id, dp.web_name);
+            // Recorded by code as well as by mapped id: the code join needs none
+            // of the name matching below, so it also covers the players that
+            // matching misses.
+            if (dp.code && dp.draft_rank) state.draft.draftRankByCode.set(dp.code, dp.draft_rank);
         }
 
         let exactMatches = 0;
@@ -800,6 +818,9 @@ async function buildDraftToFplMapping() {
             if (fplPlayer) {
                 state.draft.draftToFplIdMap.set(draftPlayer.id, fplPlayer.id);
                 state.draft.fplToDraftIdMap.set(fplPlayer.id, draftPlayer.id);
+                if (draftPlayer.draft_rank) {
+                    state.draft.draftRankByFplId.set(fplPlayer.id, draftPlayer.draft_rank);
+                }
             } else {
                 unmapped++;
                 // Expected for academy and departed players, so this is not a
@@ -1214,6 +1235,35 @@ async function ensureLiveBootstrap({ timeoutMs = 0 } = {}) {
     await Promise.all(jobs);
 }
 
+/**
+ * Attach the Draft API's own ranking to the processed players.
+ *
+ * It arrives with the draft data, which loads in the background after the first
+ * paint, so this runs twice: once when the players are processed (a no-op if the
+ * draft bootstrap has not landed) and once when it has.
+ *
+ * Joined on `code` — the player id that is stable across seasons and across the
+ * two APIs — falling back to the name-matched id map. The value is FPL's own
+ * pre-draft ranking, which is the only quality reference that exists for a
+ * player with no Premier League history at all.
+ */
+function applyDraftRanks() {
+    const byCode = state.draft.draftRankByCode;
+    const byId = state.draft.draftRankByFplId;
+    if (!byCode.size && !byId.size) return 0;
+    let attached = 0;
+    for (const src of ['live', 'historical']) {
+        const processed = state.allPlayersData[src] && state.allPlayersData[src].processed;
+        if (!processed) continue;
+        for (const p of processed) {
+            const rank = (p.code && byCode.get(p.code)) || byId.get(p.id) || null;
+            p.draft_rank = rank;
+            if (rank) attached++;
+        }
+    }
+    return attached;
+}
+
 // Fixtures arrive after the first paint, so backfill FDR and re-render once
 // they land rather than making the user wait for them.
 function applyFixturesToProcessedData(fixtures) {
@@ -1292,6 +1342,7 @@ async function fetchAndProcessData() {
             processedPlayers = calculateAdvancedScores(processedPlayers);
             processedPlayers = computeDraftMetrics(processedPlayers);
             state.allPlayersData[state.currentDataSource].processed = processedPlayers;
+            applyDraftRanks();
         }
 
         document.getElementById('lastUpdated').textContent = `עדכון אחרון: ${new Date().toLocaleString('he-IL')}`;
@@ -1356,7 +1407,10 @@ function switchDataSource(source) {
     // Selecting a season that has not been played yet must show nothing and
     // say why. Leaving the previous season's charts on screen under the new
     // season's label is worse than an empty view.
-    if (source === 'live' && currentSeasonIsTooEarly()) {
+    // The newcomer chips are the one legitimate reason to look at a season that
+    // has not started: a player promoted or newly signed has no previous season
+    // to fall back to, so an empty view is not a kinder answer than his price.
+    if (source === 'live' && currentSeasonIsTooEarly() && !state.seasonOverrideFor) {
         showEmptySeasonState();
         return;
     }
@@ -2715,6 +2769,9 @@ function createPlayerRowHtml(player, index) {
         <td>${player.team_name}</td>
         <td class="${draftTeamClass}" title="${draftTeamDisplay}">${draftTeamDisplay}</td>
         <td class="bold-cell ${getPercentileClass(player.draft_score, displayedValues.draft_score)}">${player.draft_score.toFixed(1)}</td>
+        <td class="draft-rank-cell">${player.draft_rank
+        ? `<span class="rank-badge rank-${player.draft_rank <= 20 ? 'elite' : player.draft_rank <= 60 ? 'good' : 'plain'}">#${player.draft_rank}</span>`
+        : '<span class="rank-none" title="לא מדורג ב-FPL Draft">–</span>'}</td>
         <td class="bold-cell" data-tooltip="${config.columnTooltips.vorp}" style="color:${player.vorp > 0 ? '#059669' : player.vorp < 0 ? '#dc2626' : '#94a3b8'};">${formatVorp(player.vorp)}</td>
         <td class="${getPercentileClass(player.total_points, displayedValues.total_points)}">${player.total_points}</td>
         <td class="${getPercentileClass(player.points_per_game_90, displayedValues.points_per_game_90)}">${player.points_per_game_90.toFixed(1)}</td>
@@ -3191,6 +3248,54 @@ function processChange() {
     }
 }
 
+/**
+ * Who is new to the league this season — derived, never listed.
+ *
+ * Team codes and player codes are stable across FPL seasons (Arsenal is always
+ * 3, Burnley always 90), so anything in this season's bootstrap whose code has
+ * no row in last season's committed snapshot is new to the division. That
+ * splits into the two groups worth analysing apart at a draft:
+ *
+ *   promotedTeamIds  clubs that came up — a whole squad with no top-flight data
+ *   newPlayerCodes   individual arrivals at clubs that were already here
+ *
+ * Returns null when there is nothing to compare against: on the previous-season
+ * tab itself (the snapshot IS that season) or before the live bootstrap lands.
+ * The chips read that null and say so rather than showing an empty table.
+ */
+let _newcomers = { key: null, value: null };
+function newcomerSets() {
+    if (state.currentDataSource === 'historical') return null;
+    const current = state.allPlayersData[state.currentDataSource];
+    const snap = state.allPlayersData.historical
+        && state.allPlayersData.historical.raw
+        && state.allPlayersData.historical.raw.__snapshot;
+    const teams = current && current.raw && current.raw.teams;
+    if (!teams || !teams.length || !snap) return null;
+
+    const key = `${state.currentDataSource}:${teams.length}:${snap.seasonId}:${snap.rows.length}`;
+    if (_newcomers.key === key) return _newcomers.value;
+
+    const prevTeamCodes = new Set(snap.teams.map(t => t.code));
+    const codeAt = snap.fields.indexOf('code');
+    const prevPlayerCodes = new Set(codeAt >= 0 ? snap.rows.map(r => r[codeAt]) : []);
+    const value = {
+        seasonId: snap.seasonId,
+        promotedTeamIds: new Set(teams.filter(t => !prevTeamCodes.has(t.code)).map(t => t.id)),
+        knownPlayerCodes: prevPlayerCodes
+    };
+    _newcomers = { key, value };
+    return value;
+}
+
+/** Shared by both newcomer chips: the same reason either of them cannot run. */
+function newcomerUnavailable() {
+    if (state.currentDataSource === 'historical') {
+        return `הפילטר משווה את ${SEASON_CONFIG.seasonLabel} מול ${SEASON_CONFIG.previousSeasonLabel} — עבור לעונה הנוכחית`;
+    }
+    return newcomerSets() ? null : 'נתוני העונה הנוכחית עוד לא נטענו';
+}
+
 // Every chip rendered in the UI must appear here. Five of them previously fell
 // through the switch and did nothing at all: the chip highlighted, the table
 // did not change, and there was no error to notice.
@@ -3235,6 +3340,32 @@ const QUICK_FILTERS = {
         filter: p => p.minutes > 450 && p.xDiff < 0 && p.net_transfers_event > 0,
         sortKey: 'net_transfers_event'
     },
+    // The two newcomer chips. Neither has last-season numbers by definition, so
+    // both sort on what does exist for them — FPL's own price, which is the only
+    // published expectation of a player nobody has data on — and both leave the
+    // minutes floor at zero, or they would filter out their entire subject.
+    promoted_teams: {
+        needsCurrentSeason: true,
+        filter: p => {
+            const n = newcomerSets();
+            return !!n && n.promotedTeamIds.has(p.team);
+        },
+        unavailable: newcomerUnavailable,
+        sortKey: 'now_cost', sortDirection: 'desc'
+    },
+    // "New to the league" deliberately excludes the promoted clubs: their whole
+    // squad is new, which is a different question from a signing walking into a
+    // side that was already here.
+    new_to_league: {
+        needsCurrentSeason: true,
+        filter: p => {
+            const n = newcomerSets();
+            return !!n && !n.promotedTeamIds.has(p.team) && !n.knownPlayerCodes.has(p.code);
+        },
+        unavailable: newcomerUnavailable,
+        sortKey: 'now_cost', sortDirection: 'desc'
+    },
+
     // nailed_starters, defcon_kings and best_value lived here. All three had no
     // chip in index.html, so nothing could ever call them — the mirror image of
     // the bug this list was written to prevent, and just as invisible. Two of the
@@ -3332,6 +3463,9 @@ function sortTable(key) {
         // ASC for text columns: rank, web_name, team_name, draft_team, position_name
         const ascColumns = ['rank', 'web_name', 'team_name', 'draft_team', 'position_name',
             'next_3_fdr', 'set_piece_priority.penalty', 'set_piece_priority.corner', 'set_piece_priority.free_kick',
+            // FPL's own ranking: 1 is the best player, so ascending is the
+            // useful direction.
+            'draft_rank',
             // Rank 0 is the most actionable verdict, so ascending puts the
             // players worth doing something about at the top.
             'signal_rank'];
@@ -3396,10 +3530,27 @@ function toggleQuickFilter(button, filterName) {
     if (state.activeQuickFilterName === filterName) {
         state.activeQuickFilterName = null;
         button.classList.remove('active');
+        const wasOverriding = state.seasonOverrideFor === filterName;
+        state.seasonOverrideFor = null;
+        // Handing the season gate back: without this, clearing the chip would
+        // leave a full table of a season nobody has played, which is the state
+        // showEmptySeasonState exists to prevent.
+        if (wasOverriding && state.currentDataSource === 'live' && currentSeasonIsTooEarly()) {
+            showEmptySeasonState();
+            return;
+        }
         showAllPlayers(); // Reset to default view (clears filters and resets sort)
     } else {
+        // A chip that cannot answer says why. The alternative — highlighting and
+        // showing an empty table — reads exactly like the bug this file already
+        // has a guard for.
+        const why = QUICK_FILTERS[filterName] && QUICK_FILTERS[filterName].unavailable
+            && QUICK_FILTERS[filterName].unavailable();
+        if (why) { showToast('הפילטר לא זמין כאן', why, 'info', 5000); return; }
+
         // Set new filter
         state.activeQuickFilterName = filterName;
+        state.seasonOverrideFor = (QUICK_FILTERS[filterName] || {}).needsCurrentSeason ? filterName : null;
 
         // Update UI
         document.querySelectorAll('.quick-filter-btn').forEach(btn => btn.classList.remove('active'));
@@ -3420,7 +3571,33 @@ function toggleQuickFilter(button, filterName) {
         // category" means.
         const spec = QUICK_FILTERS[filterName] || {};
         setSort(spec.sortKey || 'draft_score', spec.sortDirection || 'desc');
+
+        // Ordered after the filter and the sort are in state, so whatever the
+        // fetch renders is already the filtered view rather than a flash of the
+        // whole league.
+        if (spec.needsCurrentSeason) enterCurrentSeasonView(filterName);
     }
+}
+
+/**
+ * Bring the current season into view for a chip that only makes sense there.
+ * Before the season starts these players have a price and an ownership share and
+ * nothing else, so the banner says that instead of letting a table of zeroes
+ * imply otherwise.
+ */
+function enterCurrentSeasonView(filterName) {
+    const label = filterName === 'promoted_teams' ? 'קבוצות שעלו ליגה' : 'שחקנים חדשים בליגה';
+    if (currentSeasonIsTooEarly()) {
+        showToast(label, `עונת ${SEASON_CONFIG.seasonLabel} עוד לא התחילה — לשחקנים האלה יש מחיר ובעלות, אין דקות ונקודות`, 'info', 6000);
+    }
+    if (state.currentDataSource !== 'live') {
+        switchDataSource('live');
+        return;
+    }
+    // Already on the current season, but the empty-season state may have left it
+    // unprocessed.
+    clearEmptySeasonState();
+    if (!state.allPlayersData.live.processed) fetchAndProcessData();
 }
 
 // exportToCsv: the earlier English-header definition was silently shadowed by
@@ -4009,7 +4186,7 @@ function exportToCsv() {
 // bug fixed in it changed nothing. The live implementation is above and uses
 // the #compareModal markup already in index.html.
 /* ==========================================================================
-   DRAFT BOARD — "למי כדאי לקחת"
+   DRAFT BOARD — "את מי לקחת עכשיו"
    ==========================================================================
    Replaces the six KPI trivia cards. They answered questions the table already
    answers by sorting a column (most goals, most assists, most points) and gave
@@ -4073,7 +4250,254 @@ function windowMinMatches() {
     return Math.max(2, Math.ceil((state.trendWindow || 5) * 0.6));
 }
 
+/* --------------------------- the value index ------------------------------ */
+
+/**
+ * "Who is most worth taking" already has a unit: points you gain over the
+ * player you would otherwise end up with. So this is not a 0-100 blend of
+ * z-scores — it is an estimate in points, and every term below is printed
+ * beside it on the card.
+ *
+ *   שווי = (רמה חזויה − רמת החלפה) × משחקים צפויים
+ *
+ * Three deliberate choices, because the existing draft_score gets each of them
+ * wrong and it is the reason this exists:
+ *
+ *  - Position-relative by construction. Subtracting the replacement level at
+ *    the same position is what makes a defender and a forward comparable; a
+ *    weighted sum of percentiles never is, and draft_score — whose percentiles
+ *    are computed league-wide — systematically rewards defenders on DEFCON and
+ *    forwards on xGI, two biases that only roughly cancel.
+ *  - No double counting. Points are counted once, as the level. G+A, xGI, bonus
+ *    and DEFCON are what *produced* those points, so they do not get their own
+ *    weights on top; the underlying numbers enter only as a bounded correction
+ *    for conversion luck, and the DEFCON hit-rate only as a floor for the
+ *    positions it applies to.
+ *  - Nothing that has no meaning in a draft. No ownership (only one team can
+ *    own anyone here, so a low share carries no information) and no price
+ *    (there is no budget).
+ *
+ * The weights are hand-set and stated. scripts/backtest-value.mjs measures the
+ * ranking against what players actually scored next, so "it works" is a number
+ * rather than a claim.
+ */
+/**
+ * The knobs, in one place, because hand-set constants have to be answerable:
+ * scripts/backtest-value.mjs sweeps each one against what players actually
+ * scored next, and the numbers in the comments are what it measured.
+ */
+const VALUE_TUNING = {
+    // Shrink the edge by apps/(apps + shrinkK). Measured as neutral in aggregate
+    // (ρ .249 at 0 → .247 at 6 → .242 at 30, all inside the noise), and kept
+    // anyway: it is a guard on the *top* of the board, where a three-match cameo
+    // beating a season's evidence is the one error that costs a real pick, and
+    // where a population-wide correlation cannot see it either way.
+    shrinkK: 6,
+    // Weight on the conversion-luck correction, and its cap in points/match.
+    // Measured: worth about +0.003 ρ, i.e. nothing distinguishable. Kept because
+    // it is bounded and it is the only forward-looking term in the level — but
+    // nobody should think it is doing any of the work.
+    luckWeight: 1,
+    luckCap: 0.4,
+    // Which volume term converts a level into matches.
+    //
+    //   playRate   appearances / gameweeks played — how often he features at all
+    //   startShare starts / appearances — whether he starts when he does feature
+    //
+    // Measured, and this one mattered: playRate is worth ~+0.07 ρ over
+    // startShare, which cost as much as it added. The reason is that startShare
+    // is blind to the thing that decides a return — a player who appears in 12
+    // of 20 gameweeks and starts all 12 scores 1.0 on it, identically to a man
+    // who starts every week. Both together is no better than playRate alone.
+    volume: 'playRate'
+};
+
+/**
+ * formK is how many matches of window form it would take to outweigh the season
+ * rate — so a *large* number means the projection barely listens to form.
+ *
+ * These started at 3 and 8, on the reasonable-sounding theory that a short
+ * horizon should lean on recent form. The backtest said the opposite, at every
+ * setting and on both horizons: ignoring the five-match window entirely scored
+ * ρ .295 against form-heavy .247, and it got monotonically worse the more form
+ * was weighted. Five matches is simply too few to carry a projection.
+ *
+ * Not set to infinity, though, because the backtest cannot see the case the
+ * small weight is for: a player whose *role* changed — new penalty duty, a new
+ * manager, a move up the pitch — where the season rate describes a job he no
+ * longer has. 20 and 30 are within noise of ignoring form (.291 vs .295) while
+ * still reacting to that.
+ */
+const VALUE_HORIZONS = {
+    now: { id: 'now', label: '5 המחזורים הבאים', short: '5 הבאים', matches: 5, formK: 20, fixtures: true },
+    season: { id: 'season', label: 'עד סוף העונה', short: 'עד סוף העונה', matches: null, formK: 30, fixtures: false }
+};
+
+/** Matches left to play. A finished season prices a full one instead of zero. */
+function seasonMatchesLeft() {
+    const played = getCompletedGWCount();
+    const left = 38 - played;
+    return left > 0 ? left : 38;
+}
+
+/** Points per appearance over the whole season, the level the form regresses to. */
+function seasonPointsPerApp(p) {
+    const apps = p.appearances || (p.minutes > 0 ? Math.round(p.minutes / 70) : 0);
+    if (!apps) return null;
+    const perApp = parseFloat(p.points_per_game);
+    return Number.isFinite(perApp) && perApp > 0 ? perApp : (p.total_points || 0) / apps;
+}
+
+/**
+ * The projected level, in points per appearance.
+ *
+ * The window is weighted by its own sample size — m/(m+K) — rather than fixed,
+ * because five good gameweeks off five matches is not the same evidence as five
+ * off thirty, and a flat "70% form" pretends it is.
+ */
+function projectedLevel(p, horizon) {
+    const season = seasonPointsPerApp(p);
+    if (season === null) return null;
+    const w = windowStats(p);
+    const m = w.matches || 0;
+    const weight = m ? m / (m + horizon.formK) : 0;
+    const level = m ? weight * w.ppg + (1 - weight) * season : season;
+
+    // Conversion luck, bounded. xDiff is season G+A minus xGI: strongly
+    // negative means the chances were there and did not go in, which is the one
+    // thing the points total genuinely understates. Capped at ±0.4 points per
+    // match so a single term can never carry the estimate.
+    const apps = p.appearances || Math.max(1, Math.round((p.minutes || 0) / 70));
+    const luck = Number.isFinite(p.xDiff) ? -p.xDiff / apps : 0;
+    const cap = VALUE_TUNING.luckCap;
+    const xAdj = Math.max(-cap, Math.min(cap, luck * VALUE_TUNING.luckWeight));
+
+    return { level: level + xAdj, base: level, season, windowPpg: m ? w.ppg : null, weight, xAdj, matches: m };
+}
+
+/**
+ * Matches we expect him to actually play in the horizon — the difference
+ * between a level and a return. A 6-point-per-match player who starts half the
+ * time is worth less than a 4-point player who starts every week, and no
+ * average per 90 minutes will ever say so.
+ */
+function expectedMatches(p, horizon) {
+    const span = horizon.matches || seasonMatchesLeft();
+    const gws = getCompletedGWCount();
+    // Share of the season's gameweeks he actually appeared in. Before a ball is
+    // kicked there is nothing to measure, so it falls back to the start share.
+    const playRate = gws > 0 && p.appearances ? Math.min(1, p.appearances / gws) : null;
+    // starts / appearances. Unknown gets a mild discount rather than the benefit
+    // of the doubt.
+    const startShare = p.rotation_risk === null || p.rotation_risk === undefined ? 0.8 : p.rotation_risk;
+    const rate = VALUE_TUNING.volume === 'none' ? 1
+        : VALUE_TUNING.volume === 'startShare' ? startShare
+            : VALUE_TUNING.volume === 'both' ? (playRate === null ? startShare : playRate) * startShare
+                : (playRate === null ? startShare : playRate);
+    const availability = p.availability_factor === undefined ? 1 : p.availability_factor;
+    return { span, rate, playRate, startShare, availability, matches: span * rate * availability };
+}
+
+/**
+ * Fixture tilt, short horizon only: ±5% per point of difficulty away from an
+ * average draw. Over a whole season every schedule evens out, so applying it
+ * there would be inventing precision.
+ */
+function fixtureTilt(p, horizon) {
+    if (!horizon.fixtures) return 1;
+    const fdr = num1(p.next_3_fdr);
+    if (!fdr) return 1;
+    return Math.max(0.85, Math.min(1.15, 1 + (3 - fdr) * 0.05));
+}
+
+/**
+ * The whole index for one player and one horizon. Returns null when there is
+ * nothing honest to say — no appearances, or no replacement level for the
+ * position yet.
+ */
+let _valueCache = { key: null, values: new Map() };
+function draftValue(p, horizonId = 'season') {
+    const horizon = VALUE_HORIZONS[horizonId] || VALUE_HORIZONS.season;
+    const key = `${state.currentDataSource}:${state.trendKey}:${state.trendWindow}:${state.draft.draftHasHappened}`;
+    if (_valueCache.key !== key) _valueCache = { key, values: new Map() };
+    const cacheKey = `${p.id}:${horizon.id}`;
+    if (_valueCache.values.has(cacheKey)) return _valueCache.values.get(cacheKey);
+
+    let out = null;
+    const proj = projectedLevel(p, horizon);
+    const replacement = p.replacement_score === null || p.replacement_score === undefined
+        ? state.draft.replacementByPos[p.position_name]
+        : p.replacement_score;
+
+    if (proj && Number.isFinite(replacement)) {
+        const exp = expectedMatches(p, horizon);
+        const tilt = fixtureTilt(p, horizon);
+        // Shrunk toward zero by sample size, which is the statistically honest
+        // way to keep a three-match cameo out of first place — a flat
+        // "confidence × value" fudge would distort the unit instead.
+        const apps = proj.matches ? (p.appearances || proj.matches) : (p.appearances || 0);
+        const shrink = VALUE_TUNING.shrinkK ? apps / (apps + VALUE_TUNING.shrinkK) : 1;
+        const edge = (proj.level * tilt - replacement) * shrink;
+        out = {
+            value: edge * exp.matches,
+            edge,
+            level: proj.level,
+            replacement,
+            tilt,
+            shrink,
+            ...exp,
+            proj
+        };
+    }
+    _valueCache.values.set(cacheKey, out);
+    return out;
+}
+
+/** Just the number, for ranking and for the panel's metric. */
+function draftValueOf(p, horizonId = 'season') {
+    const v = draftValue(p, horizonId);
+    return v ? v.value : null;
+}
+
 const DRAFT_PANELS = [
+    {
+        id: 'bestpick',
+        title: 'הבחירה הכי שווה',
+        subtitle: 'נקודות שתרוויח מעל החלופה בעמדה',
+        icon: '🏆',
+        accent: '#7c3aed',
+        // The one panel that spans the row: it is the answer, the five under it
+        // are the reasons.
+        wide: true,
+        limit: 5,
+        // No horizon claim in the caption: on the finished-season tab there is no
+        // "rest of season" left, so the caption states the unit and the why line
+        // states the actual number of matches it was multiplied by.
+        valueLabel: 'נק׳ מעל החלופה לעונה',
+        // Its own metric is already position-relative, so the elite-median chip
+        // would be comparing a comparison.
+        noBenchmark: true,
+        metric: p => draftValueOf(p, 'season'),
+        fmt: v => `${v > 0 ? '+' : ''}${Math.round(v)}`,
+        display(p) { return this.fmt(this.metric(p)); },
+        why: p => {
+            const v = draftValue(p, 'season');
+            const now = draftValue(p, 'now');
+            if (!v) return '';
+            const bits = [
+                `${v.level.toFixed(2)} נק׳/משחק מול ${v.replacement.toFixed(2)} של החלופה`,
+                `${Math.round(v.matches)} משחקים צפויים`
+            ];
+            if (now) bits.push(`ב-5 הבאים: ${now.value > 0 ? '+' : ''}${now.value.toFixed(1)}`);
+            return bits.join(' · ');
+        },
+        eligible: p => {
+            const v = draftValue(p, 'season');
+            return !!v && v.value > 0 && (p.minutes || 0) >= 450;
+        },
+        rank: (a, b) => (draftValueOf(b, 'season') || 0) - (draftValueOf(a, 'season') || 0),
+        windowAware: true
+    },
     {
         id: 'value',
         title: 'הערך הגדול ביותר',
@@ -4193,16 +4617,17 @@ const DRAFT_PANELS = [
         id: 'setpiece',
         title: 'בעלי כדורים נייחים',
         subtitle: 'פנדלים וקרנות = נקודות חוזרות',
-        valueLabel: 'ציון דראפט',
+        valueLabel: 'נק׳ מעל החלופה',
         icon: '🎯',
         accent: '#be185d',
-        metric: p => p.draft_score,
-        // Was `#${setPieceOrder(p)}` — the eligibility rule already demands an
-        // order of 1 or 2, so the headline figure was "#1" on nearly every row
-        // while the ordering came from draft_score: a number that never varied
-        // and did not explain the ranking beside it. The duties themselves are
-        // the point, and the why line spells them out one by one.
-        fmt: v => v.toFixed(1),
+        metric: p => draftValueOf(p, 'season') || 0,
+        // Twice wrong before this. First `#${setPieceOrder(p)}`, which the
+        // eligibility rule pins to 1 or 2 for every row, so the figure never
+        // varied. Then draft_score under the caption "ציון דראפט", which reads as
+        // a draft *ranking* and is nothing of the sort — it is this app's own
+        // internal composite. The honest column is the one the rest of the board
+        // now ranks on, in points, and the duties stay on the why line.
+        fmt: v => `${v > 0 ? '+' : ''}${Math.round(v)}`,
         display(p) { return this.fmt(this.metric(p) || 0); },
         why: p => {
             const bits = [];
@@ -4212,7 +4637,8 @@ const DRAFT_PANELS = [
             return bits.join(' · ') || 'בעל כדורים נייחים';
         },
         eligible: p => setPieceOrder(p) <= 2 && p.minutes > 450,
-        rank: (a, b) => b.draft_score - a.draft_score
+        rank: (a, b) => (draftValueOf(b, 'season') || 0) - (draftValueOf(a, 'season') || 0),
+        windowAware: true
     }
 ];
 
@@ -4355,7 +4781,7 @@ function renderDraftBoard() {
     if (!players.length) { host.innerHTML = ''; return; }
 
     const cards = DRAFT_PANELS.map((panel, cardIdx) => {
-        const picks = panelPicks(panel, players, 3);
+        const picks = panelPicks(panel, players, panel.limit || 3);
         if (!picks.length && !panel.emptyNote) return '';
 
         const rows = picks.map((p, i) => `
@@ -4385,7 +4811,8 @@ function renderDraftBoard() {
             : `<p class="db-empty">${panel.emptyNote}</p>`;
 
         return `
-            <article class="db-card" style="--accent:${panel.accent}; --d:${cardIdx * 45}ms">
+            <article class="db-card${panel.wide ? ' is-wide' : ''}"
+                style="--accent:${panel.accent}; --d:${cardIdx * 45}ms">
                 <header class="db-head">
                     <span class="db-icon">${panel.icon}</span>
                     <span class="db-headings">
@@ -4407,7 +4834,7 @@ function renderDraftBoard() {
 
     host.innerHTML = `
         <div class="db-bar">
-            <h2 class="db-heading"><span class="db-heading-icon">🎯</span>למי כדאי לקחת</h2>
+            <h2 class="db-heading"><span class="db-heading-icon">🎯</span>את מי לקחת עכשיו</h2>
             <span class="db-scope">${scope}</span>
             <span class="db-legend" title="לכל מדד נמצא חציון 20 השחקנים הטובים באותה עמדה, והמספר האפור הוא היחס אליו. חציון ולא ממוצע, כדי ששחקן קיצוני אחד לא יזיז את הרף">
                 עילית = חציון 20 הטובים בעמדה
@@ -4743,7 +5170,7 @@ function getChartConfig(data, xKey, yKey, xLabel, yLabel, quadLabels = {}, color
     };
 }
 
-// The "למי כדאי לקחת" panel grid lived here (FORM_WINDOWS, applyFormWindow,
+// The "את מי לקחת עכשיו" panel grid lived here (FORM_WINDOWS, applyFormWindow,
 // setFormWindow, DRAFT_PANELS, renderDraftBoard) and was removed on request.
 // Everything it computed — window_ppg, window_defcon_rate, window_xgi90 — was
 // read only by those panels, so it all went with them. The equivalent answers
@@ -4836,6 +5263,12 @@ function computeDraftMetrics(players) {
             const idx = Math.min(leagueSize * (REPLACEMENT_SLOTS[pos] || 2), atPos.length - 1);
             replacementScore = scoreOf(atPos[idx]);
         }
+
+        // Kept per position as well as per player: atPos only holds players past
+        // the 900-minute bar, so a squad player has no replacement_score of his
+        // own, and the value index still has to be able to price him against the
+        // level his position replaces at.
+        state.draft.replacementByPos[pos] = Math.round(replacementScore * 100) / 100;
 
         atPos.forEach(p => {
             p.replacement_score = Math.round(replacementScore * 100) / 100;
@@ -5889,12 +6322,17 @@ async function _loadDraftDataInBackground() {
             // positional baseline all session.
             const processed = state.allPlayersData[state.currentDataSource]?.processed;
             if (processed) computeDraftMetrics(processed);
+            // The draft bootstrap is what carries draft_rank, and it has only just
+            // arrived; the players were processed long before it.
+            const ranked = applyDraftRanks();
             invalidateSignals();
 
             // Re-render table to update draft team column
             renderTable();
+            renderDraftBoard();
 
-            console.log('✅ Draft data loaded in background:', state.draft.ownedElementIds.size, 'players owned');
+            console.log('✅ Draft data loaded in background:', state.draft.ownedElementIds.size, 'players owned'
+                + (ranked ? ` · דירוג FPL for ${ranked}` : ''));
         }
     } catch (error) {
         console.log('Draft data not available:', error.message);

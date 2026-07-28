@@ -11,7 +11,9 @@ import { SCRIPT_SRC, extractFunction, installBrowserStubs } from './helpers/load
 function loadDraftMetrics(draftState = {}) {
     installBrowserStubs();
     const state = {
-        draft: { details: null, ownedElementIds: new Set(), ...draftState },
+        // replacementByPos is written per position so the value index can price
+        // players who sit below computeDraftMetrics' own minutes bar.
+        draft: { details: null, ownedElementIds: new Set(), replacementByPos: {}, ...draftState },
         allPlayersData: { live: { fixtures: null }, historical: { fixtures: null } },
         currentDataSource: 'historical'
     };
@@ -127,18 +129,42 @@ describe('rotation risk and availability', () => {
 });
 
 describe('smart filters', () => {
-    const QUICK_FILTERS = (() => {
-        const start = SCRIPT_SRC.indexOf('const QUICK_FILTERS');
+    const load = (state = {}) => {
+        globalThis.state = state;
+        const start = SCRIPT_SRC.indexOf('let _newcomers =');
         const end = SCRIPT_SRC.indexOf('function applyQuickFilter');
-        return new Function(`${SCRIPT_SRC.slice(start, end)}\nreturn QUICK_FILTERS;`)();
-    })();
+        return new Function(`const SEASON_CONFIG = { seasonLabel: '2026/27', previousSeasonLabel: '2025/26' };
+            ${SCRIPT_SRC.slice(start, end)}
+            return { QUICK_FILTERS, newcomerSets, newcomerUnavailable };`)();
+    };
+    const { QUICK_FILTERS } = load();
+
+    /**
+     * Last season's snapshot plus this season's bootstrap, in the two shapes the
+     * newcomer filters read: a team list with stable codes, and player rows.
+     */
+    const twoSeasons = ({ liveTeams, snapshotTeams, snapshotCodes }) => ({
+        currentDataSource: 'live',
+        allPlayersData: {
+            live: { raw: { teams: liveTeams } },
+            historical: {
+                raw: {
+                    __snapshot: {
+                        seasonId: '2025-26', teams: snapshotTeams,
+                        fields: ['id', 'code'], rows: snapshotCodes.map((c, i) => [i, c])
+                    }
+                }
+            }
+        }
+    });
 
     test('every chip in the UI has an implementation', () => {
         // Five chips previously fell through the switch and silently did nothing.
         const html = SCRIPT_SRC; // filters are referenced from index.html, checked below
         const required = ['set_pieces', 'attacking_defenders', 'differentials',
             'bonus_magnets', 'form_kings', 'easy_fixtures_ppg',
-            'underperformers', 'trending_underachievers'];
+            'underperformers', 'trending_underachievers',
+            'promoted_teams', 'new_to_league'];
         for (const name of required) {
             assert.ok(QUICK_FILTERS[name], `quick filter "${name}" is not implemented`);
             assert.equal(typeof QUICK_FILTERS[name].filter, 'function');
@@ -152,6 +178,44 @@ describe('smart filters', () => {
         assert.ok(QUICK_FILTERS.set_pieces.filter(taker));
         assert.ok(!QUICK_FILTERS.set_pieces.filter(nonTaker),
             'a player who takes nothing must not match the set-piece filter');
+    });
+
+    test('promoted clubs are derived from the team codes, not a hardcoded list', () => {
+        // Team codes are stable across seasons, so a club whose code has no row in
+        // last season's snapshot came up. Nothing to update every August.
+        const fns = load(twoSeasons({
+            liveTeams: [{ id: 1, code: 3 }, { id: 2, code: 90 }, { id: 3, code: 49 }],
+            snapshotTeams: [{ code: 3 }, { code: 90 }],
+            snapshotCodes: [100, 200]
+        }));
+        const promoted = fns.QUICK_FILTERS.promoted_teams.filter;
+        assert.ok(promoted({ team: 3, code: 999 }), 'team 3 is not in last season');
+        assert.ok(!promoted({ team: 1, code: 100 }), 'Arsenal did not just come up');
+    });
+
+    test('a newcomer at an established club is separated from a promoted squad', () => {
+        const fns = load(twoSeasons({
+            liveTeams: [{ id: 1, code: 3 }, { id: 3, code: 49 }],
+            snapshotTeams: [{ code: 3 }],
+            snapshotCodes: [100]
+        }));
+        const isNew = fns.QUICK_FILTERS.new_to_league.filter;
+        assert.ok(isNew({ team: 1, code: 555 }), 'a signing into a club that was already here');
+        assert.ok(!isNew({ team: 1, code: 100 }), 'played here last season');
+        assert.ok(!isNew({ team: 3, code: 777 }),
+            'came up with his club — that is the other chip, and a different question');
+    });
+
+    test('both newcomer chips explain themselves instead of emptying the table', () => {
+        // On the previous-season tab the snapshot IS that season, so there is
+        // nothing to compare against.
+        const onSnapshot = load({ currentDataSource: 'historical', allPlayersData: {} });
+        assert.match(onSnapshot.newcomerUnavailable(), /2026\/27/);
+        assert.equal(onSnapshot.newcomerSets(), null);
+
+        // And before the live bootstrap lands there are no teams to diff.
+        const loading = load({ currentDataSource: 'live', allPlayersData: { live: {}, historical: {} } });
+        assert.ok(loading.newcomerUnavailable());
     });
 
     test('form filter demands genuinely strong form, not merely non-zero', () => {
