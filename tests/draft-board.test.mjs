@@ -36,12 +36,14 @@ const FUNCTIONS = [
     'windowStats', 'windowMinMatches', 'setPieceOrder', 'defconRateFor',
     'draftBoardPool', 'panelPicks', 'getTrendSeries', 'summariseTrend',
     'trendPlayerIndex', 'gwDefensiveContribution',
-    'playerScore', 'buildDropOffLadder', 'dropOffFor'
+    'playerScore', 'buildDropOffLadder', 'dropOffFor',
+    'benchmarkMedian', 'panelBenchmark'
 ];
 
 const DEPS = [
     'DEFCON_THRESHOLD', 'TREND_METRICS', 'DRAFT_PANELS',
-    '_windowStatsCache', '_trendPlayerIndex', '_dropOff', 'gwNum'
+    '_windowStatsCache', '_trendPlayerIndex', '_dropOff', 'gwNum',
+    'BENCH_TOP_N', 'BENCH_MIN_MINUTES', '_panelBenchCache'
 ];
 
 /**
@@ -168,6 +170,53 @@ describe('panel rules', () => {
             }
         }
         assert.ok(picked > 0, 'the fixture should satisfy at least one panel');
+    });
+
+    test('every panel names the figure it puts in the value column', () => {
+        // The card title says what the panel is for ("מכונות DEFCON"); it does not
+        // say what "67%" counts. Both the board caption and the leaderboard's
+        // value column header read this, so a missing one leaves a bare number.
+        for (const p of loadBoard([makePlayer({})]).DRAFT_PANELS) {
+            assert.ok((p.valueLabel || '').trim(), `panel ${p.id} has no valueLabel`);
+            assert.notEqual(p.valueLabel, p.title,
+                `panel ${p.id} repeats its title instead of naming the metric`);
+        }
+    });
+
+    test('the benchmark is the median of the best twenty, not the mean', () => {
+        const board = loadBoard([makePlayer({})]);
+        // 1..30. The top twenty are 11..30, whose median is 20.5 — a mean would
+        // be dragged around by whatever sits at the extreme.
+        const values = Array.from({ length: 30 }, (_, i) => i + 1);
+        assert.equal(board.benchmarkMedian(values), 20.5);
+        // One absurd value pushes the window by a single rank and nothing more;
+        // a mean of the same twenty would come out near 500.
+        assert.equal(board.benchmarkMedian([...values, 10000]), 21.5);
+    });
+
+    test('too small a pool has no elite bar to speak of', () => {
+        const board = loadBoard([makePlayer({})]);
+        assert.equal(board.benchmarkMedian([9, 8, 7, 6]), null);
+        assert.equal(board.benchmarkMedian([]), null);
+    });
+
+    test('the benchmark is measured per position, and skips small samples', () => {
+        // Ten midfielders on 60% DEFCON, ten defenders on 20%, plus a defender
+        // with an elite rate off 90 minutes — three matches is the floor.
+        const players = [];
+        for (let i = 0; i < 10; i++) {
+            players.push(makePlayer({ id: 100 + i, element_type: 3, position_name: 'MID',
+                minutes: 2000, defcon_hit_rate: 60 }));
+            players.push(makePlayer({ id: 200 + i, element_type: 2, position_name: 'DEF',
+                minutes: 2000, defcon_hit_rate: 20 }));
+        }
+        players.push(makePlayer({ id: 999, element_type: 2, position_name: 'DEF',
+            minutes: 90, defcon_hit_rate: 99 }));
+        const board = loadBoard(players);
+        const defcon = panel(board, 'defcon');
+        assert.equal(board.panelBenchmark(defcon, 'MID'), 60);
+        assert.equal(board.panelBenchmark(defcon, 'DEF'), 20,
+            'the 90-minute outlier is below the minutes floor and cannot set the bar');
     });
 
     test('the market panel stays empty until a gameweek has transfer numbers', () => {

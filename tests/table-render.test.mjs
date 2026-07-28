@@ -79,12 +79,13 @@ function load(players, over = {}) {
         'fourthTrendMetric', 'fixtureForGw', 'getDraftTeamForPlayer', 'trendPlayerIndex',
         'pointsConcentration',
         'miniSparkHtml',
-        'trendBarsHtml', 'roleTrend',
+        'trendBarsHtml', 'roleTrend', 'trendBenchmark', 'benchmarkMedian',
         // the three stat boxes in the expanded row
         'boxAttack', 'boxDefence', 'boxValue'
     ], {}, [
         'WATCHLIST_KEY', 'TREND_BAR_ROW_LIMIT', 'SIGNAL_RULES', 'SIGNAL_SORT_ORDER',
         'HOLD_SIGNAL', '_signalCache', '_trendPlayerIndex', '_trendDeltaCache',
+        'BENCH_TOP_N', 'BENCH_MIN_MINUTES', '_trendBenchCache', 'POSITION_LABELS',
         'gwNum', 'TREND_METRICS', 'ROLE_TREND',
         // arrow-function consts, so they load as declarations rather than names
         'num1', 'statLine', 'fmt', 'pct'

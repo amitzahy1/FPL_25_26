@@ -54,7 +54,7 @@ function load(stateOver = {}) {
         // Two signal rules call this; without it in scope signalFor's try/catch
         // swallows a ReferenceError and every rule silently fails to match.
         'pointsConcentration',
-        'trendBarsHtml',
+        'trendBarsHtml', 'trendBenchmark', 'benchmarkMedian',
         'trendPlayerIndex', 'getDraftTeamForPlayer'
     ], {}, [
         // Lookup tables and caches the above close over, pulled from the real

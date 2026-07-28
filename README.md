@@ -103,6 +103,9 @@ Three blocks, in reading order:
    set-piece duty. The pool is only players you can actually get — free agents
    once the league's rosters have loaded, everyone before the draft — and never
    anyone injured or suspended. Each panel opens a top 20.
+   Every panel names the figure it ranks on above the value column, and each
+   pick carries the grey `פי X מהעילית` — how it compares to the median of the
+   twenty best players *at the same position* on that same metric.
    Defined by `DRAFT_PANELS` in `script.js`; a new question is one entry there.
 2. **The table** — sortable and filterable, including by `סיגנל`, the one-verdict
    column. Twelve columns are optional and remembered per browser.
@@ -118,6 +121,12 @@ Three blocks, in reading order:
   midfielders and forwards 12 CBIRT, for +2 points. Because it is a per-match
   threshold, the snapshot records a *hit-rate* — the share of appearances that
   cleared it — rather than a season average, which would misrepresent it.
+- **The top-20 benchmark** (`benchmarkMedian`): the median of the twenty best
+  players at a position on one metric. Median, so a single outlier cannot move
+  the bar; twenty, because that is roughly how many players per position get
+  drafted in an eight-team league. It appears as the grey ratio under a board
+  figure, and as the dashed grey line across the per-gameweek bars, which is the
+  same scale the bars are drawn on.
 - Percentiles are oriented so 100 is best, including for metrics where lower is
   better (price).
 - Cached API responses live in `localStorage`. Clear it from the settings

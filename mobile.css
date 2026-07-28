@@ -383,7 +383,7 @@
     .detail-body > section { min-width: 0; border-inline-start: none; }
     .detail-sum { border-top: 1px solid #dbeafe; }
 
-    .detail-boxes { flex-direction: column; border-inline-start: none; }
+    .detail-boxes { grid-template-columns: 1fr; border-inline-start: none; }
     .detail-boxes > * { width: 100%; min-width: 0; box-sizing: border-box; }
     .match-log { table-layout: fixed; }
     .detail-log, .detail-sum, .detail-boxes { overflow-x: auto; }

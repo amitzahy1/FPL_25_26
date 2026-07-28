@@ -2236,6 +2236,63 @@ function getTrendSeries(playerId, metricKey, window = 'recent') {
     });
 }
 
+/* ------------------------- top-20 position benchmark ---------------------- */
+
+/**
+ * Every figure on this page answers "how much", never "how much better". The
+ * benchmark is the median of the twenty best players at the *same position* on
+ * that same metric.
+ *
+ * Median rather than mean, because one Haaland would drag the bar somewhere no
+ * real decision lives. Top twenty rather than the whole position, because in an
+ * eight-team draft roughly that many players per position are ever drafted, so
+ * "elite" is the only reference that answers "is he worth a pick". Per position,
+ * because a defender's xGI next to a forward's is not a comparison.
+ */
+const BENCH_TOP_N = 20;
+/** Three matches: below that a per-90 rate is noise, not a level. */
+const BENCH_MIN_MINUTES = 270;
+
+function benchmarkMedian(values) {
+    const top = values
+        .filter(v => typeof v === 'number' && isFinite(v))
+        .sort((a, b) => b - a)
+        .slice(0, BENCH_TOP_N);
+    // Fewer than five and "the elite twenty" is a sentence about nothing.
+    if (top.length < 5) return null;
+    const mid = Math.floor(top.length / 2);
+    return top.length % 2 ? top[mid] : (top[mid - 1] + top[mid]) / 2;
+}
+
+/**
+ * The benchmark for a trend metric, in the unit the bars are drawn in: each
+ * player's mean per-gameweek value across the window, then the median of the
+ * best twenty. Same unit as a bar height is the whole point — it is what lets
+ * the number be drawn as one line across them instead of spelled out in text.
+ */
+let _trendBenchCache = { key: null, values: new Map() };
+function trendBenchmark(metricKey, position) {
+    if (!TREND_METRICS[metricKey] || !state.trendGws.length || !position) return null;
+    const key = `${state.currentDataSource}:${state.trendKey}`;
+    if (_trendBenchCache.key !== key) _trendBenchCache = { key, values: new Map() };
+    const cacheKey = `${metricKey}:${position}`;
+    if (_trendBenchCache.values.has(cacheKey)) return _trendBenchCache.values.get(cacheKey);
+
+    const players = (state.allPlayersData[state.currentDataSource] || {}).processed || [];
+    const means = [];
+    for (const p of players) {
+        if (p.position_name !== position) continue;
+        const series = getTrendSeries(p.id, metricKey, 'recent');
+        // A player who sat out the whole window has a mean of zero, which would
+        // only pad the pool; he cannot be in the top twenty anyway.
+        if (!series.length || !series.some(pt => pt.played)) continue;
+        means.push(series.reduce((sum, pt) => sum + pt.value, 0) / series.length);
+    }
+    const out = benchmarkMedian(means);
+    _trendBenchCache.values.set(cacheKey, out);
+    return out;
+}
+
 function summariseTrend(series, agg) {
     if (!series.length) return 0;
     const total = series.reduce((sum, pt) => sum + pt.value, 0);
@@ -2272,8 +2329,16 @@ function trendDelta(player, metricKey) {
  * The bar strip. `labels` prints each gameweek's own figure above its bar, which
  * is what turns a shape into something you can read a number off.
  */
-function trendBarsHtml(series, scale, def, { labels = false, cls = '' } = {}) {
-    return `<span class="trend-bars ${cls}" dir="ltr">` + series.map((pt, i) => {
+function trendBarsHtml(series, scale, def, { labels = false, cls = '', bench = null } = {}) {
+    // The benchmark rides the same scale as the bars, so it is one dashed line
+    // across them and needs no axis, no legend and no extra row. Capped just
+    // short of the ceiling: at 100% it stops reading as a line and starts
+    // reading as the chart's own top border.
+    const line = (bench > 0 && scale > 0)
+        ? `<i class="trend-bench" style="--bench:${(Math.min(bench / scale, 0.97) * 100).toFixed(1)}%"
+            aria-hidden="true"></i>`
+        : '';
+    return `<span class="trend-bars ${cls}" dir="ltr">${line}` + series.map((pt, i) => {
         const h = Math.max(Math.min(pt.value / (scale || 1), 1) * 100, pt.played ? 8 : 0);
         const c = ['trend-bar'];
         if (i === series.length - 1) c.push('is-last');
@@ -2297,8 +2362,9 @@ function trendCellHtml(player, metricKey, index) {
     const now = summariseTrend(recent, def.agg);
     const before = summariseTrend(getTrendSeries(player.id, metricKey, 'prev'), def.agg);
     const scale = (state.trendScales && state.trendScales[metricKey]) || 1;
+    const bench = trendBenchmark(metricKey, player.position_name);
     const bars = index < TREND_BAR_ROW_LIMIT
-        ? trendBarsHtml(recent, scale, def, { labels: true })
+        ? trendBarsHtml(recent, scale, def, { labels: true, bench })
         : '';
 
     // No delta chip here. "▼ 5 קודם 41" needs the reader to hold a second,
@@ -2306,7 +2372,8 @@ function trendCellHtml(player, metricKey, index) {
     // on their own, and the expanded row states the comparison under a heading
     // that names both windows.
     return `<td class="trend-cell trend-col" data-metric="${metricKey}"
-        title="${def.fmt(now)} ב-${recent.length} המחזורים האחרונים · ${def.fmt(before)} ב-${recent.length} שלפניהם. לחיצה על השורה פותחת את הפירוט">
+        title="${def.fmt(now)} ב-${recent.length} המחזורים האחרונים · ${def.fmt(before)} ב-${recent.length} שלפניהם${
+        bench ? ` · הקו האפור: ${def.fmt(bench)} למחזור, חציון 20 הטובים בעמדה` : ''}. לחיצה על השורה פותחת את הפירוט">
         <span class="trend-main">
             ${def.showTotal === false ? '' : `<span class="trend-value">${def.fmt(now)}</span>`}
             ${bars}
@@ -2483,10 +2550,16 @@ function playerDetailRowHtml(player, colSpan) {
             const series = getTrendSeries(player.id, k, 'recent');
             const now = summariseTrend(series, def.agg);
             const scale = (state.trendScales && state.trendScales[k]) || 1;
-            return `<div class="sum-row">
+            const bench = trendBenchmark(k, player.position_name);
+            // The line itself carries no tooltip — a 1px dash is not a hit
+            // target — so the row it belongs to explains it.
+            const tip = bench
+                ? ` title="הקו האפור: ${def.fmt(bench)} למחזור — חציון 20 ה${POSITION_LABELS[player.position_name] || ''} הטובים במדד הזה"`
+                : '';
+            return `<div class="sum-row"${tip}>
                 <span class="sum-label">${def.label}</span>
                 <span class="sum-val"><b>${def.fmt(now)}</b>${def.unit ? `<em>${def.unit}</em>` : ''}</span>
-                ${trendBarsHtml(series, scale, def, { labels: true, cls: 'is-large' })}
+                ${trendBarsHtml(series, scale, def, { labels: true, cls: 'is-large', bench })}
             </div>`;
         }).join('');
 
@@ -4005,6 +4078,7 @@ const DRAFT_PANELS = [
         id: 'value',
         title: 'הערך הגדול ביותר',
         subtitle: 'הפער מהחלופה הבאה באותה עמדה',
+        valueLabel: 'יתרון בנק׳/משחק',
         icon: '💎',
         accent: '#6366f1',
         // Not raw `vorp`, and emphatically not `vorp > 0`.
@@ -4021,7 +4095,14 @@ const DRAFT_PANELS = [
         // available player at the same position — which is what "יתרון על
         // החלופה" always meant: take him, or your fallback is this much worse.
         metric: p => dropOffFor(p),
-        display: p => `+${dropOffFor(p).toFixed(2)}`,
+        // No benchmark chip: the metric is a *gap* between two players, not a
+        // level, so the elite median of it is ~0.1 and every ratio came out
+        // "פי 17 מהעילית" — arithmetically true, and meaningless.
+        noBenchmark: true,
+        // fmt takes the figure, display takes the player: the benchmark chip and
+        // the tooltip have a number in hand and no player to hand back.
+        fmt: v => `+${v.toFixed(2)}`,
+        display(p) { return this.fmt(this.metric(p)); },
         why: p => `${playerScore(p).toFixed(2)} נק׳/משחק · הבא בתור: ${(playerScore(p) - dropOffFor(p)).toFixed(2)}`,
         eligible: p => dropOffFor(p) !== null && dropOffFor(p) > 0,
         rank: (a, b) => dropOffFor(b) - dropOffFor(a)
@@ -4030,10 +4111,12 @@ const DRAFT_PANELS = [
         id: 'form',
         title: 'הכי חמים עכשיו',
         subtitle: 'נקודות למשחק בחלון הנבחר',
+        valueLabel: 'נק׳ למשחק',
         icon: '🔥',
         accent: '#ea580c',
         metric: p => windowStats(p).ppg,
-        display: p => windowStats(p).ppg.toFixed(1),
+        fmt: v => v.toFixed(1),
+        display(p) { return this.fmt(this.metric(p)); },
         why: p => {
             const w = windowStats(p);
             return `${Math.round(w.points)} נק׳ ב-${w.matches} משחקים`;
@@ -4049,13 +4132,15 @@ const DRAFT_PANELS = [
         id: 'defcon',
         title: 'מכונות DEFCON',
         subtitle: 'עוברים את הסף בפועל, לא בממוצע',
+        valueLabel: '% משחקים מעל הסף',
         icon: '🛡️',
         accent: '#0891b2',
         // The season hit-rate is the better number where it exists (the snapshot
         // computes it per match). The window rate is the fallback for a live
         // season, which has no season-long hit-rate yet.
         metric: p => defconRateFor(p),
-        display: p => `${defconRateFor(p).toFixed(0)}%`,
+        fmt: v => `${v.toFixed(0)}%`,
+        display(p) { return this.fmt(this.metric(p)); },
         why: p => {
             const w = windowStats(p);
             if (p.defcon_hit_rate !== null && p.defcon_hit_rate !== undefined && p.defcon_eligible_apps) {
@@ -4074,10 +4159,12 @@ const DRAFT_PANELS = [
         id: 'market',
         title: 'תנועת שוק',
         subtitle: 'למי נכנסות העברות במחזור הזה',
+        valueLabel: 'העברות נטו במחזור',
         icon: '🔄',
         accent: '#0284c7',
         metric: p => p.net_transfers_event,
-        display: p => `${p.net_transfers_event > 0 ? '+' : ''}${p.net_transfers_event.toLocaleString()}`,
+        fmt: v => `${v > 0 ? '+' : ''}${Math.round(v).toLocaleString()}`,
+        display(p) { return this.fmt(this.metric(p)); },
         why: p => `${(p.transfers_in_event || 0).toLocaleString()} נכנס · ${(p.transfers_out_event || 0).toLocaleString()} יצא`,
         eligible: p => p.net_transfers_event > 0,
         rank: (a, b) => b.net_transfers_event - a.net_transfers_event,
@@ -4090,10 +4177,12 @@ const DRAFT_PANELS = [
         id: 'underlying',
         title: 'המספרים מתחת לפני השטח',
         subtitle: 'מייצרים יותר ממה שהמירו',
+        valueLabel: 'xGI ל-90 דקות',
         icon: '📈',
         accent: '#d97706',
         metric: p => parseFloat(p.xGI_per90) || 0,
-        display: p => (parseFloat(p.xGI_per90) || 0).toFixed(2),
+        fmt: v => v.toFixed(2),
+        display(p) { return this.fmt(this.metric(p)); },
         why: p => `פער המרה ${p.xDiff.toFixed(1)} — צפוי לתקן`,
         eligible: p => (parseFloat(p.xGI_per90) || 0) > 0.35 && p.xDiff < -1 &&
             windowStats(p).matches >= windowMinMatches(),
@@ -4104,10 +4193,17 @@ const DRAFT_PANELS = [
         id: 'setpiece',
         title: 'בעלי כדורים נייחים',
         subtitle: 'פנדלים וקרנות = נקודות חוזרות',
+        valueLabel: 'ציון דראפט',
         icon: '🎯',
         accent: '#be185d',
         metric: p => p.draft_score,
-        display: p => `#${setPieceOrder(p)}`,
+        // Was `#${setPieceOrder(p)}` — the eligibility rule already demands an
+        // order of 1 or 2, so the headline figure was "#1" on nearly every row
+        // while the ordering came from draft_score: a number that never varied
+        // and did not explain the ranking beside it. The duties themselves are
+        // the point, and the why line spells them out one by one.
+        fmt: v => v.toFixed(1),
+        display(p) { return this.fmt(this.metric(p) || 0); },
         why: p => {
             const bits = [];
             if (p.set_piece_priority.penalty <= 2) bits.push(`פנדל #${p.set_piece_priority.penalty}`);
@@ -4119,6 +4215,54 @@ const DRAFT_PANELS = [
         rank: (a, b) => b.draft_score - a.draft_score
     }
 ];
+
+/**
+ * The same top-20-in-position median, for a board panel's own metric. Measured
+ * against every player at that position — not against the free agents the board
+ * draws from — because the question the chip answers is "how does he compare to
+ * an elite player at his position", and that bar does not move when someone
+ * else's roster fills up.
+ */
+let _panelBenchCache = { key: null, values: new Map() };
+function panelBenchmark(panel, position) {
+    if (!position) return null;
+    // trendWindow is in the key because two panels measure inside the window.
+    const key = `${state.currentDataSource}:${state.trendKey}:${state.trendWindow}`;
+    if (_panelBenchCache.key !== key) _panelBenchCache = { key, values: new Map() };
+    const cacheKey = `${panel.id}:${position}`;
+    if (_panelBenchCache.values.has(cacheKey)) return _panelBenchCache.values.get(cacheKey);
+
+    const players = (state.allPlayersData[state.currentDataSource] || {}).processed || [];
+    const values = [];
+    for (const p of players) {
+        if (p.position_name !== position || (p.minutes || 0) < BENCH_MIN_MINUTES) continue;
+        let v = null;
+        try { v = panel.metric(p); } catch { v = null; }
+        if (typeof v === 'number' && isFinite(v)) values.push(v);
+    }
+    const out = benchmarkMedian(values);
+    _panelBenchCache.values.set(cacheKey, out);
+    return out;
+}
+
+/** "פי 1.6 מטופ-20" under a board figure, or nothing when there is no bar. */
+function benchChipHtml(panel, p) {
+    if (panel.noBenchmark) return '';
+    const bench = panelBenchmark(panel, p.position_name);
+    let v = null;
+    try { v = panel.metric(p); } catch { v = null; }
+    if (!(bench > 0) || typeof v !== 'number' || !isFinite(v) || v <= 0) return '';
+    const ratio = v / bench;
+    // Past about fivefold the elite median it has stopped being a comparison and
+    // started being a sign that the metric has no meaningful bar.
+    if (!isFinite(ratio) || ratio <= 0 || ratio > 5) return '';
+    const label = POSITION_LABELS[p.position_name] || p.position_name;
+    // "מהעילית", not "מטופ-20": a trailing hyphen-number inside an RTL string
+    // sitting in an LTR value column comes out reordered ("20-פי 1.4 מטופ").
+    // The scope bar defines the word once, and the tooltip gives the figure.
+    return `<em class="db-bench" title="חציון 20 ה${label} הטובים במדד הזה: ${panel.fmt(bench)}"
+        >פי ${ratio.toFixed(1)} מהעילית</em>`;
+}
 
 /** Best set-piece duty a player holds; 99 means he takes none of them. */
 function setPieceOrder(p) {
@@ -4225,11 +4369,16 @@ function renderDraftBoard() {
                     <span class="db-why">${escapeHtml(panel.why(p))}</span>
                 </span>
                 ${miniSparkHtml(p.id, 'pts')}
-                <span class="db-value">${escapeHtml(panel.display(p))}</span>
+                <span class="db-value">${escapeHtml(panel.display(p))}
+                    ${benchChipHtml(panel, p)}</span>
             </li>`).join('');
 
+        // The figure on each row means nothing on its own — 67% and +2.80 and #1
+        // all look like "the number". One caption over the value column names it
+        // once per card, which is cheaper to read than repeating it per row.
         const body = picks.length
-            ? `<ul class="db-list">${rows}</ul>
+            ? `<p class="db-metric-label">${escapeHtml(panel.valueLabel)}</p>
+               <ul class="db-list">${rows}</ul>
                <button type="button" class="db-more" onclick="openLeaderboard('${panel.id}')">
                    כל ה-20 <span aria-hidden="true">←</span>
                </button>`
@@ -4260,6 +4409,9 @@ function renderDraftBoard() {
         <div class="db-bar">
             <h2 class="db-heading"><span class="db-heading-icon">🎯</span>למי כדאי לקחת</h2>
             <span class="db-scope">${scope}</span>
+            <span class="db-legend" title="לכל מדד נמצא חציון 20 השחקנים הטובים באותה עמדה, והמספר האפור הוא היחס אליו. חציון ולא ממוצע, כדי ששחקן קיצוני אחד לא יזיז את הרף">
+                עילית = חציון 20 הטובים בעמדה
+            </span>
         </div>
         <div class="db-grid">${cards}</div>`;
 }
@@ -4316,7 +4468,7 @@ function openLeaderboard(panelId) {
         ${picks.length ? `<div class="lb-scroll"><table class="lb-table">
             <thead><tr>
                 <th>#</th><th>שחקן</th><th>עמדה</th><th>קבוצה</th>
-                <th>קבוצת דראפט</th><th>${panel.title}</th><th>למה</th><th>סיגנל</th>
+                <th>קבוצת דראפט</th><th>${escapeHtml(panel.valueLabel)}</th><th>למה</th><th>סיגנל</th>
             </tr></thead>
             <tbody>${rows}</tbody>
         </table></div>` : `<p class="db-empty">${panel.emptyNote || 'אין מועמדים לפי הכלל הזה'}</p>`}

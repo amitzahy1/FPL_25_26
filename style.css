@@ -958,7 +958,6 @@ tbody tr:last-child td {
 .db-bar {
     display: flex;
     align-items: baseline;
-    justify-content: space-between;
     gap: 14px;
     flex-wrap: wrap;
     margin-bottom: 12px;
@@ -992,6 +991,20 @@ tbody tr:last-child td {
     font-size: 12px;
     font-weight: 600;
     color: #94a3b8;
+    /* Pushed to the end so it and the legend read as one cluster opposite the
+       heading, instead of space-between spreading three items across the bar. */
+    margin-inline-start: auto;
+}
+
+/* The word "עילית" is defined once, here, rather than in every grey chip. */
+.db-legend {
+    padding: 2px 9px;
+    border-radius: 100px;
+    background: #f1f5f9;
+    font-size: 11px;
+    font-weight: 700;
+    color: #94a3b8;
+    cursor: help;
 }
 
 /* Fixed column counts, not auto-fill. With six panels, auto-fill produced five
@@ -1080,6 +1093,19 @@ tbody tr:last-child td {
     line-height: 1.35;
 }
 
+/* Names the figure in the value column — "67%" on its own could be a hit rate,
+   an ownership share or a chance of playing. Sits at the row end, over the
+   column it describes, in the accent colour so the pairing is unmistakable. */
+.db-metric-label {
+    margin: 0;
+    padding: 0 0 3px;
+    text-align: end;
+    font-size: 9.5px;
+    font-weight: 800;
+    letter-spacing: .01em;
+    color: color-mix(in srgb, var(--accent) 62%, #64748b);
+}
+
 .db-list {
     list-style: none;
     margin: 0;
@@ -1150,11 +1176,26 @@ tbody tr:last-child td {
    moves it to the far side — "+2.80" rendered as "2.80+". */
 .db-value {
     flex: none;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
     direction: ltr;
     font-size: 13px;
     font-weight: 800;
     color: var(--accent);
     font-variant-numeric: tabular-nums;
+}
+
+/* "how much better", one line under "how much". Grey and small on purpose: the
+   figure above it is the answer, this is the yardstick. */
+.db-bench {
+    direction: rtl;
+    font-size: 9px;
+    font-weight: 700;
+    font-style: normal;
+    color: #94a3b8;
+    white-space: nowrap;
+    letter-spacing: -.1px;
 }
 
 .db-more {
@@ -5633,6 +5674,7 @@ canvas {
 .trend-flat { color: #94a3b8; }
 
 .trend-bars {
+    position: relative;
     display: flex;
     align-items: flex-end;
     justify-content: center;
@@ -5642,6 +5684,34 @@ canvas {
     padding-top: 11px;
     box-sizing: content-box;
 }
+
+/* The top-20-in-position benchmark: one dashed grey line across the bars, at
+   the same scale they are drawn on.
+   Two elements, not one: bar heights are percentages of the *content* box,
+   while `bottom` on an absolute child resolves against the padding box — so the
+   overlay first spans exactly the content area (top = the label padding), and
+   the line is positioned inside it. One element would sit ~30% too low. */
+.trend-bench {
+    position: absolute;
+    inset-inline: -2px;
+    top: 11px;
+    bottom: 0;
+    pointer-events: none;
+}
+
+/* A gradient rather than `border-style: dashed`: dashed borders draw a coarse
+   4px pattern that reads as a divider, and this has to read as a reference. */
+.trend-bench::before {
+    content: '';
+    position: absolute;
+    inset-inline: 0;
+    bottom: var(--bench, 0%);
+    height: 1px;
+    background-image: repeating-linear-gradient(to right,
+        #ccd6e4 0 2px, transparent 2px 7px);
+}
+
+.trend-bars.is-mini .trend-bench { top: 0; }
 
 .trend-bars.is-large { height: 34px; gap: 4px; }
 .trend-bars.is-mini { height: 15px; gap: 2px; padding-top: 0; }
@@ -5670,6 +5740,10 @@ canvas {
     direction: ltr;
     font-variant-numeric: tabular-nums;
 }
+
+/* The benchmark line passes behind these figures; the halo keeps them readable
+   where it crosses without putting a box around every number. */
+.trend-bar b { text-shadow: 0 0 2px #fff, 0 0 3px #fff; }
 
 .trend-bar.is-last b { color: #1d4ed8; }
 .trend-bars.is-large .trend-bar { width: 13px; }
@@ -5886,7 +5960,10 @@ canvas {
 
 .sum-unit { grid-area: unit; font-size: 10.5px; color: #94a3b8; font-weight: 600; }
 
-.sum-row .trend-bars { grid-area: bars; justify-content: flex-end; }
+/* max-content, not just justify-content: the benchmark line is an overlay on
+   this box, so a box wider than its bars drew the line across the empty half of
+   the row. Shrink to the bars, then park them at the row's end. */
+.sum-row .trend-bars { grid-area: bars; width: max-content; margin-inline-start: auto; }
 
 .detail-next { margin-top: 9px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .detail-next-label { font-size: 11.5px; font-weight: 800; color: #64748b; }
@@ -6223,9 +6300,16 @@ canvas {
 
 /* --- the three stat boxes --- */
 
+/* auto-fit + 1fr, not `repeat(3, 1fr)`: the section is the widest column of the
+   expanded row, so three fixed tracks left a third of it empty on a wide screen
+   and three squeezed tracks on a narrow one. auto-fit spends whatever width the
+   row has, drops to two boxes then one as it runs out, and — because grid
+   tracks start at the inline start — what is left over stays on the far side,
+   keeping the boxes flush right in RTL. */
 .detail-boxes {
     display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    align-content: start;
     gap: 10px;
 }
 
@@ -6301,8 +6385,11 @@ canvas {
 /* Every block of numbers in the expanded row states the span it covers. */
 .h4-note { font-weight: 600; font-size: 10.5px; color: #94a3b8; }
 .boxes-heading { margin: 0 0 8px !important; }
-.detail-boxes { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-start; }
-.detail-boxes .boxes-heading { flex: 0 0 100%; }
+/* The heading is a grid item too; without this it takes a single track and the
+   boxes reflow around it. (This block used to re-declare .detail-boxes as a
+   flex row, which silently undid the grid above and let every box shrink to its
+   own content width — the source of the empty half-row on wide screens.) */
+.detail-boxes .boxes-heading { grid-column: 1 / -1; }
 
 /* ==========================================================================
    COLUMN PRESETS + a scrollbar you can actually see
