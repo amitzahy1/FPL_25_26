@@ -113,6 +113,69 @@ try {
     check(board.emptyWhys === 0, 'no pick has a blank reason line');
     check(board.heading.includes('למי כדאי לקחת'), 'board names the question it answers');
 
+    // THE POST-DRAFT PATH.
+    //
+    // This test blocks the network, so the draft rosters never load and
+    // `ownedElementIds` is always empty — which means every assertion above runs
+    // against the pre-draft branch only. The whole post-draft code path was
+    // untested in a browser, and that is precisely where the value panel had
+    // become impossible to satisfy: replacement level is the best free agent, so
+    // in a free-agent pool every VORP is <= 0, and the panel gated on `vorp > 0`.
+    // It rendered nothing, in the one situation the board exists for.
+    //
+    // Injecting rosters reproduces that branch without the network — but only if
+    // computeDraftMetrics is re-run too. Ownership is an *input* to VORP: with
+    // rosters known, replacement level becomes the best free agent, which is the
+    // step that drives every free agent's VORP to <= 0. Setting ownedElementIds
+    // alone leaves the pre-draft baseline in place, and this assertion then passes
+    // against the very gate it exists to catch. loadDraftDataInBackground does the
+    // same two calls in the same order (script.js:5739).
+    const postDraft = await page.evaluate(() => {
+        const all = state.allPlayersData[state.currentDataSource].processed;
+        // Take the strongest third by draft rank, so the free-agent pool is the
+        // leftovers — the realistic shape, and the one that broke.
+        const owned = [...all].sort((a, b) => b.draft_score - a.draft_score)
+            .slice(0, Math.floor(all.length / 3)).map(p => p.id);
+        state.draft.ownedElementIds = new Set(owned);
+        computeDraftMetrics(all);
+        invalidateSignals();
+        renderDraftBoard();
+
+        const cards = [...document.querySelectorAll('#draftBoard .db-card')];
+        const ids = cards.map(c => (c.querySelector('.db-more') || {}).outerHTML || '')
+            .join(' ').match(/openLeaderboard\('([a-z]+)'/g) || [];
+        return {
+            owned: owned.length,
+            pool: draftBoardPool().players.length,
+            cards: cards.length,
+            rows: document.querySelectorAll('#draftBoard .db-row').length,
+            emptyWhys: [...document.querySelectorAll('#draftBoard .db-why')]
+                .filter(e => !e.textContent.trim()).length,
+            panelsWithPicks: ids.length,
+            // The panel this exists to protect.
+            valuePicks: panelPicks(DRAFT_PANELS.find(p => p.id === 'value'),
+                draftBoardPool().players, 3).length,
+            scope: (document.querySelector('#draftBoard .db-scope') || {}).textContent || ''
+        };
+    });
+    check(postDraft.pool > 0 && postDraft.pool < postDraft.owned + postDraft.pool,
+        `rosters injected: ${postDraft.owned} owned, ${postDraft.pool} free agents`);
+    check(postDraft.scope.includes('חופשיים'),
+        'board says it is showing free agents once rosters exist');
+    check(postDraft.valuePicks > 0,
+        `the value panel still recommends somebody post-draft (${postDraft.valuePicks} picks)`);
+    check(postDraft.panelsWithPicks >= 4,
+        `${postDraft.panelsWithPicks} panels still have picks against a free-agent pool`);
+    check(postDraft.emptyWhys === 0, 'no post-draft pick has a blank reason line');
+
+    // Put it back, so the later checks see the state they expect.
+    await page.evaluate(() => {
+        state.draft.ownedElementIds = new Set();
+        computeDraftMetrics(state.allPlayersData[state.currentDataSource].processed);
+        invalidateSignals();
+        renderDraftBoard();
+    });
+
     // Each panel's top-20 must open, fill, and close.
     const modal = await page.evaluate(() => {
         const btn = document.querySelector('#draftBoard .db-more');

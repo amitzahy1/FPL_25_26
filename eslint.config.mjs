@@ -66,7 +66,10 @@ export default [
                 switchDraftTab: 'readonly', showTab: 'readonly', setRowMode: 'readonly',
                 sortTable: 'readonly', setTrendWindow: 'readonly',
                 switchMainView: 'readonly', setChartPosition: 'readonly',
-                openSettings: 'readonly'
+                openSettings: 'readonly', renderDraftBoard: 'readonly',
+                draftBoardPool: 'readonly', panelPicks: 'readonly',
+                DRAFT_PANELS: 'readonly', invalidateSignals: 'readonly',
+                computeDraftMetrics: 'readonly'
             }
         }
     },
