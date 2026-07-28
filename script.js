@@ -2789,17 +2789,17 @@ function createPlayerRowHtml(player, index) {
         <td>${player.team_name}</td>
         <td class="${draftTeamClass}" title="${draftTeamDisplay}">${draftTeamDisplay}</td>
         <td class="bold-cell ${getPercentileClass(player.draft_score, displayedValues.draft_score)}">${player.draft_score.toFixed(1)}</td>
+        <td class="draft-rank-cell ${player.draft_rank
+            // reversed: #1 is the best draft rank, so low is good here.
+            ? getPercentileClass(player.draft_rank, displayedValues.draft_rank, true) : ''}">${player.draft_rank
+        ? `<b>#${player.draft_rank}</b>`
+        : '<span class="rank-none" title="לא מדורג ב-FPL Draft">–</span>'}</td>
         <td class="proj-cell ${Number.isFinite(player.points_next_5)
             ? getPercentileClass(player.points_next_5, displayedValues.points_next_5) : ''}"
             title="נקודות צפויות ב-5 המחזורים הבאים">${
         Number.isFinite(player.points_next_5)
             ? `<b>${player.points_next_5.toFixed(1)}</b>`
             : '<span class="rank-none">–</span>'}</td>
-        <td class="draft-rank-cell ${player.draft_rank
-            // reversed: #1 is the best draft rank, so low is good here.
-            ? getPercentileClass(player.draft_rank, displayedValues.draft_rank, true) : ''}">${player.draft_rank
-        ? `<b>#${player.draft_rank}</b>`
-        : '<span class="rank-none" title="לא מדורג ב-FPL Draft">–</span>'}</td>
         <td class="bold-cell" data-tooltip="${config.columnTooltips.vorp}" style="color:${player.vorp > 0 ? '#059669' : player.vorp < 0 ? '#dc2626' : '#94a3b8'};">${formatVorp(player.vorp)}</td>
         <td class="${getPercentileClass(player.total_points, displayedValues.total_points)}">${player.total_points}</td>
         <td class="${getPercentileClass(player.points_per_game_90, displayedValues.points_per_game_90)}">${player.points_per_game_90.toFixed(1)}</td>
@@ -4735,16 +4735,21 @@ const DRAFT_PANELS = [
     {
         // Far right, because it is the summary the other five decompose into.
         id: 'composite',
-        title: 'השקלול',
-        subtitle: 'חוזק כללי מול העילית בעמדה',
-        unit: 'שקלול',
+        title: 'הכי חזקים בסך הכל',
+        subtitle: 'ציון משוקלל מול העילית בעמדה',
+        unit: 'חוזק',
         icon: '🧮',
         accent: '#4f46e5',
-        // Three components, not four plus an appearance count: five columns in a
-        // 300px card ran the headers into each other. The appearance count is
-        // already inside the דקות component, and the full breakdown — including
-        // התקפה and the weight each carries — is in the top-20 modal.
-        cols: ['partOutput', 'partMinutes', 'partDefence'],
+        // The same three supporting columns as every other card, on purpose.
+        //
+        // This card first showed its own components — תפוקה% 136, דקות% 132,
+        // הגנה% — and they were the least readable thing on the board: three
+        // percentages of a baseline the column heading never names, plus an em
+        // dash on every forward, because a forward has no DEFCON bar to be a
+        // percentage of. A score is allowed to be abstract; the numbers next to it
+        // have to be ones you already know. The breakdown is in the top-20 modal,
+        // which has the width to label all four and say which is the weak one.
+        cols: ['ppg', 'apps', 'fpl'],
         modalCols: ['partOutput', 'partMinutes', 'partAttack', 'partDefence', 'ppg', 'apps', 'fpl'],
         noBenchmark: true,
         metric: p => compositeOf(p),

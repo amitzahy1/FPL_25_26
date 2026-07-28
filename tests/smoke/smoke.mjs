@@ -191,6 +191,36 @@ try {
         renderDraftBoard();
     });
 
+    // Column *order*, not just column count.
+    //
+    // The structural check counts headers against cells, which passed while the
+    // draft-rank and projection cells were emitted in the opposite order to their
+    // headers — so the table showed a rank of "28.2" and a projection of "–", and
+    // it read as random colouring rather than as swapped columns. This walks a few
+    // headers and asserts the cell underneath actually belongs to them.
+    const alignment = await page.evaluate(() => {
+        const heads = [...document.querySelectorAll('#playersTable thead th')];
+        const row = document.querySelector('#playersTable tbody tr.player-row');
+        const p = state.displayedData[0];
+        const at = key => {
+            const i = heads.findIndex(h => h.dataset.sort === key);
+            return i < 0 ? null : (row.children[i] || {}).textContent?.trim();
+        };
+        const checks = [
+            ['draft_rank', p.draft_rank ? `#${p.draft_rank}` : '–'],
+            ['points_next_5', Number.isFinite(p.points_next_5) ? p.points_next_5.toFixed(1) : '–'],
+            ['total_points', String(p.total_points)],
+            ['minutes', String(p.minutes)],
+            ['web_name', null]
+        ];
+        return checks.filter(([key, want]) => want !== null)
+            .map(([key, want]) => ({ key, want, got: at(key) }))
+            .filter(c => c.got !== c.want);
+    });
+    check(alignment.length === 0,
+        `every checked column holds its own value${alignment.length
+            ? ': ' + alignment.map(c => `${c.key} wanted ${c.want} got ${c.got}`).join(', ') : ''}`);
+
     // Each panel's top-20 must open, fill, and close.
     const modal = await page.evaluate(() => {
         const btn = document.querySelector('#draftBoard .db-more');
