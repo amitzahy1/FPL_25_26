@@ -26,9 +26,26 @@ Status as of the 2026/27 pre-season overhaul. Items are ordered by value, not by
 - [x] All four unused Draft endpoints wired: `element-status`,
       `entry/{id}/history`, `transactions`, `draft/{league}/choices`
 - [x] xGC and `ep_next` surfaced (in the expanded row's stat boxes, which reads
-      better than two more columns in a 34-column table)
+      better than two more columns in an already wide table)
 - [x] Scouting view: signal verdicts, per-gameweek trends, expandable match log
 - [x] Cross-season ownership join on `code` rather than element id
+- [x] Draft board restored and made the page's lead block, replacing the six KPI
+      trivia cards. The cards answered questions the table already answers by
+      sorting a column; the board answers "who should I take, and why", with a
+      stated reason per pick and a top-20 behind each panel. `בטוחים בהרכב`
+      swapped for a market-movement panel that explains itself until the first
+      gameweek closes.
+- [x] Signal filter, so the most actionable column is filterable and not only
+      sortable
+- [x] Season selector moved to the page header — which season is on screen
+      decides what every number means, so it does not belong in the table's
+      toolbar. Toolbar collapsed to one row with a single button family.
+- [x] `זמינות` column dropped: a green ✓ on every row whenever the squad was fit.
+      The two informative cases already show as a badge on the שחקן cell.
+- [x] Charts view reworked — four position matrices collapsed to one with a
+      position toggle, two team charts to one quadrant, price-vs-points and the
+      ICT stack dropped, and the per-gameweek history finally plotted (trend,
+      opportunity board, positional VORP depth, minutes security)
 
 ## Post-draft
 
@@ -46,9 +63,33 @@ Status as of the 2026/27 pre-season overhaul. Items are ordered by value, not by
 
 ## Engineering
 
-- [x] CI gate on every push: ESLint, 104 unit tests, structural checks, and a
+- [x] CI gate on every push: ESLint, 132 unit tests, 8 structural checks, and a
       headless-browser smoke test that loads the page with the API and every
       proxy blocked
+- [x] **Proxy worker was an open proxy.** The whitelist tested
+      `endpoint.startsWith('https://fantasy.premierleague.com')`, which also
+      accepts `https://fantasy.premierleague.com.attacker.example/…` and
+      `https://fantasy.premierleague.com@attacker.example/…` — anyone could route
+      arbitrary traffic through the Worker on its IP and quota. Now matched on the
+      parsed hostname, https-only, GET-only, with the upstream's `Set-Cookie` and
+      CORS headers no longer forwarded and upstream failures returned as a 502
+      *with* CORS headers (a bare throw reached the page as a CORS error, so the
+      client's proxy fallback could not tell an outage from a blocked request).
+      Ten tests cover it.
+- [x] `הגדרות` did nothing on the draft tab — the modal lived inside
+      `#playersTabContent`, and a `display:none` parent hides the modal with it,
+      while its ⚙️ button is in the always-visible page header. All four modals
+      moved to page level; a structural check measures `<div>` nesting depth and
+      fails if one moves back inside a tab.
+- [x] `דקות` had three different defaults (120 in the markup, 30 on איפוס, 0 on a
+      chip), so איפוס silently produced a different table from a fresh page load.
+      One named constant each for the page default and the quick-filter override,
+      with a structural check that the markup and the constant agree.
+- [x] Deleted three unreachable smart filters (`nailed_starters`, `defcon_kings`,
+      `best_value`) — defined but with no chip, so nothing could call them. A
+      structural check now enforces chip↔rule parity in both directions; five
+      chips were once no-ops, and then three rules had no chip.
+- [x] איפוס now clears the active chip's highlight, which it left behind
 - [x] Git history rewrite — 195 MB to 2.2 MB, personal email scrubbed from all
       author metadata, HEAD tree byte-identical
 - [x] Mobile layout: zero horizontal overflow at 390px, collapsible filters

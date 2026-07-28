@@ -93,6 +93,25 @@ local_proxy.js                    dev-only CORS proxy
 `script.js` is still one large file in a single global scope; splitting it into
 ES modules is the top engineering item in [BACKLOG.md](BACKLOG.md).
 
+## The players page
+
+Three blocks, in reading order:
+
+1. **`למי כדאי לקחת`** — six panels, each answering one draft question by an
+   explicit rule, with the reason printed under every pick: VORP, form over the
+   selected window, DEFCON hit-rate, market movement, underlying numbers, and
+   set-piece duty. The pool is only players you can actually get — free agents
+   once the league's rosters have loaded, everyone before the draft — and never
+   anyone injured or suspended. Each panel opens a top 20.
+   Defined by `DRAFT_PANELS` in `script.js`; a new question is one entry there.
+2. **The table** — sortable and filterable, including by `סיגנל`, the one-verdict
+   column. Twelve columns are optional and remembered per browser.
+3. **`גרפים`** — eight cards, ordered by how directly each answers a decision,
+   defined by `CHART_SPECS`. They read the filtered set *before* the "top 20"
+   slice, and a card with nothing to plot hides itself rather than drawing an
+   empty axis. Quadrant colouring follows `goodDirection`, so green means good
+   even on the axes where lower is better (xGC, goals conceded).
+
 ## Notes
 
 - **DEFCON** (defensive contribution): defenders need 10 CBIT per match,
