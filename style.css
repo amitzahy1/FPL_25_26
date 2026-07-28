@@ -5600,33 +5600,34 @@ canvas {
     color: #334155;
 }
 
-/* --- the first three columns stay put while the rest scrolls ---
+/* --- the first two columns stay put while the rest scrolls ---
    Every selector here uses child combinators. The expanded row nests a whole
    <table class="match-log"> inside #playersTable, and descendant selectors
-   were making its first three headers sticky, blue and 168px wide. */
+   were making its first headers sticky, blue and 168px wide.
+
+   Two columns, not three: the internal-score rank column between the checkbox
+   and the name is gone, and these rules address columns by position — leaving
+   them alone would have handed the name cell the rank cell's 42px. */
 #playersTable > thead > tr > th:nth-child(1), #playersTable > tbody > tr.player-row > td:nth-child(1),
-#playersTable > thead > tr > th:nth-child(2), #playersTable > tbody > tr.player-row > td:nth-child(2),
-#playersTable > thead > tr > th:nth-child(3), #playersTable > tbody > tr.player-row > td:nth-child(3) {
+#playersTable > thead > tr > th:nth-child(2), #playersTable > tbody > tr.player-row > td:nth-child(2) {
     position: sticky;
     z-index: 5;
     background: #fff;
 }
 
 #playersTable > thead > tr > th:nth-child(1), #playersTable > tbody > tr.player-row > td:nth-child(1) { inset-inline-start: 0; width: 40px; min-width: 40px; }
-#playersTable > thead > tr > th:nth-child(2), #playersTable > tbody > tr.player-row > td:nth-child(2) { inset-inline-start: 40px; width: 42px; min-width: 42px; }
-#playersTable > thead > tr > th:nth-child(3), #playersTable > tbody > tr.player-row > td:nth-child(3) {
-    inset-inline-start: 82px;
+#playersTable > thead > tr > th:nth-child(2), #playersTable > tbody > tr.player-row > td:nth-child(2) {
+    inset-inline-start: 40px;
     min-width: 168px;
     box-shadow: 1px 0 0 #e2e8f0;
 }
 
 /* Headers must outrank the sticky body cells they scroll over. */
 #playersTable > thead > tr > th:nth-child(1),
-#playersTable > thead > tr > th:nth-child(2),
-#playersTable > thead > tr > th:nth-child(3) { z-index: 12; background: var(--primary-color); }
+#playersTable > thead > tr > th:nth-child(2) { z-index: 12; background: var(--primary-color); }
 
-#playersTable > tbody > tr.player-row:hover > td:nth-child(-n+3) { background: #f8fbff; }
-#playersTable > tbody > tr.player-row.is-open > td:nth-child(-n+3) { background: #eff6ff; }
+#playersTable > tbody > tr.player-row:hover > td:nth-child(-n+2) { background: #f8fbff; }
+#playersTable > tbody > tr.player-row.is-open > td:nth-child(-n+2) { background: #eff6ff; }
 
 /* The detail row's own table must not inherit the main table's header chrome. */
 #playersTable .match-log th {
@@ -6045,13 +6046,11 @@ canvas {
     vertical-align: middle;
 }
 
-/* A bigger box needs a bigger cell, and the sticky offsets must follow. */
+/* A bigger box needs a bigger cell, and the sticky offset must follow. */
 #playersTable > thead > tr > th:nth-child(1),
 #playersTable > tbody > tr.player-row > td:nth-child(1) { width: 48px; min-width: 48px; }
 #playersTable > thead > tr > th:nth-child(2),
 #playersTable > tbody > tr.player-row > td:nth-child(2) { inset-inline-start: 48px; }
-#playersTable > thead > tr > th:nth-child(3),
-#playersTable > tbody > tr.player-row > td:nth-child(3) { inset-inline-start: 90px; }
 
 /* Trend cell: figure on top, shape in the middle, the comparison in words. */
 .trend-cell { min-width: 112px; padding: 4px 8px !important; text-align: center; }

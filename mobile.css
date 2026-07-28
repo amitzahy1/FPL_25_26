@@ -334,20 +334,14 @@
     /* Scoped to .player-row: the expanded row's single colspan cell is also a
        `td:nth-child(1)`, so an unscoped `display: none` hid the entire match log
        and every stat box on mobile. */
+    /* The checkbox is the only column worth hiding on a phone; the rank column
+       that used to sit beside it is gone, so the name is now the second. */
     #playersTable > thead > tr > th:nth-child(1),
     #playersTable > tbody > tr.player-row > td:nth-child(1) { display: none; }
 
     #playersTable > thead > tr > th:nth-child(2),
     #playersTable > tbody > tr.player-row > td:nth-child(2) {
         inset-inline-start: 0;
-        width: 28px;
-        min-width: 28px;
-        padding-inline: 2px;
-    }
-
-    #playersTable > thead > tr > th:nth-child(3),
-    #playersTable > tbody > tr.player-row > td:nth-child(3) {
-        inset-inline-start: 28px;
         min-width: 124px;
         max-width: 124px;
     }

@@ -115,13 +115,27 @@ describe('player row renders', () => {
             'a row with a different cell count than the header shifts every column');
     });
 
-    test('shows the league-wide draft rank, not the row number', () => {
-        const players = [makePlayer({ rank: 42 })];
+    test('shows FPL Draft\'s own ranking, and only that one', () => {
+        // There used to be two columns called "דירוג": this app's own place-by-
+        // internal-score, and FPL Draft's published pre-draft rank. Two rankings
+        // side by side under near-identical names was unreadable, and the
+        // internal one was derived from draft_score — the composite the value
+        // index exists to replace. Only the external ranking survives.
+        const players = [makePlayer({ rank: 42, draft_rank: 7 })];
         const { fns, state } = load(players);
         state.percentileBase = fns.buildPercentileBase(players);
-        // Rendered as the 1st row, but the player is 42nd in the draft pool.
         const html = fns.createPlayerRowHtml(players[0], 0);
-        assert.match(html, /class="rank-cell"[^>]*>42</);
+        assert.match(html, /class="rank-badge rank-elite">#7</, 'the FPL draft rank is shown');
+        assert.doesNotMatch(html, /class="rank-cell"/, 'the internal rank column is gone');
+    });
+
+    test('an unranked player says so rather than borrowing a number', () => {
+        const players = [makePlayer({ draft_rank: null })];
+        const { fns, state } = load(players);
+        state.percentileBase = fns.buildPercentileBase(players);
+        const html = fns.createPlayerRowHtml(players[0], 0);
+        assert.match(html, /class="rank-none"/,
+            'academy and departed players have no FPL draft rank at all');
     });
 
     test('marks watched players and carries a verdict', () => {

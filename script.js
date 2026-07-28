@@ -2753,7 +2753,6 @@ function createPlayerRowHtml(player, index) {
         data-player-id="${player.id}" onclick="toggleRowDetail(${player.id}, event)"
         title="לחיצה פותחת את המשחקים האחרונים">
         <td><input type="checkbox" class="player-select" data-player-id="${player.id}" ${isChecked}></td>
-        <td class="rank-cell" title="דירוג במאגר הדראפט כולו, לפי ציון">${player.rank || index + 1}</td>
         <td class="name-cell">
             <div class="player-name-wrapper">
                 <button class="watch-star ${watched ? 'is-on' : ''}" onclick="toggleWatch(${player.id}, event)"
@@ -6430,7 +6429,7 @@ async function _loadDraftDataInBackground() {
             renderDraftBoard();
 
             console.log('✅ Draft data loaded in background:', state.draft.ownedElementIds.size, 'players owned'
-                + (ranked ? ` · דירוג FPL for ${ranked}` : ''));
+                + (ranked ? ` · FPL draft rank for ${ranked}` : ''));
         }
     } catch (error) {
         console.log('Draft data not available:', error.message);
