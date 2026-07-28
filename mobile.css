@@ -307,11 +307,10 @@
 @media (max-width: 768px) {
     .db-grid { grid-template-columns: 1fr !important; gap: 10px !important; }
     .db-card { min-width: 0; }
-    .db-row { min-width: 0; }
+    
     .db-bar { margin-bottom: 10px; }
     .db-heading { font-size: 17px; }
-    .db-name,
-    .db-why { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    
 
     /* Eight columns cannot fit a phone; the modal scrolls sideways instead of
        the page doing it. */

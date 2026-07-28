@@ -302,9 +302,12 @@ describe('trend series', () => {
     test('the fourth trend column follows what the position is scored for', () => {
         const { fns } = load();
         assert.equal(fns.fourthTrendMetric({ element_type: 1 }), 'saves');
+        // DEFCON for every outfield position: a midfielder clearing 12 CBIRT is
+        // paid the same +2 as a defender, and BPS — which sat here — is a number
+        // nobody is paid for at all.
         assert.equal(fns.fourthTrendMetric({ element_type: 2 }), 'dc');
-        assert.equal(fns.fourthTrendMetric({ element_type: 3 }), 'bps');
-        assert.equal(fns.fourthTrendMetric({ element_type: 4 }), 'bps');
+        assert.equal(fns.fourthTrendMetric({ element_type: 3 }), 'dc');
+        assert.equal(fns.fourthTrendMetric({ element_type: 4 }), 'dc');
     });
 });
 

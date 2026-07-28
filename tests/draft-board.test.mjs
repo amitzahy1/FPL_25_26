@@ -340,12 +340,15 @@ describe('panel rules', () => {
 
     test('every panel names the figure it puts in the value column', () => {
         // The card title says what the panel is for ("מכונות DEFCON"); it does not
-        // say what "67%" counts. Both the board caption and the leaderboard's
-        // value column header read this, so a missing one leaves a bare number.
+        // say what "67%" counts. `unit` is the table header over that column, in
+        // the card and in the twenty-deep modal, so a missing one leaves a bare
+        // number under a blank heading.
         for (const p of loadBoard([makePlayer({})]).DRAFT_PANELS) {
-            assert.ok((p.valueLabel || '').trim(), `panel ${p.id} has no valueLabel`);
-            assert.notEqual(p.valueLabel, p.title,
+            assert.ok((p.unit || '').trim(), `panel ${p.id} has no unit`);
+            assert.notEqual(p.unit, p.title,
                 `panel ${p.id} repeats its title instead of naming the metric`);
+            assert.ok(Array.isArray(p.cols) && p.cols.length >= 2,
+                `panel ${p.id} must carry supporting columns — one figure alone cannot be judged`);
         }
     });
 
@@ -385,12 +388,19 @@ describe('panel rules', () => {
             'the 90-minute outlier is below the minutes floor and cannot set the bar');
     });
 
-    test('the market panel stays empty until a gameweek has transfer numbers', () => {
-        const board = loadBoard([makePlayer({ net_transfers_event: 0 })]);
-        const market = panel(board, 'market');
-        assert.equal(board.panelPicks(market, board.draftBoardPool().players, 3).length, 0);
-        assert.ok(market.emptyNote,
-            'a panel that legitimately has nothing must say so; a missing card reads as a bug');
+    test('every card carries a rule, a unit and a way to explain a pick', () => {
+        // The market panel used to live here, and its transfer figures are 0 for
+        // every player until a gameweek closes — a whole card that reads "not yet"
+        // out of six that fit one row. Its numbers are still columns in the table.
+        const board = loadBoard([makePlayer({})]);
+        const ids = board.DRAFT_PANELS.map(p => p.id);
+        assert.equal(ids.length, 6, 'six cards, one row');
+        assert.deepEqual(ids, ['composite', 'bestpick', 'next5', 'value', 'defcon', 'underlying']);
+        for (const p of board.DRAFT_PANELS) {
+            for (const fn of ['metric', 'fmt', 'display', 'why', 'eligible', 'rank']) {
+                assert.equal(typeof p[fn], 'function', `panel ${p.id} is missing ${fn}`);
+            }
+        }
     });
 
     test('the value panel needs a replacement level to compare against', () => {

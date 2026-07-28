@@ -2083,6 +2083,13 @@ const TREND_METRICS = {
         label: 'BPS', agg: 'avg', fmt: v => v.toFixed(0), unit: 'ממוצע',
         read: s => gwNum(s.bps)
     },
+    // Bonus points actually won, which is what BPS is only a proxy for: a player
+    // can lead the BPS table all season and collect nothing if he is never in the
+    // top three of his match.
+    bonus: {
+        label: 'בונוס', agg: 'sum', fmt: v => v.toFixed(0), unit: '',
+        read: s => gwNum(s.bonus)
+    },
     saves: {
         label: 'הצלות', agg: 'avg', fmt: v => v.toFixed(1), unit: 'ממוצע', barFmt: v => v.toFixed(0),
         read: s => gwNum(s.saves)
@@ -2092,8 +2099,11 @@ const TREND_METRICS = {
 /** The fourth trend column depends on what the position is scored for. */
 function fourthTrendMetric(player) {
     if (player.element_type === 1) return 'saves';
-    if (player.element_type === 2) return 'dc';
-    return 'bps';
+    // DEFCON for every outfield position, not only defenders. A midfielder who
+    // clears the 12-CBIRT threshold collects the same +2 a defender does, and BPS
+    // — which used to sit here for midfielders and forwards — is a number nobody
+    // is paid for. Bonus points are shown separately, and those are.
+    return 'dc';
 }
 
 /**
@@ -2597,7 +2607,11 @@ function playerDetailRowHtml(player, colSpan) {
 
     // One labelled line per metric: name, figure, change, shape. The floating
     // unlabelled mini-charts were the part nobody could read.
-    const summary = ['pts', 'ga', 'xgi', 'mins', extraKey]
+    // Minutes came out and bonus went in. Minutes are already in the match log
+    // beside this strip, gameweek by gameweek, and in the season boxes below it —
+    // three copies of the same number, in the one panel with no room to spare.
+    // These five all answer "where do his points come from".
+    const summary = ['pts', 'ga', 'xgi', extraKey, 'bonus']
         .filter((k, i, a) => a.indexOf(k) === i)
         .map(k => {
             const def = TREND_METRICS[k];
@@ -2704,7 +2718,14 @@ function buildPercentileBase(rows) {
         minutes: rows.map(p => p.minutes),
         ict_index_per90: rows.map(p => parseFloat(p.ict_index_per90) || 0),
         bonus_per90: rows.map(p => parseFloat(p.bonus_per90) || 0),
-        clean_sheets_per90: rows.map(p => parseFloat(p.clean_sheets_per90) || 0)
+        clean_sheets_per90: rows.map(p => parseFloat(p.clean_sheets_per90) || 0),
+        // The two newest columns belong in here too. Every other number in the
+        // row is shaded green-to-red by where it falls, so two plain columns read
+        // as "not part of the ranking" — which is exactly the confusion they
+        // caused: the column the position chips sort on looked no different from
+        // an unsorted one.
+        points_next_5: rows.map(p => Number.isFinite(p.points_next_5) ? p.points_next_5 : null),
+        draft_rank: rows.map(p => p.draft_rank || null)
     };
 }
 
@@ -2768,12 +2789,16 @@ function createPlayerRowHtml(player, index) {
         <td>${player.team_name}</td>
         <td class="${draftTeamClass}" title="${draftTeamDisplay}">${draftTeamDisplay}</td>
         <td class="bold-cell ${getPercentileClass(player.draft_score, displayedValues.draft_score)}">${player.draft_score.toFixed(1)}</td>
-        <td class="proj-cell" title="נקודות צפויות ב-5 המחזורים הבאים">${
+        <td class="proj-cell ${Number.isFinite(player.points_next_5)
+            ? getPercentileClass(player.points_next_5, displayedValues.points_next_5) : ''}"
+            title="נקודות צפויות ב-5 המחזורים הבאים">${
         Number.isFinite(player.points_next_5)
             ? `<b>${player.points_next_5.toFixed(1)}</b>`
             : '<span class="rank-none">–</span>'}</td>
-        <td class="draft-rank-cell">${player.draft_rank
-        ? `<span class="rank-badge rank-${player.draft_rank <= 20 ? 'elite' : player.draft_rank <= 60 ? 'good' : 'plain'}">#${player.draft_rank}</span>`
+        <td class="draft-rank-cell ${player.draft_rank
+            // reversed: #1 is the best draft rank, so low is good here.
+            ? getPercentileClass(player.draft_rank, displayedValues.draft_rank, true) : ''}">${player.draft_rank
+        ? `<b>#${player.draft_rank}</b>`
         : '<span class="rank-none" title="לא מדורג ב-FPL Draft">–</span>'}</td>
         <td class="bold-cell" data-tooltip="${config.columnTooltips.vorp}" style="color:${player.vorp > 0 ? '#059669' : player.vorp < 0 ? '#dc2626' : '#94a3b8'};">${formatVorp(player.vorp)}</td>
         <td class="${getPercentileClass(player.total_points, displayedValues.total_points)}">${player.total_points}</td>
@@ -4523,54 +4548,283 @@ function applyValueIndex(players) {
     return list.length;
 }
 
+/* ------------------------- the weighted composite -------------------------- */
+
+/**
+ * One score per player, from how he compares to the *elite* at his position on
+ * several separate things at once.
+ *
+ * This is not a better ranking than the value index and does not pretend to be —
+ * the backtest settled that question. It answers a different one: who is strong
+ * across the board rather than who scores most. A striker can top the value
+ * index on goals alone; this asks whether the minutes, the underlying numbers
+ * and the defensive work are there too.
+ *
+ * Each component is the player's figure divided by the median of the twenty best
+ * at his position on that same figure, capped at 1.5 — past half again better
+ * than elite, more is not more informative. The weights are stated below, and
+ * every component is printed beside the score, because a single number nobody
+ * can decompose is exactly what this file spent the day removing.
+ *
+ * The components are deliberately near-independent. Points per match is *not*
+ * broken out again as bonus or DEFCON points: those are what produced it, and
+ * weighting them separately would count the same points twice — the mistake that
+ * makes draft_score unusable.
+ */
+const COMPOSITE_PARTS = [
+    {
+        key: 'output', label: 'תפוקה', weight: 0.40,
+        title: 'נקודות למשחק מול חציון 20 הטובים בעמדה',
+        value: p => seasonPointsPerApp(p)
+    },
+    {
+        key: 'minutes', label: 'דקות', weight: 0.25,
+        title: 'דקות לכל הופעה — הרמה שווה כלום אם הוא לא על הדשא',
+        value: p => {
+            const apps = appearancesOf(p);
+            return apps ? (p.minutes || 0) / apps : null;
+        }
+    },
+    {
+        key: 'attack', label: 'התקפה', weight: 0.20,
+        title: 'xGI ל-90 דקות — איכות ההזדמנויות, לפני מה שנכנס בפועל',
+        value: p => parseFloat(p.xGI_per90) || 0
+    },
+    {
+        key: 'defence', label: 'הגנה', weight: 0.15,
+        title: 'אחוז המשחקים שבהם עבר את סף ה-DEFCON. שוער לא נמדד בזה כלל',
+        value: p => defconRateFor(p)
+    }
+];
+
+const COMPOSITE_CAP = 1.5;
+
+/** Elite median for one composite component at one position. */
+let _partBenchCache = { key: null, values: new Map() };
+function partBenchmark(part, position) {
+    if (!position) return null;
+    const key = `${state.currentDataSource}:${state.trendKey}:${state.trendWindow}`;
+    if (_partBenchCache.key !== key) _partBenchCache = { key, values: new Map() };
+    const cacheKey = `${part.key}:${position}`;
+    if (_partBenchCache.values.has(cacheKey)) return _partBenchCache.values.get(cacheKey);
+
+    const players = (state.allPlayersData[state.currentDataSource] || {}).processed || [];
+    const values = [];
+    for (const p of players) {
+        if (p.position_name !== position || (p.minutes || 0) < BENCH_MIN_MINUTES) continue;
+        let v = null;
+        try { v = part.value(p); } catch { v = null; }
+        if (typeof v === 'number' && isFinite(v) && v > 0) values.push(v);
+    }
+    const out = benchmarkMedian(values);
+    _partBenchCache.values.set(cacheKey, out);
+    return out;
+}
+
+/**
+ * The score, 0-100, plus every component that went into it.
+ *
+ * A component with no figure or no elite bar at that position is dropped and its
+ * weight redistributed over the rest — a goalkeeper has no DEFCON at all, and
+ * scoring him zero on it would rank every keeper last on a metric he cannot play
+ * in. Returns null when nothing is left to measure.
+ */
+let _compositeCache = { key: null, values: new Map() };
+function compositeScore(p) {
+    const key = `${state.currentDataSource}:${state.trendKey}:${state.trendWindow}`;
+    if (_compositeCache.key !== key) _compositeCache = { key, values: new Map() };
+    if (_compositeCache.values.has(p.id)) return _compositeCache.values.get(p.id);
+
+    const parts = [];
+    let weighted = 0, totalWeight = 0;
+    for (const part of COMPOSITE_PARTS) {
+        let mine = null;
+        try { mine = part.value(p); } catch { mine = null; }
+        const bench = partBenchmark(part, p.position_name);
+        if (!Number.isFinite(mine) || !(bench > 0)) continue;
+        const ratio = Math.min(mine / bench, COMPOSITE_CAP);
+        parts.push({ ...part, mine, bench, ratio });
+        weighted += ratio * part.weight;
+        totalWeight += part.weight;
+    }
+    const out = totalWeight
+        ? { score: (weighted / totalWeight) * (100 / COMPOSITE_CAP), parts, totalWeight }
+        : null;
+    _compositeCache.values.set(p.id, out);
+    return out;
+}
+
+function compositeOf(p) {
+    const c = compositeScore(p);
+    return c ? c.score : null;
+}
+
+/** One component's ratio, as a percentage of the cap, for a column. */
+function compositePart(p, key) {
+    const c = compositeScore(p);
+    if (!c) return null;
+    const part = c.parts.find(x => x.key === key);
+    return part ? part.ratio : null;
+}
+
+/**
+ * The columns a card can show beside its own figure.
+ *
+ * One registry, read by both the card and the top-20 modal, so the two cannot
+ * drift apart and every header sits over the values it names — the alignment was
+ * off precisely because the header row and the value row were built separately.
+ */
+const BOARD_COLS = {
+    ppg: {
+        label: 'נק׳/מש׳', title: 'נקודות לכל הופעה, על פני העונה',
+        get: p => { const v = seasonPointsPerApp(p); return v === null ? '–' : v.toFixed(1); }
+    },
+    apps: {
+        label: 'מש׳', title: 'סה״כ הופעות — המכנה של כל אחוז בשורה', soft: true,
+        get: p => appearancesOf(p)
+    },
+    mins: {
+        label: 'דק׳', title: 'דקות לכל הופעה', soft: true,
+        get: p => { const a = appearancesOf(p); return a ? Math.round((p.minutes || 0) / a) : '–'; }
+    },
+    fpl: {
+        label: 'FPL', title: 'הדירוג הרשמי של FPL Draft (1 = הטוב ביותר)', soft: true,
+        get: p => p.draft_rank ? `#${p.draft_rank}` : '–'
+    },
+    dc90: {
+        label: 'DC/90', title: 'תרומה הגנתית לכל 90 דקות',
+        get: p => num1(p.def_contrib_per90) === null ? '–' : num1(p.def_contrib_per90).toFixed(1)
+    },
+    xdiff: {
+        label: 'פער', title: 'שערים ובישולים בפועל פחות הצפוי — שלילי = צפוי לתקן כלפי מעלה',
+        get: p => Number.isFinite(p.xDiff) ? p.xDiff.toFixed(1) : '–'
+    },
+    vorp: {
+        label: 'יתרון', title: 'נקודות למשחק מעל השחקן החופשי הטוב ביותר באותה עמדה',
+        get: p => formatVorp(p.vorp)
+    },
+    partOutput: {
+        label: 'תפוקה%', title: 'נקודות למשחק כאחוז מחציון 20 הטובים בעמדה (100 = בדיוק ברמת העילית)',
+        get: p => partPct(p, 'output')
+    },
+    partMinutes: {
+        label: 'דקות%', title: 'דקות להופעה כאחוז מחציון 20 הטובים בעמדה',
+        get: p => partPct(p, 'minutes')
+    },
+    partAttack: {
+        label: 'התק׳%', title: 'xGI ל-90 כאחוז מחציון 20 הטובים בעמדה',
+        get: p => partPct(p, 'attack')
+    },
+    partDefence: {
+        label: 'הגנה%', title: 'אחוז DEFCON כאחוז מחציון 20 הטובים בעמדה — שוער לא נמדד בזה',
+        get: p => partPct(p, 'defence')
+    }
+};
+
+/**
+ * One composite component as a percentage of the elite bar — as a bare number,
+ * because the header already says what the unit is and "100%" does not fit in a
+ * sixth of a 300px card.
+ */
+function partPct(p, key) {
+    const ratio = compositePart(p, key);
+    return ratio === null ? '–' : Math.round(ratio * 100);
+}
+
 const DRAFT_PANELS = [
     {
+        // Far right, because it is the summary the other five decompose into.
+        id: 'composite',
+        title: 'השקלול',
+        subtitle: 'חוזק כללי מול העילית בעמדה',
+        unit: 'שקלול',
+        icon: '🧮',
+        accent: '#4f46e5',
+        // Three components, not four plus an appearance count: five columns in a
+        // 300px card ran the headers into each other. The appearance count is
+        // already inside the דקות component, and the full breakdown — including
+        // התקפה and the weight each carries — is in the top-20 modal.
+        cols: ['partOutput', 'partMinutes', 'partDefence'],
+        modalCols: ['partOutput', 'partMinutes', 'partAttack', 'partDefence', 'ppg', 'apps', 'fpl'],
+        noBenchmark: true,
+        metric: p => compositeOf(p),
+        fmt: v => Math.round(v).toString(),
+        display(p) { return this.fmt(this.metric(p) || 0); },
+        // Not a list of the components — those are already columns, and spelling
+        // all four out again with their weights ran off the edge of the modal.
+        // The useful sentence is where he is strong and where he is not.
+        why: p => {
+            const c = compositeScore(p);
+            if (!c || !c.parts.length) return '';
+            const sorted = [...c.parts].sort((a, b) => b.ratio - a.ratio);
+            const best = sorted[0];
+            const worst = sorted[sorted.length - 1];
+            const pct = part => `${Math.round(part.ratio * 100)}% מהעילית`;
+            if (sorted.length === 1) return `${best.label}: ${pct(best)}`;
+            // "חלש בדקות (125% מהעילית)" is not a sentence about a weakness. When
+            // every component clears the bar, the lowest one is still the lowest —
+            // it is just not a problem, and the wording has to stop saying it is.
+            return worst.ratio >= 1
+                ? `כל המרכיבים מעל העילית · הנמוך ביותר ${worst.label} (${pct(worst)})`
+                : `חזק ב${best.label} (${pct(best)}) · חלש ב${worst.label} (${pct(worst)})`;
+        },
+        eligible: p => compositeOf(p) !== null && (p.minutes || 0) >= 450,
+        rank: (a, b) => (compositeOf(b) || 0) - (compositeOf(a) || 0),
+        windowAware: true
+    },
+    {
         id: 'bestpick',
-        title: 'הבחירה הכי שווה',
-        subtitle: 'נקודות שתרוויח מעל החלופה בעמדה',
+        title: 'הכי שווים',
+        subtitle: 'נקודות צפויות עד סוף העונה',
+        unit: 'נק׳ לעונה',
         icon: '🏆',
         accent: '#7c3aed',
-        // No horizon claim in the caption: on the finished-season tab there is no
-        // "rest of season" left, so the caption states the unit and the why line
-        // states the actual number of matches it was multiplied by.
-        // The headline is the projection, not the edge over the baseline.
-        //
-        // The edge is the better *ranking* — the backtest says so plainly — but as
-        // a headline it asks the reader to know what a replacement-level player
-        // is before the number means anything, and post-draft it goes negative
-        // for most of the pool, which reads as broken rather than as informative.
-        // "34 points over the rest of the season" needs no such preamble. The edge
-        // is still on the row, in words, and scarcity has its own panel beside
-        // this one — "הערך הגדול ביותר", which is exactly that question.
-        valueLabel: 'נק׳ צפויות לעונה',
-        // Its own metric is already position-relative, so the elite-median chip
-        // would be comparing a comparison.
+        cols: ['ppg', 'apps', 'fpl'],
         noBenchmark: true,
         metric: p => projectedPointsOf(p, 'season'),
         fmt: v => Math.round(v).toString(),
         display(p) { return this.fmt(this.metric(p) || 0); },
         why: p => {
             const v = draftValue(p, 'season');
-            const now = draftValue(p, 'now');
             if (!v) return '';
-            const bits = [
-                `${v.levelAdj.toFixed(2)} נק׳/משחק × ${Math.round(v.matches)} משחקים צפויים`,
-                `${v.value >= 0 ? '+' : ''}${Math.round(v.value)} מול שחקן מחליף בעמדה`
-            ];
-            if (now) bits.push(`${Math.round(now.points)} נק׳ ב-5 הבאים`);
-            return bits.join(' · ');
+            return `${v.levelAdj.toFixed(2)} נק׳/משחק × ${Math.round(v.matches)} משחקים צפויים`
+                + ` · ${v.value >= 0 ? '+' : ''}${Math.round(v.value)} מול שחקן מחליף בעמדה`;
         },
         eligible: p => (projectedPointsOf(p, 'season') || 0) > 0 && (p.minutes || 0) >= 450,
         rank: (a, b) => (projectedPointsOf(b, 'season') || 0) - (projectedPointsOf(a, 'season') || 0),
         windowAware: true
     },
     {
+        id: 'next5',
+        title: 'ל-5 המחזורים הבאים',
+        subtitle: 'רמה × משחקים × קושי הלו״ז',
+        unit: 'צפוי (5)',
+        icon: '⏭️',
+        accent: '#0ea5e9',
+        cols: ['ppg', 'mins', 'fpl'],
+        noBenchmark: true,
+        metric: p => projectedPointsOf(p, 'now'),
+        fmt: v => v.toFixed(1),
+        display(p) { return this.fmt(this.metric(p) || 0); },
+        why: p => {
+            const v = draftValue(p, 'now');
+            if (!v) return '';
+            const fdr = num1(p.next_3_fdr);
+            return `${v.levelAdj.toFixed(2)} נק׳/משחק × ${v.matches.toFixed(1)} משחקים`
+                + (fdr ? ` · קושי ${fdr.toFixed(1)}` : '');
+        },
+        eligible: p => (projectedPointsOf(p, 'now') || 0) > 0 && (p.minutes || 0) >= 450,
+        rank: (a, b) => (projectedPointsOf(b, 'now') || 0) - (projectedPointsOf(a, 'now') || 0),
+        windowAware: true
+    },
+    {
         id: 'value',
-        title: 'הערך הגדול ביותר',
-        subtitle: 'הפער מהחלופה הבאה באותה עמדה',
-        valueLabel: 'יתרון בנק׳/משחק',
+        title: 'הפער מהחלופה',
+        subtitle: 'כמה תפסיד אם תדלג עליו',
+        unit: 'נק׳/משחק',
         icon: '💎',
         accent: '#6366f1',
+        cols: ['ppg', 'apps', 'fpl'],
         // Not raw `vorp`, and emphatically not `vorp > 0`.
         //
         // computeDraftMetrics sets replacement level to the best free agent at
@@ -4578,19 +4832,12 @@ const DRAFT_PANELS = [
         // VORP is <= 0 *by construction* — the best one is exactly 0. This panel
         // draws from free agents only, so `vorp > 0` could never match and the
         // most important card on the board silently disappeared the moment the
-        // draft data arrived. Verified against the live league: 225 free agents
-        // with a VORP, 0 of them positive, maximum 0.00.
+        // draft data arrived.
         //
         // The number that survives both regimes is the drop-off to the *next*
-        // available player at the same position — which is what "יתרון על
-        // החלופה" always meant: take him, or your fallback is this much worse.
+        // available player at the same position: take him, or your fallback is
+        // this much worse.
         metric: p => dropOffFor(p),
-        // No benchmark chip: the metric is a *gap* between two players, not a
-        // level, so the elite median of it is ~0.1 and every ratio came out
-        // "פי 17 מהעילית" — arithmetically true, and meaningless.
-        noBenchmark: true,
-        // fmt takes the figure, display takes the player: the benchmark chip and
-        // the tooltip have a number in hand and no player to hand back.
         fmt: v => `+${v.toFixed(2)}`,
         display(p) { return this.fmt(this.metric(p)); },
         why: p => `${playerScore(p).toFixed(2)} נק׳/משחק · הבא בתור: ${(playerScore(p) - dropOffFor(p)).toFixed(2)}`,
@@ -4598,33 +4845,13 @@ const DRAFT_PANELS = [
         rank: (a, b) => dropOffFor(b) - dropOffFor(a)
     },
     {
-        id: 'form',
-        title: 'הכי חמים עכשיו',
-        subtitle: 'נקודות למשחק בחלון הנבחר',
-        valueLabel: 'נק׳ למשחק',
-        icon: '🔥',
-        accent: '#ea580c',
-        metric: p => windowStats(p).ppg,
-        fmt: v => v.toFixed(1),
-        display(p) { return this.fmt(this.metric(p)); },
-        why: p => {
-            const w = windowStats(p);
-            return `${Math.round(w.points)} נק׳ ב-${w.matches} משחקים`;
-        },
-        eligible: p => {
-            const w = windowStats(p);
-            return w.ppg !== null && w.matches >= windowMinMatches() && w.mpg >= 45;
-        },
-        rank: (a, b) => windowStats(b).ppg - windowStats(a).ppg,
-        windowAware: true
-    },
-    {
         id: 'defcon',
         title: 'מכונות DEFCON',
         subtitle: 'עוברים את הסף בפועל, לא בממוצע',
-        valueLabel: '% משחקים מעל הסף',
+        unit: '% מעל הסף',
         icon: '🛡️',
         accent: '#0891b2',
+        cols: ['dc90', 'ppg', 'apps'],
         // The season hit-rate is the better number where it exists (the snapshot
         // computes it per match). The window rate is the fallback for a live
         // season, which has no season-long hit-rate yet.
@@ -4652,30 +4879,13 @@ const DRAFT_PANELS = [
         windowAware: true
     },
     {
-        id: 'market',
-        title: 'תנועת שוק',
-        subtitle: 'למי נכנסות העברות במחזור הזה',
-        valueLabel: 'העברות נטו במחזור',
-        icon: '🔄',
-        accent: '#0284c7',
-        metric: p => p.net_transfers_event,
-        fmt: v => `${v > 0 ? '+' : ''}${Math.round(v).toLocaleString()}`,
-        display(p) { return this.fmt(this.metric(p)); },
-        why: p => `${(p.transfers_in_event || 0).toLocaleString()} נכנס · ${(p.transfers_out_event || 0).toLocaleString()} יצא`,
-        eligible: p => p.net_transfers_event > 0,
-        rank: (a, b) => b.net_transfers_event - a.net_transfers_event,
-        // net_transfers_event is 0 for every player until a gameweek closes, so
-        // this panel would vanish with no explanation. A stated empty state
-        // reads as "not yet", a missing card reads as a bug.
-        emptyNote: 'אין עדיין נתוני העברות — יעבוד כשהמחזור הראשון ייסגר'
-    },
-    {
         id: 'underlying',
-        title: 'המספרים מתחת לפני השטח',
+        title: 'איכות ההזדמנויות',
         subtitle: 'מייצרים יותר ממה שהמירו',
-        valueLabel: 'xGI ל-90 דקות',
+        unit: 'xGI / 90',
         icon: '📈',
         accent: '#d97706',
+        cols: ['xdiff', 'ppg', 'apps'],
         metric: p => parseFloat(p.xGI_per90) || 0,
         fmt: v => v.toFixed(2),
         display(p) { return this.fmt(this.metric(p)); },
@@ -4715,29 +4925,10 @@ function panelBenchmark(panel, position) {
     return out;
 }
 
-/** "פי 1.6 מטופ-20" under a board figure, or nothing when there is no bar. */
-function benchChipHtml(panel, p) {
-    if (panel.noBenchmark) return '';
-    const bench = panelBenchmark(panel, p.position_name);
-    let v = null;
-    try { v = panel.metric(p); } catch { v = null; }
-    if (!(bench > 0) || typeof v !== 'number' || !isFinite(v) || v <= 0) return '';
-    const ratio = v / bench;
-    // Past about fivefold the elite median it has stopped being a comparison and
-    // started being a sign that the metric has no meaningful bar.
-    if (!isFinite(ratio) || ratio <= 0 || ratio > 5) return '';
-    const label = POSITION_LABELS[p.position_name] || p.position_name;
-    // "מהעילית", not "מטופ-20": a trailing hyphen-number inside an RTL string
-    // sitting in an LTR value column comes out reordered ("20-פי 1.4 מטופ").
-    // The scope bar defines the word once, and the tooltip gives the figure.
-    return `<em class="db-bench" title="חציון 20 ה${label} הטובים במדד הזה: ${panel.fmt(bench)}"
-        >פי ${ratio.toFixed(1)} מהעילית</em>`;
-}
-
 /**
  * The three-letter club code. Six cards to a row leaves ~300px for a name, a
- * club and an appearance count, and "Bournemouth" spends it all; the full name
- * stays as the title.
+ * club and a figure, and "Bournemouth" spends it all; the full name stays as the
+ * title attribute.
  */
 function teamShort(p) {
     const team = state.teamsData && state.teamsData[p.team];
@@ -4837,6 +5028,47 @@ function panelPicks(panel, pool, limit) {
     }).sort(panel.rank).slice(0, limit);
 }
 
+/**
+ * A card's picks as a real table: header cells over the values they name.
+ *
+ * There used to be one coloured caption floating above a list of rows, which is
+ * what made the numbers hard to read — the caption named only the big figure, the
+ * other numbers on the row were unlabelled, and nothing lined up between rows.
+ * A table with a header row solves all three at once, and the same builder draws
+ * the top-20 modal so the two cannot look different.
+ */
+function panelTableHtml(panel, picks, { modal = false } = {}) {
+    const keys = modal && panel.modalCols ? panel.modalCols : (panel.cols || []);
+    const cols = keys.map(key => BOARD_COLS[key]).filter(Boolean);
+    const head = `<tr>
+        <th class="db-th-name">שחקן</th>
+        <th class="db-th-key" title="${escapeHtml(panel.subtitle)}">${escapeHtml(panel.unit)}</th>
+        ${cols.map(c => `<th title="${escapeHtml(c.title)}">${escapeHtml(c.label)}</th>`).join('')}
+        ${modal ? '<th class="db-th-spark">5 מחזורים</th><th class="db-th-why">למה</th><th>סיגנל</th>' : ''}
+    </tr>`;
+
+    const body = picks.map((p, i) => {
+        const signal = modal ? signalFor(p) : null;
+        return `<tr${modal ? ` onclick="jumpToPlayer(${p.id})" title="הצג אותו בטבלה"` : ''}>
+            <td class="db-td-name">
+                <span class="db-i">${i + 1}</span>
+                <span class="db-nm">
+                    <b>${escapeHtml(p.web_name)}</b>
+                    <em title="${escapeHtml(p.team_name)}">${p.position_name} · ${escapeHtml(teamShort(p))}</em>
+                </span>
+            </td>
+            <td class="db-td-key">${escapeHtml(panel.display(p))}</td>
+            ${cols.map(c => `<td class="${c.soft ? 'db-td-soft' : ''}">${escapeHtml(String(c.get(p)))}</td>`).join('')}
+            ${modal ? `<td class="db-td-spark">${miniSparkHtml(p.id, 'pts')}</td>
+                <td class="db-td-why">${escapeHtml(panel.why(p))}</td>
+                <td><span class="signal-badge signal-${signal.tone}">${signal.label}</span></td>` : ''}
+        </tr>`;
+    }).join('');
+
+    return `<table class="db-tbl${modal ? ' is-modal' : ''}">
+        <thead>${head}</thead><tbody>${body}</tbody></table>`;
+}
+
 function renderDraftBoard() {
     const host = document.getElementById('draftBoard');
     if (!host) return;
@@ -4852,30 +5084,8 @@ function renderDraftBoard() {
         const picks = panelPicks(panel, players, 3);
         if (!picks.length && !panel.emptyNote) return '';
 
-        const rows = picks.map((p, i) => `
-            <li class="db-row">
-                <span class="db-rank">${i + 1}</span>
-                <span class="db-player">
-                    <span class="db-line">
-                        <span class="db-name">${escapeHtml(p.web_name)}</span>
-                        <span class="db-meta" title="${escapeHtml(p.team_name)}"
-                            >${p.position_name} · ${escapeHtml(teamShort(p))}</span>
-                        <span class="db-apps" title="סה״כ הופעות בעונה — כל אחוז נקרא מול המספר הזה"
-                            >${appearancesOf(p)} מש׳</span>
-                    </span>
-                    <span class="db-why">${escapeHtml(panel.why(p))}</span>
-                </span>
-                ${miniSparkHtml(p.id, 'pts')}
-                <span class="db-value">${escapeHtml(panel.display(p))}
-                    ${benchChipHtml(panel, p)}</span>
-            </li>`).join('');
-
-        // The figure on each row means nothing on its own — 67% and +2.80 and #1
-        // all look like "the number". One caption over the value column names it
-        // once per card, which is cheaper to read than repeating it per row.
         const body = picks.length
-            ? `<p class="db-metric-label">${escapeHtml(panel.valueLabel)}</p>
-               <ul class="db-list">${rows}</ul>
+            ? `${panelTableHtml(panel, picks)}
                <button type="button" class="db-more" onclick="openLeaderboard('${panel.id}')">
                    כל ה-20 <span aria-hidden="true">←</span>
                </button>`
@@ -4931,44 +5141,25 @@ function openLeaderboard(panelId) {
     const { players, freeAgentsOnly } = draftBoardPool();
     const picks = panelPicks(panel, players, 20);
 
-    const rows = picks.map((p, i) => {
-        const signal = signalFor(p);
-        const draftTeam = getDraftTeamForPlayer(p.id);
-        return `<tr onclick="jumpToPlayer(${p.id})" title="הצג את ${escapeHtml(p.web_name)} בטבלה">
-            <td class="lb-rank">${i + 1}</td>
-            <td class="lb-name">
-                ${escapeHtml(p.web_name)}
-                ${p.availability_grade !== 'available'
-                ? `<span class="status-badge status-${p.availability_grade}" title="${escapeHtml(p.news || '')}">${p.chance_of_playing_next_round !== null ? p.chance_of_playing_next_round + '%' : '!'}</span>`
-                : ''}
-            </td>
-            <td>${p.position_name}</td>
-            <td>${escapeHtml(p.team_name)}</td>
-            <td class="${draftTeam ? 'draft-owned' : 'draft-free'}">${draftTeam ? escapeHtml(draftTeam) : '🆓 חופשי'}</td>
-            <td class="lb-value">${escapeHtml(panel.display(p))}</td>
-            <td class="lb-why">${escapeHtml(panel.why(p))}</td>
-            <td><span class="signal-badge signal-${signal.tone}">${signal.label}</span></td>
-        </tr>`;
-    }).join('');
-
-    // --accent goes on the wrapper, not the header: .lb-value in every row reads
-    // it too, and a custom property set on a sibling does not inherit sideways.
+    // Same builder as the card, so the twenty read exactly like the three — one
+    // set of headers, one column order, one alignment. The modal adds the reason
+    // and the verdict, which there is no room for in a 300px card.
+    // --accent goes on the wrapper, not the header: the value cell in every row
+    // reads it too, and a custom property set on a sibling does not inherit
+    // sideways.
     host.innerHTML = `
       <div class="lb" style="--accent:${panel.accent}">
         <header class="lb-head">
             <span class="lb-icon">${panel.icon}</span>
             <span>
                 <h2>${panel.title}</h2>
-                <p>${panel.subtitle} · ${freeAgentsOnly ? 'שחקנים חופשיים בלבד' : 'כל השחקנים'}</p>
+                <p>${panel.subtitle} · ${freeAgentsOnly ? 'שחקנים חופשיים בלבד' : 'כל השחקנים'}
+                    · ${picks.length} מועמדים</p>
             </span>
         </header>
-        ${picks.length ? `<div class="lb-scroll"><table class="lb-table">
-            <thead><tr>
-                <th>#</th><th>שחקן</th><th>עמדה</th><th>קבוצה</th>
-                <th>קבוצת דראפט</th><th>${escapeHtml(panel.valueLabel)}</th><th>למה</th><th>סיגנל</th>
-            </tr></thead>
-            <tbody>${rows}</tbody>
-        </table></div>` : `<p class="db-empty">${panel.emptyNote || 'אין מועמדים לפי הכלל הזה'}</p>`}
+        ${picks.length
+        ? `<div class="lb-scroll">${panelTableHtml(panel, picks, { modal: true })}</div>`
+        : `<p class="db-empty">${panel.emptyNote || 'אין מועמדים לפי הכלל הזה'}</p>`}
       </div>`;
 
     modal.style.display = 'block';

@@ -125,7 +125,8 @@ describe('player row renders', () => {
         const { fns, state } = load(players);
         state.percentileBase = fns.buildPercentileBase(players);
         const html = fns.createPlayerRowHtml(players[0], 0);
-        assert.match(html, /class="rank-badge rank-elite">#7</, 'the FPL draft rank is shown');
+        assert.match(html, /class="draft-rank-cell[^"]*"[^>]*><b>#7</,
+            'the FPL draft rank is shown, shaded by the same rule as every other number');
         assert.doesNotMatch(html, /class="rank-cell"/, 'the internal rank column is gone');
     });
 

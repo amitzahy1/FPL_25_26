@@ -97,20 +97,30 @@ try {
     // with no "why" line is the regression worth catching.
     const board = await page.evaluate(() => {
         const cards = [...document.querySelectorAll('#draftBoard .db-card')];
+        const rows = [...document.querySelectorAll('#draftBoard .db-tbl tbody tr')];
         return {
             cards: cards.length,
-            rows: document.querySelectorAll('#draftBoard .db-row').length,
-            whys: document.querySelectorAll('#draftBoard .db-why').length,
-            emptyWhys: [...document.querySelectorAll('#draftBoard .db-why')]
-                .filter(e => !e.textContent.trim()).length,
+            rows: rows.length,
+            // The card explains a pick with its columns now, not with a sentence:
+            // a key figure under a header that names it, plus supporting numbers.
+            keyed: rows.filter(r => (r.querySelector('.db-td-key') || {}).textContent?.trim()).length,
+            thinRows: rows.filter(r => r.children.length < 4).length,
+            headers: [...document.querySelectorAll('#draftBoard .db-tbl thead th')]
+                .filter(h => h.textContent.trim()).length,
+            headless: [...document.querySelectorAll('#draftBoard .db-tbl')]
+                .filter(t => t.querySelectorAll('thead th').length !== (t.querySelector('tbody tr') || { children: [] }).children.length).length,
             more: document.querySelectorAll('#draftBoard .db-more').length,
             heading: (document.querySelector('#draftBoard .db-heading') || {}).textContent || ''
         };
     });
     check(board.cards >= 4, `draft board rendered ${board.cards} panels`);
-    check(board.rows > 0 && board.whys === board.rows,
-        `every one of ${board.rows} picks carries a reason`);
-    check(board.emptyWhys === 0, 'no pick has a blank reason line');
+    check(board.rows > 0 && board.keyed === board.rows,
+        `every one of ${board.rows} picks shows its figure`);
+    check(board.rows > 0 && board.thinRows === 0,
+        'every pick carries supporting columns, not one bare number');
+    // A header count that disagrees with the cell count is the misalignment this
+    // layout was built to fix, and it is invisible in a screenshot.
+    check(board.headless === 0, 'every card table has one header per column');
     check(board.heading.includes('את מי לקחת'), 'board names the question it answers');
 
     // THE POST-DRAFT PATH.
@@ -142,15 +152,19 @@ try {
         renderDraftBoard();
 
         const cards = [...document.querySelectorAll('#draftBoard .db-card')];
+        // [a-z0-9] — the panel ids include next5, and a class without digits
+        // matched nothing, which is the same bug the quick-filter guard had.
         const ids = cards.map(c => (c.querySelector('.db-more') || {}).outerHTML || '')
-            .join(' ').match(/openLeaderboard\('([a-z]+)'/g) || [];
+            .join(' ').match(/openLeaderboard\('([a-z0-9]+)'/g) || [];
+        const rows = [...document.querySelectorAll('#draftBoard .db-tbl tbody tr')];
         return {
             owned: owned.length,
             pool: draftBoardPool().players.length,
             cards: cards.length,
-            rows: document.querySelectorAll('#draftBoard .db-row').length,
-            emptyWhys: [...document.querySelectorAll('#draftBoard .db-why')]
-                .filter(e => !e.textContent.trim()).length,
+            rows: rows.length,
+            // A post-draft pool is where a rule quietly stops matching, so every
+            // surviving pick must still print its figure.
+            blankFigures: rows.filter(r => !(r.querySelector('.db-td-key') || {}).textContent?.trim()).length,
             panelsWithPicks: ids.length,
             // The panel this exists to protect.
             valuePicks: panelPicks(DRAFT_PANELS.find(p => p.id === 'value'),
@@ -166,7 +180,8 @@ try {
         `the value panel still recommends somebody post-draft (${postDraft.valuePicks} picks)`);
     check(postDraft.panelsWithPicks >= 4,
         `${postDraft.panelsWithPicks} panels still have picks against a free-agent pool`);
-    check(postDraft.emptyWhys === 0, 'no post-draft pick has a blank reason line');
+    check(postDraft.rows > 0 && postDraft.blankFigures === 0,
+        `every one of ${postDraft.rows} post-draft picks still prints its figure`);
 
     // Put it back, so the later checks see the state they expect.
     await page.evaluate(() => {
@@ -182,13 +197,18 @@ try {
         if (!btn) return { ok: false, why: 'no panel had a top-20 button' };
         btn.click();
         const m = document.getElementById('leaderboardModal');
-        const rows = m.querySelectorAll('.lb-table tbody tr').length;
+        const rows = [...m.querySelectorAll('.db-tbl.is-modal tbody tr')];
         const shown = m.style.display === 'block';
+        // The sentence that explains a pick lives here, where there is room for
+        // it — so every one of the twenty must have one.
+        const whys = rows.filter(r => (r.querySelector('.db-td-why') || {}).textContent?.trim()).length;
         window.closeModal();
-        return { ok: true, shown, rows, closed: m.style.display === 'none' };
+        return { ok: true, shown, rows: rows.length, whys, closed: m.style.display === 'none' };
     });
     check(modal.ok && modal.shown && modal.rows > 1 && modal.closed,
         `top-20 modal opens with ${modal.rows} rows and closes`);
+    check(modal.rows > 0 && modal.whys === modal.rows,
+        `every one of ${modal.rows} rows in the modal carries a reason`);
 
     // The charts view: every card that stays visible must have drawn a chart, and
     // a card with nothing to plot must hide itself rather than show an empty axis.

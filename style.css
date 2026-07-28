@@ -1036,8 +1036,6 @@ tbody tr:last-child td {
     .db-card { padding: 11px 12px 0; }
     .db-title { font-size: 12.5px; }
     .db-sub { font-size: 10px; }
-    .db-name { font-size: 12px; }
-    .db-meta, .db-why { font-size: 10px; }
     /* The strip is decoration at this width, and the column it costs is the one
        the reason line needs. */
     .db-card:not(.is-wide) .db-row .trend-bars { display: none; }
@@ -1051,14 +1049,6 @@ tbody tr:last-child td {
 
 /* Wide enough for two columns of picks once there is room for it. */
 @media (min-width: 1120px) {
-    .db-card.is-wide .db-list {
-        display: grid;
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-        column-gap: 22px;
-    }
-    /* Each column keeps its own top border; the first row of each must not lose
-       it just because it is first in the source. */
-    .db-card.is-wide .db-row:nth-child(-n+2) { border-top: 1px solid #f1f5f9; }
 }
 
 .db-card {
@@ -1126,6 +1116,97 @@ tbody tr:last-child td {
     line-height: 1.35;
 }
 
+/* The 5-gameweek strip inside the top-20 modal: twenty rows of numbers are hard
+   to scan for shape, and the shape is why one of two similar players is the pick. */
+.db-th-spark { width: 90px; }
+.db-td-spark { direction: ltr; padding-block: 2px; }
+.db-td-spark .trend-bars { margin: 0 auto; }
+
+/* --------------------------- the card tables -----------------------------
+   table-layout: fixed is the whole point: the header cells and the value cells
+   are laid out by one algorithm, so "שחקן | שקלול | תפוקה" sits exactly over the
+   values it names. The previous card was a floating caption above a flex list,
+   which lined up by luck and mostly did not. */
+.db-tbl {
+    width: 100%;
+    table-layout: fixed;
+    border-collapse: collapse;
+}
+
+/* The global `th` rule is a sticky blue gradient with white text and a shadow,
+   written for the players table. Everything it sets has to be undone here, or a
+   card's header row renders as an unexplained coloured band. */
+.db-tbl th {
+    position: static;
+    background: none;
+    padding: 0 2px 4px;
+    border-bottom: 1px solid #eef2f7;
+    font-size: 8.5px;
+    font-weight: 800;
+    color: #94a3b8;
+    text-align: end;
+    white-space: nowrap;
+    letter-spacing: 0;
+    text-shadow: none;
+    cursor: help;
+}
+
+.db-tbl th:hover { background: none; transform: none; }
+.db-tbl th.db-th-name { text-align: start; width: 38%; }
+.db-tbl th.db-th-key { width: 20%; color: var(--accent); }
+
+.db-tbl td {
+    padding: 5px 2px;
+    border-top: 1px solid #f6f9fc;
+    font-size: 11px;
+    text-align: end;
+    direction: ltr;
+    font-variant-numeric: tabular-nums;
+}
+
+.db-tbl td.db-td-name { direction: rtl; text-align: start; }
+
+.db-td-name {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    min-width: 0;
+}
+
+.db-i {
+    width: 14px;
+    height: 14px;
+    flex: none;
+    display: grid;
+    place-items: center;
+    border-radius: 4px;
+    background: color-mix(in srgb, var(--accent) 12%, #fff);
+    font-size: 8.5px;
+    font-weight: 800;
+    color: var(--accent);
+}
+
+.db-nm { min-width: 0; }
+.db-nm b { display: block; font-size: 11.5px; font-weight: 800; color: #0f172a; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.db-nm em { display: block; font-style: normal; font-size: 9px; font-weight: 600; color: #94a3b8; white-space: nowrap; }
+
+.db-td-key { font-size: 13px; font-weight: 800; color: var(--accent); }
+.db-td-soft { color: #94a3b8; font-weight: 700; }
+
+/* --- the same table, twenty deep, in the modal --- */
+.db-tbl.is-modal { table-layout: auto; }
+.db-tbl.is-modal th { font-size: 11px; padding: 6px 8px; }
+.db-tbl.is-modal th.db-th-name { width: auto; }
+.db-tbl.is-modal th.db-th-key { width: auto; }
+.db-tbl.is-modal td { font-size: 13px; padding: 7px 8px; }
+.db-tbl.is-modal .db-nm b { font-size: 13.5px; }
+.db-tbl.is-modal .db-nm em { font-size: 11px; }
+.db-tbl.is-modal .db-td-key { font-size: 15px; }
+.db-tbl.is-modal .db-i { width: 18px; height: 18px; font-size: 10px; }
+.db-tbl.is-modal tbody tr { cursor: pointer; }
+.db-tbl.is-modal tbody tr:hover > * { background: #f8fbff; }
+.db-tbl.is-modal .db-td-why { direction: rtl; text-align: start; color: #64748b; font-size: 11.5px; min-width: 220px; }
+
 /* Names the figure in the value column — "67%" on its own could be a hit rate,
    an ownership share or a chance of playing. Sits at the row end, over the
    column it describes, in the accent colour so the pairing is unmistakable. */
@@ -1139,36 +1220,6 @@ tbody tr:last-child td {
     color: color-mix(in srgb, var(--accent) 62%, #64748b);
 }
 
-.db-list {
-    list-style: none;
-    margin: 0;
-    padding: 0;
-    flex: 1;
-}
-
-.db-row {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 7px 0;
-    border-top: 1px solid #f1f5f9;
-}
-
-.db-rank {
-    width: 18px;
-    height: 18px;
-    flex: none;
-    display: grid;
-    place-items: center;
-    border-radius: 5px;
-    font-size: 10px;
-    font-weight: 800;
-    color: var(--accent);
-    background: color-mix(in srgb, var(--accent) 12%, #fff);
-}
-
-.db-player { min-width: 0; flex: 1; }
-
 /* Name and club on one line that clips, rather than wrapping the club name onto
    its own line and pushing the reason down with it. */
 .db-line {
@@ -1177,22 +1228,6 @@ tbody tr:last-child td {
     gap: 5px;
     min-width: 0;
     white-space: nowrap;
-}
-
-.db-name {
-    font-size: 12.5px;
-    font-weight: 700;
-    color: #0f172a;
-    flex: none;
-}
-
-.db-meta {
-    font-size: 10.5px;
-    font-weight: 600;
-    color: #94a3b8;
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
 }
 
 /* Deliberately the smallest thing on the row: it is context for the figure, not
@@ -1204,16 +1239,6 @@ tbody tr:last-child td {
     font-weight: 700;
     color: #b6c2d2;
     white-space: nowrap;
-}
-
-.db-why {
-    display: block;
-    font-size: 10.5px;
-    color: #64748b;
-    line-height: 1.35;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
 }
 
 /* LTR: the figures carry a leading sign or #, and in an RTL row the browser
@@ -1315,40 +1340,6 @@ tbody tr:last-child td {
 .lb-head p { margin: 2px 0 0; font-size: 12px; font-weight: 600; color: #94a3b8; }
 
 .lb-scroll { overflow-x: auto; }
-
-.lb-table {
-    width: 100%;
-    border-collapse: collapse;
-    font-size: 12.5px;
-}
-
-.lb-table th {
-    position: sticky;
-    top: 0;
-    background: #f8fafc;
-    padding: 8px 10px;
-    text-align: start;
-    font-size: 11px;
-    font-weight: 700;
-    color: #64748b;
-    white-space: nowrap;
-    border-bottom: 1px solid #e2e8f0;
-}
-
-.lb-table td {
-    padding: 8px 10px;
-    border-bottom: 1px solid #f1f5f9;
-    color: #334155;
-    white-space: nowrap;
-}
-
-.lb-table tbody tr { cursor: pointer; transition: background .12s ease; }
-.lb-table tbody tr:hover { background: #f8fafc; }
-
-.lb-rank { color: #94a3b8; font-weight: 700; font-variant-numeric: tabular-nums; }
-.lb-name { font-weight: 700; color: #0f172a; }
-.lb-value { font-weight: 800; color: var(--accent); font-variant-numeric: tabular-nums; direction: ltr; }
-.lb-why { color: #64748b; font-size: 11.5px; white-space: normal; min-width: 180px; }
 
 /* Player Comparison Styles */
 .comparison-header {
@@ -5958,14 +5949,21 @@ canvas {
 .log-opp em { font-style: normal; font-size: 10px; opacity: .7; }
 
 /* the summary column: label · figure · change · shape · unit */
+/* Centred, and the tracks no longer stretch.
+   The bars track used to be 1fr, so it absorbed all the leftover width and shoved
+   the chart against the far edge — label on one side, figure in the middle, chart
+   pinned to the other, with a void between them. That is what made this strip
+   read as a separate widget dropped into the panel rather than part of it. Three
+   content-sized tracks, centred as a group, hold together. */
 .sum-row {
     display: grid;
-    grid-template-columns: 62px auto 1fr;
+    grid-template-columns: 58px 66px auto;
     grid-template-areas: "label val bars";
+    justify-content: center;
     align-items: center;
-    gap: 8px;
-    padding: 6px 0;
-    border-bottom: 1px dotted #dbeafe;
+    gap: 10px;
+    padding: 7px 0;
+    border-bottom: 1px solid #eef4fb;
 }
 
 .sum-row:last-of-type { border-bottom: none; }
@@ -6008,7 +6006,11 @@ canvas {
 /* max-content, not just justify-content: the benchmark line is an overlay on
    this box, so a box wider than its bars drew the line across the empty half of
    the row. Shrink to the bars, then park them at the row's end. */
-.sum-row .trend-bars { grid-area: bars; width: max-content; margin-inline-start: auto; }
+/* max-content because the benchmark line is an overlay on this box, so a box
+   wider than its bars drew the line across the empty half of the row. No auto
+   margin any more: the row centres the whole group instead of pushing the chart
+   away from its own figure. */
+.sum-row .trend-bars { grid-area: bars; width: max-content; }
 
 .detail-next { margin-top: 9px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .detail-next-label { font-size: 11.5px; font-weight: 800; color: #64748b; }
@@ -6341,30 +6343,16 @@ canvas {
 .cmp-tags .detail-tag { font-size: 11.5px; }
 
 
-/* FPL Draft's own ranking. Elite/good/plain rather than a raw number alone: the
-   distance between #4 and #9 matters, the distance between #180 and #240 does
-   not, and the badge says which regime you are looking at. */
+/* FPL Draft's own ranking, and the projection beside it, are shaded by the same
+   green-to-red percentile rule as every other number in the row. Each used to
+   carry its own colour language — a gold/blue/grey badge and plain indigo text —
+   which made them read as decoration rather than as part of the ranking, and left
+   the column the position chips sort on looking no different from an unsorted
+   one. Two colour systems in one table is one too many. */
 .draft-rank-cell { text-align: center; }
-
-/* The column the "ל-5 הבאים" chips sort on. It exists because they sorted on it
-   while it was invisible, which reads exactly like an arbitrary order. */
+.draft-rank-cell b,
+.proj-cell b { font-size: 12.5px; font-weight: 800; direction: ltr; font-variant-numeric: tabular-nums; }
 .proj-cell { text-align: center; }
-.proj-cell b { font-size: 13px; font-weight: 800; color: #4338ca; direction: ltr; font-variant-numeric: tabular-nums; }
-
-.rank-badge {
-    display: inline-block;
-    min-width: 34px;
-    padding: 2px 7px;
-    border-radius: 100px;
-    font-size: 12px;
-    font-weight: 800;
-    direction: ltr;
-    font-variant-numeric: tabular-nums;
-}
-
-.rank-badge.rank-elite { background: #fef3c7; color: #92400e; }
-.rank-badge.rank-good { background: #e0f2fe; color: #075985; }
-.rank-badge.rank-plain { background: #f1f5f9; color: #64748b; }
 .rank-none { color: #cbd5e1; }
 
 /* --- the three stat boxes --- */
