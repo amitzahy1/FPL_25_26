@@ -92,6 +92,71 @@ try {
     check(!r.hScroll, 'no horizontal page scroll at 1440px');
     check(pageErrors.length === 0, `no uncaught page errors${pageErrors.length ? `: ${pageErrors[0]}` : ''}`);
 
+    // The draft board is the first thing on the page, and every panel is only as
+    // good as the sentence explaining its pick — a panel rendering three names
+    // with no "why" line is the regression worth catching.
+    const board = await page.evaluate(() => {
+        const cards = [...document.querySelectorAll('#draftBoard .db-card')];
+        return {
+            cards: cards.length,
+            rows: document.querySelectorAll('#draftBoard .db-row').length,
+            whys: document.querySelectorAll('#draftBoard .db-why').length,
+            emptyWhys: [...document.querySelectorAll('#draftBoard .db-why')]
+                .filter(e => !e.textContent.trim()).length,
+            more: document.querySelectorAll('#draftBoard .db-more').length,
+            heading: (document.querySelector('#draftBoard .db-heading') || {}).textContent || ''
+        };
+    });
+    check(board.cards >= 4, `draft board rendered ${board.cards} panels`);
+    check(board.rows > 0 && board.whys === board.rows,
+        `every one of ${board.rows} picks carries a reason`);
+    check(board.emptyWhys === 0, 'no pick has a blank reason line');
+    check(board.heading.includes('למי כדאי לקחת'), 'board names the question it answers');
+
+    // Each panel's top-20 must open, fill, and close.
+    const modal = await page.evaluate(() => {
+        const btn = document.querySelector('#draftBoard .db-more');
+        if (!btn) return { ok: false, why: 'no panel had a top-20 button' };
+        btn.click();
+        const m = document.getElementById('leaderboardModal');
+        const rows = m.querySelectorAll('.lb-table tbody tr').length;
+        const shown = m.style.display === 'block';
+        window.closeModal();
+        return { ok: true, shown, rows, closed: m.style.display === 'none' };
+    });
+    check(modal.ok && modal.shown && modal.rows > 1 && modal.closed,
+        `top-20 modal opens with ${modal.rows} rows and closes`);
+
+    // The charts view: every card that stays visible must have drawn a chart, and
+    // a card with nothing to plot must hide itself rather than show an empty axis.
+    const chartsBefore = pageErrors.length;
+    const chartsView = await page.evaluate(async () => {
+        switchMainView('charts');
+        await new Promise(r => setTimeout(r, 900));
+        const cards = [...document.querySelectorAll('#chartsGrid .chart-card')];
+        const visible = cards.filter(c => !c.hidden);
+        const drawn = visible.filter(c => {
+            const canvas = c.querySelector('canvas');
+            return canvas && charts[canvas.id];
+        });
+        const notes = visible.filter(c => (c.querySelector('.chart-note') || {}).textContent);
+        // Switch the position matrix and make sure it rebuilds rather than leaking
+        // the destroyed instance.
+        setChartPosition('DEF');
+        await new Promise(r => setTimeout(r, 300));
+        const afterToggle = !!charts['chart-position'];
+        switchMainView('table');
+        return { cards: cards.length, visible: visible.length, drawn: drawn.length,
+            notes: notes.length, afterToggle };
+    });
+    check(chartsView.cards === 8, `charts view built ${chartsView.cards} cards from CHART_SPECS`);
+    check(chartsView.visible > 0 && chartsView.drawn === chartsView.visible,
+        `all ${chartsView.visible} visible charts drew (${chartsView.cards - chartsView.visible} hid themselves)`);
+    check(chartsView.notes === chartsView.visible, 'every visible chart says what it answers');
+    check(chartsView.afterToggle, 'the position matrix rebuilds when the position changes');
+    check(pageErrors.length === chartsBefore,
+        `no errors from the charts view${pageErrors.length > chartsBefore ? `: ${pageErrors[chartsBefore]}` : ''}`);
+
     // Sub-tabs must switch without throwing.
     const tabs = await page.evaluate(() => {
         const out = [];
@@ -103,6 +168,27 @@ try {
     });
     check(tabs.every(([, okTab]) => okTab),
         `draft sub-tabs switch cleanly (${tabs.filter(([, o]) => o).length}/${tabs.length})`);
+
+    // הגדרות is in the always-visible page header, so it has to work from either
+    // tab. It used to live inside #playersTabContent and did nothing at all from
+    // the draft tab — a hidden parent hides the modal with it.
+    const settings = await page.evaluate(() => {
+        const m = document.getElementById('settingsModal');
+        const seen = [];
+        for (const tab of ['draft', 'players']) {
+            showTab(tab);
+            openSettings();
+            // checkVisibility() walks the ancestors, which is the whole point here.
+            // offsetParent does not work for this: .modal is position:fixed, and
+            // that returns null for a fixed element however visible it is.
+            seen.push([tab, m.style.display === 'block' && m.checkVisibility()]);
+            window.closeModal();
+        }
+        showTab('players');
+        return seen;
+    });
+    check(settings.every(([, vis]) => vis),
+        `settings opens from both tabs (${settings.filter(([, v]) => v).map(([t]) => t).join(', ') || 'neither'})`);
 
     // Mobile: the layout must not overflow.
     await page.setViewport({ width: 390, height: 844, isMobile: true });

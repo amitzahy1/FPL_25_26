@@ -941,111 +941,329 @@ tbody tr:last-child td {
     background-clip: text;
 }
 
-/* Dashboard KPIs */
-.dashboard-kpis {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-    gap: 16px;
-    margin: 20px 0;
-    padding: 0;
-}
-
-.kpi-card {
-    background: linear-gradient(135deg, var(--card-bg) 0%, var(--card-bg-hover) 100%);
-    border-radius: var(--radius-md);
-    padding: 20px;
-    display: flex;
-    align-items: center;
-    gap: 16px;
-    box-shadow: var(--shadow-md);
-    border: 1px solid var(--border-color);
-    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-    animation: fadeInUp 0.6s ease-out backwards;
-    position: relative;
-    overflow: hidden;
-}
-
-.kpi-card::before {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    height: 4px;
-    background: linear-gradient(90deg, var(--primary-color), var(--secondary-color));
-    transform: scaleX(0);
-    transform-origin: left;
-    transition: transform 0.3s ease;
-}
-
-.kpi-card:hover {
-    transform: translateY(-4px);
-    box-shadow: var(--shadow-lg);
-}
-
-.kpi-card:hover::before {
-    transform: scaleX(1);
-}
-
-.kpi-icon {
-    font-size: 2.5em;
-    filter: drop-shadow(0 2px 4px rgba(0,0,0,0.1));
-    animation: pulse 2s ease-in-out infinite;
-}
-
 @keyframes pulse {
     0%, 100% { transform: scale(1); }
     50% { transform: scale(1.05); }
 }
 
-.kpi-content {
-    flex: 1;
+/* ==========================================================================
+   DRAFT BOARD — "למי כדאי לקחת"
+   Six panels, three picks each, one stated reason per pick. This replaced the
+   KPI strip, whose CSS was declared three times over at top level and silently
+   resolved by source order; keep this the only place the board is styled.
+   ========================================================================== */
+
+.draft-board { margin: 4px 0 20px; }
+
+.db-bar {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 14px;
+    flex-wrap: wrap;
+    margin-bottom: 12px;
+    padding-inline: 2px;
+}
+
+.db-heading {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    margin: 0;
+    font-size: 19px;
+    font-weight: 800;
+    letter-spacing: -0.2px;
+    color: #0f172a;
+}
+
+.db-heading-icon {
+    width: 30px;
+    height: 30px;
+    flex: none;
+    display: grid;
+    place-items: center;
+    font-size: 15px;
+    border-radius: 9px;
+    background: linear-gradient(145deg, #0f172a, #1e293b);
+    box-shadow: 0 3px 10px -4px rgba(15, 23, 42, .55);
+}
+
+.db-scope {
+    font-size: 12px;
+    font-weight: 600;
+    color: #94a3b8;
+}
+
+/* Fixed column counts, not auto-fill. With six panels, auto-fill produced five
+   across and one stranded on its own row on a wide screen; three columns always
+   means two even rows. Six narrow columns is also wrong — it squeezes the "why"
+   line down to one word, and that line is the only part worth reading. */
+.db-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    /* A panel with nothing to recommend is short. Stretching it to match its
+       neighbours is where the empty white space came from. */
+    align-items: start;
+    gap: 12px;
+}
+
+@media (min-width: 700px) {
+    .db-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (min-width: 1120px) {
+    .db-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+
+.db-card {
     display: flex;
     flex-direction: column;
-    gap: 4px;
+    background: #fff;
+    border: 1px solid #e8edf3;
+    border-radius: 14px;
+    padding: 13px 14px 9px;
+    box-shadow: 0 1px 3px rgba(15, 23, 42, .05);
+    position: relative;
+    overflow: hidden;
+    animation: fadeInUp .45s ease-out backwards;
+    animation-delay: var(--d, 0ms);
+    transition: box-shadow .2s ease, border-color .2s ease;
 }
 
-.kpi-label {
-    font-size: 0.85em;
-    color: var(--text-secondary);
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
+.db-card::before {
+    content: '';
+    position: absolute;
+    inset-block-start: 0;
+    inset-inline: 0;
+    height: 3px;
+    background: var(--accent);
 }
 
-.kpi-value {
-    font-size: 1.8em;
+.db-card:hover {
+    border-color: color-mix(in srgb, var(--accent) 35%, #e8edf3);
+    box-shadow: 0 6px 18px -10px color-mix(in srgb, var(--accent) 60%, transparent);
+}
+
+.db-head {
+    display: flex;
+    align-items: flex-start;
+    gap: 9px;
+    margin-bottom: 8px;
+}
+
+.db-icon {
+    width: 26px;
+    height: 26px;
+    flex: none;
+    display: grid;
+    place-items: center;
+    font-size: 13px;
+    border-radius: 8px;
+    background: color-mix(in srgb, var(--accent) 12%, #fff);
+}
+
+.db-headings { min-width: 0; }
+
+.db-title {
+    display: block;
+    font-size: 13.5px;
     font-weight: 800;
-    color: var(--primary-color);
-    line-height: 1;
-    background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
+    color: #0f172a;
+    line-height: 1.25;
 }
 
-.kpi-subtext {
-    font-size: 0.75em;
-    color: var(--text-secondary);
-    font-weight: 500;
+.db-sub {
+    display: block;
+    font-size: 10.5px;
+    font-weight: 600;
+    color: #94a3b8;
+    line-height: 1.35;
 }
 
-/* KPI specific colors and animations */
-.kpi-card[data-kpi="hot-player"] .kpi-icon { 
-    animation-delay: 0s;
-    animation: pulse 1.5s ease-in-out infinite, glow 2s ease-in-out infinite;
+.db-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    flex: 1;
 }
 
-@keyframes glow {
-    0%, 100% { filter: drop-shadow(0 0 5px rgba(255, 107, 0, 0.5)); }
-    50% { filter: drop-shadow(0 0 15px rgba(255, 107, 0, 0.8)); }
+.db-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 7px 0;
+    border-top: 1px solid #f1f5f9;
 }
 
-.kpi-card[data-kpi="best-draft"] .kpi-icon { animation-delay: 0.1s; }
-.kpi-card[data-kpi="top-scorer"] .kpi-icon { animation-delay: 0.2s; }
-.kpi-card[data-kpi="top-assister"] .kpi-icon { animation-delay: 0.3s; }
-.kpi-card[data-kpi="top-points"] .kpi-icon { animation-delay: 0.4s; }
-.kpi-card[data-kpi="best-value"] .kpi-icon { animation-delay: 0.5s; }
+.db-rank {
+    width: 18px;
+    height: 18px;
+    flex: none;
+    display: grid;
+    place-items: center;
+    border-radius: 5px;
+    font-size: 10px;
+    font-weight: 800;
+    color: var(--accent);
+    background: color-mix(in srgb, var(--accent) 12%, #fff);
+}
+
+.db-player { min-width: 0; flex: 1; }
+
+/* Name and club on one line that clips, rather than wrapping the club name onto
+   its own line and pushing the reason down with it. */
+.db-line {
+    display: flex;
+    align-items: baseline;
+    gap: 5px;
+    min-width: 0;
+    white-space: nowrap;
+}
+
+.db-name {
+    font-size: 12.5px;
+    font-weight: 700;
+    color: #0f172a;
+    flex: none;
+}
+
+.db-meta {
+    font-size: 10.5px;
+    font-weight: 600;
+    color: #94a3b8;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.db-why {
+    display: block;
+    font-size: 10.5px;
+    color: #64748b;
+    line-height: 1.35;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* LTR: the figures carry a leading sign or #, and in an RTL row the browser
+   moves it to the far side — "+2.80" rendered as "2.80+". */
+.db-value {
+    flex: none;
+    direction: ltr;
+    font-size: 13px;
+    font-weight: 800;
+    color: var(--accent);
+    font-variant-numeric: tabular-nums;
+}
+
+.db-more {
+    align-self: stretch;
+    margin-top: 6px;
+    padding: 7px;
+    border: none;
+    border-top: 1px solid #f1f5f9;
+    background: none;
+    font: inherit;
+    font-size: 11px;
+    font-weight: 700;
+    color: #64748b;
+    cursor: pointer;
+    border-radius: 0 0 8px 8px;
+    transition: color .15s ease, background .15s ease;
+}
+
+.db-more:hover {
+    color: var(--accent);
+    background: color-mix(in srgb, var(--accent) 6%, #fff);
+}
+
+.db-empty {
+    margin: 0;
+    padding: 14px 2px 12px;
+    font-size: 11.5px;
+    line-height: 1.5;
+    color: #94a3b8;
+    border-top: 1px solid #f1f5f9;
+}
+
+/* --- top-20 leaderboard behind each panel --- */
+
+.modal-content--wide { max-width: 1080px; }
+
+.lb-head {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding-bottom: 12px;
+    margin-bottom: 4px;
+    border-bottom: 1px solid #f1f5f9;
+}
+
+.lb-icon {
+    width: 40px;
+    height: 40px;
+    flex: none;
+    display: grid;
+    place-items: center;
+    font-size: 19px;
+    border-radius: 12px;
+    background: color-mix(in srgb, var(--accent) 12%, #fff);
+}
+
+/* Two classes deep on purpose. `.modal-content h2` further down the file is a
+   32px gradient-clipped heading with a 4px underline, and it matches at the same
+   specificity as a bare `.lb-head h2` — so source order handed it the win and
+   the underline pushed the icon out of line with the title. */
+.modal-content .lb-head h2 {
+    margin: 0;
+    padding: 0;
+    border: none;
+    background: none;
+    -webkit-text-fill-color: currentColor;
+    font-size: 18px;
+    font-weight: 800;
+    color: #0f172a;
+    letter-spacing: -.2px;
+}
+
+.lb-head p { margin: 2px 0 0; font-size: 12px; font-weight: 600; color: #94a3b8; }
+
+.lb-scroll { overflow-x: auto; }
+
+.lb-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12.5px;
+}
+
+.lb-table th {
+    position: sticky;
+    top: 0;
+    background: #f8fafc;
+    padding: 8px 10px;
+    text-align: start;
+    font-size: 11px;
+    font-weight: 700;
+    color: #64748b;
+    white-space: nowrap;
+    border-bottom: 1px solid #e2e8f0;
+}
+
+.lb-table td {
+    padding: 8px 10px;
+    border-bottom: 1px solid #f1f5f9;
+    color: #334155;
+    white-space: nowrap;
+}
+
+.lb-table tbody tr { cursor: pointer; transition: background .12s ease; }
+.lb-table tbody tr:hover { background: #f8fafc; }
+
+.lb-rank { color: #94a3b8; font-weight: 700; font-variant-numeric: tabular-nums; }
+.lb-name { font-weight: 700; color: #0f172a; }
+.lb-value { font-weight: 800; color: var(--accent); font-variant-numeric: tabular-nums; direction: ltr; }
+.lb-why { color: #64748b; font-size: 11.5px; white-space: normal; min-width: 180px; }
 
 /* Player Comparison Styles */
 .comparison-header {
@@ -1425,24 +1643,6 @@ tbody tr:last-child td {
         padding: 12px;
     }
     
-    /* Dashboard KPIs */
-    .dashboard-kpis {
-        grid-template-columns: repeat(2, 1fr);
-        gap: 12px;
-    }
-    
-    .kpi-card {
-        padding: 16px;
-    }
-    
-    .kpi-icon {
-        font-size: 2em;
-    }
-    
-    .kpi-value {
-        font-size: 1.5em;
-    }
-    
     /* Player Comparison */
     .comparison-players-grid {
         grid-template-columns: 1fr;
@@ -1598,14 +1798,6 @@ tbody tr:last-child td {
 @media (max-width: 480px) {
     header h1 {
         font-size: 1.5em;
-    }
-    
-    .dashboard-kpis {
-        grid-template-columns: 1fr;
-    }
-    
-    .kpi-card {
-        padding: 12px;
     }
     
     .tab-button {
@@ -3124,189 +3316,278 @@ tbody tr:last-child td {
     transform: rotate(10deg);
 }
 
-/* ============================================
-   IMPROVED DASHBOARD KPIs
-   ============================================ */
-
-.dashboard-kpis {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-    gap: 16px;
-    margin-bottom: 24px;
-}
-
-.kpi-card {
-    background: linear-gradient(135deg, var(--card-bg) 0%, var(--card-bg-hover) 100%);
-    padding: 20px;
-    border-radius: var(--radius-md);
-    border: 2px solid var(--border-color);
-    box-shadow: var(--shadow-sm);
-    transition: all 0.3s ease;
-    position: relative;
-    overflow: hidden;
-}
-
-.kpi-card::before {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 4px;
-    background: linear-gradient(90deg, var(--primary-color) 0%, var(--secondary-color) 100%);
-    transform: scaleX(0);
-    transition: transform 0.3s ease;
-}
-
-.kpi-card:hover::before {
-    transform: scaleX(1);
-}
-
-.kpi-card:hover {
-    transform: translateY(-4px);
-    box-shadow: var(--shadow-md);
-    border-color: var(--primary-color);
-}
-
-.kpi-icon {
-    font-size: 32px;
-    margin-bottom: 8px;
-    display: block;
-}
-
-.kpi-label {
-    font-size: 13px;
-    color: var(--text-secondary);
-    font-weight: 600;
-    margin-bottom: 6px;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-}
-
-.kpi-value {
-    font-size: 24px;
-    font-weight: 800;
-    color: var(--text-primary);
-    display: block;
-}
-
-.kpi-subvalue {
-    font-size: 14px;
-    color: var(--primary-color);
-    font-weight: 600;
-    margin-top: 4px;
-}
-
 /* Responsive adjustments */
 @media (max-width: 768px) {
     .header-top {
         flex-direction: column;
         align-items: stretch;
     }
-    
+
     .header-left {
         text-align: center;
     }
-    
+
     .header-right {
         justify-content: center;
     }
-    
+
     .user-info {
         justify-content: center;
     }
-    
-    .dashboard-kpis {
-        grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-    }
 }
 
-/* UNIFIED TOOLBAR & DASHBOARD STYLES */
+/* ==========================================================================
+   CONTROLS TOOLBAR
+   One row of controls, one button family. Previously each control carried its
+   own inline style block, so the four actions had four different looks, the
+   `עמודות` trigger had no desktop rule at all, and every override here needed
+   !important to outrank the markup.
+   ========================================================================== */
 
-/* Toolbar Responsive */
-@media (max-width: 768px) {
-    .controls-toolbar > div {
-        flex-direction: column;
-        align-items: stretch;
-    }
-    
-    .controls-toolbar .toggle-group {
-        width: 100%;
-        justify-content: center;
-    }
-    
-    .controls-toolbar .action-btn {
-        flex: 1;
-        justify-content: center;
-    }
-    
-    .charts-dashboard-grid {
-        grid-template-columns: 1fr !important;
-    }
+.controls-toolbar {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-bottom: 20px;
+    background: #fff;
+    padding: 12px 14px;
+    border-radius: 14px;
+    border: 1px solid #eef2f7;
+    box-shadow: 0 1px 3px rgba(15, 23, 42, .04);
 }
 
-/* View Buttons */
-.view-btn.active {
-    background-color: #eff6ff !important; /* blue-50 */
-    color: #2563eb !important; /* blue-600 */
-    border-color: #c7d2fe !important; /* blue-200 */
+.tb-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 14px;
+    flex-wrap: wrap;
 }
 
-.view-btn:hover:not(.active) {
-    background-color: #f8fafc !important;
+.tb-group,
+.tb-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
 }
 
-/* Source Toggle Button */
-.source-toggle-btn {
-    background: transparent;
-    color: #64748b;
+.tb-row--filters {
+    gap: 10px;
+    padding-top: 10px;
+    border-top: 1px solid #f1f5f9;
+    justify-content: flex-start;
+    overflow-x: auto;
+}
+
+.tb-row-label {
+    font-size: 12px;
+    font-weight: 700;
+    color: #94a3b8;
+    white-space: nowrap;
+    flex: none;
+}
+
+/* --- the one button family: איפוס · השוואה · עמודות · CSV --- */
+
+.tb-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 7px 13px;
+    border: 1px solid #e2e8f0;
+    border-radius: 9px;
+    background: #fff;
+    color: #475569;
+    font-family: inherit;
+    font-size: 13px;
+    font-weight: 700;
+    line-height: 1.4;
+    white-space: nowrap;
+    cursor: pointer;
+    transition: background .15s ease, border-color .15s ease, color .15s ease;
+}
+
+.tb-btn:hover { background: #f8fafc; border-color: #cbd5e1; color: #0f172a; }
+.tb-btn:active { background: #f1f5f9; }
+
+.tb-btn--primary { border-color: #c7d2fe; background: #eef2ff; color: #4338ca; }
+.tb-btn--primary:hover { background: #e0e7ff; border-color: #a5b4fc; color: #3730a3; }
+
+.tb-btn--good { border-color: #bbf7d0; background: #f0fdf4; color: #166534; }
+.tb-btn--good:hover { background: #dcfce7; border-color: #86efac; color: #14532d; }
+
+/* --- segmented toggle: טבלה / גרפים --- */
+
+.tb-seg {
+    display: inline-flex;
+    gap: 2px;
+    padding: 3px;
+    background: #f1f5f9;
+    border: 1px solid #e2e8f0;
+    border-radius: 11px;
+}
+
+.view-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 14px;
     border: none;
     border-radius: 8px;
-    font-weight: 600;
-    transition: all 0.2s;
+    background: transparent;
+    color: #64748b;
+    font-family: inherit;
+    font-size: 13px;
+    font-weight: 700;
+    white-space: nowrap;
+    cursor: pointer;
+    transition: background .15s ease, color .15s ease, box-shadow .15s ease;
 }
 
-/* A white pill on a #f8fafc background was almost invisible: it was not
-   possible to tell at a glance which season was being displayed, which made
-   last season's numbers look like they were the new season's. */
+.view-btn:hover:not(.active) { background: #e2e8f0; color: #334155; }
+
+.view-btn.active {
+    background: #fff;
+    color: #1d4ed8;
+    box-shadow: 0 1px 3px rgba(15, 23, 42, .12);
+}
+
+/* --- season switch, in the page header --- */
+
+.season-switch {
+    display: inline-flex;
+    gap: 2px;
+    padding: 3px;
+    background: #f1f5f9;
+    border: 1px solid #e2e8f0;
+    border-radius: 11px;
+}
+
+.source-toggle-btn {
+    padding: 6px 13px;
+    border: none;
+    border-radius: 8px;
+    background: transparent;
+    color: #64748b;
+    font-family: inherit;
+    font-size: 13px;
+    font-weight: 700;
+    white-space: nowrap;
+    cursor: pointer;
+    transition: background .15s ease, color .15s ease, box-shadow .15s ease;
+}
+
+.source-toggle-btn:hover:not(.active) { background: #e2e8f0; color: #334155; }
+
+/* Which season is on screen decides what every number means, so the selected
+   state is a filled pill rather than a subtle tint: a white pill on #f8fafc was
+   almost invisible, and last season's numbers read as this season's. */
 .source-toggle-btn.active {
-    background: #3b82f6 !important;
-    color: #ffffff !important;
-    box-shadow: 0 2px 6px rgba(59, 130, 246, 0.35) !important;
+    background: linear-gradient(135deg, #2563eb, #1d4ed8);
+    color: #fff;
+    box-shadow: 0 2px 8px -2px rgba(37, 99, 235, .55);
 }
 
-.source-toggle-btn.active::before {
-    content: '●';
-    font-size: 9px;
-    margin-inline-end: 6px;
-    vertical-align: middle;
+/* ==========================================================================
+   CHARTS VIEW
+   Every card used to repeat the same block of inline styles. The grid and the
+   card live here now; the markup is generated from CHART_SPECS.
+   ========================================================================== */
+
+.charts-view { padding-bottom: 32px; }
+
+.charts-dashboard-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 440px), 1fr));
+    gap: 14px;
+    margin-top: 14px;
 }
 
-.source-toggle-btn:hover:not(.active) {
-    background: #f1f5f9 !important;
-}
-
-/* Quick Filter Buttons */
-.quick-filter-btn.active {
-    background-color: #3b82f6 !important;
-    color: white !important;
-    border-color: #2563eb !important;
-}
-
-/* Chart Card */
 .chart-card {
-    background: white;
-    padding: 20px;
-    border-radius: 16px;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.05);
-    border: 1px solid #f1f5f9;
-    min-height: 400px;
-    transition: transform 0.2s ease, box-shadow 0.2s ease;
+    display: flex;
+    flex-direction: column;
+    background: #fff;
+    padding: 14px 16px 12px;
+    border-radius: 14px;
+    border: 1px solid #eef2f7;
+    box-shadow: 0 1px 3px rgba(15, 23, 42, .04);
+    transition: border-color .2s ease, box-shadow .2s ease;
 }
 
 .chart-card:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 8px 20px rgba(0,0,0,0.08);
+    border-color: #dbe3ec;
+    box-shadow: 0 6px 18px -12px rgba(15, 23, 42, .35);
+}
+
+/* A card that had nothing to plot used to draw an empty axis, which reads as a
+   broken chart rather than as "this needs data the season does not have yet". */
+.chart-card[hidden] { display: none; }
+
+.chart-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+    padding-bottom: 10px;
+    margin-bottom: 10px;
+    border-bottom: 1px solid #f1f5f9;
+}
+
+.chart-title {
+    margin: 0;
+    font-size: 15px;
+    font-weight: 800;
+    color: #0f172a;
+    letter-spacing: -.2px;
+}
+
+/* One line per card saying what question it answers. Eight scatter plots with
+   only axis labels leave the reader to work out why each one is there. */
+.chart-note {
+    margin: 3px 0 0;
+    font-size: 11px;
+    font-weight: 500;
+    line-height: 1.4;
+    color: #94a3b8;
+}
+
+/* No flex:1 here. In a flex column that sets flex-basis to 0 and overrides the
+   height, which collapsed every canvas to about half the space it asked for. */
+.chart-canvas {
+    position: relative;
+    height: 330px;
+}
+
+.chart-seg {
+    display: inline-flex;
+    gap: 2px;
+    padding: 3px;
+    flex: none;
+    background: #f1f5f9;
+    border: 1px solid #e2e8f0;
+    border-radius: 9px;
+}
+
+.chart-seg button {
+    padding: 4px 9px;
+    border: none;
+    border-radius: 6px;
+    background: transparent;
+    color: #64748b;
+    font-family: inherit;
+    font-size: 11.5px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: background .15s ease, color .15s ease, box-shadow .15s ease;
+}
+
+.chart-seg button:hover[aria-pressed="false"] { background: #e2e8f0; color: #334155; }
+
+.chart-seg button[aria-pressed="true"] {
+    background: #fff;
+    color: #1d4ed8;
+    box-shadow: 0 1px 3px rgba(15, 23, 42, .12);
 }
 
 
@@ -3612,29 +3893,10 @@ th {
     box-shadow: 0 4px 12px rgba(15, 23, 42, 0.2) !important;
 }
 
-/* Enhanced View Switcher Buttons */
-.view-btn {
-    font-size: 1em !important;
-    padding: 10px 20px !important;
-    border-radius: 10px !important;
-    background: white !important;
-    color: #64748b !important;
-    border: 1px solid #e2e8f0 !important;
-    box-shadow: 0 1px 2px rgba(0,0,0,0.05) !important;
-}
-
-.view-btn:hover {
-    border-color: #cbd5e1 !important;
-    color: #1e293b !important;
-}
-
-.view-btn.active {
-    background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%) !important;
-    color: white !important;
-    border-color: transparent !important;
-    box-shadow: 0 4px 12px rgba(37, 99, 235, 0.2) !important;
-}
-
+/* A second .view-btn block lived here — a bordered white pill that fought the
+   segmented control above. It won on source order and every property carried
+   !important, so the earlier rules were unreachable. The toolbar section is the
+   only place .view-btn is styled now. */
 
 /* ============================================
    RIVAL ANALYSIS TAB STYLES
@@ -4317,37 +4579,41 @@ canvas {
 /* Quick Filters Styles */
 .quick-filters-group {
     display: flex;
-    gap: 10px;
-    flex-wrap: wrap;
+    gap: 6px;
+    flex-wrap: nowrap;
 }
 
 .quick-filter-btn {
-    padding: 8px 16px;
-    background: white;
-    border: 1px solid #e2e8f0;
+    padding: 6px 12px;
+    background: #f8fafc;
+    border: 1px solid #eef2f7;
     border-radius: 20px;
-    font-size: 13px;
+    font-family: inherit;
+    font-size: 12px;
     font-weight: 600;
     color: #64748b;
     cursor: pointer;
-    transition: all 0.2s ease;
-    box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+    transition: background .15s ease, border-color .15s ease, color .15s ease;
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: 5px;
+    white-space: nowrap;
 }
 
 .quick-filter-btn:hover {
-    background: #f8fafc;
+    background: #f1f5f9;
     border-color: #cbd5e1;
-    transform: translateY(-1px);
+    color: #334155;
 }
 
+/* Declared twice before: a solid blue !important block earlier in the file beat
+   this soft-blue one on colour, while the loser's box-shadow still applied — so
+   the chip rendered in a combination neither rule described. */
 .quick-filter-btn.active {
-    background: #eff6ff; /* Light Blue */
-    border-color: #3b82f6;
+    background: #eff6ff;
+    border-color: #93c5fd;
     color: #1d4ed8;
-    box-shadow: 0 2px 4px rgba(59, 130, 246, 0.15);
+    box-shadow: inset 0 0 0 1px rgba(147, 197, 253, .5);
 }
 
 /* Improved Comparison Modal */
@@ -4986,16 +5252,15 @@ canvas {
         padding: 12px;
     }
 
-    .controls-toolbar > div {
+    .tb-row {
         flex-direction: column;
-        align-items: stretch !important;
-        gap: 12px !important;
+        align-items: stretch;
     }
 
-    .toggle-group {
-        justify-content: center;
-        width: 100%;
-    }
+    .tb-row--filters { flex-direction: row; align-items: center; }
+
+    .tb-seg,
+    .season-switch { justify-content: center; }
 
     /* Draft Sub-Nav */
     .draft-sub-nav-container {
@@ -5038,13 +5303,12 @@ canvas {
 
     /* Charts Grid */
     .charts-dashboard-grid {
-        grid-template-columns: 1fr !important;
+        grid-template-columns: 1fr;
     }
-    
-    .chart-card {
-        min-height: 300px;
-    }
-    
+
+    .chart-canvas { height: 270px; }
+    .chart-head { flex-direction: column; }
+
     /* Stats Cards */
     .lineup-stats-card {
         padding: 10px !important;
@@ -5690,59 +5954,8 @@ canvas {
 .trend-vs .ni { direction: ltr; unicode-bidi: isolate; font-variant-numeric: tabular-nums; }
 .trend-delta { font-size: 11.5px; }
 
-/* ==========================================================================
-   KPI CARDS — leader plus runners-up
-   Second and third place carry most of the value: the leader is usually
-   already on someone's roster.
-   ========================================================================== */
-.kpi-empty { grid-column: 1 / -1; padding: 18px; text-align: center; color: #64748b; font-size: 14px; }
-
-.kpi-value { display: flex; align-items: center; gap: 6px; }
-.kpi-free { font-size: 0.5em; -webkit-text-fill-color: initial; }
-
-.kpi-subtext { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-
-.kpi-runners {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 4px 6px;
-    margin-top: 7px;
-    padding-top: 6px;
-    border-top: 1px dotted #cbd5e1;
-}
-
-.kpi-runner {
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    font-size: 12.5px;
-    color: #475569;
-    background: rgba(255, 255, 255, .6);
-    border-radius: 6px;
-    padding: 2px 6px;
-    white-space: nowrap;
-}
-
-.kpi-runner b {
-    font-size: 10px;
-    font-weight: 800;
-    color: #94a3b8;
-    background: #eef2f7;
-    border-radius: 4px;
-    padding: 0 4px;
-}
-
-.kpi-runner em {
-    font-style: normal;
-    font-weight: 800;
-    color: #0f172a;
-    font-variant-numeric: tabular-nums;
-    direction: ltr;
-}
-
-/* Points across the recent window, inline next to the leader's figure. */
-.mini-spark { display: inline-flex; align-items: flex-end; gap: 2px; height: 16px; }
-.kpi-subtext .trend-bars { height: 15px; padding-top: 0; }
+/* Points across the recent window, inline in a draft-board row. */
+.mini-spark { display: inline-flex; align-items: flex-end; gap: 2px; height: 15px; flex: none; }
 
 .mini-spark i {
     width: 4px;
@@ -6167,90 +6380,6 @@ canvas {
 .trend-cell[data-metric="xgi"] .trend-bar b { inset-inline: -6px; font-size: 9px; }
 .trend-cell[data-metric="pts"] { min-width: 116px; }
 
-/* ==========================================================================
-   KPI CARDS — five deep without growing taller
-   Three runners-up on their own lines each already made the strip tall; five
-   would have doubled it. The leader shrinks, the chrome tightens, and the
-   runners-up sit two or three to a line.
-   ========================================================================== */
-.dashboard-kpis { gap: 10px; }
-
-.kpi-card { padding: 11px 13px; gap: 9px; }
-.kpi-icon { font-size: 20px; }
-.kpi-label { font-size: 10.5px; letter-spacing: .02em; }
-.kpi-value { font-size: 1.32em; gap: 5px; }
-.kpi-subtext { font-size: 11px; gap: 6px; }
-
-.kpi-runners { margin-top: 5px; padding-top: 5px; gap: 3px 4px; }
-
-.kpi-runner {
-    font-size: 11.5px;
-    padding: 1px 5px;
-    gap: 3px;
-    border-radius: 5px;
-}
-
-.kpi-runner b { font-size: 9px; padding: 0 3px; }
-.kpi-subtext .trend-bars, .mini-spark { height: 13px; }
-.mini-spark i { width: 3px; }
-
-/* The card asks a question and then answers it, so the question is what should
-   read first. It was 10.5px grey uppercase above a gradient-filled name at more
-   than twice the size — the answer was shouting over the question. */
-.kpi-card .kpi-content { display: flex; flex-direction: column; gap: 2px; width: 100%; }
-
-.kpi-card .kpi-label {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    font-size: 14px;
-    font-weight: 800;
-    color: #0f172a;
-    text-transform: none;
-    letter-spacing: -.2px;
-}
-
-.kpi-card .kpi-icon { font-size: 16px; line-height: 1; animation: none; flex: none; }
-
-/* Still bold, but it yields to the title: solid colour instead of the gradient,
-   and a size step below it rather than above. */
-.kpi-card .kpi-value {
-    font-size: 16.5px;
-    font-weight: 750;
-    color: var(--primary-color);
-    background: none;
-    -webkit-text-fill-color: currentColor;
-    letter-spacing: -.3px;
-}
-
-/* The card asks a question and then answers it, so the question should read
-   first. It was 10.5px grey uppercase sitting above a gradient-filled name at
-   more than twice the size — the answer was shouting over the question. */
-.kpi-card .kpi-content { display: flex; flex-direction: column; gap: 2px; width: 100%; }
-
-.kpi-card .kpi-label {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    font-size: 14px;
-    font-weight: 800;
-    color: #0f172a;
-    text-transform: none;
-    letter-spacing: -.2px;
-}
-
-.kpi-card .kpi-icon { font-size: 16px; line-height: 1; animation: none; flex: none; }
-
-/* Still bold, but it yields to the title: a solid colour instead of the gradient
-   and a size step below it rather than above. */
-.kpi-card .kpi-value {
-    font-size: 16.5px;
-    font-weight: 750;
-    color: var(--primary-color);
-    background: none;
-    -webkit-text-fill-color: currentColor;
-    letter-spacing: -.3px;
-}
 
 /* ==========================================================================
    COLUMNS MENU

@@ -7,8 +7,8 @@
     <title>⚽ FPL Pro Analytics Hub</title>
     <!-- Inline so the tab icon needs no extra request; mirrors the header mark. -->
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='40' y2='40' gradientUnits='userSpaceOnUse'%3E%3Cstop stop-color='%2322D3EE'/%3E%3Cstop offset='.55' stop-color='%233B82F6'/%3E%3Cstop offset='1' stop-color='%236366F1'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='40' height='40' rx='9' fill='%230F172A'/%3E%3Cpath d='M20 5 8 9.7v9.9c0 7 4.9 12.4 12 14.1 7.1-1.7 12-7.1 12-14.1V9.7L20 5Z' fill='url(%23g)'/%3E%3Crect x='12.6' y='20.4' width='3.4' height='7' rx='1.2' fill='%23fff' fill-opacity='.95'/%3E%3Crect x='18.3' y='16.2' width='3.4' height='11.2' rx='1.2' fill='%23fff'/%3E%3Crect x='24' y='12' width='3.4' height='15.4' rx='1.2' fill='%23fff' fill-opacity='.95'/%3E%3C/svg%3E">
-    <link rel="stylesheet" href="style.css?v=2026.07.27.260">
-    <link rel="stylesheet" href="mobile.css?v=2026.07.27.260">
+    <link rel="stylesheet" href="style.css?v=2026.07.27.261">
+    <link rel="stylesheet" href="mobile.css?v=2026.07.27.261">
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.5.1"></script>
     <script
         src="https://cdnjs.cloudflare.com/ajax/libs/chartjs-plugin-annotation/2.2.1/chartjs-plugin-annotation.min.js"></script>
@@ -73,6 +73,16 @@
 
                     <!-- User & Status (Left) -->
                     <div class="user-actions">
+                        <!-- Which season is on screen decides what every number on the
+                             page means, so it belongs at page level, not buried in the
+                             table's toolbar. Labels are injected by applySeasonLabels(). -->
+                        <div class="season-switch" role="group" aria-label="בחירת עונה">
+                            <button class="source-toggle-btn active" id="liveDataBtn"
+                                onclick="switchDataSource('live')"></button>
+                            <button class="source-toggle-btn" id="historicalDataBtn"
+                                onclick="switchDataSource('historical')"></button>
+                        </div>
+
                         <div class="status-pill">
                             <span class="status-dot"></span>
                             <span id="headerGW">GW--</span>
@@ -127,38 +137,38 @@
                 }
 
                 .brand-logo {
-                    width: 42px;
-                    height: 42px;
-                    border-radius: 12px;
+                    width: 44px;
+                    height: 44px;
+                    flex: none;
+                    border-radius: 13px;
                     display: flex;
                     align-items: center;
                     justify-content: center;
                     background: linear-gradient(145deg, #0f172a, #1e293b);
-                    box-shadow: 0 4px 12px -4px rgba(59, 130, 246, .55),
+                    box-shadow: 0 4px 14px -4px rgba(59, 130, 246, .5),
                                 inset 0 1px 0 rgba(255, 255, 255, .08);
                 }
 
-
+                /* Solid, not gradient-clipped. A gradient fill on 18px bold text
+                   renders as low-contrast and slightly blurred — it read as a
+                   washed-out label rather than as the name of the product. */
                 .brand-info h1 {
-                    font-size: 18px;
+                    font-size: 21px;
+                    line-height: 1.15;
                     margin: 0;
                     color: #0f172a;
-                    background: linear-gradient(95deg, #1e293b 30%, #3b82f6);
-                    -webkit-background-clip: text;
-                    background-clip: text;
-                    -webkit-text-fill-color: transparent;
                     font-weight: 800;
-                    letter-spacing: -0.5px;
-                    font-family: 'Segoe UI', sans-serif;
+                    letter-spacing: -0.45px;
                 }
 
                 .brand-subtitle {
-                    font-size: 11px;
+                    font-size: 10.5px;
                     color: #64748b;
-                    font-weight: 600;
+                    font-weight: 700;
                     text-transform: uppercase;
-                    letter-spacing: 0.5px;
+                    letter-spacing: 0.9px;
                     display: block;
+                    margin-top: 1px;
                 }
 
                 .main-nav {
@@ -320,11 +330,9 @@
 
                 <!-- Removed Legend as requested -->
 
-                <!-- Dashboard KPIs -->
-                <div id="dashboardKPIs" class="dashboard-kpis">
-                    <!-- Cards are rendered by updateDashboardKPIs() from KPI_CARDS, so a
-                         new question means one entry in that list, not seven lines here. -->
-                </div>
+                <!-- Draft board: who to take and why. Rendered by renderDraftBoard()
+                     from DRAFT_PANELS, so a new question means one entry in that list. -->
+                <div id="draftBoard" class="draft-board"></div>
 
                 <!-- On a phone the filter stack is ~1000px tall, so it is a
                      disclosure there and always-open on desktop (see mobile.css). -->
@@ -358,7 +366,11 @@
                     <div class="filter-group"><label title="מסנן שחקנים מתחת למספר הנקודות הזה">🏆 נק׳ מ-</label><input type="number" id="minPoints"
                             onkeyup="processChange()" placeholder="0"></div>
 
-                    <div class="filter-group"><label title="טווח דקות, למשל 120-3420">⏳ דקות</label><input type="number" id="minMinutes"
+                    <!-- value must stay in step with DEFAULT_MIN_MINUTES in script.js;
+                         a structural check asserts they match, because they drifted
+                         apart once and איפוס quietly produced a different table
+                         from a fresh page load. -->
+                    <div class="filter-group"><label title="מסנן שחקנים מתחת למספר הדקות הזה">⏳ דקות</label><input type="number" id="minMinutes"
                             onkeyup="processChange()" value="120" placeholder="0"></div>
                     <div class="filter-group">
                         <label title="החלון שהנתונים מחושבים עליו">📅 טווח</label>
@@ -378,6 +390,13 @@
                             <option value="negative">שלילי (ביצועי חסר)</option>
                         </select></div>
 
+                    <!-- Options are filled by populateSignalFilter() from SIGNAL_RULES,
+                         so a new verdict needs no change here. -->
+                    <div class="filter-group"><label title="הסינון לפי הסיגנל בעמודת סיגנל">🚦 סיגנל</label><select
+                            id="signalFilter" onchange="processChange()">
+                            <option value="">כל הסיגנלים</option>
+                        </select></div>
+
                     <div class="filter-group"><label>הצג:</label><select id="showEntries" onchange="processChange()">
                             <option value="20" selected>20 הראשונים</option>
                             <option value="50">50</option>
@@ -388,41 +407,21 @@
 
                 </div>
 
-                <!-- UNIFIED CONTROLS TOOLBAR -->
-                <div class="controls-toolbar"
-                    style="display: flex; flex-direction: column; gap: 16px; margin-bottom: 24px; background: white; padding: 20px; border-radius: 16px; box-shadow: 0 4px 12px rgba(0,0,0,0.03); border: 1px solid #f1f5f9;">
+                <!-- CONTROLS TOOLBAR
+                     Every control here used to carry its own inline style block, which
+                     is why the four action buttons ended up with four different looks
+                     and why `עמודות` matched none of them. Layout and appearance both
+                     live in style.css now; the markup only says what each control is. -->
+                <div class="controls-toolbar">
 
-                    <!-- Top Row: Toggles & Actions -->
-                    <div
-                        style="display: flex; flex-wrap: wrap; gap: 16px; align-items: center; justify-content: space-between; width: 100%;">
-
-                        <!-- Left: Data Source & View -->
-                        <div style="display: flex; gap: 16px; align-items: center;">
-                            <!-- Data Source -->
-                            <div class="toggle-group"
-                                style="display: flex; background: #f8fafc; padding: 4px; border-radius: 10px; border: 1px solid #e2e8f0;">
-                                <button class="source-toggle-btn active" id="liveDataBtn"
-                                    onclick="switchDataSource('live')"
-                                    style="padding: 8px 16px; border: none; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; transition: all 0.2s;"></button>
-                                <button class="source-toggle-btn" id="historicalDataBtn"
-                                    onclick="switchDataSource('historical')"
-                                    style="padding: 8px 16px; border: none; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; transition: all 0.2s;"></button>
+                    <div class="tb-row">
+                        <div class="tb-group">
+                            <div class="tb-seg" role="group" aria-label="תצוגה">
+                                <button class="view-btn active" onclick="switchMainView('table')"
+                                    id="btnViewTable">📋 טבלה</button>
+                                <button class="view-btn" onclick="switchMainView('charts')"
+                                    id="btnViewCharts">📊 גרפים</button>
                             </div>
-
-                            <div style="width: 1px; height: 32px; background: #e2e8f0;"></div>
-
-                            <!-- View Switcher -->
-                            <div class="toggle-group"
-                                style="display: flex; background: #f8fafc; padding: 4px; border-radius: 10px; border: 1px solid #e2e8f0;">
-                                <button class="view-btn active" onclick="switchMainView('table')" id="btnViewTable"
-                                    style="padding: 8px 16px; border: none; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 6px; transition: all 0.2s;">📋
-                                    טבלה</button>
-                                <button class="view-btn" onclick="switchMainView('charts')" id="btnViewCharts"
-                                    style="padding: 8px 16px; border: none; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 6px; transition: all 0.2s;">📊
-                                    גרפים</button>
-                            </div>
-
-                            <div style="width: 1px; height: 32px; background: #e2e8f0;"></div>
 
                             <!-- Scouting controls: watchlist, row density, trend window -->
                             <div class="scout-controls">
@@ -447,30 +446,24 @@
                             </div>
                         </div>
 
-                        <!-- Right: Main Actions -->
-                        <div style="display: flex; gap: 10px;">
-                            <button class="action-btn" onclick="showAllPlayers(this)"
-                                style="padding: 8px 16px; border: 1px solid #e2e8f0; background: white; border-radius: 8px; color: #475569; font-weight: 600; cursor: pointer; transition: all 0.2s;">🔄
-                                איפוס</button>
-                            <button class="action-btn" id="compareBtn" onclick="compareSelectedPlayers()"
-                                style="padding: 8px 16px; border: 1px solid #c7d2fe; background: #e0e7ff; border-radius: 8px; color: #4338ca; font-weight: 600; cursor: pointer; transition: all 0.2s;">⚖️
-                                השוואה</button>
+                        <div class="tb-actions">
+                            <button class="tb-btn" onclick="showAllPlayers(this)"
+                                title="נקה את כל הסינונים">🔄 איפוס</button>
+                            <button class="tb-btn tb-btn--primary" id="compareBtn"
+                                onclick="compareSelectedPlayers()" title="השווה את השחקנים שסימנת">⚖️ השוואה</button>
                             <details class="cols-menu" id="colsMenu">
-                                <summary class="action-btn" title="הצג או הסתר עמודות">🧩 עמודות
+                                <summary class="tb-btn" title="הצג או הסתר עמודות">🧩 עמודות
                                     <span class="cols-count" id="colsCount"></span></summary>
                                 <div class="cols-panel" id="optionalCols"></div>
                             </details>
-                            <button class="action-btn" onclick="exportToCsv()"
-                                style="padding: 8px 16px; border: 1px solid #bbf7d0; background: #dcfce7; border-radius: 8px; color: #166534; font-weight: 600; cursor: pointer; transition: all 0.2s;">📥
-                                CSV</button>
+                            <button class="tb-btn tb-btn--good" onclick="exportToCsv()"
+                                title="ייצא את הטבלה הנוכחית">📥 CSV</button>
                         </div>
                     </div>
-                    <!-- Bottom Row: Quick Filters -->
-                    <div
-                        style="display: flex; align-items: center; gap: 12px; padding-top: 16px; border-top: 1px solid #f1f5f9; overflow-x: auto;">
-                        <span style="font-size: 14px; font-weight: 700; color: #64748b; white-space: nowrap;">✨ פילטרים
-                            חכמים:</span>
-                        <div class="quick-filters-group" style="display: flex; gap: 8px;">
+
+                    <div class="tb-row tb-row--filters">
+                        <span class="tb-row-label">✨ פילטרים חכמים</span>
+                        <div class="quick-filters-group">
                             <button class="quick-filter-btn" onclick="toggleQuickFilter(this, 'set_pieces')">🎯 מצבים
                                 נייחים</button>
                             <button class="quick-filter-btn"
@@ -507,8 +500,11 @@
                                     <th data-sort="team_name">קבוצה<span class="sort-indicator"></span></th>
                                     <th data-sort="draft_team" title="קבוצת דראפט (חופשי/שם הקבוצה)">קבוצת דראפט<span
                                             class="sort-indicator"></span></th>
-                                    <th data-sort="availability_factor" title="זמינות: פציעה / הרחקה / סיכוי השתתפות">
-                                        זמינות<span class="sort-indicator"></span></th>
+                                    <!-- The זמינות column was here. It printed ✓ on every row
+                                         whenever the squad was fit, spending a column on a
+                                         constant. Availability now shows as a badge on the
+                                         שחקן cell — only when there is something to say — and
+                                         as the "לא זמין" signal. -->
                                     <th data-sort="draft_score" title="ציון דראפט משוקלל">ציון<span
                                             class="sort-indicator"></span></th>
                                     <th data-sort="vorp"
@@ -565,165 +561,83 @@
 
                 </div> <!-- End mainTableView -->
 
-                <!-- MAIN CHARTS VIEW WRAPPER -->
-                <!-- `display` was declared twice here (none, then grid); the second
-                     won, so the charts view rendered under the table on every page
-                     load. switchMainView() sets display:grid when it is selected. -->
-                <div id="mainChartsView"
-                    style="display: none; grid-template-columns: repeat(auto-fit, minmax(min(100%, 400px), 1fr)); gap: 24px; padding-bottom: 40px;">
-
-                    <!-- CHARTS VIEW WRAPPER (New Grid Layout) -->
-                    <div class="charts-dashboard-grid"
-                        style="display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 450px), 1fr)); gap: 24px; margin-top: 24px; padding-bottom: 40px;">
-
-                        <!-- Midfielders Matrix -->
-                        <div class="chart-card"
-                            style="background: white; padding: 20px; border-radius: 16px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); border: 1px solid #f1f5f9; min-height: 400px;">
-                            <h3 class="chart-title"
-                                style="font-size: 18px; margin-bottom: 15px; padding-bottom: 10px; border-bottom: 1px solid #eee; color: #1e293b;">
-                                📊 מטריצת קשרים</h3>
-                            <div style="height: 350px; position: relative;">
-                                <canvas id="chart-mid"></canvas>
-                            </div>
-                        </div>
-
-                        <!-- Forwards Matrix -->
-                        <div class="chart-card"
-                            style="background: white; padding: 20px; border-radius: 16px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); border: 1px solid #f1f5f9; min-height: 400px;">
-                            <h3 class="chart-title"
-                                style="font-size: 18px; margin-bottom: 15px; padding-bottom: 10px; border-bottom: 1px solid #eee; color: #1e293b;">
-                                📊 מטריצת חלוצים</h3>
-                            <div style="height: 350px; position: relative;">
-                                <canvas id="chart-fwd"></canvas>
-                            </div>
-                        </div>
-
-                        <!-- Defenders Matrix -->
-                        <div class="chart-card"
-                            style="background: white; padding: 20px; border-radius: 16px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); border: 1px solid #f1f5f9; min-height: 400px;">
-                            <h3 class="chart-title"
-                                style="font-size: 18px; margin-bottom: 15px; padding-bottom: 10px; border-bottom: 1px solid #eee; color: #1e293b;">
-                                📊 מטריצת מגנים</h3>
-                            <div style="height: 350px; position: relative;">
-                                <canvas id="chart-def"></canvas>
-                            </div>
-                        </div>
-
-                        <!-- Goalkeepers Matrix -->
-                        <div class="chart-card"
-                            style="background: white; padding: 20px; border-radius: 16px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); border: 1px solid #f1f5f9; min-height: 400px;">
-                            <h3 class="chart-title"
-                                style="font-size: 18px; margin-bottom: 15px; padding-bottom: 10px; border-bottom: 1px solid #eee; color: #1e293b;">
-                                📊 מטריצת שוערים</h3>
-                            <div style="height: 350px; position: relative;">
-                                <canvas id="chart-gkp"></canvas>
-                            </div>
-                        </div>
-
-                        <!-- Team Attack -->
-                        <div class="chart-card"
-                            style="background: white; padding: 20px; border-radius: 16px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); border: 1px solid #f1f5f9; min-height: 400px;">
-                            <h3 class="chart-title"
-                                style="font-size: 18px; margin-bottom: 15px; padding-bottom: 10px; border-bottom: 1px solid #eee; color: #1e293b;">
-                                ⚔️ התקפת קבוצות</h3>
-                            <div style="height: 350px; position: relative;">
-                                <canvas id="chart-attack"></canvas>
-                            </div>
-                        </div>
-
-                        <!-- Team Defense -->
-                        <div class="chart-card"
-                            style="background: white; padding: 20px; border-radius: 16px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); border: 1px solid #f1f5f9; min-height: 400px;">
-                            <h3 class="chart-title"
-                                style="font-size: 18px; margin-bottom: 15px; padding-bottom: 10px; border-bottom: 1px solid #eee; color: #1e293b;">
-                                🛡️ הגנת קבוצות</h3>
-                            <div style="height: 350px; position: relative;">
-                                <canvas id="chart-defense"></canvas>
-                            </div>
-                        </div>
-
-                        <!-- Price vs Score -->
-                        <div class="chart-card"
-                            style="background: white; padding: 20px; border-radius: 16px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); border: 1px solid #f1f5f9; min-height: 400px;">
-                            <h3 class="chart-title"
-                                style="font-size: 18px; margin-bottom: 15px; padding-bottom: 10px; border-bottom: 1px solid #eee; color: #1e293b;">
-                                💎 ערך (נקודות מול אחוז בחירה)</h3>
-                            <div style="height: 350px; position: relative;">
-                                <canvas id="chart-price-score"></canvas>
-                            </div>
-                        </div>
-
-                        <!-- ICT Breakdown -->
-                        <div class="chart-card"
-                            style="background: white; padding: 20px; border-radius: 16px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); border: 1px solid #f1f5f9; min-height: 400px;">
-                            <h3 class="chart-title"
-                                style="font-size: 18px; margin-bottom: 15px; padding-bottom: 10px; border-bottom: 1px solid #eee; color: #1e293b;">
-                                ⚡ מדד ICT (טופ 15)</h3>
-                            <div style="height: 350px; position: relative;">
-                                <canvas id="chart-ict"></canvas>
-                            </div>
-                        </div>
-
-                    </div>
-
-                </div> <!-- End mainChartsView -->
-
-                <!-- Comparison modal. Must NOT live inside #mainChartsView: that wrapper is
-                     display:none on the table view, and a hidden parent hides the modal with
-                     it, so pressing השוואה appeared to do nothing at all. -->
-                <div id="compareModal" class="modal" onclick="if(event.target === this) closeModal()">
-                    <div class="modal-content">
-                        <span class="close" onclick="closeModal()">&times;</span>
-                        <div id="compareContent"></div>
-                    </div>
+                <!-- CHARTS VIEW
+                     Cards are built by ensureChartCards() from CHART_SPECS, so a new
+                     chart is one entry in that list rather than a block of markup here
+                     plus a call site in renderCharts(). `display` was declared twice on
+                     this wrapper (none, then grid) and the second won, so the charts
+                     rendered under the table on every page load. -->
+                <div id="mainChartsView" class="charts-view" style="display: none;">
+                    <div class="charts-dashboard-grid" id="chartsGrid"></div>
                 </div>
-
-                <div id="visualizationModal" class="modal">
-
-                    <div class="modal-content">
-
-                        <span class="close" onclick="closeModal()">&times;</span>
-
-                        <h2 id="visualizationTitle"></h2>
-
-                        <div class="chart-container-wrapper">
-                            <canvas id="visualizationChart"></canvas>
-                        </div>
-
-                    </div>
-
-                </div>
-
-                <div id="settingsModal" class="modal" style="display: none;">
-                    <div class="modal-content">
-                        <span class="close"
-                            onclick="document.getElementById('settingsModal').style.display='none'">&times;</span>
-                        <h2>⚙️ הגדרות</h2>
-
-                        <div class="settings-group">
-                            <label>🏆 מזהה ליגת הדראפט:</label>
-                            <input type="text" id="leagueIdInput" inputmode="numeric" placeholder="689"
-                                style="width: 100%; padding: 8px;">
-                            <small>המזהה מתחלף בכל עונה. אפשר גם להעביר אותו בכתובת: <code>?league=12345</code></small>
-                        </div>
-
-                        <div class="settings-group">
-                            <label>🌐 Custom FPL Proxy (Cloudflare Worker):</label>
-                            <input type="text" id="customProxyInput" placeholder="https://your-worker.workers.dev"
-                                style="width: 100%; padding: 8px;">
-                            <small>הכנס כאן את כתובת ה-Worker הפרטי שלך לשיפור ביצועים</small>
-                        </div>
-
-                        <button class="control-button active" onclick="saveSettings()">שמור הגדרות</button>
-                    </div>
-                </div>
-
-                <div id="tooltip" class="tooltip" style="display:none;"></div>
 
             </div> <!-- end playersTabContent -->
 
             <!-- Toast Container -->
             <div id="toastContainer" class="toast-container"></div>
+
+            <!-- ==================================================================
+                 MODALS — page level, outside both tabs. A tab is display:none when
+                 inactive and a hidden parent hides the modal with it, so a modal
+                 nested in one can only ever open from that one. השוואה lost this
+                 way once (it was inside #mainChartsView) and הגדרות was unusable
+                 from the draft tab for far longer, even though its ⚙️ button is in
+                 the always-visible page header. `npm run check` now fails if a
+                 modal moves back inside a tab.
+                 ================================================================== -->
+
+            <div id="compareModal" class="modal" onclick="if(event.target === this) closeModal()">
+                <div class="modal-content">
+                    <span class="close" onclick="closeModal()">&times;</span>
+                    <div id="compareContent"></div>
+                </div>
+            </div>
+
+            <!-- Top 20 behind any draft-board panel -->
+            <div id="leaderboardModal" class="modal" onclick="if(event.target === this) closeModal()">
+                <div class="modal-content modal-content--wide">
+                    <span class="close" onclick="closeModal()">&times;</span>
+                    <div id="leaderboardContent"></div>
+                </div>
+            </div>
+
+            <div id="visualizationModal" class="modal">
+                <div class="modal-content">
+                    <span class="close" onclick="closeModal()">&times;</span>
+                    <h2 id="visualizationTitle"></h2>
+                    <div class="chart-container-wrapper">
+                        <canvas id="visualizationChart"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <!-- The tooltip host is out here for the same reason: [data-tooltip]
+                 elements exist in both tabs. -->
+            <div id="settingsModal" class="modal" style="display: none;">
+                <div class="modal-content">
+                    <span class="close"
+                        onclick="document.getElementById('settingsModal').style.display='none'">&times;</span>
+                    <h2>⚙️ הגדרות</h2>
+
+                    <div class="settings-group">
+                        <label>🏆 מזהה ליגת הדראפט:</label>
+                        <input type="text" id="leagueIdInput" inputmode="numeric" placeholder="689"
+                            style="width: 100%; padding: 8px;">
+                        <small>המזהה מתחלף בכל עונה. אפשר גם להעביר אותו בכתובת: <code>?league=12345</code></small>
+                    </div>
+
+                    <div class="settings-group">
+                        <label>🌐 Custom FPL Proxy (Cloudflare Worker):</label>
+                        <input type="text" id="customProxyInput" placeholder="https://your-worker.workers.dev"
+                            style="width: 100%; padding: 8px;">
+                        <small>הכנס כאן את כתובת ה-Worker הפרטי שלך לשיפור ביצועים</small>
+                    </div>
+
+                    <button class="control-button active" onclick="saveSettings()">שמור הגדרות</button>
+                </div>
+            </div>
+
+            <div id="tooltip" class="tooltip" style="display:none;"></div>
 
             <!-- Draft Tab Content -->
             <div id="draftTabContent" class="tab-content" style="display: none;">
@@ -998,7 +912,7 @@
     <!-- Version query is bumped by scripts/stamp-version.mjs on every commit
          (npm run stamp). It was left at 4.0.0 for months, so returning
          visitors kept running a cached script.js and never saw fixes. -->
-    <script src="script.js?v=2026.07.27.260" defer></script>
+    <script src="script.js?v=2026.07.27.261" defer></script>
 </body>
 
 </html>

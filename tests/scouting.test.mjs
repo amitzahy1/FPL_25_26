@@ -5,7 +5,7 @@
 
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
-import { loadFunctions, installBrowserStubs } from './helpers/load-script.mjs';
+import { loadFunctions, installBrowserStubs, extractDeclaration, extractFunction } from './helpers/load-script.mjs';
 
 /** A processed player, the shape createPlayerRowHtml receives. */
 function makePlayer(over = {}) {
@@ -176,6 +176,56 @@ describe('signal verdicts', () => {
         state.allPlayersData.live.processed = [claim];
         const out = makePlayer({ id: 3, availability_grade: 'injured' });
         assert.ok(fns.signalRank(claim) < fns.signalRank(out));
+    });
+});
+
+describe('the signal filter', () => {
+    /**
+     * Fills the <select> the filter reads. SIGNAL_SORT_ORDER comes back out with
+     * it so the assertions compare against the real list rather than a copy that
+     * can drift from it.
+     */
+    function withSelect() {
+        const select = { innerHTML: '', value: '' };
+        globalThis.document = { getElementById: id => (id === 'signalFilter' ? select : null) };
+        const body = [
+            extractDeclaration('SIGNAL_RULES'),
+            extractDeclaration('SIGNAL_SORT_ORDER'),
+            extractDeclaration('HOLD_SIGNAL'),
+            extractFunction('populateSignalFilter')
+        ].join('\n');
+        const { populateSignalFilter, order } = new Function(
+            `${body}\nreturn { populateSignalFilter, order: SIGNAL_SORT_ORDER };`
+        )();
+        populateSignalFilter();
+        return { select, order };
+    }
+
+    const optionValues = html => [...html.matchAll(/value="([^"]*)"/g)].map(m => m[1]);
+
+    test('offers one option per rule, plus a clear-all', () => {
+        const { select, order } = withSelect();
+        const values = optionValues(select.innerHTML);
+        assert.equal(values[0], '', 'the first option must clear the filter');
+        assert.equal(new Set(values).size, values.length, 'no duplicated option');
+        assert.equal(values.length, order.length + 1,
+            'a rule with no option is unreachable from the UI, which is how three quick '
+            + 'filters ended up defined but unusable');
+    });
+
+    test('lists them in the order the column sorts', () => {
+        const { select, order } = withSelect();
+        assert.deepEqual(optionValues(select.innerHTML).filter(Boolean), order,
+            'the filter and the sorted column should read top-to-bottom the same way');
+    });
+
+    test('every option is labelled in Hebrew, not by its key', () => {
+        const { select } = withSelect();
+        const labels = [...select.innerHTML.matchAll(/>([^<]+)</g)].map(m => m[1].trim());
+        assert.ok(labels.length > 1);
+        for (const label of labels) {
+            assert.ok(/[֐-׿]/.test(label), `option "${label}" is not readable`);
+        }
     });
 });
 

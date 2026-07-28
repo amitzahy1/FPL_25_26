@@ -39,7 +39,7 @@ if (thead) {
     if (rowFn) {
         // <td> written literally, plus the trend cells emitted from trendKeys
         const literal = [...rowFn[0].matchAll(/<td\b/g)].length;
-        const trendKeys = (js.match(/const trendKeys = \[([^\]]*)\]/) || [, ''])[1];
+        const trendKeys = (js.match(/const trendKeys = \[([^\]]*)\]/) || ['', ''])[1];
         const trendCount = trendKeys.split(',').filter(x => x.trim()).length;
         const cells = literal + trendCount;
         check(headers === cells,
@@ -58,6 +58,62 @@ check(!!proxy, 'config.corsProxy not found');
 if (proxy) {
     check(!/localhost|127\.0\.0\.1/.test(proxy[1]),
         `config.corsProxy points at a local address: ${proxy[1]}`);
+}
+
+// 6. the minutes floor is written in two places and they drifted apart, so איפוס
+//    silently produced a different table from a fresh page load
+const htmlMinutes = html.match(/id="minMinutes"[\s\S]{0,200}?value="(\d+)"/);
+const jsMinutes = js.match(/const DEFAULT_MIN_MINUTES = '(\d+)'/);
+check(!!htmlMinutes, 'the minMinutes input has no default value');
+check(!!jsMinutes, 'DEFAULT_MIN_MINUTES not found in script.js');
+if (htmlMinutes && jsMinutes) {
+    check(htmlMinutes[1] === jsMinutes[1],
+        `minMinutes opens on ${htmlMinutes[1]} but איפוס restores ${jsMinutes[1]}`);
+}
+
+// 7. every smart-filter chip has a rule, and every rule has a chip. Both
+//    directions have shipped broken: five chips were once no-ops, and later three
+//    rules had no chip and could never run.
+const chips = [...html.matchAll(/toggleQuickFilter\(this,\s*'([a-z_]+)'\)/g)].map(m => m[1]);
+const qf = js.match(/const QUICK_FILTERS = \{[\s\S]*?\n\};/);
+check(chips.length > 0, 'no smart-filter chips found in index.html');
+check(!!qf, 'QUICK_FILTERS not found in script.js');
+if (chips.length && qf) {
+    const rules = [...qf[0].matchAll(/^ {4}([a-z_]+): \{/gm)].map(m => m[1]);
+    const orphanChips = chips.filter(c => !rules.includes(c));
+    const unreachable = rules.filter(r => !chips.includes(r));
+    check(orphanChips.length === 0,
+        `smart-filter chip with no rule (highlights and does nothing): ${orphanChips.join(', ')}`);
+    check(unreachable.length === 0,
+        `smart-filter rule with no chip (unreachable): ${unreachable.join(', ')}`);
+}
+
+// 8. modals must not sit inside a tab. A tab is display:none when inactive, and a
+//    hidden parent hides the modal with it — this took out השוואה once and הגדרות
+//    from the draft tab for far longer.
+//
+//    Measured by <div> nesting depth, not by a text range: the modals now sit
+//    between the two tabs in source order, which a start/end index test reads as
+//    "inside the first one".
+{
+    // Comments are stripped first so prose mentioning a tag cannot skew the depth.
+    const bare = html.replace(/<!--[\s\S]*?-->/g, '');
+    const tags = [...bare.matchAll(/<(\/?)div\b[^>]*>/g)];
+    const opensTab = t => /id="(players|draft)TabContent"/.test(t[0]);
+
+    const nested = [];
+    for (let i = 0; i < tags.length; i++) {
+        if (!opensTab(tags[i])) continue;
+        let depth = 0;
+        for (let j = i; j < tags.length; j++) {
+            depth += tags[j][1] ? -1 : 1;
+            if (depth === 0) break;
+            const id = tags[j][0].match(/id="(\w*[Mm]odal)"/);
+            if (id) nested.push(id[1]);
+        }
+    }
+    check(nested.length === 0,
+        `modal(s) nested inside a tab, so they cannot open from the other one: ${nested.join(', ')}`);
 }
 
 if (failures.length) {

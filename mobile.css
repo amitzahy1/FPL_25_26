@@ -305,33 +305,19 @@
 /* --- card grids: let items shrink, and clip text instead of the layout --- */
 
 @media (max-width: 768px) {
-    .dashboard-kpis {
-        grid-template-columns: 1fr !important;
-        gap: 10px !important;
-        margin: 12px 0 !important;
-    }
-
-    .kpi-card { padding: 13px 15px !important; gap: 12px !important; min-width: 0; }
-    .kpi-card > * { min-width: 0; }
-    .kpi-content { min-width: 0; overflow: hidden; }
-
-    .kpi-label,
-    .kpi-value,
-    .kpi-subtext,
-    .kpi-runner {
-        min-width: 0;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-    }
-
-    .kpi-runners { min-width: 0; flex-wrap: wrap; }
-
     .db-grid { grid-template-columns: 1fr !important; gap: 10px !important; }
     .db-card { min-width: 0; }
     .db-row { min-width: 0; }
+    .db-bar { margin-bottom: 10px; }
+    .db-heading { font-size: 17px; }
     .db-name,
     .db-why { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+    /* Eight columns cannot fit a phone; the modal scrolls sideways instead of
+       the page doing it. */
+    .lb-table { font-size: 12px; }
+    .lb-table th, .lb-table td { padding: 7px 8px; }
+    .lb-why { min-width: 150px; }
 
     /* Anything laid out as a grid or flex row of cards gets the same treatment:
        without min-width:0 a grid item refuses to shrink past its content. */
@@ -414,37 +400,43 @@
 }
 
 /* --- the controls toolbar wraps instead of running off the screen ---
-   Its rows are laid out with inline styles, so overriding them needs the
-   same specificity plus !important. */
+   The inline styles and the attribute-selector hack that used to hide the
+   divider <div>s are gone; plain class rules are enough now. */
 @media (max-width: 768px) {
-    .controls-toolbar { padding: 12px !important; gap: 12px !important; }
+    .controls-toolbar { padding: 12px; gap: 10px; }
 
-    .controls-toolbar > div,
-    .controls-toolbar > div > div {
-        flex-wrap: wrap !important;
-        gap: 8px !important;
+    .tb-row,
+    .tb-group,
+    .tb-actions {
+        flex-wrap: wrap;
+        gap: 8px;
         min-width: 0;
     }
 
-    /* The vertical rule between the view toggle and the scout controls only
-       reads as a separator when they are on one line. */
-    .controls-toolbar > div > div[style*="width: 1px"] { display: none !important; }
+    .tb-actions > * { flex: 1 1 auto; justify-content: center; }
+    .tb-btn { padding: 7px 11px; font-size: 12.5px; }
+    .tb-seg, .season-switch { flex-wrap: nowrap; }
+    .tb-row--filters { padding-top: 8px; }
 
-    .controls-toolbar .action-btn { padding: 7px 11px !important; font-size: 13px; }
-    .toggle-group { flex-wrap: wrap; }
+    /* The season switch is the widest thing in the header on a phone. */
+    .season-switch { order: -1; }
+    .source-toggle-btn { padding: 6px 10px; font-size: 12.5px; }
 }
 
 /* --- charts --- */
 @media (max-width: 768px) {
     .charts-dashboard-grid {
-        grid-template-columns: 1fr !important;
-        gap: 12px !important;
+        grid-template-columns: 1fr;
+        gap: 12px;
         min-width: 0;
     }
 
-    .chart-card { min-width: 0; padding: 12px !important; }
+    .chart-card { min-width: 0; padding: 12px; }
     .chart-card canvas { max-width: 100%; }
-    .chart-title { font-size: 14px !important; }
+    .chart-title { font-size: 14px; }
+    .chart-note { font-size: 10.5px; }
+    .chart-canvas { height: 260px; }
+    .chart-head { flex-direction: column; align-items: stretch; gap: 8px; }
     .matrix-grid { grid-template-columns: 1fr !important; }
 }
 

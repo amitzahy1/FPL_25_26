@@ -70,7 +70,6 @@ function load(players, over = {}) {
     globalThis.formatVorp = v => String(v ?? '-');
     globalThis.formatDefconRate = v => String(v ?? '-');
     globalThis.formatRotation = v => String(v ?? '-');
-    globalThis.formatAvailability = () => 'ok';
     globalThis.escapeHtml = String;
 
     const fns = loadFunctions([

@@ -120,7 +120,7 @@ const config = {
     get draftLeagueId() { return getLeagueId(); },
     setPieceTakers: {}, // DEPRECATED: Now automated via API in preprocessPlayerData
     tableColumns: [
-        'rank', 'web_name', 'draft_score', 'vorp', 'defcon_hit_rate', 'rotation_risk', 'availability',
+        'rank', 'web_name', 'draft_score', 'vorp', 'defcon_hit_rate', 'rotation_risk',
         'stability_index', 'predicted_points_1_gw', 'next_3_fdr', 'team_name', 'draft_team',
         'position_name', 'now_cost', 'total_points', 'points_per_game_90', 'selected_by_percent',
         'dreamteam_count', 'net_transfers_event', 'def_contrib_per90', 'goals_scored_assists',
@@ -221,7 +221,6 @@ const config = {
         'vorp': 'VORP — כמה נקודות למשחק השחקן טוב יותר מהחלופה הזמינה בחינם באותה עמדה. המדד המרכזי לדראפט: בדראפט אין מחירים, ולכן ה"ערך" הוא היתרון על פני מי שאפשר לקחת בלי לבזבז פיק.',
         'defcon_hit_rate': 'אחוז ההופעות שבהן השחקן עבר בפועל את סף ה-DEFCON (10 CBIT למגן, 12 CBIRT לקשר/חלוץ) וזכה ב-2 נקודות. זהו סף פר-משחק, ולכן ממוצע ל-90 דקות מטעה.',
         'rotation_risk': 'אחוז ההופעות שבהן השחקן פתח בהרכב. בדראפט אי אפשר פשוט להעביר שחקן, ולכן שחקן מסובב מסוכן יותר מאשר ב-FPL רגיל.',
-        'availability': 'מצב זמינות: פציעה, הרחקה או סיכוי השתתפות מתחת ל-100%.',
         'xDiff': 'ההפרש בין שערים+בישולים בפועל לצפי (xGI). ערך חיובי מעיד על מימוש יתר.',
         'net_transfers_event': 'סה"כ העברות נכנסות פחות יוצאות במחזור הנוכחי - מדד למומנטום ביקוש לשחקן.'
     }
@@ -257,6 +256,11 @@ const state = {
     aggregatedCache: {}, // { 3: [...], 5: [...] }
     historicalPoints: {}, // GW -> Map(elementId -> stats)
     displayedData: [],
+    // The same rows before the "הצג: 20 הראשונים" slice. The charts read this:
+    // plotting the visible slice meant every scatter had exactly 20 points on it,
+    // so a league-wide distribution looked like a handful of dots.
+    filteredData: [],
+    chartPosition: 'MID',        // which position the matrix chart is showing
     // Percentile baselines are computed once per render from the whole filtered
     // league, BEFORE the top-N slice. Scoping them to the visible rows made
     // every cell in a top-20 view look average.
@@ -322,9 +326,13 @@ const state = {
     }
 };
 
+/**
+ * Live Chart instances, keyed by canvas id, so each render can destroy the
+ * previous one before replacing it. `comparisonRadar` was seeded here too, left
+ * behind when the radar chart was removed — nothing has written or read it since.
+ */
 const charts = {
-    visualization: null,
-    comparisonRadar: null
+    visualization: null
 };
 
 /**
@@ -1288,10 +1296,12 @@ async function fetchAndProcessData() {
 
         document.getElementById('lastUpdated').textContent = `עדכון אחרון: ${new Date().toLocaleString('he-IL')}`;
         populateTeamFilter();
+        populateSignalFilter();
+        assertQuickFiltersReachable();
         loadWatchlist();
         state.shownOptional = loadOptionalColumns();
         invalidateSignals();
-        updateDashboardKPIs(); // Update dashboard KPIs
+        renderDraftBoard();
         processChange();
 
         // The trend window is a handful of localStorage-cached gameweek fetches.
@@ -1306,7 +1316,7 @@ async function fetchAndProcessData() {
             // before it landed so they are recomputed with it.
             invalidateSignals();
             renderTable();
-            updateDashboardKPIs();
+            renderDraftBoard();
         });
 
         // Load draft data in background (for team filter)
@@ -1384,8 +1394,8 @@ function showEmptySeasonState() {
         </td></tr>`;
     }
 
-    const grid = document.getElementById('dashboardKPIs');
-    if (grid) grid.innerHTML = '';
+    const board = document.getElementById('draftBoard');
+    if (board) board.innerHTML = '';
 
     showSeasonBanner(played);
     showToast(`אין נתוני ${SEASON_CONFIG.seasonLabel}`, 'העונה החדשה טרם החלה', 'warning', 4000);
@@ -1951,6 +1961,23 @@ const SIGNAL_SORT_ORDER = ['claim', 'buylow', 'swing', 'clinical', 'hold',
 function signalRank(player) {
     const i = SIGNAL_SORT_ORDER.indexOf(signalFor(player).key);
     return i < 0 ? SIGNAL_SORT_ORDER.length : i;
+}
+
+/**
+ * Fills the סיגנל filter from the rules themselves, in the same order the column
+ * sorts, so adding a rule to SIGNAL_RULES also adds it to the filter and neither
+ * can drift from the other.
+ */
+function populateSignalFilter() {
+    const select = document.getElementById('signalFilter');
+    if (!select) return;
+    const byKey = new Map([...SIGNAL_RULES, HOLD_SIGNAL].map(r => [r.key, r]));
+    const options = SIGNAL_SORT_ORDER
+        .map(key => byKey.get(key))
+        .filter(Boolean)
+        .map(r => `<option value="${r.key}">${r.label}</option>`)
+        .join('');
+    select.innerHTML = `<option value="">כל הסיגנלים</option>${options}`;
 }
 
 /* ------------------------- per-gameweek trends --------------------------- */
@@ -2614,7 +2641,6 @@ function createPlayerRowHtml(player, index) {
         <td>${player.position_name}</td>
         <td>${player.team_name}</td>
         <td class="${draftTeamClass}" title="${draftTeamDisplay}">${draftTeamDisplay}</td>
-        <td data-tooltip="${config.columnTooltips.availability}">${formatAvailability(player)}</td>
         <td class="bold-cell ${getPercentileClass(player.draft_score, displayedValues.draft_score)}">${player.draft_score.toFixed(1)}</td>
         <td class="bold-cell" data-tooltip="${config.columnTooltips.vorp}" style="color:${player.vorp > 0 ? '#059669' : player.vorp < 0 ? '#dc2626' : '#94a3b8'};">${formatVorp(player.vorp)}</td>
         <td class="${getPercentileClass(player.total_points, displayedValues.total_points)}">${player.total_points}</td>
@@ -2794,7 +2820,7 @@ function renderTable() {
             <div style="font-size:14px; font-weight:700; margin-bottom:4px;">אין תוצאות</div>
             <div style="font-size:12.5px;">${reason}</div>
         </td></tr>`;
-        updateDashboardKPIs(state.displayedData);
+        renderDraftBoard();
         return;
     }
 
@@ -2810,8 +2836,8 @@ function renderTable() {
     updateScoutingUi();
     syncDetailWidth();
 
-    // Update KPIs based on displayed/filtered data
-    updateDashboardKPIs(state.displayedData);
+    // The board follows the position filter, so it is rebuilt with the table.
+    renderDraftBoard();
 
     document.querySelectorAll('.player-select').forEach(checkbox => {
         checkbox.addEventListener('change', function () {
@@ -2881,6 +2907,13 @@ function generateFixturesHTML(player) {
 
 function processChange() {
     if (!state.allPlayersData[state.currentDataSource].processed) return;
+
+    // Cleared once, here, by the only function that can decide the table is
+    // empty. It used to be cleared inside applyQuickFilter, which meant a notice
+    // written by any other filter was wiped by a quick filter that ran later,
+    // and a stale notice survived when no quick filter was active at all.
+    state.quickFilterNotice = null;
+
     // ... filters ...
     const nameFilter = document.getElementById('searchName').value.toLowerCase();
     const posFilter = document.getElementById('positionFilter').value;
@@ -2975,6 +3008,18 @@ function processChange() {
         }
     }
 
+    // The סיגנל column is the most actionable thing in the table, and until now
+    // the only way to use it was to sort by it and read. signalFor() is cached
+    // per player, so this is a map lookup per row.
+    const signalFilter = (document.getElementById('signalFilter') || {}).value || '';
+    if (signalFilter) {
+        filteredData = filteredData.filter(p => signalFor(p).key === signalFilter);
+        if (!filteredData.length) {
+            const rule = [...SIGNAL_RULES, HOLD_SIGNAL].find(r => r.key === signalFilter);
+            state.quickFilterNotice = `אין שחקן עם הסיגנל "${rule ? rule.label : signalFilter}" בסינון הנוכחי`;
+        }
+    }
+
     if (state.watchlistOnly) {
         filteredData = filteredData.filter(p => state.watchlist.has(p.id));
         if (!filteredData.length) {
@@ -3053,6 +3098,8 @@ function processChange() {
     // here BEFORE the top-N slice. Scoping it to the visible rows made a top-20
     // view paint its best players as merely average.
     state.percentileBase = buildPercentileBase(state.displayedData);
+    // The charts read the same pre-slice set, for the same reason.
+    state.filteredData = state.displayedData;
 
     // THEN limit to the requested number of rows
     if (showEntries !== 'all') state.displayedData = state.displayedData.slice(0, parseInt(showEntries));
@@ -3115,22 +3162,26 @@ const QUICK_FILTERS = {
         filter: p => p.minutes > 450 && p.xDiff < 0 && p.net_transfers_event > 0,
         sortKey: 'net_transfers_event'
     },
-    // Reliable starters: high share of appearances as a starter.
-    nailed_starters: {
-        filter: p => p.rotation_risk !== null && p.rotation_risk >= 0.85 && p.minutes > 600,
-        sortKey: 'points_per_game_90'
-    },
-    // The DEFCON specialists: players who actually clear the threshold often.
-    defcon_kings: {
-        filter: p => p.defcon_hit_rate !== null && p.defcon_hit_rate >= 25,
-        sortKey: 'defcon_hit_rate'
-    },
-    // Best value relative to what is freely available at the same position.
-    best_value: {
-        filter: p => p.vorp !== null && p.vorp > 0,
-        sortKey: 'vorp'
-    }
+    // nailed_starters, defcon_kings and best_value lived here. All three had no
+    // chip in index.html, so nothing could ever call them — the mirror image of
+    // the bug this list was written to prevent, and just as invisible. Two of the
+    // three are now panels on the draft board (VORP and DEFCON hit-rate), and the
+    // third sorts on rotation_risk, which is a column you can click.
 };
+
+// The chips and the rules must agree in both directions. A chip with no rule
+// highlights and does nothing; a rule with no chip is dead weight that reads as a
+// working feature. Both have shipped here before.
+function assertQuickFiltersReachable() {
+    const chips = [...document.querySelectorAll('.quick-filter-btn')]
+        .map(b => (b.getAttribute('onclick') || '').match(/'([a-z_]+)'/))
+        .filter(Boolean).map(m => m[1]);
+    const rules = Object.keys(QUICK_FILTERS);
+    const orphanChips = chips.filter(c => !rules.includes(c));
+    const unreachable = rules.filter(r => !chips.includes(r));
+    if (orphanChips.length) console.warn('⚠️ quick-filter chip with no rule:', orphanChips);
+    if (unreachable.length) console.warn('⚠️ quick-filter rule with no chip:', unreachable);
+}
 
 // Filters whose inputs simply do not exist yet outside a live season, so an
 // empty result is expected and should be explained rather than shown as a
@@ -3164,7 +3215,6 @@ function applyQuickFilter(filterName) {
         return;
     }
 
-    state.quickFilterNotice = null;
     state.displayedData = state.displayedData.filter(spec.filter);
     // No sorting here: processChange() sorts by state.sortKey immediately after
     // this returns, which discarded whatever this used to do. Each filter names
@@ -3242,14 +3292,27 @@ function setActiveButton(button) {
     if (button) button.classList.add('active');
 }
 
+/**
+ * The minutes floor the page opens on, and the one איפוס restores.
+ *
+ * There were three different "defaults": 120 in the markup, 30 here, and 0 in
+ * toggleQuickFilter. Pressing איפוס therefore produced a *different* table from a
+ * fresh page load, silently, and neither number was written down anywhere as the
+ * intended one. A quick filter still drops it to zero on purpose — a chip carries
+ * its own minutes threshold and should not be filtered twice.
+ */
+const DEFAULT_MIN_MINUTES = '120';
+const QUICK_FILTER_MIN_MINUTES = '0';
+
 function showAllPlayers(button) {
     setActiveButton(button);
     state.activeQuickFilterName = null;
-    ['searchName', 'positionFilter', 'teamFilter', 'priceRange', 'minPoints', 'xDiffFilter', 'draftTeamFilter'].forEach(id => {
+    document.querySelectorAll('.quick-filter-btn.active').forEach(b => b.classList.remove('active'));
+    ['searchName', 'positionFilter', 'teamFilter', 'priceRange', 'minPoints', 'xDiffFilter', 'signalFilter', 'draftTeamFilter'].forEach(id => {
         const el = document.getElementById(id);
         if (el) el.value = '';
     });
-    document.getElementById('minMinutes').value = '30';
+    document.getElementById('minMinutes').value = DEFAULT_MIN_MINUTES;
     document.getElementById('showEntries').value = 'all';
     processChange();
     sortTable('draft_score');
@@ -3270,11 +3333,13 @@ function toggleQuickFilter(button, filterName) {
         button.classList.add('active');
 
         // Reset other inputs to avoid confusion, but keep quick filter active
-        ['searchName', 'positionFilter', 'teamFilter', 'priceRange', 'minPoints', 'xDiffFilter', 'draftTeamFilter'].forEach(id => {
+        ['searchName', 'positionFilter', 'teamFilter', 'priceRange', 'minPoints', 'xDiffFilter', 'signalFilter', 'draftTeamFilter'].forEach(id => {
             const el = document.getElementById(id);
             if (el) el.value = '';
         });
-        document.getElementById('minMinutes').value = '0'; // Often quick filters need low minutes
+        // Each chip carries its own minutes threshold; applying the page default
+        // on top of it would filter the same thing twice.
+        document.getElementById('minMinutes').value = QUICK_FILTER_MIN_MINUTES;
 
         // Open every quick filter on its best players. Each filter may name the
         // column that makes its own category legible; the rest fall back to
@@ -3559,11 +3624,10 @@ function getMetricValueClass(value, values, reversed) {
 // Radar chart removed - not needed for the new comparison design
 
 window.closeModal = function () {
-    const compareModal = document.getElementById('compareModal');
-    const vizModal = document.getElementById('visualizationModal');
-
-    if (compareModal) compareModal.style.display = 'none';
-    if (vizModal) vizModal.style.display = 'none';
+    // Closes by class, not by a list of ids: the previous version named two of
+    // the four modals, so a modal added later stayed open with no way to dismiss
+    // it and nothing in the code saying why.
+    document.querySelectorAll('.modal').forEach(m => { m.style.display = 'none'; });
 
     document.body.style.overflow = ''; // Restore scrolling
 
@@ -3871,111 +3935,352 @@ function exportToCsv() {
 // of the same name meant only one ever ran, and the dead one read fine, so a
 // bug fixed in it changed nothing. The live implementation is above and uses
 // the #compareModal markup already in index.html.
-// ============================================
-// DASHBOARD KPIs
-// ============================================
+/* ==========================================================================
+   DRAFT BOARD — "למי כדאי לקחת"
+   ==========================================================================
+   Replaces the six KPI trivia cards. They answered questions the table already
+   answers by sorting a column (most goals, most assists, most points) and gave
+   a bare number with no reason attached. Each panel here answers one concrete
+   draft question with an explicit, stated rule, so a recommendation can be
+   argued with rather than taken on trust — and every pick carries the sentence
+   that put it there.
+
+   The pool is the players you can actually get: free agents only, once the
+   league's rosters are known. Before the draft everyone is available.
+   ========================================================================== */
+
+/** Per-match DEFCON threshold by element_type. Mirrors the snapshot builder. */
+const DEFCON_THRESHOLD = { 1: null, 2: 10, 3: 12, 4: 12 };
 
 /**
- * The KPI strip. Each card names a question, shows the leader, and now also the
- * runners-up: knowing who is second and third is most of the value, because the
- * leader is usually already owned.
+ * Recent-window aggregates for one player, over the gameweeks ensureTrendWindow()
+ * has loaded. `matches` counts the gameweeks he actually played, not the
+ * gameweeks in the window: three good games out of five is a different player
+ * from three good games out of three.
  *
- * `pick` returns a comparable number, or null when the player has no answer to
- * this question at all — nulls are excluded rather than sorted last as zeros.
+ * Cached on state.trendKey, which changes whenever the window is rebuilt.
  */
-const KPI_CARDS = [
+let _windowStatsCache = { key: null, byId: new Map() };
+function windowStats(player) {
+    if (_windowStatsCache.key !== state.trendKey) {
+        _windowStatsCache = { key: state.trendKey, byId: new Map() };
+    }
+    const hit = _windowStatsCache.byId.get(player.id);
+    if (hit) return hit;
+
+    const mins = getTrendSeries(player.id, 'mins', 'recent');
+    const pts = getTrendSeries(player.id, 'pts', 'recent');
+    const dc = getTrendSeries(player.id, 'dc', 'recent');
+    const threshold = DEFCON_THRESHOLD[player.element_type];
+
+    let matches = 0, minutes = 0, points = 0, dcHits = 0;
+    mins.forEach((m, i) => {
+        if (m.value <= 0) return;
+        matches++;
+        minutes += m.value;
+        points += pts[i] ? pts[i].value : 0;
+        if (threshold !== null && dc[i] && dc[i].value >= threshold) dcHits++;
+    });
+
+    const out = {
+        matches, minutes, points,
+        gws: mins.length,
+        ppg: matches ? points / matches : null,
+        mpg: matches ? minutes / matches : null,
+        // GKPs are not DEFCON-eligible at all, which is different from 0%.
+        dcRate: (threshold !== null && matches) ? (dcHits / matches) * 100 : null,
+        dcHits
+    };
+    _windowStatsCache.byId.set(player.id, out);
+    return out;
+}
+
+/** Minimum appearances a player needs inside the window to be recommendable. */
+function windowMinMatches() {
+    return Math.max(2, Math.ceil((state.trendWindow || 5) * 0.6));
+}
+
+const DRAFT_PANELS = [
     {
-        id: 'hot-player', icon: '🔥', label: 'שחקן לוהט',
-        pick: p => p.minutes > 450 ? (parseFloat(p.form) || 0) : null,
-        fmt: (v, p) => `כושר ${v.toFixed(1)} · ${p.points_per_game_90.toFixed(1)} נק׳/90`,
-        short: v => v.toFixed(1)
+        id: 'value',
+        title: 'הערך הגדול ביותר',
+        subtitle: 'VORP — יתרון על החלופה החופשית',
+        icon: '💎',
+        accent: '#6366f1',
+        metric: p => p.vorp,
+        display: p => `+${p.vorp.toFixed(2)}`,
+        why: p => `חלופה בעמדה: ${p.replacement_score.toFixed(2)} נק׳ למשחק`,
+        eligible: p => p.vorp !== null && p.vorp > 0 && p.replacement_score !== null,
+        rank: (a, b) => b.vorp - a.vorp
     },
     {
-        id: 'best-draft', icon: '🏅', label: 'מלך הדראפט',
-        pick: p => p.draft_score,
-        fmt: v => `ציון ${v.toFixed(1)}`,
-        short: v => v.toFixed(1)
+        id: 'form',
+        title: 'הכי חמים עכשיו',
+        subtitle: 'נקודות למשחק בחלון הנבחר',
+        icon: '🔥',
+        accent: '#ea580c',
+        metric: p => windowStats(p).ppg,
+        display: p => windowStats(p).ppg.toFixed(1),
+        why: p => {
+            const w = windowStats(p);
+            return `${Math.round(w.points)} נק׳ ב-${w.matches} משחקים`;
+        },
+        eligible: p => {
+            const w = windowStats(p);
+            return w.ppg !== null && w.matches >= windowMinMatches() && w.mpg >= 45;
+        },
+        rank: (a, b) => windowStats(b).ppg - windowStats(a).ppg,
+        windowAware: true
     },
     {
-        id: 'top-scorer', icon: '⚽', label: 'מלך השערים',
-        pick: p => p.goals_scored,
-        fmt: v => `${v} שערים`,
-        short: v => String(v)
+        id: 'defcon',
+        title: 'מכונות DEFCON',
+        subtitle: 'עוברים את הסף בפועל, לא בממוצע',
+        icon: '🛡️',
+        accent: '#0891b2',
+        // The season hit-rate is the better number where it exists (the snapshot
+        // computes it per match). The window rate is the fallback for a live
+        // season, which has no season-long hit-rate yet.
+        metric: p => defconRateFor(p),
+        display: p => `${defconRateFor(p).toFixed(0)}%`,
+        why: p => {
+            const w = windowStats(p);
+            if (p.defcon_hit_rate !== null && p.defcon_hit_rate !== undefined && p.defcon_eligible_apps) {
+                return `${p.defcon_hits}/${p.defcon_eligible_apps} משחקים מעל הסף בעונה`;
+            }
+            return `${w.dcHits}/${w.matches} משחקים מעל הסף בחלון`;
+        },
+        eligible: p => {
+            const rate = defconRateFor(p);
+            return rate !== null && rate >= 20 && windowStats(p).matches >= windowMinMatches();
+        },
+        rank: (a, b) => defconRateFor(b) - defconRateFor(a),
+        windowAware: true
     },
     {
-        id: 'top-assister', icon: '🎯', label: 'מלך הבישולים',
-        pick: p => p.assists,
-        fmt: v => `${v} בישולים`,
-        short: v => String(v)
+        id: 'market',
+        title: 'תנועת שוק',
+        subtitle: 'למי נכנסות העברות במחזור הזה',
+        icon: '🔄',
+        accent: '#0284c7',
+        metric: p => p.net_transfers_event,
+        display: p => `${p.net_transfers_event > 0 ? '+' : ''}${p.net_transfers_event.toLocaleString()}`,
+        why: p => `${(p.transfers_in_event || 0).toLocaleString()} נכנס · ${(p.transfers_out_event || 0).toLocaleString()} יצא`,
+        eligible: p => p.net_transfers_event > 0,
+        rank: (a, b) => b.net_transfers_event - a.net_transfers_event,
+        // net_transfers_event is 0 for every player until a gameweek closes, so
+        // this panel would vanish with no explanation. A stated empty state
+        // reads as "not yet", a missing card reads as a bug.
+        emptyNote: 'אין עדיין נתוני העברות — יעבוד כשהמחזור הראשון ייסגר'
     },
     {
-        id: 'top-points', icon: '🏆', label: 'מוביל נקודות',
-        pick: p => p.total_points,
-        fmt: v => `${v} נקודות`,
-        short: v => String(v)
+        id: 'underlying',
+        title: 'המספרים מתחת לפני השטח',
+        subtitle: 'מייצרים יותר ממה שהמירו',
+        icon: '📈',
+        accent: '#d97706',
+        metric: p => parseFloat(p.xGI_per90) || 0,
+        display: p => (parseFloat(p.xGI_per90) || 0).toFixed(2),
+        why: p => `פער המרה ${p.xDiff.toFixed(1)} — צפוי לתקן`,
+        eligible: p => (parseFloat(p.xGI_per90) || 0) > 0.35 && p.xDiff < -1 &&
+            windowStats(p).matches >= windowMinMatches(),
+        rank: (a, b) => (parseFloat(b.xGI_per90) || 0) - (parseFloat(a.xGI_per90) || 0),
+        windowAware: true
     },
     {
-        id: 'best-value', icon: '💎', label: 'הערך הגדול ביותר',
-        // VORP, not points-per-million: there is no budget in a draft league, so
-        // the only meaningful "value" is the gap to the freely available
-        // alternative at the same position.
-        // Not filtered to positive values. Once the league's rosters are known,
-        // replacement level is the best free agent, so if the strongest player
-        // at every position is unowned then nobody clears it and the card went
-        // blank -- which read as broken rather than as "the pool is wide open".
-        pick: p => (p.vorp === null || p.vorp === undefined) ? null : p.vorp,
-        fmt: (v, p) => v > 0
-            ? `+${v.toFixed(2)} נק׳ על החלופה החופשית`
-            : 'החלופה החופשית באותה עמדה חזקה לא פחות',
-        short: v => `${v > 0 ? '+' : ''}${v.toFixed(2)}`
+        id: 'setpiece',
+        title: 'בעלי כדורים נייחים',
+        subtitle: 'פנדלים וקרנות = נקודות חוזרות',
+        icon: '🎯',
+        accent: '#be185d',
+        metric: p => p.draft_score,
+        display: p => `#${setPieceOrder(p)}`,
+        why: p => {
+            const bits = [];
+            if (p.set_piece_priority.penalty <= 2) bits.push(`פנדל #${p.set_piece_priority.penalty}`);
+            if (p.set_piece_priority.corner <= 2) bits.push(`קרן #${p.set_piece_priority.corner}`);
+            if (p.set_piece_priority.free_kick <= 2) bits.push(`חופשית #${p.set_piece_priority.free_kick}`);
+            return bits.join(' · ') || 'בעל כדורים נייחים';
+        },
+        eligible: p => setPieceOrder(p) <= 2 && p.minutes > 450,
+        rank: (a, b) => b.draft_score - a.draft_score
     }
 ];
 
-function updateDashboardKPIs(dataToUse = null) {
-    const host = document.getElementById('dashboardKPIs');
+/** Best set-piece duty a player holds; 99 means he takes none of them. */
+function setPieceOrder(p) {
+    return Math.min(p.set_piece_priority.penalty, p.set_piece_priority.corner,
+        p.set_piece_priority.free_kick);
+}
+
+function defconRateFor(p) {
+    if (p.defcon_hit_rate !== null && p.defcon_hit_rate !== undefined) return p.defcon_hit_rate;
+    return windowStats(p).dcRate;
+}
+
+/**
+ * The pool every panel picks from. Narrowed by the position filter only: when
+ * you have filtered the table to defenders you are shopping for a defender, and
+ * a board still recommending forwards contradicts the table under it. The other
+ * filters (price, minutes, form) describe how you want to *read* the league, not
+ * what you are willing to draft, so the board ignores them.
+ */
+function draftBoardPool() {
+    const players = (state.allPlayersData[state.currentDataSource] || {}).processed || [];
+    const owned = state.draft.ownedElementIds;
+    const freeAgentsOnly = owned && owned.size > 0;
+    const pos = (document.getElementById('positionFilter') || {}).value || '';
+
+    return {
+        freeAgentsOnly,
+        position: pos,
+        players: players.filter(p =>
+            (!freeAgentsOnly || !owned.has(p.id)) &&
+            (!pos || p.position_name === pos) &&
+            // Injured or suspended players are never a recommendation.
+            p.availability_factor > 0.5)
+    };
+}
+
+function panelPicks(panel, pool, limit) {
+    return pool.filter(p => {
+        try { return !!panel.eligible(p); } catch (e) { return false; }
+    }).sort(panel.rank).slice(0, limit);
+}
+
+function renderDraftBoard() {
+    const host = document.getElementById('draftBoard');
     if (!host) return;
 
-    const data = dataToUse || state.displayedData || state.allPlayersData[state.currentDataSource].processed;
-    if (!data || !data.length) {
-        host.innerHTML = '<div class="kpi-empty">אין נתונים להצגה בסינון הנוכחי</div>';
+    const { players, freeAgentsOnly, position } = draftBoardPool();
+    if (!players.length) { host.innerHTML = ''; return; }
+
+    const cards = DRAFT_PANELS.map((panel, cardIdx) => {
+        const picks = panelPicks(panel, players, 3);
+        if (!picks.length && !panel.emptyNote) return '';
+
+        const rows = picks.map((p, i) => `
+            <li class="db-row">
+                <span class="db-rank">${i + 1}</span>
+                <span class="db-player">
+                    <span class="db-line">
+                        <span class="db-name">${escapeHtml(p.web_name)}</span>
+                        <span class="db-meta">${p.position_name} · ${escapeHtml(p.team_name)}</span>
+                    </span>
+                    <span class="db-why">${escapeHtml(panel.why(p))}</span>
+                </span>
+                ${miniSparkHtml(p.id, 'pts')}
+                <span class="db-value">${escapeHtml(panel.display(p))}</span>
+            </li>`).join('');
+
+        const body = picks.length
+            ? `<ul class="db-list">${rows}</ul>
+               <button type="button" class="db-more" onclick="openLeaderboard('${panel.id}')">
+                   כל ה-20 <span aria-hidden="true">←</span>
+               </button>`
+            : `<p class="db-empty">${panel.emptyNote}</p>`;
+
+        return `
+            <article class="db-card" style="--accent:${panel.accent}; --d:${cardIdx * 45}ms">
+                <header class="db-head">
+                    <span class="db-icon">${panel.icon}</span>
+                    <span class="db-headings">
+                        <span class="db-title">${panel.title}</span>
+                        <span class="db-sub">${panel.subtitle}</span>
+                    </span>
+                </header>
+                ${body}
+            </article>`;
+    }).filter(Boolean).join('');
+
+    if (!cards) { host.innerHTML = ''; return; }
+
+    const scope = [
+        freeAgentsOnly ? `${players.length} שחקנים חופשיים` : `${players.length} שחקנים — לפני הדראפט`,
+        position ? POSITION_LABELS[position] || position : null,
+        state.trendGws.length ? `חלון ${state.trendWindow} מחזורים` : null
+    ].filter(Boolean).join(' · ');
+
+    host.innerHTML = `
+        <div class="db-bar">
+            <h2 class="db-heading"><span class="db-heading-icon">🎯</span>למי כדאי לקחת</h2>
+            <span class="db-scope">${scope}</span>
+        </div>
+        <div class="db-grid">${cards}</div>`;
+}
+
+const POSITION_LABELS = { GKP: 'שוערים', DEF: 'מגנים', MID: 'קשרים', FWD: 'חלוצים' };
+
+/* ---------------------------- top-20 leaderboard -------------------------- */
+
+/**
+ * The board shows three; the question "who else" is the whole reason to look at
+ * it. Same rule, same pool, same "why" sentence — twenty deep, with the draft
+ * team and the signal verdict alongside, so the answer does not need the table.
+ */
+function openLeaderboard(panelId) {
+    const panel = DRAFT_PANELS.find(p => p.id === panelId);
+    const modal = document.getElementById('leaderboardModal');
+    const host = document.getElementById('leaderboardContent');
+    if (!panel || !modal || !host) return;
+
+    const { players, freeAgentsOnly } = draftBoardPool();
+    const picks = panelPicks(panel, players, 20);
+
+    const rows = picks.map((p, i) => {
+        const signal = signalFor(p);
+        const draftTeam = getDraftTeamForPlayer(p.id);
+        return `<tr onclick="jumpToPlayer(${p.id})" title="הצג את ${escapeHtml(p.web_name)} בטבלה">
+            <td class="lb-rank">${i + 1}</td>
+            <td class="lb-name">
+                ${escapeHtml(p.web_name)}
+                ${p.availability_grade !== 'available'
+                ? `<span class="status-badge status-${p.availability_grade}" title="${escapeHtml(p.news || '')}">${p.chance_of_playing_next_round !== null ? p.chance_of_playing_next_round + '%' : '!'}</span>`
+                : ''}
+            </td>
+            <td>${p.position_name}</td>
+            <td>${escapeHtml(p.team_name)}</td>
+            <td class="${draftTeam ? 'draft-owned' : 'draft-free'}">${draftTeam ? escapeHtml(draftTeam) : '🆓 חופשי'}</td>
+            <td class="lb-value">${escapeHtml(panel.display(p))}</td>
+            <td class="lb-why">${escapeHtml(panel.why(p))}</td>
+            <td><span class="signal-badge signal-${signal.tone}">${signal.label}</span></td>
+        </tr>`;
+    }).join('');
+
+    // --accent goes on the wrapper, not the header: .lb-value in every row reads
+    // it too, and a custom property set on a sibling does not inherit sideways.
+    host.innerHTML = `
+      <div class="lb" style="--accent:${panel.accent}">
+        <header class="lb-head">
+            <span class="lb-icon">${panel.icon}</span>
+            <span>
+                <h2>${panel.title}</h2>
+                <p>${panel.subtitle} · ${freeAgentsOnly ? 'שחקנים חופשיים בלבד' : 'כל השחקנים'}</p>
+            </span>
+        </header>
+        ${picks.length ? `<div class="lb-scroll"><table class="lb-table">
+            <thead><tr>
+                <th>#</th><th>שחקן</th><th>עמדה</th><th>קבוצה</th>
+                <th>קבוצת דראפט</th><th>${panel.title}</th><th>למה</th><th>סיגנל</th>
+            </tr></thead>
+            <tbody>${rows}</tbody>
+        </table></div>` : `<p class="db-empty">${panel.emptyNote || 'אין מועמדים לפי הכלל הזה'}</p>`}
+      </div>`;
+
+    modal.style.display = 'block';
+}
+
+/** Open a player's row in the table, from anywhere. */
+function jumpToPlayer(playerId) {
+    window.closeModal();
+    if (!state.displayedData.some(p => p.id === playerId)) {
+        showToast('לא בטבלה', 'השחקן לא עובר את הסינון הנוכחי — נקה סינון כדי לראות אותו', 'info', 4000);
         return;
     }
-
-    const owned = state.draft.ownedElementIds;
-    host.innerHTML = KPI_CARDS.map(card => {
-        const ranked = data
-            .map(p => ({ p, v: card.pick(p) }))
-            .filter(x => x.v !== null && x.v !== undefined && Number.isFinite(x.v))
-            .sort((a, b) => b.v - a.v)
-            .slice(0, 5);
-
-        if (!ranked.length) {
-            return `<div class="kpi-card" data-kpi="${card.id}">
-                <div class="kpi-content">
-                    <div class="kpi-label"><span class="kpi-icon">${card.icon}</span>${card.label}</div>
-                    <div class="kpi-value">–</div>
-                    <div class="kpi-subtext">אין מועמד בסינון הנוכחי</div>
-                </div></div>`;
-        }
-
-        const [first, ...rest] = ranked;
-        // A free-agent marker matters more than any of the numbers: the leader is
-        // usually taken, and the runner-up is the one you can actually get.
-        const freeMark = p => (owned.size > 0 && !owned.has(p.id)) ? '<span class="kpi-free">🆓</span>' : '';
-
-        return `<div class="kpi-card" data-kpi="${card.id}">
-            <div class="kpi-content">
-                <div class="kpi-label"><span class="kpi-icon">${card.icon}</span>${card.label}</div>
-                <div class="kpi-value">${escapeHtml(first.p.web_name)}${freeMark(first.p)}</div>
-                <div class="kpi-subtext">${card.fmt(first.v, first.p)}${miniSparkHtml(first.p.id, 'pts')}</div>
-                ${rest.length ? `<div class="kpi-runners">${rest.map((x, i) => `
-                    <span class="kpi-runner" title="${escapeHtml(x.p.team_name)} · ${card.fmt(x.v, x.p)}">
-                        <b>${i + 2}</b> ${escapeHtml(x.p.web_name)}${freeMark(x.p)}
-                        <em>${card.short(x.v)}</em>
-                    </span>`).join('')}</div>` : ''}
-            </div>
-        </div>`;
-    }).join('');
+    state.openRowId = playerId;
+    renderTable();
+    const row = document.querySelector(`#playersTable tr.player-row.is-open`);
+    if (row) row.scrollIntoView({ behavior: 'smooth', block: 'center' });
 }
 
 function getNestedValue(obj, path) {
@@ -4016,169 +4321,12 @@ function showVisualization(type) {
     document.getElementById('visualizationModal').style.display = 'block';
 }
 
-function showTeamDefenseChart() {
-    if (!state.allPlayersData[state.currentDataSource].processed) {
-        showToast('המתן', 'יש להמתין לטעינת הנתונים', 'warning', 3000);
-        return;
-    }
-    document.getElementById('visualizationTitle').textContent = 'הגנת קבוצות (צפוי ספיגות מול ספיגות בפועל)';
-
-    // Use filtered data if available, otherwise use all data
-    const dataToUse = state.displayedData || state.allPlayersData[state.currentDataSource].processed;
-
-    const teamStats = {};
-    dataToUse.forEach(p => {
-        if (!teamStats[p.team_name]) teamStats[p.team_name] = { xGC: 0, GC: 0, minutes: 0 };
-        teamStats[p.team_name].xGC += parseFloat(p.expected_goals_conceded) || 0;
-        teamStats[p.team_name].GC += p.goals_conceded || 0;
-        if (p.element_type === 1 || p.element_type === 2) { // GKP or DEF
-            teamStats[p.team_name].minutes += p.minutes;
-        }
-    });
-
-    const dataPoints = Object.entries(teamStats).map(([team, stats]) => {
-        const gamesPlayed = stats.minutes > 0 ? (stats.minutes / 90) / 11 : 0;
-        return {
-            x: gamesPlayed > 0 ? stats.xGC / gamesPlayed : 0,
-            y: gamesPlayed > 0 ? stats.GC / gamesPlayed : 0,
-            team: team
-        };
-    }).filter(d => d.x > 0 || d.y > 0);
-
-    const quadLabels = { topRight: 'הגנה חלשה', topLeft: 'חוסר מזל', bottomRight: 'בר מזל', bottomLeft: 'הגנת ברזל' };
-    const getPointColor = (c) => { const { x, y } = c.raw; return y > x ? 'rgba(255, 99, 132, 0.7)' : 'rgba(75, 192, 192, 0.7)'; };
-    const config = getChartConfig(dataPoints, 'x', 'y', 'צפי ספיגות / 90 (xGC) - שמאלה זה טוב', 'ספיגות בפועל / 90 - למטה זה טוב', quadLabels, getPointColor, (v) => v.team);
-
-    const ctx = document.getElementById('visualizationChart').getContext('2d');
-    if (charts.visualization) charts.visualization.destroy();
-    charts.visualization = new Chart(ctx, config);
-    document.getElementById('visualizationModal').style.display = 'block';
-}
-
-function showTeamAttackChart() {
-    if (!state.allPlayersData[state.currentDataSource].processed) {
-        showToast('המתן', 'יש להמתין לטעינת הנתונים', 'warning', 3000);
-        return;
-    }
-    document.getElementById('visualizationTitle').textContent = 'התקפת קבוצות (צפי מעורבות בשערים מול מעורבות בפועל)';
-
-    // Use filtered data if available, otherwise use all data
-    const dataToUse = state.displayedData || state.allPlayersData[state.currentDataSource].processed;
-
-    const teamStats = {};
-    dataToUse.forEach(p => {
-        if (!teamStats[p.team_name]) teamStats[p.team_name] = { xGI: 0, GI: 0, minutes: 0 };
-        teamStats[p.team_name].xGI += parseFloat(p.expected_goal_involvements) || 0;
-        teamStats[p.team_name].GI += (p.goals_scored || 0) + (p.assists || 0);
-        if (p.element_type === 3 || p.element_type === 4) { // MID or FWD
-            teamStats[p.team_name].minutes += p.minutes;
-        }
-    });
-
-    const dataPoints = Object.entries(teamStats).map(([team, stats]) => {
-        const gamesPlayed = stats.minutes > 0 ? (stats.minutes / 90) / 11 : 0;
-        return {
-            x: gamesPlayed > 0 ? stats.xGI / gamesPlayed : 0,
-            y: gamesPlayed > 0 ? stats.GI / gamesPlayed : 0,
-            team: team
-        };
-    }).filter(d => d.x > 0 || d.y > 0);
-
-    const quadLabels = { topRight: 'התקפה קטלנית', topLeft: 'חוסר מימוש', bottomRight: 'מימוש יתר', bottomLeft: 'התקפה חלשה' };
-    const getPointColor = (c) => { const { x, y } = c.raw; return y > x ? 'rgba(75, 192, 192, 0.7)' : 'rgba(255, 99, 132, 0.7)'; };
-    const config = getChartConfig(dataPoints, 'x', 'y', 'צפי מעורבות בשערים / 90 (xGI) - ימינה זה טוב', 'שערים+בישולים / 90 - למעלה זה טוב', quadLabels, getPointColor, (v) => v.team);
-
-    const ctx = document.getElementById('visualizationChart').getContext('2d');
-    if (charts.visualization) charts.visualization.destroy();
-    charts.visualization = new Chart(ctx, config);
-    document.getElementById('visualizationModal').style.display = 'block';
-}
-
-function showPriceVsScoreChart() {
-    if (!state.allPlayersData[state.currentDataSource].processed) {
-        showToast('המתן', 'יש להמתין לטעינת הנתונים', 'warning', 3000);
-        return;
-    }
-    document.getElementById('visualizationTitle').textContent = 'תמורה למחיר (ציון דראפט מול מחיר)';
-
-    // If user filtered data, show all filtered players. Otherwise, filter by minutes
-    const isFiltered = state.displayedData.length < state.allPlayersData[state.currentDataSource].processed.length;
-    const players = isFiltered ? state.displayedData : state.displayedData.filter(p => p.minutes > 300);
-    if (players.length < 2) {
-        showToast('אין מספיק נתונים', 'לא נמצאו מספיק שחקנים להשוואה', 'warning', 3000);
-        return;
-    }
-
-    const dataPoints = players.map(p => ({ x: p.now_cost, y: p.draft_score, player: p.web_name, team: p.team_name, pos: p.position_name }));
-    const colorMap = { DEF: 'rgba(100,149,237,0.7)', MID: 'rgba(60,179,113,0.7)', FWD: 'rgba(255,99,132,0.7)', GKP: 'rgba(255,159,64,0.7)' };
-    const ctx = document.getElementById('visualizationChart').getContext('2d');
-    if (charts.visualization) charts.visualization.destroy();
-    charts.visualization = new Chart(ctx, {
-        type: 'scatter',
-        data: {
-            datasets: [{
-                label: 'Players',
-                data: dataPoints,
-                backgroundColor: dataPoints.map(p => colorMap[p.pos])
-            }]
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: {
-                legend: { display: false },
-                datalabels: { display: false },
-                tooltip: { callbacks: { label: c => { const p = c.raw; return `${p.player} (${p.team}): ציון ${p.y.toFixed(1)} ב-${p.x.toFixed(1)}M` } } }
-            },
-            scales: {
-                x: { title: { display: true, text: 'מחיר' } },
-                y: { title: { display: true, text: 'ציון דראפט' } }
-            }
-        }
-    });
-    document.getElementById('visualizationModal').style.display = 'block';
-}
-
-function showIctBreakdownChart() {
-    if (!state.allPlayersData[state.currentDataSource].processed) {
-        showToast('המתן', 'יש להמתין לטעינת הנתונים', 'warning', 3000);
-        return;
-    }
-
-    // If user filtered data, show all filtered players. Otherwise, filter by minutes
-    const isFiltered = state.displayedData.length < state.allPlayersData[state.currentDataSource].processed.length;
-    const filteredPlayers = isFiltered ? state.displayedData : state.displayedData.filter(p => p.minutes > 300);
-    const topPlayers = filteredPlayers.sort((a, b) => b.ict_index - a.ict_index).slice(0, 15);
-    if (topPlayers.length < 2) {
-        showToast('אין מספיק נתונים', 'לא נמצאו מספיק שחקנים להשוואה', 'warning', 3000);
-        return;
-    }
-    document.getElementById('visualizationTitle').textContent = 'פרופיל שחקן (פירוק ICT ל-90 דקות)';
-
-    const chartData = {
-        labels: topPlayers.map(p => p.web_name),
-        datasets: [
-            { label: 'השפעה/90 (Influence)', data: topPlayers.map(p => parseFloat(p.influence_per90 || 0)), backgroundColor: 'rgba(54, 162, 235, 0.7)' },
-            { label: 'יצירתיות/90 (Creativity)', data: topPlayers.map(p => parseFloat(p.creativity_per90 || 0)), backgroundColor: 'rgba(75, 192, 192, 0.7)' },
-            { label: 'איום/90 (Threat)', data: topPlayers.map(p => parseFloat(p.threat_per90 || 0)), backgroundColor: 'rgba(255, 99, 132, 0.7)' }
-        ]
-    };
-
-    const ctx = document.getElementById('visualizationChart').getContext('2d');
-    if (charts.visualization) charts.visualization.destroy();
-    charts.visualization = new Chart(ctx, {
-        type: 'bar',
-        data: chartData,
-        options: {
-            indexAxis: 'y',
-            responsive: true,
-            maintainAspectRatio: false,
-            scales: { x: { stacked: true }, y: { stacked: true } },
-            plugins: { legend: { position: 'bottom' } }
-        }
-    });
-    document.getElementById('visualizationModal').style.display = 'block';
-}
+// showTeamDefenseChart, showTeamAttackChart, showPriceVsScoreChart and
+// showIctBreakdownChart lived here: modal copies of four charts in the charts
+// view, unreachable from the UI since nothing called them. Two of the four
+// plotted metrics the charts view has since dropped (price in a league with no
+// budget, and the ICT blend), so keeping them would have preserved exactly the
+// reading the rework removed. See git history if a modal chart is wanted back.
 
 function getChartConfig(data, xKey, yKey, xLabel, yLabel, quadLabels = {}, colorFunc = null, dataLabelFunc = null) {
     const dataPoints = data.map(d => ({ x: getNestedValue(d, xKey), y: getNestedValue(d, yKey), ...d }));
@@ -4423,17 +4571,10 @@ function formatRotation(r) {
     return `<span style="color:${color}; font-weight:700;">${pct}%</span>`;
 }
 
-function formatAvailability(p) {
-    if (p.status && ['i', 's', 'u'].includes(p.status)) {
-        const label = p.status === 'i' ? 'פציעה' : p.status === 's' ? 'הרחקה' : 'לא זמין';
-        return `<span title="${(p.news || '').replace(/"/g, '')}" style="color:#dc2626; font-weight:700;">⛔ ${label}</span>`;
-    }
-    const chance = p.chance_of_playing_next_round;
-    if (chance !== null && chance !== undefined && chance < 100) {
-        return `<span title="${(p.news || '').replace(/"/g, '')}" style="color:#d97706; font-weight:700;">⚠️ ${chance}%</span>`;
-    }
-    return '<span style="color:#059669;">✓</span>';
-}
+// formatAvailability() lived here. Its whole job was to render a green ✓ for the
+// ~95% of players with nothing wrong with them, which is what made the זמינות
+// column a column of constants. The two cases that carry information — flagged
+// and out — are on the שחקן cell as a .status-badge, and in the "לא זמין" signal.
 
 // ============================================
 // DRAFT-SPECIFIC METRICS
@@ -7547,28 +7688,12 @@ function updateMyLineup(entryId) {
 
 
 // ============================================
-// VIEW SWITCHING & NAV FIXES
+// TAB SWITCHING
 // ============================================
-
-function switchMainView(viewName) {
-    const tableDiv = document.getElementById('mainTableView');
-    const chartsDiv = document.getElementById('mainChartsView');
-    const btnTable = document.getElementById('btnViewTable');
-    const btnCharts = document.getElementById('btnViewCharts');
-
-    if (viewName === 'table') {
-        if (tableDiv) tableDiv.style.display = 'block';
-        if (chartsDiv) chartsDiv.style.display = 'none';
-        if (btnTable) btnTable.classList.add('active');
-        if (btnCharts) btnCharts.classList.remove('active');
-    } else if (viewName === 'charts') {
-        if (tableDiv) tableDiv.style.display = 'none';
-        if (chartsDiv) chartsDiv.style.display = 'grid';
-        if (btnTable) btnTable.classList.remove('active');
-        if (btnCharts) btnCharts.classList.add('active');
-        Object.values(Chart.instances).forEach(chart => chart.resize());
-    }
-}
+// switchMainView lived here too. Two declarations of the same name in a classic
+// script means the later one wins, so this copy never ran — and it had drifted
+// (it set display:grid, which the charts view no longer uses). The live one sits
+// with renderCharts, next to the thing it triggers.
 
 function showTab(tabName) {
     document.querySelectorAll('.nav-item').forEach(btn => btn.classList.remove('active'));
@@ -7579,9 +7704,14 @@ function showTab(tabName) {
     const draftView = document.getElementById('draftTabContent');
 
     if (tabName === 'players') {
+        // Only reset to the table when arriving from somewhere else. init() calls
+        // showTab(lastTab) after the draft data finishes loading — seconds after
+        // the table is already interactive — so an unconditional reset here threw
+        // away a גרפים click made during that window, with nothing to explain it.
+        const alreadyHere = playersView && playersView.style.display !== 'none';
         if (playersView) playersView.style.display = 'block';
         if (draftView) draftView.style.display = 'none';
-        switchMainView('table');
+        if (!alreadyHere) switchMainView('table');
         localStorage.setItem('fplToolActiveTab', 'players');
     } else if (tabName === 'draft') {
         if (playersView) playersView.style.display = 'none';
@@ -7603,24 +7733,83 @@ function showTab(tabName) {
 // RENDER CHARTS (From Backup Style)
 // ============================================
 
-function getMatrixChartConfig(data, xLabel, yLabel, quadLabels = {}) {
-    const dataPoints = data.map(d => ({ x: d.x, y: d.y, team: d.team, player: d.player }));
+/**
+ * The shared scatter-with-quadrants config.
+ *
+ * `opts.goodDirection` says which way is *better* on each axis, defaulting to
+ * high/high. Without it the green quadrant was hardcoded to "high x, high y",
+ * which painted the best goalkeepers red (a low xGC/90 is what you want) and put
+ * a green tint behind a quadrant literally labelled "הגנה חלשה".
+ *
+ * `opts.colorFor` overrides the quadrant colouring entirely, for charts that
+ * colour by category (owned vs free) rather than by position in the grid.
+ */
+function getMatrixChartConfig(data, xLabel, yLabel, quadLabels = {}, opts = {}) {
+    const dataPoints = data.map(d => ({ ...d }));
     const xValues = dataPoints.map(p => p.x);
     const yValues = dataPoints.map(p => p.y);
-    // Use mean (average) instead of median for consistent center point
-    const xMedian = xValues.length ? xValues.reduce((a, b) => a + b, 0) / xValues.length : 0;
-    const yMedian = yValues.length ? yValues.reduce((a, b) => a + b, 0) / yValues.length : 0;
+    // Mean, not median: deliberately, so the crosshair sits at the league average.
+    const xMean = xValues.length ? xValues.reduce((a, b) => a + b, 0) / xValues.length : 0;
+    const yMean = yValues.length ? yValues.reduce((a, b) => a + b, 0) / yValues.length : 0;
 
-    // Color function based on quadrant - Green (top-right), Red (bottom-left), Orange (others)
+    const good = { x: 'high', y: 'high', ...(opts.goodDirection || {}) };
+    const isGood = (v, mean, dir) => dir === 'low' ? v <= mean : v >= mean;
+
+    const GREEN = 'rgba(34, 197, 94, 0.85)';
+    const RED = 'rgba(239, 68, 68, 0.85)';
+    const AMBER = 'rgba(251, 146, 60, 0.85)';
+
     const getPointColor = (point) => {
-        if (point.x >= xMedian && point.y >= yMedian) {
-            return 'rgba(34, 197, 94, 0.85)'; // Green - Best
-        } else if (point.x < xMedian && point.y < yMedian) {
-            return 'rgba(239, 68, 68, 0.85)'; // Red - Worst
-        } else {
-            return 'rgba(251, 146, 60, 0.85)'; // Orange - Medium
-        }
+        if (opts.colorFor) return opts.colorFor(point);
+        const gx = isGood(point.x, xMean, good.x);
+        const gy = isGood(point.y, yMean, good.y);
+        if (gx && gy) return GREEN;
+        if (!gx && !gy) return RED;
+        return AMBER;
     };
+
+    // Quadrant labels are placed by grid corner, but which corner is "good"
+    // depends on goodDirection — so the tint follows the caller's own wording.
+    const cornerTone = (cx, cy) => {
+        const gx = isGood(cx === 'right' ? xMean + 1 : xMean - 1, xMean, good.x);
+        const gy = isGood(cy === 'top' ? yMean + 1 : yMean - 1, yMean, good.y);
+        if (gx && gy) return { color: 'rgba(21, 128, 61, 0.95)', bg: 'rgba(34, 197, 94, 0.12)' };
+        if (!gx && !gy) return { color: 'rgba(185, 28, 28, 0.95)', bg: 'rgba(239, 68, 68, 0.12)' };
+        return { color: 'rgba(180, 83, 9, 0.95)', bg: 'rgba(251, 146, 60, 0.12)' };
+    };
+
+    // Anchored to the outer corners of the plot, not to the crosshair. Four labels
+    // hung off the centre point collided into an unreadable pile as soon as the
+    // card was narrow — which is every card in a three-column grid.
+    const xLo = xValues.length ? Math.min(...xValues) : 0;
+    const xHi = xValues.length ? Math.max(...xValues) : 1;
+    const yLo = yValues.length ? Math.min(...yValues) : 0;
+    const yHi = yValues.length ? Math.max(...yValues) : 1;
+
+    const cornerLabel = (content, cx, cy) => {
+        const tone = cornerTone(cx, cy);
+        return {
+            type: 'label',
+            xValue: cx === 'right' ? xHi : xLo,
+            yValue: cy === 'top' ? yHi : yLo,
+            content: content || '',
+            position: { x: cx === 'right' ? 'end' : 'start', y: cy === 'top' ? 'start' : 'end' },
+            xAdjust: cx === 'right' ? -4 : 4,
+            yAdjust: cy === 'top' ? 4 : -4,
+            color: tone.color, backgroundColor: tone.bg,
+            font: { weight: 'bold', size: 10.5 }, padding: 4, borderRadius: 4
+        };
+    };
+
+    const diagonal = opts.diagonal && dataPoints.length
+        ? (() => {
+            const hi = Math.min(Math.max(...xValues), Math.max(...yValues));
+            return {
+                type: 'line', xMin: 0, yMin: 0, xMax: hi, yMax: hi,
+                borderColor: 'rgba(100, 116, 139, 0.45)', borderWidth: 2, borderDash: [4, 4]
+            };
+        })()
+        : null;
 
     return {
         type: 'scatter',
@@ -7628,7 +7817,7 @@ function getMatrixChartConfig(data, xLabel, yLabel, quadLabels = {}) {
             datasets: [{
                 label: 'Items',
                 data: dataPoints,
-                pointRadius: 6,
+                pointRadius: ctx => (opts.radiusFor && ctx.raw ? opts.radiusFor(ctx.raw) : 6),
                 pointHoverRadius: 9,
                 pointBorderWidth: 2,
                 pointBorderColor: 'rgba(255, 255, 255, 0.9)',
@@ -7669,8 +7858,12 @@ function getMatrixChartConfig(data, xLabel, yLabel, quadLabels = {}) {
                 datalabels: {
                     display: 'auto',
                     align: 'top',
+                    // `label` when the caller decided which points to name (see
+                    // labelTop); player-or-club otherwise, for the team matrices
+                    // where every point is worth naming.
                     formatter: (value, context) => {
-                        return context.dataset.data[context.dataIndex].player || context.dataset.data[context.dataIndex].team || '';
+                        const d = context.dataset.data[context.dataIndex];
+                        return d.label !== undefined ? d.label : (d.player || d.team || '');
                     },
                     font: { size: 10, weight: 'bold' },
                     color: '#1e293b',
@@ -7687,6 +7880,7 @@ function getMatrixChartConfig(data, xLabel, yLabel, quadLabels = {}) {
                     callbacks: {
                         label: function (context) {
                             const d = context.raw;
+                            if (opts.tooltipFor) return opts.tooltipFor(d);
                             return `${d.player || d.team}: (${d.x.toFixed(2)}, ${d.y.toFixed(2)})`;
                         }
                     }
@@ -7695,18 +7889,19 @@ function getMatrixChartConfig(data, xLabel, yLabel, quadLabels = {}) {
                     annotations: {
                         xLine: {
                             type: 'line',
-                            xMin: xMedian, xMax: xMedian,
+                            xMin: xMean, xMax: xMean,
                             borderColor: 'rgba(0,0,0,0.2)', borderWidth: 2, borderDash: [6, 6]
                         },
                         yLine: {
                             type: 'line',
-                            yMin: yMedian, yMax: yMedian,
+                            yMin: yMean, yMax: yMean,
                             borderColor: 'rgba(0,0,0,0.2)', borderWidth: 2, borderDash: [6, 6]
                         },
-                        labelTopRight: { type: 'label', xValue: xMedian, yValue: yMedian, content: quadLabels.topRight || '', position: { x: 'start', y: 'start' }, xAdjust: 15, yAdjust: -15, color: 'rgba(34, 197, 94, 0.9)', font: { weight: 'bold', size: 11 }, backgroundColor: 'rgba(34, 197, 94, 0.1)', padding: 4, borderRadius: 4 },
-                        labelBottomLeft: { type: 'label', xValue: xMedian, yValue: yMedian, content: quadLabels.bottomLeft || '', position: { x: 'end', y: 'end' }, xAdjust: -15, yAdjust: 15, color: 'rgba(239, 68, 68, 0.9)', font: { weight: 'bold', size: 11 }, backgroundColor: 'rgba(239, 68, 68, 0.1)', padding: 4, borderRadius: 4 },
-                        labelTopLeft: { type: 'label', xValue: xMedian, yValue: yMedian, content: quadLabels.topLeft || '', position: { x: 'end', y: 'start' }, xAdjust: -15, yAdjust: -15, color: 'rgba(251, 146, 60, 0.9)', font: { weight: 'bold', size: 11 }, backgroundColor: 'rgba(251, 146, 60, 0.1)', padding: 4, borderRadius: 4 },
-                        labelBottomRight: { type: 'label', xValue: xMedian, yValue: yMedian, content: quadLabels.bottomRight || '', position: { x: 'start', y: 'end' }, xAdjust: 15, yAdjust: 15, color: 'rgba(251, 146, 60, 0.9)', font: { weight: 'bold', size: 11 }, backgroundColor: 'rgba(251, 146, 60, 0.1)', padding: 4, borderRadius: 4 }
+                        ...(diagonal ? { diagonal } : {}),
+                        labelTopRight: cornerLabel(quadLabels.topRight, 'right', 'top'),
+                        labelBottomLeft: cornerLabel(quadLabels.bottomLeft, 'left', 'bottom'),
+                        labelTopLeft: cornerLabel(quadLabels.topLeft, 'left', 'top'),
+                        labelBottomRight: cornerLabel(quadLabels.bottomRight, 'right', 'bottom')
                     }
                 }
             }
@@ -7714,202 +7909,583 @@ function getMatrixChartConfig(data, xLabel, yLabel, quadLabels = {}) {
     };
 }
 
+/* ==========================================================================
+   CHARTS VIEW
+   ==========================================================================
+   Eight cards, ordered by how directly each answers a draft decision, and
+   rendered from CHART_SPECS — a new chart is one entry in that list rather than
+   a block of markup plus a call site.
+
+   What changed and why:
+   - The four positional matrices were the same chart four times. They are one
+     card with a position toggle, which leaves room for the charts below.
+   - The two team charts were one question split in half ("who attacks well" and
+     "who defends well" are only useful together). They are one quadrant.
+   - Price-vs-points is gone. There is no budget in a draft league, so an axis
+     of £m cannot answer anything; the card's own heading had already drifted to
+     describing a different metric than the code plotted.
+   - The ICT stacked bar is gone. ICT is a blend the API derives from inputs
+     these charts now plot directly.
+   - Added the per-gameweek trend, the opportunity board and positional depth:
+     the gameweek history was already loaded for the table's micro-charts and no
+     chart here had ever used it.
+   ========================================================================== */
+
+const POSITION_COLOR = { GKP: '#0891b2', DEF: '#059669', MID: '#6366f1', FWD: '#ea580c' };
+
+/**
+ * What "elite" means depends on the position, so each gets its own x axis — and
+ * for a goalkeeper the good direction is *down*, which is why the matrix used to
+ * paint the best keepers in the league red.
+ */
+const POSITION_MATRIX = {
+    GKP: {
+        key: 'expected_goals_conceded_per_90', label: 'xGC ל-90 (נמוך = טוב)',
+        good: 'low', minMinutes: 450,
+        quads: {
+            topLeft: 'הטובים בעמדה', bottomRight: 'החלשים בעמדה',
+            topRight: 'נקודות למרות הגנה פרוצה', bottomLeft: 'הגנה טובה, מעט נקודות'
+        }
+    },
+    DEF: {
+        key: 'def_contrib_per90', label: 'תרומה הגנתית ל-90',
+        good: 'high', minMinutes: 450,
+        quads: {
+            topRight: 'הטובים בעמדה', bottomLeft: 'החלשים בעמדה',
+            topLeft: 'נקודות בלי בסיס הגנתי', bottomRight: 'בסיס הגנתי בלי נקודות'
+        }
+    },
+    MID: {
+        key: 'xGI_per90', label: 'xGI ל-90',
+        good: 'high', minMinutes: 450,
+        quads: {
+            topRight: 'הטובים בעמדה', bottomLeft: 'החלשים בעמדה',
+            topLeft: 'נקודות בלי הזדמנויות', bottomRight: 'הזדמנויות בלי נקודות'
+        }
+    },
+    FWD: {
+        key: 'xGI_per90', label: 'xGI ל-90',
+        good: 'high', minMinutes: 360,
+        quads: {
+            topRight: 'הטובים בעמדה', bottomLeft: 'החלשים בעמדה',
+            topLeft: 'נקודות בלי הזדמנויות', bottomRight: 'הזדמנויות בלי נקודות'
+        }
+    }
+};
+
+const CHART_LINE_PALETTE = ['#6366f1', '#ea580c', '#059669', '#0891b2',
+    '#be185d', '#d97706', '#7c3aed', '#dc2626'];
+
+/**
+ * Names only the points worth naming.
+ *
+ * The datalabels plugin drops labels that collide, so a 500-player scatter does
+ * not print 500 names — but it does print every name it can fit, which came out
+ * as a solid mat of text across the middle of the chart. The tooltip still
+ * identifies every point; the printed labels are reserved for the ones the chart
+ * exists to surface.
+ *
+ * Every point keeps `name` for the tooltip; only the chosen ones get `player`,
+ * which is what the label formatter reads.
+ */
+function labelTop(points, count, score) {
+    const chosen = new Set([...points]
+        .sort((a, b) => score(b) - score(a))
+        .slice(0, count));
+    // An explicit empty `label` rather than just omitting the name: the formatter
+    // falls back to the club when there is no player name, so leaving it off
+    // printed a chart labelled with twenty repetitions of "Arsenal".
+    return points.map(pt => ({ ...pt, label: chosen.has(pt) ? pt.name : '' }));
+}
+
+/** Axis and tooltip chrome shared by the non-scatter charts. */
+function chartAxis(text) {
+    return {
+        title: { display: true, text, font: { weight: 'bold', size: 12 }, color: '#64748b' },
+        grid: { color: 'rgba(0,0,0,0.05)' },
+        ticks: { color: '#94a3b8', font: { size: 11 } }
+    };
+}
+
+const CHART_TOOLTIP = {
+    backgroundColor: 'rgba(15, 23, 42, 0.95)',
+    titleColor: '#fff',
+    bodyColor: '#e2e8f0',
+    borderColor: 'rgba(59, 130, 246, 0.5)',
+    borderWidth: 1,
+    padding: 10
+};
+
+/* ----------------------------- 1. opportunity ----------------------------- */
+
+function buildOpportunityChart(data) {
+    if (!state.trendGws.length) return null;
+    const owned = state.draft.ownedElementIds;
+    const rosterKnown = owned.size > 0;
+
+    const raw = data.map(p => {
+        const delta = trendDelta(p, 'pts');
+        if (delta === null || p.minutes < 450) return null;
+        return {
+            x: p.draft_score, y: delta, name: p.web_name, team: p.team_name,
+            free: !rosterKnown || !owned.has(p.id)
+        };
+    }).filter(Boolean);
+    if (raw.length < 4) return null;
+
+    // Named: the free agents who are both good and climbing. That is the whole
+    // question the card asks, and nothing else on it needs a printed name.
+    const points = labelTop(raw, 12, pt => (pt.free ? 1000 : 0) + pt.x + pt.y * 3);
+
+    return getMatrixChartConfig(points, 'ציון דראפט',
+        `שינוי נקודות מול ${state.trendWindow} המחזורים שלפני`, {
+        topRight: 'איכות ומומנטום', topLeft: 'מתחמם אבל חלש',
+        bottomRight: 'איכות שמתקררת', bottomLeft: 'לא עכשיו'
+    }, {
+        // Colour by availability, not by quadrant: the best player on the chart is
+        // usually already on someone's roster, so "can I have him" outranks
+        // "is he good" as the first thing to see.
+        colorFor: pt => pt.free ? 'rgba(34, 197, 94, 0.85)' : 'rgba(148, 163, 184, 0.35)',
+        radiusFor: pt => pt.free ? 5.5 : 3.5,
+        tooltipFor: d => `${d.name} · ${d.team}${d.free ? ' · 🆓 חופשי' : ' · תפוס'} — `
+            + `ציון ${d.x.toFixed(1)}, ${d.y > 0 ? '+' : ''}${d.y.toFixed(1)} נק׳`
+    });
+}
+
+/* --------------------------- 2. position matrix --------------------------- */
+
+function buildPositionMatrix(data) {
+    const pos = POSITION_MATRIX[state.chartPosition] ? state.chartPosition : 'MID';
+    const spec = POSITION_MATRIX[pos];
+    const players = data.filter(p => p.position_name === pos && p.minutes > spec.minMinutes);
+    if (players.length < 3) return null;
+
+    const raw = players.map(p => ({
+        x: parseFloat(p[spec.key]) || 0,
+        y: parseFloat(p.points_per_game_90) || 0,
+        name: p.web_name, team: p.team_name
+    }));
+
+    // Named: the ones in the good quadrant, by output.
+    const dir = spec.good === 'low' ? -1 : 1;
+    const points = labelTop(raw, 14, pt => pt.y * 2 + pt.x * dir);
+
+    return getMatrixChartConfig(points, spec.label, 'נקודות ל-90 דקות', spec.quads, {
+        goodDirection: { x: spec.good, y: 'high' },
+        radiusFor: () => 5,
+        tooltipFor: d => `${d.name} · ${d.team} — ${spec.label}: ${d.x.toFixed(2)}, `
+            + `${d.y.toFixed(1)} נק׳/90`
+    });
+}
+
+function setChartPosition(pos) {
+    state.chartPosition = POSITION_MATRIX[pos] ? pos : 'MID';
+    renderCharts();
+}
+
+/* ------------------------------- 3. trend -------------------------------- */
+
+function buildTrendChart(data) {
+    if (state.trendGws.length < 2) return null;
+
+    const ranked = data
+        .map(p => ({ p, total: summariseTrend(getTrendSeries(p.id, 'pts', 'recent'), 'sum') }))
+        .filter(x => x.total > 0)
+        .sort((a, b) => b.total - a.total)
+        .slice(0, 8);
+    if (ranked.length < 2) return null;
+
+    return {
+        type: 'line',
+        data: {
+            labels: state.trendGws.map(g => `מחזור ${g.gw}`),
+            datasets: ranked.map((x, i) => ({
+                label: x.p.web_name,
+                data: getTrendSeries(x.p.id, 'pts', 'recent').map(pt => pt.value),
+                borderColor: CHART_LINE_PALETTE[i % CHART_LINE_PALETTE.length],
+                backgroundColor: CHART_LINE_PALETTE[i % CHART_LINE_PALETTE.length],
+                borderWidth: 2, tension: 0.3, pointRadius: 3, pointHoverRadius: 6
+            }))
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: { mode: 'index', intersect: false },
+            scales: {
+                x: chartAxis(''),
+                y: { ...chartAxis('נקודות במחזור'), beginAtZero: true }
+            },
+            plugins: {
+                legend: { position: 'bottom', labels: { boxWidth: 10, font: { size: 11 }, color: '#475569' } },
+                datalabels: { display: false },
+                tooltip: CHART_TOOLTIP
+            }
+        }
+    };
+}
+
+/* ---------------------------- 4. conversion ------------------------------ */
+
+function buildConversionChart(data) {
+    const raw = data.map(p => {
+        const xgi = parseFloat(p.expected_goal_involvements) || 0;
+        if (p.minutes < 450 || xgi < 2) return null;
+        return {
+            x: xgi, y: (p.goals_scored || 0) + (p.assists || 0),
+            name: p.web_name, team: p.team_name
+        };
+    }).filter(Boolean);
+    if (raw.length < 4) return null;
+
+    // Distance from the diagonal is the whole point of this chart, so it is not
+    // coloured by quadrant: above the line means converting more than the chances
+    // were worth (expect a fall), below means the opposite (expect a correction).
+    const GAP = 1.5;
+    // Named: the ones furthest off the line in either direction — the only points
+    // on this chart that are telling you to do something.
+    const points = labelTop(raw, 14, pt => Math.abs(pt.y - pt.x));
+
+    return getMatrixChartConfig(points, 'צפי מעורבות (xGI)', 'מעורבות בפועל (G+A)', {}, {
+        diagonal: true,
+        colorFor: pt => pt.y - pt.x >= GAP ? 'rgba(251, 146, 60, 0.9)'
+            : pt.x - pt.y >= GAP ? 'rgba(59, 130, 246, 0.9)'
+                : 'rgba(148, 163, 184, 0.4)',
+        radiusFor: pt => Math.abs(pt.y - pt.x) >= GAP ? 6 : 3.5,
+        tooltipFor: d => {
+            const gap = d.y - d.x;
+            const verdict = gap >= GAP ? 'מימוש יתר — צפוי לרדת'
+                : gap <= -GAP ? 'מימוש חסר — צפוי לתקן' : 'ממש לפי הצפי';
+            return `${d.name} · ${d.team} — xGI ${d.x.toFixed(1)}, G+A ${d.y} (${verdict})`;
+        }
+    });
+}
+
+/* ------------------------------- 5. teams -------------------------------- */
+
+function buildTeamChart(data) {
+    const teams = new Map();
+    data.forEach(p => {
+        if (!teams.has(p.team_name)) {
+            teams.set(p.team_name, { attMins: 0, defMins: 0, xgi: 0, xgc: 0, fdr: 0, fdrN: 0 });
+        }
+        const t = teams.get(p.team_name);
+        if (['MID', 'FWD'].includes(p.position_name)) {
+            t.attMins += p.minutes;
+            t.xgi += parseFloat(p.expected_goal_involvements) || 0;
+        } else {
+            t.defMins += p.minutes;
+            t.xgc += parseFloat(p.expected_goals_conceded) || 0;
+        }
+        if (p.next_3_fdr > 0) { t.fdr += p.next_3_fdr; t.fdrN++; }
+    });
+
+    const points = [...teams.entries()].map(([team, t]) => {
+        // Per 90 minutes of the players who make up that half of the team, so a
+        // squad the filters happened to trim to three players is not compared
+        // against one with eleven.
+        if (t.attMins < 900 || t.defMins < 900) return null;
+        return {
+            x: t.xgi / (t.attMins / 90),
+            y: t.xgc / (t.defMins / 90),
+            fdr: t.fdrN ? t.fdr / t.fdrN : 0,
+            team
+        };
+    }).filter(Boolean);
+    if (points.length < 4) return null;
+
+    return getMatrixChartConfig(points, 'צפי מעורבות התקפית ל-90', 'צפי ספיגות ל-90', {
+        bottomRight: 'הקבוצה שאתה רוצה', topLeft: 'להתרחק',
+        topRight: 'התקפה חזקה, הגנה פרוצה', bottomLeft: 'הגנה טובה, התקפה חלשה'
+    }, {
+        // Conceding less is better, so "good" is down on this axis. Without this
+        // the green tint sat behind the quadrant labelled "הגנה חלשה".
+        goodDirection: { x: 'high', y: 'low' },
+        radiusFor: pt => pt.fdr > 0 ? Math.max(4, Math.min(11, 4 + (5 - pt.fdr) * 1.8)) : 6,
+        tooltipFor: d => `${d.team} — xGI ${d.x.toFixed(2)}, xGC ${d.y.toFixed(2)}`
+            + (d.fdr > 0 ? `, קושי 3 הבאים ${d.fdr.toFixed(1)}` : '')
+    });
+}
+
+/* ---------------------------- 6. positional depth ------------------------ */
+
+function buildDepthChart(data) {
+    const owned = state.draft.ownedElementIds;
+    const rosterKnown = owned.size > 0;
+    const DEPTH = 10;
+
+    const datasets = Object.keys(POSITION_COLOR).map(pos => {
+        const values = data
+            .filter(p => p.position_name === pos && p.vorp !== null && p.vorp !== undefined
+                && (!rosterKnown || !owned.has(p.id)))
+            .map(p => p.vorp)
+            .sort((a, b) => b - a)
+            .slice(0, DEPTH);
+        return {
+            label: POSITION_LABELS[pos],
+            // Shorter than DEPTH means the position runs dry before the tenth
+            // pick, which is exactly the scarcity this chart is about.
+            data: Array.from({ length: DEPTH }, (_, i) => i < values.length ? values[i] : null),
+            borderColor: POSITION_COLOR[pos],
+            backgroundColor: POSITION_COLOR[pos],
+            borderWidth: 2, tension: 0.25, pointRadius: 3, spanGaps: false
+        };
+    }).filter(d => d.data.some(v => v !== null));
+
+    if (!datasets.length) return null;
+
+    return {
+        type: 'line',
+        data: {
+            labels: Array.from({ length: DEPTH }, (_, i) => `#${i + 1}`),
+            datasets
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: { mode: 'index', intersect: false },
+            scales: {
+                x: chartAxis(rosterKnown ? 'הפנוי ה-N הטוב בעמדה' : 'השחקן ה-N הטוב בעמדה'),
+                y: chartAxis('VORP')
+            },
+            plugins: {
+                legend: { position: 'bottom', labels: { boxWidth: 10, font: { size: 11 }, color: '#475569' } },
+                datalabels: { display: false },
+                tooltip: {
+                    ...CHART_TOOLTIP,
+                    callbacks: {
+                        label: c => `${c.dataset.label}: VORP ${Number(c.parsed.y).toFixed(2)}`
+                    }
+                },
+                annotation: {
+                    annotations: {
+                        replacement: {
+                            type: 'line', yMin: 0, yMax: 0,
+                            borderColor: 'rgba(100, 116, 139, 0.5)', borderWidth: 2, borderDash: [5, 5],
+                            label: {
+                                display: true, content: 'רמת החלופה', position: 'start',
+                                color: '#64748b', backgroundColor: 'rgba(241,245,249,.9)',
+                                font: { size: 10, weight: 'bold' }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    };
+}
+
+/* --------------------------- 7. minutes security ------------------------- */
+
+function buildMinutesChart(data) {
+    const raw = data.map(p => {
+        if (p.rotation_risk === null || p.rotation_risk === undefined || p.minutes < 600) return null;
+        return {
+            x: Math.round(p.rotation_risk * 100),
+            y: parseFloat(p.points_per_game_90) || 0,
+            name: p.web_name, team: p.team_name
+        };
+    }).filter(Boolean);
+    if (raw.length < 4) return null;
+
+    // Named: nailed and productive, plus the productive-but-rotated risks.
+    const points = labelTop(raw, 12, pt => pt.y * 2 + pt.x / 25);
+
+    return getMatrixChartConfig(points, 'אחוז ההופעות שבהן פתח בהרכב', 'נקודות ל-90 דקות', {
+        topRight: 'קבוע ומייצר', bottomLeft: 'מסובב ולא מייצר',
+        topLeft: 'מייצר אבל מסובב', bottomRight: 'קבוע אבל לא מייצר'
+    }, {
+        radiusFor: () => 4.5,
+        tooltipFor: d => `${d.name} · ${d.team} — ${d.x}% פתיחות, ${d.y.toFixed(1)} נק׳/90`
+    });
+}
+
+/* -------------------------------- 8. DEFCON ------------------------------ */
+
+function buildDefconChart(data) {
+    const top = data
+        .filter(p => p.defcon_hit_rate !== null && p.defcon_hit_rate !== undefined
+            && p.position_name !== 'GKP')
+        .sort((a, b) => b.defcon_hit_rate - a.defcon_hit_rate)
+        .slice(0, 15);
+    // The live API has no per-match DEFCON history, so this is snapshot-only —
+    // the card hides itself rather than drawing an empty axis.
+    if (top.length < 3) return null;
+
+    return {
+        type: 'bar',
+        data: {
+            labels: top.map(p => p.web_name),
+            datasets: [{
+                label: 'אחוז משחקים מעל הסף',
+                data: top.map(p => p.defcon_hit_rate),
+                backgroundColor: top.map(p => POSITION_COLOR[p.position_name] || '#64748b'),
+                borderRadius: 4
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            indexAxis: 'y',
+            scales: {
+                x: { ...chartAxis('% מההופעות'), beginAtZero: true, max: 100 },
+                y: { ...chartAxis(''), grid: { display: false } }
+            },
+            plugins: {
+                legend: { display: false },
+                datalabels: {
+                    // 'right', not 'end': on a horizontal bar 'end' resolved to the
+                    // bar's own end and the figure straddled the edge of the fill.
+                    anchor: 'end', align: 'right', offset: 4, clamp: true,
+                    formatter: v => `${Math.round(v)}%`,
+                    font: { size: 10, weight: 'bold' }, color: '#475569'
+                },
+                tooltip: {
+                    ...CHART_TOOLTIP,
+                    callbacks: {
+                        label: c => `${Math.round(c.parsed.x)}% מההופעות מעל הסף`
+                    }
+                }
+            }
+        }
+    };
+}
+
+/* -------------------------------- the list ------------------------------- */
+
+const CHART_SPECS = [
+    {
+        id: 'chart-opportunity', title: '🎯 לוח הזדמנויות',
+        note: 'ציון דראפט מול המומנטום בחלון הנבחר. ירוק = פנוי, אפור = תפוס.',
+        build: buildOpportunityChart
+    },
+    {
+        id: 'chart-position', title: '📊 מטריצת עמדה',
+        note: 'מי מייצר יותר ממה שהעמדה שלו דורשת. הצירים משתנים לפי העמדה.',
+        build: buildPositionMatrix, positions: true
+    },
+    {
+        id: 'chart-trend', title: '📈 טרנד נקודות',
+        note: 'הנקודות מחזור-מחזור של שמונת החמים בסינון הנוכחי — מי בעלייה ומי דועך.',
+        build: buildTrendChart
+    },
+    {
+        id: 'chart-conversion', title: '⚖️ מימוש מול צפי',
+        note: 'מעל הקו — מימוש יתר, צפוי לרדת. מתחת לקו — מימוש חסר, צפוי לתקן.',
+        build: buildConversionChart
+    },
+    {
+        id: 'chart-teams', title: '🏟️ קבוצות: התקפה מול הגנה',
+        note: 'למי כדאי להחזיק שחקנים. נקודה גדולה = לוח משחקים קל יותר בשלושת הבאים.',
+        build: buildTeamChart
+    },
+    {
+        id: 'chart-depth', title: '📉 עומק לפי עמדה',
+        note: 'כמה מהר נגמרים השחקנים הטובים בכל עמדה — סדר העדיפויות בדראפט ובטרייד.',
+        build: buildDepthChart
+    },
+    {
+        id: 'chart-minutes', title: '🔒 ביטחון דקות מול תפוקה',
+        note: 'בדראפט אי אפשר פשוט להעביר שחקן, ולכן שחקן מסובב מסוכן גם אם הוא טוב.',
+        build: buildMinutesChart
+    },
+    {
+        id: 'chart-defcon', title: '🛡️ מכונות DEFCON',
+        note: 'אחוז ההופעות שבהן עברו בפועל את הסף. ממוצע ל-90 דקות מטעה כאן.',
+        build: buildDefconChart
+    }
+];
+
+/** Builds the card scaffolding once, from CHART_SPECS. */
+function ensureChartCards() {
+    const grid = document.getElementById('chartsGrid');
+    if (!grid || grid.dataset.built === '1') return grid;
+
+    grid.innerHTML = CHART_SPECS.map(spec => `
+        <section class="chart-card" id="card-${spec.id}">
+            <header class="chart-head">
+                <div>
+                    <h3 class="chart-title">${spec.title}</h3>
+                    <p class="chart-note">${spec.note}</p>
+                </div>
+                ${spec.positions ? `<div class="chart-seg" role="group" aria-label="עמדה">
+                    ${Object.keys(POSITION_MATRIX).map(pos => `
+                        <button type="button" data-chart-pos="${pos}"
+                            onclick="setChartPosition('${pos}')">${POSITION_LABELS[pos]}</button>`).join('')}
+                </div>` : ''}
+            </header>
+            <div class="chart-canvas"><canvas id="${spec.id}"></canvas></div>
+        </section>`).join('');
+
+    grid.dataset.built = '1';
+    return grid;
+}
+
 function renderCharts() {
-    console.log('📊 Rendering Main Charts (Backup Style)...');
     if (!state.allPlayersData[state.currentDataSource].processed) return;
 
     const chartsView = document.getElementById('mainChartsView');
     if (!chartsView || getComputedStyle(chartsView).display === 'none') return;
 
-    const data = state.displayedData || state.allPlayersData[state.currentDataSource].processed;
+    ensureChartCards();
 
-    // 1. Render Matrices (Positional)
-    const renderPosMatrix = (canvasId, pos, xKey, xLabel, title) => {
-        const canvas = document.getElementById(canvasId);
-        if (!canvas) return;
+    // Pre-slice, so a "top 20" table does not reduce every scatter to 20 points.
+    const data = (state.filteredData && state.filteredData.length)
+        ? state.filteredData
+        : (state.displayedData || state.allPlayersData[state.currentDataSource].processed);
 
-        const statsRange = document.getElementById('statsRange') ? document.getElementById('statsRange').value : 'all';
-        let minMinutes = 300;
-        if (statsRange === '3') minMinutes = 90;
-        if (statsRange === '5') minMinutes = 200;
-        if (statsRange === '10') minMinutes = 400;
-        if (statsRange === 'all') minMinutes = 300;
+    document.querySelectorAll('#chartsGrid [data-chart-pos]').forEach(btn => {
+        btn.setAttribute('aria-pressed', String(btn.dataset.chartPos === state.chartPosition));
+    });
 
-        const players = data.filter(p => p.position_name === pos && p.minutes > minMinutes);
-        if (players.length < 2) return;
+    CHART_SPECS.forEach(spec => {
+        const card = document.getElementById(`card-${spec.id}`);
+        const canvas = document.getElementById(spec.id);
+        if (!card || !canvas) return;
 
-        const chartData = players.map(p => ({
-            x: parseFloat(p[xKey] || 0),
-            y: parseFloat(p.points_per_game_90),
-            player: p.web_name,
-            team: p.team_name
-        }));
-
-        const config = getMatrixChartConfig(chartData, xLabel, 'נקודות ל-90 דק\'', {
-            topRight: `גבוה/${title}`,
-            topLeft: 'גבוה/נמוך',
-            bottomRight: `נמוך/${title}`,
-            bottomLeft: 'נמוך/נמוך'
-        });
-
-        const ctx = canvas.getContext('2d');
-        if (charts[canvasId]) charts[canvasId].destroy();
-        charts[canvasId] = new Chart(ctx, config);
-    };
-
-    renderPosMatrix('chart-mid', 'MID', 'xGI_per90', 'xGI/90', 'קשרים');
-    renderPosMatrix('chart-fwd', 'FWD', 'xGI_per90', 'xGI/90', 'חלוצים');
-    renderPosMatrix('chart-def', 'DEF', 'def_contrib_per90', 'תרומה הגנתית/90', 'מגנים');
-    renderPosMatrix('chart-gkp', 'GKP', 'expected_goals_conceded_per_90', 'xGC/90', 'שוערים');
-
-    // 2. Team Charts (Attack/Defense)
-    const renderTeamChart = (canvasId, type, xKey, yKey, xLabel, yLabel, quadLabels) => {
-        const canvas = document.getElementById(canvasId);
-        if (!canvas) return;
-
-        const teamStats = {};
-        data.forEach(p => {
-            if (!teamStats[p.team_name]) teamStats[p.team_name] = { x: 0, y: 0, mins: 0 };
-
-            // Fix: Use correct keys for aggregation (always use per 90 or total? Team chart needs total to average, or average per 90)
-            // Original logic summed values. 
-            // If xKey is 'expected_goal_involvements', we use it.
-            // If we are in range mode, 'expected_goal_involvements' should be the aggregated total.
-
-            let valX = 0;
-            if (xKey === 'expected_goal_involvements') {
-                valX = parseFloat(p.expected_goal_involvements) || 0;
-            } else if (xKey === 'expected_goals_conceded') {
-                valX = parseFloat(p.expected_goals_conceded) || 0;
-            } else {
-                valX = parseFloat(p[xKey] || 0);
-            }
-
-            const valY = type === 'attack' ? ((p.goals_scored || 0) + (p.assists || 0)) : (p.goals_conceded || 0);
-
-            if ((type === 'attack' && ['MID', 'FWD'].includes(p.position_name)) ||
-                (type === 'defense' && ['DEF', 'GKP'].includes(p.position_name))) {
-                teamStats[p.team_name].x += valX;
-                teamStats[p.team_name].y += valY;
-                teamStats[p.team_name].mins += p.minutes;
-            }
-        });
-
-        const points = Object.entries(teamStats).map(([team, stats]) => {
-            // Normalize to per 90 mins for approx 5-6 players?
-            // Actually user asked for team attack/defense. If we sum stats for relevant positions, we get total output.
-            // Normalizing by players minutes gives "per player per 90".
-            // Let's keep previous logic but ensure it's robust.
-            const playersCount = type === 'attack' ? 6 : 5; // Approx mids+fwds vs defs+gkp
-            const norm = stats.mins > 0 ? (stats.mins / 90) / playersCount : 1;
-
-            // Avoid division by zero or very small numbers
-            if (stats.mins < 450) return null; // Need meaningful minutes
-
-            return { x: stats.x / norm, y: stats.y / norm, team: team };
-        }).filter(d => d !== null && (d.x > 0 || d.y > 0));
-
-        const config = getMatrixChartConfig(points, xLabel, yLabel, quadLabels);
-        const ctx = canvas.getContext('2d');
-        if (charts[canvasId]) charts[canvasId].destroy();
-        charts[canvasId] = new Chart(ctx, config);
-    };
-
-    renderTeamChart('chart-attack', 'attack', 'expected_goal_involvements', 'GI', 'צפי מעורבות (xGI)', 'מעורבות בפועל (G+A)', { topRight: 'התקפה קטלנית', bottomLeft: 'התקפה חלשה' });
-    renderTeamChart('chart-defense', 'defense', 'expected_goals_conceded', 'GC', 'צפי ספיגות (xGC)', 'ספיגות בפועל (GC)', { topRight: 'הגנה חלשה', bottomLeft: 'הגנת ברזל' });
-
-    // 3. Price vs Score (Value Chart)
-    const renderPriceScore = () => {
-        const canvas = document.getElementById('chart-price-score');
-        if (!canvas) return;
-
-        const statsRange = document.getElementById('statsRange') ? document.getElementById('statsRange').value : 'all';
-        let minMinutes = 500; // default for all season
-        if (statsRange === '3') minMinutes = 90;
-        if (statsRange === '5') minMinutes = 200;
-        if (statsRange === '10') minMinutes = 400;
-
-        const points = data.filter(p => p.minutes > minMinutes).map(p => ({
-            x: parseFloat(p.now_cost),
-            y: parseFloat(p.total_points),
-            player: p.web_name,
-            team: p.team_name
-        }));
-
-        const config = getMatrixChartConfig(points, 'מחיר (£m)', 'נקודות', {
-            topRight: 'יהלומים (זול וטוב)',
-            bottomLeft: 'יקר ולא יעיל'
-        });
-
-        const ctx = canvas.getContext('2d');
-        if (charts['chart-price-score']) charts['chart-price-score'].destroy();
-        charts['chart-price-score'] = new Chart(ctx, config);
-    };
-    renderPriceScore();
-
-    // 4. ICT Chart
-    const renderICT = () => {
-        const canvas = document.getElementById('chart-ict');
-        if (!canvas) return;
-
-        // Sort by ICT Index (or ict_index_per90 if we want, but usually total is used for "top 15")
-        // If range is active, ict_index should be aggregated total.
-        const topICT = [...data].sort((a, b) => (parseFloat(b.ict_index) || 0) - (parseFloat(a.ict_index) || 0)).slice(0, 15);
-
-        const ctx = canvas.getContext('2d');
-        if (charts['chart-ict']) charts['chart-ict'].destroy();
-
-        charts['chart-ict'] = new Chart(ctx, {
-            type: 'bar',
-            data: {
-                labels: topICT.map(p => p.web_name),
-                datasets: [
-                    { label: 'Influence', data: topICT.map(p => parseFloat(p.influence) || 0), backgroundColor: '#3b82f6' },
-                    { label: 'Creativity', data: topICT.map(p => parseFloat(p.creativity) || 0), backgroundColor: '#10b981' },
-                    { label: 'Threat', data: topICT.map(p => parseFloat(p.threat) || 0), backgroundColor: '#ef4444' }
-                ]
-            },
-            options: {
-                responsive: true, maintainAspectRatio: false,
-                scales: { x: { stacked: true }, y: { stacked: true } },
-                plugins: {
-                    legend: { position: 'bottom' },
-                    datalabels: { display: false } // Disable datalabels for this bar chart to reduce clutter
-                }
-            }
-        });
-    };
-    renderICT();
-}
-
-// Override switchMainView to call renderCharts
-// We use a self-invoking function or just overwrite to avoid infinite recursion if we re-run this script
-(function () {
-    const originalSwitchMainView = window.switchMainView;
-    window.switchMainView = function (viewName) {
-        // Handle UI toggling explicitly if original is missing or just as redundancy
-        const tableDiv = document.getElementById('mainTableView');
-        const chartsDiv = document.getElementById('mainChartsView');
-        const btnTable = document.getElementById('btnViewTable');
-        const btnCharts = document.getElementById('btnViewCharts');
-
-        if (viewName === 'table') {
-            if (tableDiv) tableDiv.style.display = 'block';
-            if (chartsDiv) chartsDiv.style.display = 'none';
-            if (btnTable) btnTable.classList.add('active');
-            if (btnCharts) btnCharts.classList.remove('active');
-        } else if (viewName === 'charts') {
-            if (tableDiv) tableDiv.style.display = 'none';
-            if (chartsDiv) chartsDiv.style.display = 'grid';
-            if (btnTable) btnTable.classList.remove('active');
-            if (btnCharts) btnCharts.classList.add('active');
-            setTimeout(renderCharts, 50);
+        let config = null;
+        try {
+            config = spec.build(data);
+        } catch (e) {
+            console.warn(`⚠️ chart ${spec.id} failed to build`, e);
         }
 
-        // If we wanted to keep original logic (e.g. resize), we could call originalSwitchMainView(viewName)
-        // But we just reimplemented the core logic above.
-    };
-})();
+        if (charts[spec.id]) {
+            charts[spec.id].destroy();
+            charts[spec.id] = null;
+        }
+
+        // A card with nothing to plot hides itself. Leaving an empty axis behind
+        // reads as a broken chart rather than as "this needs data you don't have
+        // yet" — which is the normal state before a season has been played.
+        card.hidden = !config;
+        if (!config) return;
+
+        charts[spec.id] = new Chart(canvas.getContext('2d'), config);
+    });
+}
+
+// ============================================
+// VIEW SWITCHING
+// ============================================
+// One definition. There used to be two: a plain one here and an IIFE lower down
+// that replaced it, so the version being read was not the version running.
+
+function switchMainView(viewName) {
+    const tableDiv = document.getElementById('mainTableView');
+    const chartsDiv = document.getElementById('mainChartsView');
+    const btnTable = document.getElementById('btnViewTable');
+    const btnCharts = document.getElementById('btnViewCharts');
+
+    const charting = viewName === 'charts';
+    if (tableDiv) tableDiv.style.display = charting ? 'none' : 'block';
+    if (chartsDiv) chartsDiv.style.display = charting ? 'block' : 'none';
+    if (btnTable) btnTable.classList.toggle('active', !charting);
+    if (btnCharts) btnCharts.classList.toggle('active', charting);
+
+    // renderCharts() bails while the view is display:none, so it has to run after
+    // the switch — and after a frame, so the canvases have a measured size.
+    if (charting) setTimeout(renderCharts, 50);
+}
 
 
 // ============================================
