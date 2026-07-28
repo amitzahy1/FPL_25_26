@@ -1195,6 +1195,17 @@ tbody tr:last-child td {
     text-overflow: ellipsis;
 }
 
+/* Deliberately the smallest thing on the row: it is context for the figure, not
+   a figure of its own. But it is always there, because a percentage without its
+   denominator is the easiest way to be misled by this board. */
+.db-apps {
+    flex: none;
+    font-size: 9px;
+    font-weight: 700;
+    color: #b6c2d2;
+    white-space: nowrap;
+}
+
 .db-why {
     display: block;
     font-size: 10.5px;
@@ -6335,6 +6346,11 @@ canvas {
    distance between #4 and #9 matters, the distance between #180 and #240 does
    not, and the badge says which regime you are looking at. */
 .draft-rank-cell { text-align: center; }
+
+/* The column the "ל-5 הבאים" chips sort on. It exists because they sorted on it
+   while it was invisible, which reads exactly like an arbitrary order. */
+.proj-cell { text-align: center; }
+.proj-cell b { font-size: 13px; font-weight: 800; color: #4338ca; direction: ltr; font-variant-numeric: tabular-nums; }
 
 .rank-badge {
     display: inline-block;

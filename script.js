@@ -2769,6 +2769,10 @@ function createPlayerRowHtml(player, index) {
         <td>${player.team_name}</td>
         <td class="${draftTeamClass}" title="${draftTeamDisplay}">${draftTeamDisplay}</td>
         <td class="bold-cell ${getPercentileClass(player.draft_score, displayedValues.draft_score)}">${player.draft_score.toFixed(1)}</td>
+        <td class="proj-cell" title="נקודות צפויות ב-5 המחזורים הבאים">${
+        Number.isFinite(player.points_next_5)
+            ? `<b>${player.points_next_5.toFixed(1)}</b>`
+            : '<span class="rank-none">–</span>'}</td>
         <td class="draft-rank-cell">${player.draft_rank
         ? `<span class="rank-badge rank-${player.draft_rank <= 20 ? 'elite' : player.draft_rank <= 60 ? 'good' : 'plain'}">#${player.draft_rank}</span>`
         : '<span class="rank-none" title="לא מדורג ב-FPL Draft">–</span>'}</td>
@@ -3310,7 +3314,11 @@ function positionShortlistFilters() {
             // when every startable player at the position is already owned.
             filter: p => p.position_name === pos && isAvailableToDraft(p)
                 && (p.minutes || 0) >= 450 && projectedPointsOf(p, 'now') > 0,
-            sortKey: 'points_next_5', sortDirection: 'desc'
+            sortKey: 'points_next_5', sortDirection: 'desc',
+            // Sorting by a column nobody can see is indistinguishable from not
+            // sorting at all: the order was invisible until "צפוי (5)" existed.
+            explain: 'מסודר לפי העמודה "צפוי (5)" — נקודות צפויות ב-5 המחזורים הבאים:'
+                + ' הרמה שלו למשחק × המשחקים שהוא צפוי לשחק × קושי הלו״ז'
         };
     }
     return out;
@@ -3331,8 +3339,9 @@ const QUICK_FILTERS = {
     // set_piece_priority is 99 for a non-taker, so the old `> 0` test matched
     // every player in the league.
     set_pieces: {
-        filter: p => Math.min(p.set_piece_priority.penalty, p.set_piece_priority.corner,
-            p.set_piece_priority.free_kick) <= 3,
+        // setPieceOrder, not a second copy of the same Math.min: 99 means "takes
+        // none of them", which is why the original `> 0` test matched the league.
+        filter: p => setPieceOrder(p) <= 3,
         sortKey: 'set_piece_priority.penalty', sortDirection: 'asc'
     },
     attacking_defenders: {
@@ -3605,6 +3614,8 @@ function toggleQuickFilter(button, filterName) {
         // category" means.
         const spec = QUICK_FILTERS[filterName] || {};
         setSort(spec.sortKey || 'draft_score', spec.sortDirection || 'desc');
+
+        if (spec.explain) showToast('סדר התוצאות', spec.explain, 'info', 7000);
 
         // Ordered after the filter and the sort are in state, so whatever the
         // fetch renders is already the filtered view rather than a flash of the
@@ -4538,10 +4549,6 @@ const DRAFT_PANELS = [
         subtitle: 'נקודות שתרוויח מעל החלופה בעמדה',
         icon: '🏆',
         accent: '#7c3aed',
-        // The one panel that spans the row: it is the answer, the five under it
-        // are the reasons.
-        wide: true,
-        limit: 5,
         // No horizon claim in the caption: on the finished-season tab there is no
         // "rest of season" left, so the caption states the unit and the why line
         // states the actual number of matches it was multiplied by.
@@ -4652,7 +4659,13 @@ const DRAFT_PANELS = [
         },
         eligible: p => {
             const rate = defconRateFor(p);
-            return rate !== null && rate >= 20 && windowStats(p).matches >= windowMinMatches();
+            if (rate === null || rate < 20) return false;
+            // A hit-rate is only a rate if it has a denominator. Colwill topped
+            // this card at 67% off two clearances in three eligible matches,
+            // which is a coin toss wearing a percentage sign.
+            const apps = p.defcon_eligible_apps;
+            if (Number.isFinite(apps) && apps > 0 && apps < 10) return false;
+            return windowStats(p).matches >= windowMinMatches();
         },
         rank: (a, b) => defconRateFor(b) - defconRateFor(a),
         windowAware: true
@@ -4690,48 +4703,8 @@ const DRAFT_PANELS = [
             windowStats(p).matches >= windowMinMatches(),
         rank: (a, b) => (parseFloat(b.xGI_per90) || 0) - (parseFloat(a.xGI_per90) || 0),
         windowAware: true
-    },
-    {
-        id: 'setpiece',
-        title: 'בעלי כדורים נייחים',
-        subtitle: 'פנדלים וקרנות = נקודות חוזרות',
-        valueLabel: 'שערים + בישולים בעונה',
-        icon: '🎯',
-        accent: '#be185d',
-        // Three wrong figures preceded this one, and the last was the worst.
-        //
-        //  1. `#${setPieceOrder(p)}` — the eligibility rule pins that to 1 or 2,
-        //     so it read "#1" on nearly every row and never varied.
-        //  2. draft_score captioned "ציון דראפט", which reads as a draft ranking
-        //     and is nothing of the sort — it is this app's internal composite.
-        //  3. points above the baseline, which for a set-piece taker at a weak
-        //     club is legitimately negative: the card showed -5, -9, -13 and
-        //     asked the reader to hold "replacement level" in their head to
-        //     understand why.
-        //
-        // What a set-piece taker is for is returns, so the figure is returns. The
-        // one thing this cannot be is points *from* set pieces: FPL publishes who
-        // takes them and nothing whatsoever about which goals came from them —
-        // not in the bootstrap, not in the draft API, not in the per-gameweek
-        // logs. Inventing that number would be worse than not having it.
-        metric: p => (p.goals_scored || 0) + (p.assists || 0),
-        fmt: v => v.toFixed(0),
-        display(p) { return this.fmt(this.metric(p)); },
-        why: p => {
-            const bits = [];
-            if (p.set_piece_priority.penalty <= 2) bits.push(`פנדל #${p.set_piece_priority.penalty}`);
-            if (p.set_piece_priority.corner <= 2) bits.push(`קרן #${p.set_piece_priority.corner}`);
-            if (p.set_piece_priority.free_kick <= 2) bits.push(`חופשית #${p.set_piece_priority.free_kick}`);
-            const out = [`${p.goals_scored || 0} שערים · ${p.assists || 0} בישולים`];
-            if (bits.length) out.push(bits.join(' · '));
-            return out.join(' · ');
-        },
-        eligible: p => setPieceOrder(p) <= 2 && p.minutes > 450,
-        rank: (a, b) => ((b.goals_scored || 0) + (b.assists || 0))
-            - ((a.goals_scored || 0) + (a.assists || 0))
     }
 ];
-
 /**
  * The same top-20-in-position median, for a board panel's own metric. Measured
  * against every player at that position — not against the free agents the board
@@ -4778,6 +4751,26 @@ function benchChipHtml(panel, p) {
     // The scope bar defines the word once, and the tooltip gives the figure.
     return `<em class="db-bench" title="חציון 20 ה${label} הטובים במדד הזה: ${panel.fmt(bench)}"
         >פי ${ratio.toFixed(1)} מהעילית</em>`;
+}
+
+/**
+ * The three-letter club code. Six cards to a row leaves ~300px for a name, a
+ * club and an appearance count, and "Bournemouth" spends it all; the full name
+ * stays as the title.
+ */
+function teamShort(p) {
+    const team = state.teamsData && state.teamsData[p.team];
+    return (team && team.short_name) || p.team_name || '';
+}
+
+/**
+ * Appearances, from the field when it exists and from minutes when it does not.
+ * Every rate on the board is a fraction of this, so the board prints it: "67%"
+ * off three matches and off thirty are not the same claim.
+ */
+function appearancesOf(p) {
+    if (Number.isFinite(p.appearances)) return p.appearances;
+    return p.minutes > 0 ? Math.round(p.minutes / 70) : 0;
 }
 
 /** Best set-piece duty a player holds; 99 means he takes none of them. */
@@ -4875,7 +4868,7 @@ function renderDraftBoard() {
     if (!players.length) { host.innerHTML = ''; return; }
 
     const cards = DRAFT_PANELS.map((panel, cardIdx) => {
-        const picks = panelPicks(panel, players, panel.limit || 3);
+        const picks = panelPicks(panel, players, 3);
         if (!picks.length && !panel.emptyNote) return '';
 
         const rows = picks.map((p, i) => `
@@ -4884,7 +4877,10 @@ function renderDraftBoard() {
                 <span class="db-player">
                     <span class="db-line">
                         <span class="db-name">${escapeHtml(p.web_name)}</span>
-                        <span class="db-meta">${p.position_name} · ${escapeHtml(p.team_name)}</span>
+                        <span class="db-meta" title="${escapeHtml(p.team_name)}"
+                            >${p.position_name} · ${escapeHtml(teamShort(p))}</span>
+                        <span class="db-apps" title="סה״כ הופעות בעונה — כל אחוז נקרא מול המספר הזה"
+                            >${appearancesOf(p)} מש׳</span>
                     </span>
                     <span class="db-why">${escapeHtml(panel.why(p))}</span>
                 </span>
@@ -4905,8 +4901,7 @@ function renderDraftBoard() {
             : `<p class="db-empty">${panel.emptyNote}</p>`;
 
         return `
-            <article class="db-card${panel.wide ? ' is-wide' : ''}"
-                style="--accent:${panel.accent}; --d:${cardIdx * 45}ms">
+            <article class="db-card" style="--accent:${panel.accent}; --d:${cardIdx * 45}ms">
                 <header class="db-head">
                     <span class="db-icon">${panel.icon}</span>
                     <span class="db-headings">

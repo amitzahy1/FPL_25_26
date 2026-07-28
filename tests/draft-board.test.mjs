@@ -470,7 +470,9 @@ describe('panel rules', () => {
     });
 
     test('a non-taker is not a set-piece specialist', () => {
-        // 99 means "takes none of them"; a `> 0` test would match the whole league.
+        // 99 means "takes none of them"; a `> 0` test would match the whole
+        // league. The board panel that used this is gone — the set-piece chip
+        // beside the table now shares the helper rather than copying the rule.
         const board = loadBoard([
             makePlayer({ id: 1 }),
             makePlayer({ id: 2, set_piece_priority: { penalty: 1, corner: 99, free_kick: 99 } })
@@ -478,8 +480,6 @@ describe('panel rules', () => {
         const pool = board.draftBoardPool().players;
         assert.equal(board.setPieceOrder(pool[0]), 99);
         assert.equal(board.setPieceOrder(pool[1]), 1);
-        assert.deepEqual(
-            board.panelPicks(panel(board, 'setpiece'), pool, 3).map(p => p.id), [2]);
     });
 
     test('the season DEFCON rate wins over the window rate where it exists', () => {
@@ -519,16 +519,17 @@ describe('panel rules', () => {
     });
 
     test('a rule that throws drops the player instead of the panel', () => {
-        // A player missing set_piece_priority made the whole board disappear before
-        // panelPicks caught per-player failures.
-        const board = loadBoard([
-            makePlayer({ id: 1, set_piece_priority: undefined }),
-            makePlayer({ id: 2, set_piece_priority: { penalty: 1, corner: 99, free_kick: 99 } })
-        ]);
+        // A player missing a field its rule reads made the whole board disappear
+        // before panelPicks caught per-player failures.
+        const board = loadBoard([makePlayer({ id: 1 }), makePlayer({ id: 2 })]);
+        const brittle = {
+            id: 'brittle',
+            eligible: p => { if (p.id === 1) throw new Error('missing field'); return true; },
+            rank: (a, b) => a.id - b.id
+        };
         assert.deepEqual(
-            board.panelPicks(panel(board, 'setpiece'), board.draftBoardPool().players, 3)
-                .map(p => p.id),
-            [2]);
+            board.panelPicks(brittle, board.draftBoardPool().players, 3).map(p => p.id), [2],
+            'one broken player must not take the panel down with him');
     });
 });
 

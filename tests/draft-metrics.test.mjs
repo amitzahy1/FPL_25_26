@@ -139,6 +139,8 @@ describe('smart filters', () => {
         return new Function(`const SEASON_CONFIG = { seasonLabel: '2026/27', previousSeasonLabel: '2025/26' };
             const draftValueOf = (p) => p.__now === undefined ? 0 : p.__now;
             const projectedPointsOf = (p) => p.__now === undefined ? 0 : p.__now;
+            const setPieceOrder = (p) => Math.min(p.set_piece_priority.penalty,
+                p.set_piece_priority.corner, p.set_piece_priority.free_kick);
             ${SCRIPT_SRC.slice(start, end)}
             return { QUICK_FILTERS, newcomerSets, newcomerUnavailable, isAvailableToDraft };`)();
     };
