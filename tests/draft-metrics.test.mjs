@@ -169,8 +169,7 @@ describe('smart filters', () => {
         // Five chips previously fell through the switch and silently did nothing.
         const html = SCRIPT_SRC; // filters are referenced from index.html, checked below
         const required = ['set_pieces', 'attacking_defenders', 'differentials',
-            'bonus_magnets', 'form_kings', 'easy_fixtures_ppg',
-            'underperformers', 'trending_underachievers',
+            'form_kings', 'underperformers',
             'promoted_teams', 'new_to_league',
             'best_gkp_5', 'best_def_5', 'best_mid_5', 'best_fwd_5'];
         for (const name of required) {

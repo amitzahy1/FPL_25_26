@@ -3351,30 +3351,16 @@ const QUICK_FILTERS = {
         filter: p => parseFloat(p.selected_by_percent) < 10 && p.draft_score > 40,
         sortKey: 'draft_score'
     },
-    bonus_magnets: {
-        filter: p => p.minutes > 450 && p.bonus_per90 > 0.25,
-        sortKey: 'bonus_per90'
-    },
     // "form > 0" matched essentially the whole league. Require a genuinely
     // strong recent return from someone who is actually playing.
     form_kings: {
         filter: p => parseFloat(p.form) >= 4.5 && p.minutes > 450,
         sortKey: 'points_per_game_90'
     },
-    // Good underlying numbers against a soft run of fixtures.
-    easy_fixtures_ppg: {
-        filter: p => p.next_3_fdr > 0 && p.next_3_fdr <= 2.7 && p.minutes > 450,
-        sortKey: 'points_per_game_90'
-    },
     // Creating more than they have converted: candidates to improve.
     underperformers: {
         filter: p => p.minutes > 600 && p.xDiff < -1.5,
         sortKey: 'xDiff', sortDirection: 'asc'
-    },
-    // Underperforming AND being bought — the market expects a correction.
-    trending_underachievers: {
-        filter: p => p.minutes > 450 && p.xDiff < 0 && p.net_transfers_event > 0,
-        sortKey: 'net_transfers_event'
     },
     // The four position chips: the best free agents at one position over the next
     // five gameweeks, most recommended first. Same index the board ranks on, on
@@ -3420,7 +3406,11 @@ const QUICK_FILTERS = {
 // working feature. Both have shipped here before.
 function assertQuickFiltersReachable() {
     const chips = [...document.querySelectorAll('.quick-filter-btn')]
-        .map(b => (b.getAttribute('onclick') || '').match(/'([a-z_]+)'/))
+        // [a-z0-9_], with the digits: the four position chips are named
+        // best_gkp_5 and friends, and a class without them matched none of them —
+        // so this check, whose entire job is to catch an unreachable rule, was
+        // reporting all four as unreachable on every load.
+        .map(b => (b.getAttribute('onclick') || '').match(/'([a-z0-9_]+)'/))
         .filter(Boolean).map(m => m[1]);
     const rules = Object.keys(QUICK_FILTERS);
     const orphanChips = chips.filter(c => !rules.includes(c));
@@ -3433,14 +3423,6 @@ function assertQuickFiltersReachable() {
 // empty result is expected and should be explained rather than shown as a
 // blank table.
 const FILTER_PREREQS = {
-    easy_fixtures_ppg: {
-        available: () => (state.allPlayersData.live.fixtures || []).length > 0,
-        reason: 'אין עדיין לוח משחקים לעונה החדשה — הפילטר הזה יעבוד כשהמשחקים יתפרסמו'
-    },
-    trending_underachievers: {
-        available: () => state.currentDataSource === 'live',
-        reason: 'נתוני העברות קיימים רק בעונה פעילה — לא זמין בנתוני עונה שהסתיימה'
-    },
     differentials: {
         available: () => state.currentDataSource === 'live',
         reason: 'אחוזי בחירה משקפים את העונה שהסתיימה ולא את הדראפט הקרוב'
