@@ -3288,6 +3288,30 @@ function newcomerSets() {
     return value;
 }
 
+/**
+ * "פנוי" means free agent once the league's rosters are known, and everyone
+ * before the draft — the same rule the board's pool uses, because a chip that
+ * recommends a player somebody already owns is not a recommendation.
+ */
+function isAvailableToDraft(p) {
+    const owned = state.draft.ownedElementIds;
+    if (owned && owned.size > 0 && owned.has(p.id)) return false;
+    return p.availability_factor > 0.5;
+}
+
+/** One chip per position, built from one rule so they cannot drift apart. */
+function positionShortlistFilters() {
+    const out = {};
+    for (const pos of ['GKP', 'DEF', 'MID', 'FWD']) {
+        out[`best_${pos.toLowerCase()}_5`] = {
+            filter: p => p.position_name === pos && isAvailableToDraft(p)
+                && (p.minutes || 0) >= 450 && draftValueOf(p, 'now') > 0,
+            sortKey: 'value_now', sortDirection: 'desc'
+        };
+    }
+    return out;
+}
+
 /** Shared by both newcomer chips: the same reason either of them cannot run. */
 function newcomerUnavailable() {
     if (state.currentDataSource === 'historical') {
@@ -3340,6 +3364,12 @@ const QUICK_FILTERS = {
         filter: p => p.minutes > 450 && p.xDiff < 0 && p.net_transfers_event > 0,
         sortKey: 'net_transfers_event'
     },
+    // The four position chips: the best free agents at one position over the next
+    // five gameweeks, most recommended first. Same index the board ranks on, on
+    // its short horizon — which is the only horizon where the fixture tilt
+    // applies, and "ל-5 הבאים" is exactly what that horizon means.
+    ...positionShortlistFilters(),
+
     // The two newcomer chips. Neither has last-season numbers by definition, so
     // both sort on what does exist for them — FPL's own price, which is the only
     // published expectation of a player nobody has data on — and both leave the
@@ -4459,6 +4489,26 @@ function draftValueOf(p, horizonId = 'season') {
     return v ? v.value : null;
 }
 
+/**
+ * Copy both horizons onto the players as plain fields.
+ *
+ * The table sorts by reading a named property off the row, so a getter is not
+ * enough — the figure has to exist as `value_now` / `value_season`. Cheap to
+ * refresh (draftValue is cached per data source, window and draft state) and it
+ * has to be refreshed, because replacement level moves when the league's rosters
+ * load and the play rate moves as gameweeks are played.
+ */
+function applyValueIndex(players) {
+    const list = players
+        || (state.allPlayersData[state.currentDataSource] || {}).processed
+        || [];
+    for (const p of list) {
+        p.value_now = draftValueOf(p, 'now');
+        p.value_season = draftValueOf(p, 'season');
+    }
+    return list.length;
+}
+
 const DRAFT_PANELS = [
     {
         id: 'bestpick',
@@ -4776,6 +4826,10 @@ function panelPicks(panel, pool, limit) {
 function renderDraftBoard() {
     const host = document.getElementById('draftBoard');
     if (!host) return;
+
+    // Both the board and the position chips read these, and this is the one
+    // place that runs after every change that can move them.
+    applyValueIndex();
 
     const { players, freeAgentsOnly, position } = draftBoardPool();
     if (!players.length) { host.innerHTML = ''; return; }

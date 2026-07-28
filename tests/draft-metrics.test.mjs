@@ -133,9 +133,13 @@ describe('smart filters', () => {
         globalThis.state = state;
         const start = SCRIPT_SRC.indexOf('let _newcomers =');
         const end = SCRIPT_SRC.indexOf('function applyQuickFilter');
+        // draftValueOf lives with the value index, far from this slice; the tests
+        // that need it care about the *rule*, not the arithmetic, so it reads a
+        // figure off the fixture.
         return new Function(`const SEASON_CONFIG = { seasonLabel: '2026/27', previousSeasonLabel: '2025/26' };
+            const draftValueOf = (p) => p.__now === undefined ? 0 : p.__now;
             ${SCRIPT_SRC.slice(start, end)}
-            return { QUICK_FILTERS, newcomerSets, newcomerUnavailable };`)();
+            return { QUICK_FILTERS, newcomerSets, newcomerUnavailable, isAvailableToDraft };`)();
     };
     const { QUICK_FILTERS } = load();
 
@@ -164,7 +168,8 @@ describe('smart filters', () => {
         const required = ['set_pieces', 'attacking_defenders', 'differentials',
             'bonus_magnets', 'form_kings', 'easy_fixtures_ppg',
             'underperformers', 'trending_underachievers',
-            'promoted_teams', 'new_to_league'];
+            'promoted_teams', 'new_to_league',
+            'best_gkp_5', 'best_def_5', 'best_mid_5', 'best_fwd_5'];
         for (const name of required) {
             assert.ok(QUICK_FILTERS[name], `quick filter "${name}" is not implemented`);
             assert.equal(typeof QUICK_FILTERS[name].filter, 'function');
@@ -178,6 +183,40 @@ describe('smart filters', () => {
         assert.ok(QUICK_FILTERS.set_pieces.filter(taker));
         assert.ok(!QUICK_FILTERS.set_pieces.filter(nonTaker),
             'a player who takes nothing must not match the set-piece filter');
+    });
+
+    test('the position shortlists rank on the five-gameweek index, best first', () => {
+        const fns = load({ draft: { ownedElementIds: new Set() } });
+        const player = (over) => ({
+            position_name: 'MID', minutes: 1800, availability_factor: 1, __now: 5, ...over
+        });
+        for (const [name, pos] of [['best_gkp_5', 'GKP'], ['best_def_5', 'DEF'],
+            ['best_mid_5', 'MID'], ['best_fwd_5', 'FWD']]) {
+            const spec = fns.QUICK_FILTERS[name];
+            assert.equal(spec.sortKey, 'value_now', `${name} must sort on the short horizon`);
+            assert.equal(spec.sortDirection, 'desc', `${name} must put the best pick first`);
+            assert.ok(spec.filter(player({ position_name: pos })), `${name} must match a ${pos}`);
+            const otherPos = pos === 'GKP' ? 'FWD' : 'GKP';
+            assert.ok(!spec.filter(player({ position_name: otherPos })),
+                `${name} must not match a ${otherPos}`);
+            assert.ok(!spec.filter(player({ position_name: pos, __now: -2 })),
+                'a player worth less than the alternative is not a recommendation');
+            assert.ok(!spec.filter(player({ position_name: pos, minutes: 200 })),
+                'five gameweeks of value off two matches of evidence is noise');
+        }
+    });
+
+    test('"פנוי" excludes players the league already owns, and the unfit', () => {
+        const fns = load({ draft: { ownedElementIds: new Set([7]) } });
+        assert.ok(fns.isAvailableToDraft({ id: 1, availability_factor: 1 }));
+        assert.ok(!fns.isAvailableToDraft({ id: 7, availability_factor: 1 }),
+            'somebody else already has him');
+        assert.ok(!fns.isAvailableToDraft({ id: 2, availability_factor: 0.25 }),
+            'a doubtful player is not a recommendation');
+
+        // Before the draft nobody is owned, so nobody is excluded on that ground.
+        const preDraft = load({ draft: { ownedElementIds: new Set() } });
+        assert.ok(preDraft.isAvailableToDraft({ id: 7, availability_factor: 1 }));
     });
 
     test('promoted clubs are derived from the team codes, not a hardcoded list', () => {

@@ -1,0 +1,583 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>את מי לקחת עכשיו — 4 אפשרויות עיצוב</title>
+    <!--
+        Four layouts for the recommendations section, on real data from the
+        committed 2025/26 snapshot so the judgement is about the design and not
+        about placeholder text.
+
+        The value index here is the shipped formula from script.js with two terms
+        left out, because neither is available to a static page: the window-form
+        blend (needs the per-gameweek window, and it is nearly weightless since
+        the backtest) and the fixture tilt (needs the fixture list). Everything
+        else — replacement level per position, the play rate, the small-sample
+        shrinkage — is computed exactly as the site computes it.
+    -->
+    <style>
+        :root {
+            color-scheme: light;
+            --bg: #eef2f7;
+            --card: #ffffff;
+            --ink: #0f172a;
+            --muted: #64748b;
+            --faint: #94a3b8;
+            --line: #e6edf6;
+            --accent: #4f46e5;
+        }
+
+        * { box-sizing: border-box; }
+
+        body {
+            margin: 0;
+            padding: 0 0 60px;
+            background: var(--bg);
+            color: var(--ink);
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Rubik, Arial, sans-serif;
+            font-size: 14px;
+            line-height: 1.45;
+        }
+
+        /* ---------------------------------------------------------- page ---- */
+
+        .page-head {
+            position: sticky;
+            top: 0;
+            z-index: 20;
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            flex-wrap: wrap;
+            padding: 12px 22px;
+            background: rgba(255, 255, 255, .92);
+            backdrop-filter: blur(8px);
+            border-bottom: 1px solid var(--line);
+        }
+
+        .page-head h1 { margin: 0; font-size: 17px; font-weight: 800; }
+        .page-head p { margin: 0; font-size: 12px; color: var(--muted); }
+        .jump { display: flex; gap: 6px; margin-inline-start: auto; flex-wrap: wrap; }
+
+        .jump a {
+            padding: 5px 11px;
+            border-radius: 100px;
+            background: #f1f5f9;
+            color: #475569;
+            font-size: 12px;
+            font-weight: 700;
+            text-decoration: none;
+        }
+
+        .jump a:hover { background: #e2e8f0; }
+
+        section { padding: 26px 22px 8px; }
+
+        .opt-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; margin-bottom: 4px; }
+        .opt-num {
+            width: 24px; height: 24px; flex: none; display: grid; place-items: center;
+            border-radius: 7px; background: var(--ink); color: #fff; font-size: 12px; font-weight: 800;
+        }
+        .opt-head h2 { margin: 0; font-size: 16px; font-weight: 800; }
+        .opt-head .verdict { font-size: 12px; font-weight: 700; color: var(--accent); }
+        .opt-note { margin: 0 0 14px; font-size: 12.5px; color: var(--muted); max-width: 82ch; }
+
+        .frame {
+            background: var(--card);
+            border: 1px solid var(--line);
+            border-radius: 14px;
+            padding: 14px 16px;
+            box-shadow: 0 10px 26px -22px rgba(15, 23, 42, .5);
+        }
+
+        .bar { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
+        .bar h3 { margin: 0; font-size: 18px; font-weight: 800; letter-spacing: -.2px; }
+        .bar .scope { font-size: 12px; font-weight: 600; color: var(--faint); margin-inline-start: auto; }
+        .bar .legend {
+            padding: 2px 9px; border-radius: 100px; background: #f1f5f9;
+            font-size: 11px; font-weight: 700; color: var(--faint);
+        }
+
+        .tabs { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 10px; }
+
+        .tab {
+            padding: 5px 12px;
+            border: 1px solid var(--line);
+            border-radius: 100px;
+            background: #fff;
+            font: inherit;
+            font-size: 12px;
+            font-weight: 700;
+            color: #475569;
+            cursor: pointer;
+        }
+
+        .tab.on { background: var(--ink); border-color: var(--ink); color: #fff; }
+
+        .num { direction: ltr; font-variant-numeric: tabular-nums; unicode-bidi: isolate; }
+
+        /* ------------------------------------------------ 1. ranked list ---- */
+
+        .rank-list { list-style: none; margin: 0; padding: 0; }
+
+        .rank-row {
+            display: grid;
+            grid-template-columns: 30px minmax(0, 1fr) auto auto auto;
+            align-items: center;
+            gap: 14px;
+            padding: 9px 4px;
+            border-top: 1px solid #f1f5f9;
+        }
+
+        .rank-row:first-child { border-top: none; }
+        .rank-row:hover { background: #fafcff; }
+
+        .pos-num {
+            width: 26px; height: 26px; display: grid; place-items: center;
+            border-radius: 8px; background: #eef2ff; color: var(--accent);
+            font-size: 12.5px; font-weight: 800;
+        }
+
+        .rank-row:nth-child(1) .pos-num { background: #fef3c7; color: #92400e; }
+        .rank-row:nth-child(2) .pos-num { background: #e8eef5; color: #475569; }
+        .rank-row:nth-child(3) .pos-num { background: #fde8d7; color: #9a3412; }
+
+        .who { min-width: 0; }
+        .who .line { display: flex; align-items: baseline; gap: 7px; white-space: nowrap; }
+        .who .name { font-size: 14px; font-weight: 800; }
+        .who .meta { font-size: 11px; font-weight: 600; color: var(--faint); }
+        .who .why { font-size: 11.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+        .flags { display: flex; gap: 4px; }
+
+        .flag {
+            width: 24px; height: 24px; display: grid; place-items: center;
+            border-radius: 7px; background: #f4f7fb; font-size: 12px;
+        }
+
+        .fpl-ref { font-size: 11px; font-weight: 700; color: var(--faint); }
+
+        .val { text-align: end; min-width: 92px; }
+        .val b { display: block; font-size: 17px; font-weight: 800; color: var(--accent); }
+        .val span { font-size: 10px; font-weight: 700; color: var(--faint); }
+
+        /* -------------------------------------------- 2. position columns ---- */
+
+        .pos-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+
+        .pos-col { border: 1px solid var(--line); border-radius: 11px; overflow: hidden; }
+
+        .pos-col > h4 {
+            margin: 0;
+            padding: 8px 11px;
+            background: var(--col, #f8fafc);
+            font-size: 12.5px;
+            font-weight: 800;
+            color: var(--colInk, #334155);
+            display: flex;
+            justify-content: space-between;
+        }
+
+        .pos-col ol { list-style: none; margin: 0; padding: 4px 0; }
+
+        .pos-col li {
+            display: grid;
+            grid-template-columns: 18px minmax(0, 1fr) auto;
+            align-items: center;
+            gap: 8px;
+            padding: 6px 11px;
+            border-top: 1px solid #f6f9fc;
+        }
+
+        .pos-col li:first-child { border-top: none; }
+        .pos-col .i { font-size: 10.5px; font-weight: 800; color: var(--faint); }
+        .pos-col .nm { font-size: 12.5px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .pos-col .tm { font-size: 10px; color: var(--faint); font-weight: 600; }
+        .pos-col .v { font-size: 13px; font-weight: 800; color: var(--colInk, #334155); }
+
+        /* ------------------------------------------------- 3. six cards ---- */
+
+        .six { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 10px; }
+
+        .mini {
+            border: 1px solid var(--line);
+            border-radius: 11px;
+            padding: 10px 11px 4px;
+            border-top: 2px solid var(--accent);
+            min-width: 0;
+        }
+
+        .mini h4 { margin: 0; font-size: 12px; font-weight: 800; }
+        .mini .sub { font-size: 9.5px; font-weight: 600; color: var(--faint); display: block; margin-bottom: 6px; }
+        .mini .cap { font-size: 9px; font-weight: 800; color: var(--accent); text-align: end; }
+        .mini ul { list-style: none; margin: 0; padding: 0; }
+
+        .mini li {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 5px 0;
+            border-top: 1px solid #f4f7fb;
+        }
+
+        .mini .r { width: 15px; height: 15px; flex: none; display: grid; place-items: center; border-radius: 4px; background: #f1f5f9; font-size: 9px; font-weight: 800; color: var(--faint); }
+        .mini .n { flex: 1; min-width: 0; font-size: 11.5px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .mini .x { font-size: 12px; font-weight: 800; color: var(--accent); }
+
+        /* ------------------------------------------------ 4. FIFA cards ---- */
+
+        .fut-row { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 12px; }
+
+        .fut {
+            position: relative;
+            border-radius: 14px;
+            padding: 12px 12px 10px;
+            color: #2b2100;
+            background:
+                radial-gradient(120% 70% at 50% 0%, rgba(255, 255, 255, .55), transparent 60%),
+                linear-gradient(160deg, #f6dd94 0%, #e8c264 38%, #caa244 62%, #f3d98d 100%);
+            box-shadow: 0 14px 30px -20px rgba(120, 90, 10, .8), inset 0 0 0 1px rgba(255, 255, 255, .5);
+            overflow: hidden;
+        }
+
+        .fut.silver {
+            color: #26303a;
+            background:
+                radial-gradient(120% 70% at 50% 0%, rgba(255, 255, 255, .6), transparent 60%),
+                linear-gradient(160deg, #eef2f6 0%, #cfd8e1 40%, #b3bec9 65%, #e6ebf0 100%);
+            box-shadow: 0 14px 30px -20px rgba(60, 70, 85, .7), inset 0 0 0 1px rgba(255, 255, 255, .6);
+        }
+
+        .fut.bronze {
+            color: #3a2413;
+            background:
+                radial-gradient(120% 70% at 50% 0%, rgba(255, 255, 255, .45), transparent 60%),
+                linear-gradient(160deg, #e7c19a 0%, #cf9f74 40%, #b4794b 66%, #e4bd94 100%);
+            box-shadow: 0 14px 30px -20px rgba(110, 70, 35, .75), inset 0 0 0 1px rgba(255, 255, 255, .45);
+        }
+
+        .fut-top { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 8px; align-items: start; }
+
+        .fut-rate { text-align: center; line-height: 1; }
+        .fut-rate b { display: block; font-size: 26px; font-weight: 900; letter-spacing: -1px; }
+        .fut-rate span { display: block; font-size: 8px; font-weight: 800; opacity: .72; margin-top: 2px; }
+        .fut-rate .pos { margin-top: 5px; font-size: 11px; font-weight: 900; }
+
+        /* A monogram, not a photo: resources.premierleague.com answers 403 to any
+           request that is not the Premier League's own site, so a player image
+           here would be a broken box on every card. */
+        .fut-face {
+            height: 76px;
+            display: grid;
+            place-items: center;
+        }
+
+        .fut-mono {
+            width: 62px;
+            height: 62px;
+            display: grid;
+            place-items: center;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, .42);
+            box-shadow: inset 0 0 0 1px rgba(0, 0, 0, .16), 0 3px 8px -4px rgba(0, 0, 0, .4);
+            font-size: 22px;
+            font-weight: 900;
+            letter-spacing: -1px;
+        }
+
+        .fut-name {
+            margin: 6px 0 4px;
+            padding-top: 6px;
+            border-top: 1px solid rgba(0, 0, 0, .18);
+            text-align: center;
+            font-size: 13px;
+            font-weight: 900;
+            letter-spacing: -.2px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .fut-club { text-align: center; font-size: 9.5px; font-weight: 700; opacity: .78; margin-bottom: 6px; }
+
+        .fut-stats {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 2px 8px;
+            padding-top: 6px;
+            border-top: 1px solid rgba(0, 0, 0, .18);
+        }
+
+        /* Hugging, not space-between: at this width a value ended up closer to the
+           next cell's label than to its own. */
+        .fut-stats div { display: flex; gap: 5px; font-size: 10px; font-weight: 800; }
+        .fut-stats i { font-style: normal; opacity: .7; min-width: 30px; }
+
+        .fut-foot {
+            margin-top: 7px;
+            padding-top: 5px;
+            border-top: 1px solid rgba(0, 0, 0, .18);
+            text-align: center;
+            font-size: 9px;
+            font-weight: 800;
+            opacity: .78;
+        }
+
+        footer { padding: 20px 22px; font-size: 12px; color: var(--muted); max-width: 90ch; }
+        footer code { background: #e8eef5; padding: 1px 5px; border-radius: 4px; font-size: 11px; }
+
+        @media (max-width: 1500px) {
+            .six, .fut-row { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+        }
+
+        @media (max-width: 1000px) {
+            .pos-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+            .six, .fut-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+            .rank-row { grid-template-columns: 26px minmax(0, 1fr) auto; }
+            .rank-row .flags, .rank-row .fpl-ref { display: none; }
+        }
+    </style>
+</head>
+
+<body>
+    <header class="page-head">
+        <h1>את מי לקחת עכשיו</h1>
+        <p>4 אפשרויות עיצוב · נתוני 2025/26 אמיתיים</p>
+        <nav class="jump">
+            <a href="#o1">1 · רשימה מדורגת</a>
+            <a href="#o2">2 · טורים לפי עמדה</a>
+            <a href="#o3">3 · 6 כרטיסים בשורה</a>
+            <a href="#o4">4 · כרטיסי FIFA</a>
+        </nav>
+    </header>
+
+    <section id="o1">
+        <div class="opt-head">
+            <span class="opt-num">1</span>
+            <h2>רשימה מדורגת + תגי סיבה</h2>
+            <span class="verdict">ההמלצה שלי</span>
+        </div>
+        <p class="opt-note">מקום אחד להסתכל בו. הדירוג הוא מדד השווי, וכל שורה נושאת את הסיבות שבגללן
+            השחקן שם — התגים הם ששת הכללים שהיו קודם שישה כרטיסים נפרדים. הקטגוריות הופכות לפילטרים
+            מעל הרשימה, כך ששחקן לא מופיע חמש פעמים בחמישה מקומות.</p>
+        <div class="frame" id="frame1"></div>
+    </section>
+
+    <section id="o2">
+        <div class="opt-head">
+            <span class="opt-num">2</span>
+            <h2>ארבעה טורים לפי עמדה</h2>
+        </div>
+        <p class="opt-note">מתאים לרגע שבו צריך למלא עמדה מסוימת: אתה סורק טור אחד ולא מסנן רשימה.
+            החיסרון — הוא מסתיר את ההשוואה בין עמדות, וזה בדיוק מה שמדד השווי נבנה כדי לאפשר.</p>
+        <div class="frame" id="frame2"></div>
+    </section>
+
+    <section id="o3">
+        <div class="opt-head">
+            <span class="opt-num">3</span>
+            <h2>שישה כרטיסים בשורה אחת</h2>
+        </div>
+        <p class="opt-note">מה שיש באתר עכשיו, בשורה אחת במקום שתיים. שומר על ההפרדה בין השאלות,
+            אבל אותו שחקן חוזר בכמה כרטיסים, ובכל כרטיס המספר הוא ביחידה אחרת.</p>
+        <div class="frame" id="frame3"></div>
+    </section>
+
+    <section id="o4">
+        <div class="opt-head">
+            <span class="opt-num">4</span>
+            <h2>כרטיסי שחקן בסטייל FIFA</h2>
+        </div>
+        <p class="opt-note">כרטיס נושא שש מטריקות בלי מקרא, כי המקום של כל מספר בכרטיס הוא ההסבר שלו.
+            המספר הגדול הוא השווי בנקודות (לא דירוג מומצא 0-99), והזהב/כסף/ארד הוא הרף: מעל 60 נק׳
+            מעל החלופה, מעל 30, והשאר.</p>
+        <div class="frame" id="frame4"></div>
+    </section>
+
+    <footer>
+        <p>שדה <code>דירוג FPL</code> מופיע כמקום בפריסה ולא כמספר: הוא מגיע מ-API הדראפט החי
+            (<code>draft_rank</code>), ודף סטטי לא יכול למשוך אותו. באתר עצמו הוא כבר עמודה בטבלה.</p>
+        <p>מדד השווי כאן מחושב כמו באתר — <code>(רמה − רמת החלפה בעמדה) × משחקים צפויים</code>, עם
+            שרינקאז׳ לפי מספר הופעות — חסרים רק שני איברים שדף סטטי לא יכול לחשב: משקל הכושר בחלון
+            (שהבקטסט הראה כמעט חסר משקל) והטיית לוח המשחקים.</p>
+    </footer>
+
+    <script>
+        const SLOTS = { GKP: 1, DEF: 4, MID: 4, FWD: 2 };
+        const POS = { 1: 'GKP', 2: 'DEF', 3: 'MID', 4: 'FWD' };
+        const POS_HE = { GKP: 'שוערים', DEF: 'מגנים', MID: 'קשרים', FWD: 'חלוצים' };
+        const POS_COL = {
+            GKP: ['#f5f3ff', '#6d28d9'], DEF: ['#ecfeff', '#0e7490'],
+            MID: ['#eef2ff', '#4338ca'], FWD: ['#fff7ed', '#c2410c']
+        };
+        const LEAGUE = 8, GWS = 38, SHRINK_K = 6;
+        const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+        // Two letters off the name: "B.Fernandes" -> BF, "Haaland" -> HA.
+        const monogram = name => {
+            const clean = String(name).replace(/[^\p{L}\s.]/gu, '');
+            const parts = clean.split(/[\s.]+/).filter(Boolean);
+            return (parts.length > 1
+                ? parts[0][0] + parts[parts.length - 1][0]
+                : clean.slice(0, 2)).toUpperCase();
+        };
+
+        (async function () {
+            const snap = await (await fetch('../data/season-2025-26.json')).json();
+            const F = Object.fromEntries(snap.fields.map((f, i) => [f, i]));
+            const teams = Object.fromEntries(snap.teams.map(t => [t.id, t.short_name]));
+            const num = v => { const n = parseFloat(v); return Number.isFinite(n) ? n : 0; };
+
+            const players = snap.rows.map(r => {
+                const pos = POS[r[F.element_type]];
+                const apps = r[F.appearances] || 0;
+                return {
+                    code: r[F.code], name: r[F.web_name], pos, team: teams[r[F.team]],
+                    apps, minutes: r[F.minutes] || 0, ppg: num(r[F.points_per_game]),
+                    points: r[F.total_points] || 0,
+                    xgi90: num(r[F.expected_goal_involvements_per_90]),
+                    dc90: num(r[F.defensive_contribution_per_90]),
+                    defcon: r[F.defcon_hit_rate],
+                    starts: r[F.starts] || 0,
+                    pen: r[F.penalties_order] || 99,
+                    corner: r[F.corners_and_indirect_freekicks_order] || 99,
+                    fk: r[F.direct_freekicks_order] || 99,
+                    xdiff: (r[F.goals_scored] || 0) + (r[F.assists] || 0) - num(r[F.expected_goal_involvements]),
+                    minsPerApp: apps ? Math.round((r[F.minutes] || 0) / apps) : 0
+                };
+            });
+
+            // Replacement level: the first player past the point where every team
+            // in the league has filled that position — the site's pre-draft rule.
+            const replacement = {};
+            for (const pos of Object.keys(SLOTS)) {
+                const at = players.filter(p => p.pos === pos && p.minutes >= 900)
+                    .sort((a, b) => b.ppg - a.ppg);
+                if (!at.length) continue;
+                replacement[pos] = at[Math.min(LEAGUE * SLOTS[pos], at.length - 1)].ppg;
+            }
+
+            for (const p of players) {
+                const rep = replacement[p.pos];
+                p.rep = rep ?? null;
+                if (rep == null || !p.apps) { p.value = null; continue; }
+                const playRate = Math.min(1, p.apps / GWS);
+                const shrink = p.apps / (p.apps + SHRINK_K);
+                p.matches = GWS * playRate;
+                p.value = (p.ppg - rep) * shrink * p.matches;
+            }
+
+            const eligible = players.filter(p => p.value !== null && p.minutes >= 450);
+            const byValue = [...eligible].sort((a, b) => b.value - a.value);
+
+            // The six rules that used to be six cards, kept as the reason tags.
+            const RULES = [
+                { id: 'defcon', icon: '🛡️', label: 'מכונת DEFCON', test: p => p.defcon >= 45 },
+                { id: 'form', icon: '🔥', label: 'תפוקה גבוהה', test: p => p.ppg >= 5.5 },
+                { id: 'setpiece', icon: '🎯', label: 'בעל כדורים נייחים', test: p => Math.min(p.pen, p.corner, p.fk) <= 2 },
+                { id: 'xgi', icon: '📈', label: 'מייצר יותר ממה שהמיר', test: p => p.xgi90 >= 0.45 && p.xdiff < -1 },
+                { id: 'nailed', icon: '⏱️', label: 'קבוע בהרכב', test: p => p.apps >= 30 && p.minsPerApp >= 80 },
+                { id: 'diff', icon: '💎', label: 'פער מהחלופה', test: p => p.rep !== null && p.ppg - p.rep >= 2 }
+            ];
+            const rulesFor = p => RULES.filter(r => { try { return r.test(p); } catch { return false; } });
+
+            const scope = `${eligible.length} שחקנים · עונת 2025/26 המלאה`;
+            const bar = extra => `<div class="bar"><h3>את מי לקחת עכשיו</h3>
+                ${extra || ''}<span class="scope">${scope}</span></div>`;
+
+            /* ---------------------------------------- 1. ranked list ---- */
+            const row = (p, i) => {
+                const flags = rulesFor(p).slice(0, 4)
+                    .map(r => `<span class="flag" title="${r.label}">${r.icon}</span>`).join('');
+                return `<li class="rank-row">
+                    <span class="pos-num num">${i + 1}</span>
+                    <span class="who">
+                        <span class="line"><span class="name">${esc(p.name)}</span>
+                            <span class="meta">${p.pos} · ${esc(p.team)}</span></span>
+                        <span class="why num">${p.ppg.toFixed(2)} נק׳/משחק מול ${p.rep.toFixed(2)} של החלופה ·
+                            ${Math.round(p.matches)} משחקים צפויים</span>
+                    </span>
+                    <span class="flags">${flags}</span>
+                    <span class="fpl-ref" title="בא מ-API הדראפט החי, שאינו זמין לדף סטטי">דירוג FPL ·
+                        <span class="num">—</span></span>
+                    <span class="val"><b class="num">+${Math.round(p.value)}</b><span>נק׳ מעל החלופה</span></span>
+                </li>`;
+            };
+            document.getElementById('frame1').innerHTML = bar(
+                `<span class="legend">עילית = חציון 20 הטובים בעמדה</span>`)
+                + `<div class="tabs">
+                    <button class="tab on">הכל</button>
+                    ${RULES.map(r => `<button class="tab">${r.icon} ${r.label}</button>`).join('')}
+                   </div>
+                   <ol class="rank-list">${byValue.slice(0, 10).map(row).join('')}</ol>`;
+
+            /* ------------------------------------ 2. position columns ---- */
+            document.getElementById('frame2').innerHTML = bar() + `<div class="pos-grid">${
+                Object.keys(SLOTS).map(pos => {
+                    const [bg, ink] = POS_COL[pos];
+                    const top = byValue.filter(p => p.pos === pos).slice(0, 6);
+                    return `<div class="pos-col" style="--col:${bg}; --colInk:${ink}">
+                        <h4><span>${POS_HE[pos]}</span><span class="num">${top.length ? '+' + Math.round(top[0].value) : ''}</span></h4>
+                        <ol>${top.map((p, i) => `<li>
+                            <span class="i num">${i + 1}</span>
+                            <span><span class="nm">${esc(p.name)}</span>
+                                <span class="tm">${esc(p.team)} · ${p.ppg.toFixed(1)} נק׳/משחק</span></span>
+                            <span class="v num">+${Math.round(p.value)}</span>
+                        </li>`).join('')}</ol>
+                    </div>`;
+                }).join('')}</div>`;
+
+            /* ---------------------------------------- 3. six cards ---- */
+            const CARDS = [
+                { icon: '🏆', title: 'הכי שווים', sub: 'נק׳ מעל החלופה', cap: 'נק׳', accent: '#7c3aed', pick: byValue, val: p => '+' + Math.round(p.value) },
+                { icon: '🛡️', title: 'מכונות DEFCON', sub: 'עוברים את הסף בפועל', cap: '% מעל הסף', accent: '#0891b2', pick: eligible.filter(p => p.defcon > 0).sort((a, b) => b.defcon - a.defcon), val: p => p.defcon.toFixed(0) + '%' },
+                { icon: '🔥', title: 'תפוקה גבוהה', sub: 'נקודות למשחק', cap: 'נק׳/משחק', accent: '#ea580c', pick: [...eligible].sort((a, b) => b.ppg - a.ppg), val: p => p.ppg.toFixed(1) },
+                { icon: '🎯', title: 'כדורים נייחים', sub: 'פנדלים וקרנות', cap: 'נק׳ מעל החלופה', accent: '#be185d', pick: byValue.filter(p => Math.min(p.pen, p.corner, p.fk) <= 2), val: p => '+' + Math.round(p.value) },
+                { icon: '📈', title: 'מתחת לפני השטח', sub: 'מייצרים יותר ממה שהמירו', cap: 'xGI ל-90', accent: '#d97706', pick: eligible.filter(p => p.xdiff < -1).sort((a, b) => b.xgi90 - a.xgi90), val: p => p.xgi90.toFixed(2) },
+                { icon: '⏱️', title: 'קבועים בהרכב', sub: 'דקות שאפשר לסמוך עליהן', cap: 'דק׳ להופעה', accent: '#0284c7', pick: eligible.filter(p => p.apps >= 30).sort((a, b) => b.minsPerApp - a.minsPerApp), val: p => p.minsPerApp }
+            ];
+            document.getElementById('frame3').innerHTML = bar() + `<div class="six">${
+                CARDS.map(c => `<div class="mini" style="--accent:${c.accent}; border-top-color:${c.accent}">
+                    <h4>${c.icon} ${c.title}</h4><span class="sub">${c.sub}</span>
+                    <p class="cap" style="margin:0 0 2px">${c.cap}</p>
+                    <ul>${c.pick.slice(0, 3).map((p, i) => `<li>
+                        <span class="r num">${i + 1}</span>
+                        <span class="n">${esc(p.name)}</span>
+                        <span class="x num" style="color:${c.accent}">${c.val(p)}</span>
+                    </li>`).join('')}</ul>
+                </div>`).join('')}</div>`;
+
+            /* ---------------------------------------- 4. FIFA cards ---- */
+            const tier = v => v >= 60 ? '' : v >= 30 ? ' silver' : ' bronze';
+            document.getElementById('frame4').innerHTML = bar() + `<div class="fut-row">${
+                byValue.slice(0, 6).map((p, i) => `<article class="fut${tier(p.value)}">
+                    <div class="fut-top">
+                        <div class="fut-rate">
+                            <b class="num">${Math.round(p.value)}</b>
+                            <span>נק׳ מעל<br>החלופה</span>
+                            <div class="pos">${p.pos}</div>
+                        </div>
+                        <div class="fut-face"><span class="fut-mono">${esc(monogram(p.name))}</span></div>
+                    </div>
+                    <h4 class="fut-name">${esc(p.name)}</h4>
+                    <div class="fut-club">${esc(p.team)}</div>
+                    <div class="fut-stats">
+                        <div><i>נק׳</i><span class="num">${p.ppg.toFixed(1)}</span></div>
+                        <div><i>דק׳</i><span class="num">${p.minsPerApp}</span></div>
+                        <div><i>xGI</i><span class="num">${p.xgi90.toFixed(2)}</span></div>
+                        <div><i>DEF</i><span class="num">${p.defcon > 0 ? p.defcon.toFixed(0) + '%' : '–'}</span></div>
+                        <div><i>הופעות</i><span class="num">${p.apps}</span></div>
+                        <div><i>נייח</i><span class="num">${Math.min(p.pen, p.corner, p.fk) <= 2 ? '#' + Math.min(p.pen, p.corner, p.fk) : '–'}</span></div>
+                    </div>
+                    <div class="fut-foot">פער מהחלופה <span class="num">${(p.ppg - p.rep).toFixed(2)}</span>
+                        · דירוג FPL <span class="num">—</span></div>
+                </article>`).join('')}</div>`;
+        })().catch(e => {
+            document.body.insertAdjacentHTML('afterbegin',
+                `<p style="padding:20px;color:#b91c1c">לא הצלחתי לטעון את נתוני העונה: ${esc(e.message)}</p>`);
+        });
+    </script>
+</body>
+
+</html>
