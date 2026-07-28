@@ -46,7 +46,12 @@ export default [
         files: ['tests/**/*.mjs', 'scripts/**/*.mjs', 'eslint.config.mjs'],
         languageOptions: {
             sourceType: 'module',
-            globals: { Buffer: 'readonly', __dirname: 'readonly' }
+            // Request/Response are Node's built-in fetch globals; the Worker test
+            // uses them to stand in for workerd.
+            globals: {
+                Buffer: 'readonly', __dirname: 'readonly',
+                Request: 'readonly', Response: 'readonly', Headers: 'readonly'
+            }
         }
     },
     {
@@ -57,8 +62,11 @@ export default [
             sourceType: 'module',
             globals: {
                 document: 'readonly', window: 'readonly', state: 'readonly',
+                charts: 'readonly',
                 switchDraftTab: 'readonly', showTab: 'readonly', setRowMode: 'readonly',
-                sortTable: 'readonly', setTrendWindow: 'readonly'
+                sortTable: 'readonly', setTrendWindow: 'readonly',
+                switchMainView: 'readonly', setChartPosition: 'readonly',
+                openSettings: 'readonly'
             }
         }
     },
