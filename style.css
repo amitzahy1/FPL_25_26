@@ -3627,12 +3627,17 @@ span.tone-down { background: none !important; color: #1d4ed8; font-weight: 700; 
     .charts-dashboard-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
 
-/* A card that sized its own canvas — the focused verdict list grows a row per
-   player — spans the grid, because a 1200px-tall column would drag the two
-   beside it down with it. */
-.chart-card.is-tall { grid-column: 1 / -1; }
+/* A chart that sizes itself — the focused verdict list grows a row per player —
+   grows inside its card, which keeps its slot and its height. Letting the card
+   itself grow and span the grid meant one chip click turned a 250px card into a
+   1200px one and the page jumped; scrolling the list is the same information
+   without the page moving under you. */
+.chart-canvas > .chart-scroll { position: relative; height: 100%; }
 
-.chart-card.is-tall .chart-canvas { max-height: 78vh; }
+.chart-canvas.is-scroll {
+    overflow-y: auto;
+    overscroll-behavior: contain;
+}
 
 .chart-card {
     display: flex;

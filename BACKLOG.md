@@ -282,6 +282,19 @@ Status as of the 2026/27 pre-season overhaul. Items are ordered by value, not by
       relabelled short, and the ✨ label moved above the chips so they get the
       container's full width. Measured at 1400px and 1600px: one row at both.
 
+- [x] 📅 חלון did nothing outside the table. `setTrendWindow` re-rendered the
+      table and stopped, so the opportunity board's Δpoints axis, the trend
+      lines and every board form figure kept drawing the old window with no
+      sign that they had — which made moving the control into the filters (where
+      it reads as page-wide) a lie. It renders the charts and the board now.
+      Both neighbouring 📅 controls were also renamed, because they read as the
+      same thing: **חלון מומנטום** is the width of the trend measurement,
+      **טווח נתונים** is which matches the numbers themselves come from.
+- [x] Picking a verdict chip turned a 250px card into a ~1200px one that spanned
+      the grid — one click and the page jumped. The self-sizing list grows
+      *inside* the card now (`.chart-scroll` in a scrolling `.chart-canvas`), so
+      the card keeps its slot and its height and all 53 names are still there.
+
 ## Pre-draft, still open
 
 - [ ] Steals-vs-ADP column: `draft_rank` is FPL Draft's own published ranking, so

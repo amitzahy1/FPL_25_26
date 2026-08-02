@@ -560,10 +560,11 @@ try {
             named: fc.data.labels.filter(Boolean).length,
             tickLabels: fc.scales.y.ticks.filter(t => t.label).length,
             autoSkip: fc.options.scales.y.ticks.autoSkip,
-            // The card grows a row per player instead of squeezing them into 330px.
+            // The list grows a row per player inside a card that keeps its slot,
+            // so the measurement is the scrollable content, not the card.
             canvasHeight: Math.round(
-                focusCard.querySelector('.chart-canvas').getBoundingClientRect().height),
-            spansGrid: focusCard.classList.contains('is-tall'),
+                focusCard.querySelector('.chart-scroll').getBoundingClientRect().height),
+            spansGrid: focusCard.querySelector('.chart-canvas').classList.contains('is-scroll'),
             othersUntouched: charts['chart-minutes'].data.datasets[0].data.length
                 === before.minutes
         };
@@ -686,7 +687,7 @@ try {
         + `${chartsView.focused.tickLabels} of ${chartsView.focused.points}`);
     check(chartsView.focused.spansGrid
         && chartsView.focused.canvasHeight >= chartsView.focused.points * 14,
-        `the card grows to ${chartsView.focused.canvasHeight}px so nothing is squeezed`);
+        `the list grows to ${chartsView.focused.canvasHeight}px inside a scrolling card`);
     check(chartsView.focused.othersUntouched && chartsView.posFacet.spreadStillFocused,
         'narrowing one card leaves the others alone');
     check(chartsView.posFacet.narrowed && chartsView.posFacet.drew,
@@ -929,6 +930,54 @@ try {
     check(onePage.lead[0] === 'chart-opportunity' && onePage.lead.length === 6,
         'the six lead slots are pinned and survive a filter round-trip');
     check(onePage.noSwapControl, 'and carry no per-slot swap control');
+
+    // Two things that were quietly wrong: the momentum window drove the table
+    // alone, and a focused verdict grew its card to ~1200px and spanned the
+    // grid — one chip click and the page jumped.
+    const windowAndFocus = await page.evaluate(async () => {
+        const cardH = () => Math.round(
+            document.getElementById('card-chart-signal-spread').getBoundingClientRect().height);
+        const canvasBox = () => document.querySelector('#card-chart-signal-spread .chart-canvas');
+
+        const beforeH = cardH();
+        const chip = [...document.querySelectorAll('#facet-chart-signal-spread [data-facet-value]')]
+            .map(b => b.dataset.facetValue).filter(Boolean)[0];
+        setChartFacet('chart-signal-spread', chip);
+        await new Promise(r => setTimeout(r, 500));
+        const focused = {
+            cardGrew: cardH() - beforeH,
+            spansGrid: document.getElementById('card-chart-signal-spread')
+                .classList.contains('is-tall'),
+            scrolls: canvasBox().classList.contains('is-scroll')
+                && canvasBox().scrollHeight > canvasBox().clientHeight + 20,
+            bars: charts['chart-signal-spread'].data.labels.length
+        };
+        setChartFacet('chart-signal-spread', chip);
+        await new Promise(r => setTimeout(r, 400));
+
+        // The momentum window has to reach the charts and the board, not just
+        // the table: the opportunity board's y axis IS the window.
+        const axis = () => charts['chart-opportunity'].options.scales.y.title.text;
+        const scope = () => (document.querySelector('#draftBoard .db-scope') || {}).textContent || '';
+        const at5 = { axis: axis(), scope: scope() };
+        setTrendWindow(10);
+        await new Promise(r => setTimeout(r, 2500));
+        const at10 = { axis: axis(), scope: scope() };
+        setTrendWindow(5);
+        await new Promise(r => setTimeout(r, 2500));
+        return { focused, at5, at10, restored: axis() === at5.axis };
+    });
+    check(windowAndFocus.focused.bars > 10 && !windowAndFocus.focused.spansGrid
+        && windowAndFocus.focused.cardGrew < 40,
+        `a focused verdict lists ${windowAndFocus.focused.bars} players without`
+        + ` growing its card (${windowAndFocus.focused.cardGrew}px)`);
+    check(windowAndFocus.focused.scrolls, 'it scrolls inside the card instead');
+    check(/10/.test(windowAndFocus.at10.axis) && windowAndFocus.at10.axis !== windowAndFocus.at5.axis,
+        `the momentum window reaches the charts ("${windowAndFocus.at10.axis}")`);
+    check(/10 מחזורים/.test(windowAndFocus.at10.scope)
+        && windowAndFocus.at10.scope !== windowAndFocus.at5.scope,
+        'and the draft board');
+    check(windowAndFocus.restored, 'and setting it back restores them');
 
     check(pageErrors.length === 0, 'still no page errors after interaction');
 } catch (e) {

@@ -3087,11 +3087,25 @@ function miniSparkHtml(playerId, metricKey = 'pts') {
     return trendBarsHtml(series, scale, def, { cls: 'is-mini' });
 }
 
+/**
+ * The momentum window, and it governs the whole page — the opportunity board's
+ * Δpoints axis, the trend lines and every "form in the window" figure the draft
+ * board prints all measure over it.
+ *
+ * It used to re-render the table alone, so moving this control into the filters
+ * (where it reads as page-wide) would have been a lie: the charts and the board
+ * kept drawing the old window with no sign that they had.
+ */
 function setTrendWindow(n) {
     state.trendWindow = parseInt(n, 10) || 5;
     state.trendGws = [];
     state.trendPrevGws = [];
-    ensureTrendWindow().then(() => { renderTable(); updateScoutingUi(); });
+    ensureTrendWindow().then(() => {
+        renderTable();
+        updateScoutingUi();
+        renderCharts();
+        renderDraftBoard();
+    });
 }
 
 /** Percentile baselines for the whole filtered league, computed once. */
@@ -10976,7 +10990,9 @@ function ensureChartCards() {
                      and the scaffolding is built exactly once. -->
                 ${spec.facet ? `<div class="chart-facet" id="facet-${spec.id}"></div>` : ''}
             </header>
-            <div class="chart-canvas"><canvas id="${spec.id}"></canvas></div>
+            <!-- The inner div is what a self-sizing chart grows; .chart-canvas
+                 keeps the card's height and scrolls. -->
+            <div class="chart-canvas"><div class="chart-scroll"><canvas id="${spec.id}"></canvas></div></div>
         </section>`).join('');
 
     grid.dataset.built = '1';
@@ -11067,14 +11083,16 @@ function renderCharts() {
         if (!config) return;
 
         // A chart may ask for its own height — the focused verdict list grows a
-        // row per player, and a fixed 330px box would squeeze fifty names into
-        // twelve. Read and removed here so Chart.js never sees the key, and the
-        // card spans the grid so a tall one does not stretch its neighbours.
+        // row per player, and a fixed box would squeeze fifty names into twelve.
+        // It grows *inside* the card, which keeps its slot and its height: the
+        // first version put the height on the card and let it span the grid, and
+        // a 1200px card reads as the chart having taken over the page.
         const box = card.querySelector('.chart-canvas');
+        const inner = card.querySelector('.chart-scroll');
         const wanted = config.cardHeight;
         delete config.cardHeight;
-        if (box) box.style.height = wanted ? `${wanted}px` : '';
-        card.classList.toggle('is-tall', !!wanted);
+        if (box) box.classList.toggle('is-scroll', !!wanted);
+        if (inner) inner.style.height = wanted ? `${wanted}px` : '';
 
         // The hover highlight is keyed on a dataset index, and the datasets are
         // rebuilt here. Carrying the old index over would dim the wrong line.
