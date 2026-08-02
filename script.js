@@ -2058,25 +2058,96 @@ function populateTeamFilter() {
     });
 }
 
-function getPercentileClass(value, values, reversed = false) {
-    // values = array of all values for this metric in displayed players
-    if (values.length < 3) return 'percentile-middle';
+/* ========================================================================== */
+/*  CELL TONES                                                                */
+/* ==========================================================================
+ * One question — "how does this value compare?" — used to be answered six
+ * different ways depending on which column you were in: a background tint on
+ * fifteen columns, coloured digits on VORP, a soft pill on xDiff and transfers,
+ * a solid badge on קושי, a gradient on the draft team, and a faded dash on the
+ * set pieces. Same idea, six shapes.
+ *
+ * It is three now, and the shape says what *kind* of statement the cell is
+ * making:
+ *
+ *   scale    a measurement with a better and a worse end. Green/grey/red.
+ *   diverge  a measurement with no better end — notable high or low, and the
+ *            reader decides. Amber/grey/blue, deliberately a different palette.
+ *   badge    a label, not a measurement. A pill, because that is the shape of
+ *            a word.
+ *
+ * The direction is the part that was actually broken, not just inconsistent.
+ * The old helper assumed high = good for every column it touched, so xDiff —
+ * which the signal rules read as *over-performance*, a warning — was painted
+ * green at the top, contradicting the סיגנל cell three columns over. Anything
+ * whose good end is arguable is `diverge`, which makes no claim at all.
+ */
+const CELL_TONE = {
+    // Higher is better.
+    draft_score: { kind: 'scale', good: 'high' },
+    points_next_5: { kind: 'scale', good: 'high' },
+    vorp: { kind: 'scale', good: 'high' },
+    total_points: { kind: 'scale', good: 'high' },
+    points_per_game_90: { kind: 'scale', good: 'high' },
+    def_contrib_per90: { kind: 'scale', good: 'high' },
+    xGI_per90: { kind: 'scale', good: 'high' },
+    goals_assists: { kind: 'scale', good: 'high' },
+    defcon_hit_rate: { kind: 'scale', good: 'high' },
+    stability_index: { kind: 'scale', good: 'high' },
+    ict_index_per90: { kind: 'scale', good: 'high' },
+    dreamteam_count: { kind: 'scale', good: 'high' },
+    rotation_risk: { kind: 'scale', good: 'high' },
+    minutes: { kind: 'scale', good: 'high' },
+    bonus_per90: { kind: 'scale', good: 'high' },
+    clean_sheets_per90: { kind: 'scale', good: 'high' },
+    // Lower is better: #1 is the best draft rank there is.
+    draft_rank: { kind: 'scale', good: 'low' },
+    // No better end.
+    //  xDiff            positive is finishing above the model, which is either
+    //                   a skill or a correction waiting to happen — the signal
+    //                   rules split on exactly that, so the cell cannot claim it
+    //  net_transfers    the classic crowd moving, which is information
+    //  selected_by_%    likewise: high means he goes early, not that he is good
+    xDiff: { kind: 'diverge' },
+    net_transfers_event: { kind: 'diverge' },
+    selected_by_percent: { kind: 'diverge' }
+};
 
-    const sorted = [...values].sort((a, b) => a - b);
+/** Which third of the sample a value falls in. The shared part of both scales. */
+function quantileBand(value, values) {
+    if (!Array.isArray(values) || !Number.isFinite(value)) return 'mid';
+    // Some samples carry nulls for players a metric does not apply to; a null
+    // sorted as zero would drag every threshold down.
+    const sorted = values.filter(Number.isFinite).sort((a, b) => a - b);
+    if (sorted.length < 3) return 'mid';
     const p33 = sorted[Math.floor(sorted.length * 0.33)];
     const p67 = sorted[Math.floor(sorted.length * 0.67)];
+    if (value >= p67) return 'hi';
+    if (value <= p33) return 'lo';
+    return 'mid';
+}
 
-    if (reversed) {
-        // For metrics where lower is better (e.g., goals_conceded)
-        if (value <= p33) return 'percentile-high';  // green
-        if (value >= p67) return 'percentile-low';   // red
-        return 'percentile-middle';                  // gray
-    } else {
-        // For metrics where higher is better
-        if (value >= p67) return 'percentile-high';  // green
-        if (value <= p33) return 'percentile-low';   // red
-        return 'percentile-middle';                  // gray
+/**
+ * The class for one cell, from the column's declared kind. Unknown columns get
+ * nothing rather than a guess — a column with no entry in CELL_TONE is one
+ * nobody has decided the direction for, and a plain cell says that honestly.
+ */
+function toneClass(column, value, values) {
+    const spec = CELL_TONE[column];
+    if (!spec || !Number.isFinite(value)) return '';
+    const band = quantileBand(value, values);
+    if (spec.kind === 'diverge') {
+        return band === 'hi' ? 'tone-up' : band === 'lo' ? 'tone-down' : 'tone-flat';
     }
+    if (band === 'mid') return 'tone-mid';
+    const isGood = spec.good === 'low' ? band === 'lo' : band === 'hi';
+    return isGood ? 'tone-good' : 'tone-bad';
+}
+
+/** A label cell: same geometry everywhere, tone chosen by the caller. */
+function cellBadge(text, tone, title) {
+    return `<span class="cell-badge cell-badge--${tone}"${
+        title ? ` title="${escapeHtml(title)}"` : ''}>${text}</span>`;
 }
 
 /* ==========================================================================
@@ -2810,9 +2881,9 @@ function boxAttack(p) {
             ${statLine('xA / 90', fmt(p.expected_assists_per_90), 'בישולים צפויים לכל 90 דקות')}
             ${statLine('xGI / 90', fmt(p.xGI_per90), 'מעורבות צפויה בשערים לכל 90 דקות')}
             ${statLine('xDiff', (num1(p.xDiff) === null ? null :
-                `<span class="${p.xDiff >= 0 ? 'xdiff-positive' : 'xdiff-negative'}">${
+                `<span class="${p.xDiff >= 0 ? 'tone-up' : 'tone-down'}">${
                     p.xDiff > 0 ? '+' : ''}${num1(p.xDiff).toFixed(2)}</span>`),
-                'ההפרש בין התפוקה בפועל לצפויה — חיובי = מימוש מעל הצפי')}
+                'ההפרש בין התפוקה בפועל לצפויה — חיובי = מימוש מעל הצפי, לא בהכרח טוב')}
             ${statLine('ICT / 90', fmt(p.ict_index_per90, 1))}
             ${statLine('בונוס / 90', fmt(p.bonus_per90))}
         </dl>
@@ -3038,7 +3109,15 @@ function buildPercentileBase(rows) {
         // Null outside the pre-season overlay, which leaves the cell unshaded —
         // correct, because off-season there is no second season to compare to.
         price_delta: rows.map(p => Number.isFinite(p.price_delta) ? p.price_delta : null),
-        hype_gap: rows.map(p => Number.isFinite(p.hype_gap) ? p.hype_gap : null)
+        hype_gap: rows.map(p => Number.isFinite(p.hype_gap) ? p.hype_gap : null),
+        // The three columns the tone rework brought into the same system: VORP
+        // stops being a hand-coloured special case, and the two diverging ones
+        // need the sample to know what counts as a notable move.
+        vorp: rows.map(p => Number.isFinite(p.vorp) ? p.vorp : null),
+        defcon_hit_rate: rows.map(p => Number.isFinite(p.defcon_hit_rate) ? p.defcon_hit_rate : null),
+        rotation_risk: rows.map(p => Number.isFinite(p.rotation_risk) ? p.rotation_risk : null),
+        xDiff: rows.map(p => Number.isFinite(p.xDiff) ? p.xDiff : null),
+        net_transfers_event: rows.map(p => displayNetTransfers(p)).filter(Number.isFinite)
     };
 }
 
@@ -3119,7 +3198,7 @@ function createPlayerRowHtml(player, index) {
 
     const draftTeam = getDraftTeamForPlayer(player.id);
     const draftTeamDisplay = draftTeam || '🆓 חופשי';
-    const draftTeamClass = draftTeam ? 'draft-owned' : 'draft-free';
+    const draftTeamTone = draftTeam ? 'info' : 'good';
 
     // Badge Logic
     let nameBadges = icons.icons;
@@ -3127,18 +3206,14 @@ function createPlayerRowHtml(player, index) {
         nameBadges += '<span title="High Defensive Workrate (Bonus Points Magnet)">🛡️</span>';
     }
 
-    // FDR Logic
-    let fdrBadge = '<span class="fdr-badge" style="background-color:#e0e0e0; color:#333;">-</span>';
-    if (player.next_3_fdr > 0) {
-        const grade = player.next_3_fdr_grade || 'medium';
-        let color = '#9e9e9e'; // medium (gray)
-        let textColor = 'white';
-        if (grade === 'easy') { color = '#4caf50'; } // green
-        else if (grade === 'hard') { color = '#f44336'; } // red
-        else { color = '#fbbf24'; textColor = 'black'; } // medium (yellowish)
-
-        fdrBadge = `<div class="fdr-badge" style="background-color:${color}; color:${textColor}; padding:2px 6px; border-radius:4px; font-weight:bold; display:inline-block; min-width:30px; text-align:center;">${player.next_3_fdr.toFixed(1)}</div>`;
-    }
+    // The fixture-run badge: a category (easy / medium / hard), so a badge, in
+    // the same three inks as every other badge in the table.
+    const fdrBadge = player.next_3_fdr > 0
+        ? cellBadge(player.next_3_fdr.toFixed(1),
+            player.next_3_fdr_grade === 'easy' ? 'good'
+                : player.next_3_fdr_grade === 'hard' ? 'bad' : 'warn',
+            'קושי ממוצע של 3 המשחקים הקרובים')
+        : '<span class="cell-none">–</span>';
 
     return `<tr class="player-row ${state.openRowId === player.id ? 'is-open' : ''}"
         data-player-id="${player.id}" onclick="toggleRowDetail(${player.id}, event)"
@@ -3158,48 +3233,48 @@ function createPlayerRowHtml(player, index) {
         </td>
         <td>${player.position_name}</td>
         <td>${player.team_name}</td>
-        <td class="${draftTeamClass}" title="${draftTeamDisplay}">${draftTeamDisplay}</td>
-        <td class="bold-cell ${getPercentileClass(player.draft_score, displayedValues.draft_score)}">${player.draft_score.toFixed(1)}</td>
+        <td>${cellBadge(escapeHtml(draftTeamDisplay), draftTeamTone, draftTeamDisplay)}</td>
+        <td class="bold-cell ${toneClass('draft_score', player.draft_score, displayedValues.draft_score)}">${player.draft_score.toFixed(1)}</td>
         <td class="draft-rank-cell ${player.draft_rank
             // reversed: #1 is the best draft rank, so low is good here.
-            ? getPercentileClass(player.draft_rank, displayedValues.draft_rank, true) : ''}">${player.draft_rank
+            ? toneClass('draft_rank', player.draft_rank, displayedValues.draft_rank) : ''}">${player.draft_rank
         ? `<b>#${player.draft_rank}</b>`
         : '<span class="rank-none" title="לא מדורג ב-FPL Draft">–</span>'}</td>
         <td class="proj-cell ${Number.isFinite(player.points_next_5)
-            ? getPercentileClass(player.points_next_5, displayedValues.points_next_5) : ''}"
+            ? toneClass('points_next_5', player.points_next_5, displayedValues.points_next_5) : ''}"
             title="נקודות צפויות ב-5 המחזורים הבאים">${
         Number.isFinite(player.points_next_5)
             ? `<b>${player.points_next_5.toFixed(1)}</b>`
             : '<span class="rank-none">–</span>'}</td>
-        <td class="bold-cell" data-tooltip="${config.columnTooltips.vorp}" style="color:${player.vorp > 0 ? '#059669' : player.vorp < 0 ? '#dc2626' : '#94a3b8'};">${formatVorp(player.vorp)}</td>
-        <td class="${getPercentileClass(player.total_points, displayedValues.total_points)}">${player.total_points}</td>
-        <td class="${getPercentileClass(player.points_per_game_90, displayedValues.points_per_game_90)}">${player.points_per_game_90.toFixed(1)}</td>
-        <td class="transfers-cell" data-tooltip="${config.columnTooltips.net_transfers_event}"><span class="${player.net_transfers_event >= 0 ? 'net-transfers-positive' : 'net-transfers-negative'}">${player.net_transfers_event.toLocaleString()}</span></td>
-        <td class="${getPercentileClass(displayOwnership(player), displayedValues.selected_by_percent)}"
+        <td class="bold-cell ${toneClass('vorp', player.vorp, displayedValues.vorp)}" data-tooltip="${config.columnTooltips.vorp}">${formatVorp(player.vorp)}</td>
+        <td class="${toneClass('total_points', player.total_points, displayedValues.total_points)}">${player.total_points}</td>
+        <td class="${toneClass('points_per_game_90', player.points_per_game_90, displayedValues.points_per_game_90)}">${player.points_per_game_90.toFixed(1)}</td>
+        <td class="transfers-cell ${toneClass('net_transfers_event', displayNetTransfers(player) ?? NaN, displayedValues.net_transfers_event)}" data-tooltip="${config.columnTooltips.net_transfers_event}">${(displayNetTransfers(player) ?? 0).toLocaleString()}</td>
+        <td class="${toneClass('selected_by_percent', displayOwnership(player), displayedValues.selected_by_percent)}"
             ${ownershipCellTitle(player)}>${ownershipCellHtml(player)}</td>
-        <td class="${getPercentileClass(player.def_contrib_per90, displayedValues.def_contrib_per90)}" data-tooltip="${config.columnTooltips.def_contrib_per90}">${player.def_contrib_per90.toFixed(1)}</td>
-        <td class="${getPercentileClass(parseFloat(player.xGI_per90) || 0, displayedValues.xGI_per90)}">${(parseFloat(player.xGI_per90) || 0).toFixed(2)}</td>
-        <td class="${getPercentileClass((player.goals_scored || 0) + (player.assists || 0), displayedValues.goals_assists)}">${(player.goals_scored || 0) + (player.assists || 0)}</td>
+        <td class="${toneClass('def_contrib_per90', player.def_contrib_per90, displayedValues.def_contrib_per90)}" data-tooltip="${config.columnTooltips.def_contrib_per90}">${player.def_contrib_per90.toFixed(1)}</td>
+        <td class="${toneClass('xGI_per90', parseFloat(player.xGI_per90) || 0, displayedValues.xGI_per90)}">${(parseFloat(player.xGI_per90) || 0).toFixed(2)}</td>
+        <td class="${toneClass('goals_assists', (player.goals_scored || 0) + (player.assists || 0), displayedValues.goals_assists)}">${(player.goals_scored || 0) + (player.assists || 0)}</td>
         <td class="signal-cell">
             <span class="signal-badge signal-${signal.tone}">${signal.label}</span>
             ${signal.why.length ? `<span class="signal-why">${signal.why.map(w => `<span>${w}</span>`).join('')}</span>` : ''}
         </td>
         ${trendKeys.map(key => trendCellHtml(player, key, index)).join('')}
-        <td data-tooltip="${config.columnTooltips.defcon_hit_rate}">${formatDefconRate(player.defcon_hit_rate)}</td>
+        <td class="${toneClass('defcon_hit_rate', player.defcon_hit_rate, displayedValues.defcon_hit_rate)}" data-tooltip="${config.columnTooltips.defcon_hit_rate}">${formatDefconRate(player.defcon_hit_rate)}</td>
         <td class="fdr-cell">${fdrBadge}</td>
         <td class="fixtures-cell">${fixturesHTML}</td>
-        <td class="bold-cell stability-cell ${getPercentileClass(player.stability_index || 0, displayedValues.stability_index)}">${(player.stability_index || 0).toFixed(0)}</td>
-        <td class="${getPercentileClass(parseFloat(player.ict_index_per90) || 0, displayedValues.ict_index_per90)}">${(parseFloat(player.ict_index_per90) || 0).toFixed(1)}</td>
-        <td class="${getPercentileClass(player.dreamteam_count, displayedValues.dreamteam_count)}">${player.dreamteam_count}</td>
-        <td class="${player.xDiff >= 0 ? 'xdiff-positive' : 'xdiff-negative'}" data-tooltip="${config.columnTooltips.xDiff}">${player.xDiff.toFixed(2)}</td>
-        <td data-tooltip="${config.columnTooltips.rotation_risk}">${formatRotation(player.rotation_risk)}</td>
-        <td class="${getPercentileClass(player.minutes, displayedValues.minutes)}">${player.minutes}</td>
-        <td class="${getPercentileClass(parseFloat(player.bonus_per90) || 0, displayedValues.bonus_per90)}">${(parseFloat(player.bonus_per90) || 0).toFixed(2)}</td>
-        <td class="${getPercentileClass(parseFloat(player.clean_sheets_per90) || 0, displayedValues.clean_sheets_per90)}">${(parseFloat(player.clean_sheets_per90) || 0).toFixed(2)}</td>
+        <td class="bold-cell stability-cell ${toneClass('stability_index', player.stability_index || 0, displayedValues.stability_index)}">${(player.stability_index || 0).toFixed(0)}</td>
+        <td class="${toneClass('ict_index_per90', parseFloat(player.ict_index_per90) || 0, displayedValues.ict_index_per90)}">${(parseFloat(player.ict_index_per90) || 0).toFixed(1)}</td>
+        <td class="${toneClass('dreamteam_count', player.dreamteam_count, displayedValues.dreamteam_count)}">${player.dreamteam_count}</td>
+        <td class="${toneClass('xDiff', player.xDiff, displayedValues.xDiff)}" data-tooltip="${config.columnTooltips.xDiff}">${player.xDiff > 0 ? '+' : ''}${player.xDiff.toFixed(2)}</td>
+        <td class="${toneClass('rotation_risk', player.rotation_risk, displayedValues.rotation_risk)}" data-tooltip="${config.columnTooltips.rotation_risk}">${formatRotation(player.rotation_risk)}</td>
+        <td class="${toneClass('minutes', player.minutes, displayedValues.minutes)}">${player.minutes}</td>
+        <td class="${toneClass('bonus_per90', parseFloat(player.bonus_per90) || 0, displayedValues.bonus_per90)}">${(parseFloat(player.bonus_per90) || 0).toFixed(2)}</td>
+        <td class="${toneClass('clean_sheets_per90', parseFloat(player.clean_sheets_per90) || 0, displayedValues.clean_sheets_per90)}">${(parseFloat(player.clean_sheets_per90) || 0).toFixed(2)}</td>
         <td class="price-cell">${priceCellHtml(player)}</td>
-        <td class="${player.set_piece_priority.penalty === 1 ? 'set-piece-yes' : 'set-piece-no'}">${player.set_piece_priority.penalty === 1 ? '🎯 (1)' : '–'}</td>
-        <td class="${player.set_piece_priority.corner > 0 ? 'set-piece-yes' : 'set-piece-no'}">${player.set_piece_priority.corner > 0 ? `(${player.set_piece_priority.corner})` : '–'}</td>
-        <td class="${player.set_piece_priority.free_kick > 0 ? 'set-piece-yes' : 'set-piece-no'}">${player.set_piece_priority.free_kick > 0 ? `(${player.set_piece_priority.free_kick})` : '–'}</td>
+        <td>${player.set_piece_priority.penalty === 1 ? cellBadge('🎯 1', 'good') : '<span class="cell-none">–</span>'}</td>
+        <td>${player.set_piece_priority.corner > 0 ? cellBadge(`${player.set_piece_priority.corner}#`, 'info') : '<span class="cell-none">–</span>'}</td>
+        <td>${player.set_piece_priority.free_kick > 0 ? cellBadge(`${player.set_piece_priority.free_kick}#`, 'info') : '<span class="cell-none">–</span>'}</td>
     </tr>`;
 }
 
@@ -6115,17 +6190,18 @@ function formatVorp(v) {
     return (v > 0 ? '+' : '') + v.toFixed(2);
 }
 
+// Value only: the good/bad reading is the cell's tone (see CELL_TONE), and two
+// colour systems on one number was the exact incoherence the tones replaced.
+// These carried fixed thresholds (40% DEFCON = green) that also disagreed with
+// the tone's terciles, so the text could say good while the cell said average.
 function formatDefconRate(rate) {
-    if (rate === null || rate === undefined) return '<span style="color:#cbd5e1;">–</span>';
-    const color = rate >= 40 ? '#059669' : rate >= 20 ? '#d97706' : '#94a3b8';
-    return `<span style="color:${color}; font-weight:700;">${rate.toFixed(0)}%</span>`;
+    if (rate === null || rate === undefined) return '<span class="cell-none">–</span>';
+    return `${rate.toFixed(0)}%`;
 }
 
 function formatRotation(r) {
-    if (r === null || r === undefined) return '<span style="color:#cbd5e1;">–</span>';
-    const pct = Math.round(r * 100);
-    const color = pct >= 85 ? '#059669' : pct >= 65 ? '#d97706' : '#dc2626';
-    return `<span style="color:${color}; font-weight:700;">${pct}%</span>`;
+    if (r === null || r === undefined) return '<span class="cell-none">–</span>';
+    return `${Math.round(r * 100)}%`;
 }
 
 // formatAvailability() lived here. Its whole job was to render a green ✓ for the

@@ -291,35 +291,47 @@ tbody tr:last-child td {
     font-weight: 600;
 }
 
-.xdiff-positive, .net-transfers-positive { 
-    color: var(--secondary-color);
+/* ==========================================================================
+   CELL TONES — the table's one colour language (see CELL_TONE in script.js)
+   ==========================================================================
+   scale    green / grey / red backgrounds: a measurement with a better end.
+   diverge  amber / blue backgrounds: notable high or low, no claim about
+            which is good — a different palette on purpose, so a glance tells
+            a ranked column from a reported one.
+   badge    a pill, for labels only. A measurement is never a pill.
+   ========================================================================== */
+
+.tone-good { background-color: rgba(16, 185, 129, 0.15) !important; font-weight: 600; }
+.tone-mid { background-color: rgba(156, 163, 175, 0.1) !important; }
+.tone-bad { background-color: rgba(239, 68, 68, 0.15) !important; }
+
+.tone-up { background-color: rgba(245, 158, 11, 0.16) !important; font-weight: 600; }
+.tone-flat { background-color: rgba(156, 163, 175, 0.1) !important; }
+.tone-down { background-color: rgba(59, 130, 246, 0.14) !important; font-weight: 600; }
+
+/* In running text (the expanded row), the same two meanings as colour alone. */
+span.tone-up { background: none !important; color: #b45309; font-weight: 700; }
+span.tone-down { background: none !important; color: #1d4ed8; font-weight: 700; }
+
+.cell-badge {
+    display: inline-block;
+    min-width: 30px;
+    padding: 2px 8px;
+    border-radius: 5px;
+    font-size: 0.88em;
     font-weight: 700;
-    background: rgba(16, 185, 129, 0.1);
-    padding: 4px 8px;
-    border-radius: 4px;
+    text-align: center;
+    white-space: nowrap;
 }
 
-.xdiff-negative, .net-transfers-negative { 
-    color: #ef4444;
-    font-weight: 700;
-    background: rgba(239, 68, 68, 0.1);
-    padding: 4px 8px;
-    border-radius: 4px;
-}
+.cell-badge--good { background: #e7f4ec; color: #0e7a45; }
+.cell-badge--bad { background: #fbeae8; color: #b93229; }
+.cell-badge--warn { background: #fdf3e3; color: #a9620b; }
+.cell-badge--info { background: #e8f0fa; color: #1c57a8; }
+.cell-badge--muted { background: #f1f5f9; color: #64748b; }
 
-/* Percentile-based Comparative Coloring */
-.percentile-high {
-    background-color: rgba(16, 185, 129, 0.15) !important; /* ירוק בהיר */
-    font-weight: 600;
-}
-
-.percentile-middle {
-    background-color: rgba(156, 163, 175, 0.1) !important; /* אפור בהיר */
-}
-
-.percentile-low {
-    background-color: rgba(239, 68, 68, 0.15) !important; /* אדום בהיר */
-}
+/* "Does not apply here", as quiet as possible. */
+.cell-none { color: #cbd5e1; }
 
 /* ML Prediction Styling */
 .ml-high {
@@ -347,25 +359,6 @@ tbody tr:last-child td {
     border-radius: 6px;
 }
 
-/* Draft Team Styling */
-.draft-owned {
-    color: #0284c7;
-    font-weight: 700;
-    background: linear-gradient(135deg, rgba(2, 132, 199, 0.12), rgba(3, 105, 161, 0.08));
-    padding: 4px 8px;
-    border-radius: 6px;
-    font-size: 0.9em;
-}
-
-.draft-free {
-    color: #10b981;
-    font-weight: 600;
-    background: rgba(16, 185, 129, 0.08);
-    padding: 4px 8px;
-    border-radius: 6px;
-    font-size: 0.9em;
-}
-
 .sort-indicator { 
     display: inline-block; 
     margin-left: 6px;
@@ -378,19 +371,6 @@ tbody tr:last-child td {
     color: var(--primary-color);
 }
 
-.set-piece-yes { 
-    color: var(--secondary-color); 
-    font-weight: 700;
-    background: rgba(16, 185, 129, 0.1);
-    padding: 3px 6px;
-    border-radius: 4px;
-}
-
-.set-piece-no { 
-    color: var(--text-secondary); 
-    font-weight: 400;
-    opacity: 0.5;
-}
 .modal { 
     display: none; 
     position: fixed; 

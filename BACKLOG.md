@@ -216,6 +216,20 @@ Status as of the 2026/27 pre-season overhaul. Items are ordered by value, not by
       axis text that cannot be overlapped, clipped or collision-dropped.
 - [x] DC/90, xGI and G+A moved to sit directly after % בחירה.
 
+- [x] **One colour language for the table.** Six systems answered "is this
+      value good" six different ways — percentile tint on 15 columns, coloured
+      digits on VORP, soft pills on xDiff/העברות, a solid inline-styled badge on
+      קושי, a gradient pill on the draft team, faded dashes on set pieces. Now
+      three, and the shape says what kind of statement the cell makes:
+      `scale` (green/grey/red tint, direction declared per column in
+      `CELL_TONE`), `diverge` (amber/blue tint — notable, no verdict), `badge`
+      (a pill, for labels only). The real bug underneath: the old helper assumed
+      high = good everywhere, so a high xDiff was painted green while the סיגנל
+      column called the same number מימוש יתר. xDiff, העברות and % בחירה are
+      diverging now — they report, they do not rank. DEFCON and הרכב stopped
+      carrying fixed thresholds in their text colour that could disagree with
+      the cell tint. An undeclared column gets no tone rather than a guess.
+
 ## Pre-draft, still open
 
 - [ ] Steals-vs-ADP column: `draft_rank` is FPL Draft's own published ranking, so

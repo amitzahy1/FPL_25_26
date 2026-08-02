@@ -74,7 +74,7 @@ function load(players, over = {}) {
 
     const fns = loadFunctions([
         'createPlayerRowHtml', 'playerDetailRowHtml', 'trendCellHtml', 'buildPercentileBase',
-        'getPercentileClass', 'signalFor', 'signalRank', 'invalidateSignals',
+        'toneClass', 'quantileBand', 'cellBadge', 'signalFor', 'signalRank', 'invalidateSignals',
         'getTrendSeries', 'summariseTrend', 'trendDelta', 'gwDefensiveContribution',
         'fourthTrendMetric', 'fixtureForGw', 'getDraftTeamForPlayer', 'trendPlayerIndex',
         'pointsConcentration',
@@ -85,8 +85,10 @@ function load(players, over = {}) {
         // the pre-season market cells; inert on the live tab, which is what the
         // rows here are, so they exercise the fallback path
         'priceCellHtml', 'ownershipCellHtml', 'ownershipCellTitle', 'marketBadgesHtml',
-        'displayCost', 'displayOwnership', 'marketOverlayActive', 'marketIndex'
+        'displayCost', 'displayOwnership', 'marketOverlayActive', 'marketIndex',
+        'displayNetTransfers'
     ], {}, [
+        'CELL_TONE',
         'WATCHLIST_KEY', 'TREND_BAR_ROW_LIMIT', 'SIGNAL_RULES', 'SIGNAL_SORT_ORDER',
         'HOLD_SIGNAL', '_signalCache', '_trendPlayerIndex', '_trendDeltaCache',
         'BENCH_TOP_N', 'BENCH_MIN_MINUTES', '_trendBenchCache', 'POSITION_LABELS',
@@ -102,6 +104,69 @@ function load(players, over = {}) {
 function countCells(html) {
     return (html.match(/<td\b/g) || []).length;
 }
+
+describe('cell tones', () => {
+    test('a scale column paints its good end green, whichever end that is', () => {
+        const { fns } = load([makePlayer()]);
+        const sample = [1, 2, 3, 4, 5, 6, 7, 8, 9];
+        assert.equal(fns.toneClass('draft_score', 9, sample), 'tone-good');
+        assert.equal(fns.toneClass('draft_score', 1, sample), 'tone-bad');
+        // #1 is the best draft rank there is.
+        assert.equal(fns.toneClass('draft_rank', 1, sample), 'tone-good');
+        assert.equal(fns.toneClass('draft_rank', 9, sample), 'tone-bad');
+    });
+
+    test('xDiff is never green — the signal rules split on what a high one means', () => {
+        // The old renderer painted high xDiff green while the סיגנל column three
+        // cells over called the same number מימוש יתר. A diverging tone makes no
+        // claim either way.
+        const { fns } = load([makePlayer()]);
+        const sample = [-3, -2, -1, 0, 1, 2, 3];
+        assert.equal(fns.toneClass('xDiff', 3, sample), 'tone-up');
+        assert.equal(fns.toneClass('xDiff', -3, sample), 'tone-down');
+        assert.equal(fns.toneClass('xDiff', 0, sample), 'tone-flat');
+        for (const v of sample) {
+            const cls = fns.toneClass('xDiff', v, sample);
+            assert.ok(!/tone-(good|bad)/.test(cls), `xDiff ${v} must not carry a verdict`);
+        }
+    });
+
+    test('an undeclared column gets no tone rather than a guessed direction', () => {
+        const { fns } = load([makePlayer()]);
+        assert.equal(fns.toneClass('some_new_column', 5, [1, 5, 9]), '');
+    });
+
+    test('nulls in the sample do not drag the thresholds', () => {
+        const { fns } = load([makePlayer()]);
+        const sample = [null, null, null, null, 1, 2, 3, 4, 5, 6, 7, 8, 9];
+        assert.equal(fns.toneClass('draft_score', 5, sample), 'tone-mid',
+            'nulls sorted as zeros would have made 5 look elite');
+    });
+
+    test('every getPercentileClass column moved over, and the row uses one language', () => {
+        const players = [makePlayer(), makePlayer({ id: 2, web_name: 'Other' })];
+        const { fns, state } = load(players);
+        state.percentileBase = fns.buildPercentileBase(players);
+        const html = fns.createPlayerRowHtml(players[0], 0);
+        assert.ok(!/percentile-(high|low|middle)/.test(html), 'the old classes are gone');
+        assert.ok(!/xdiff-(positive|negative)/.test(html));
+        assert.ok(!/net-transfers-/.test(html));
+        assert.ok(!/set-piece-(yes|no)/.test(html));
+        assert.ok(!/draft-(owned|free)/.test(html));
+        assert.ok(!/fdr-badge/.test(html));
+        assert.ok(!/style="color:/.test(html), 'no hand-coloured cells either');
+    });
+
+    test('a label is a badge and a measurement never is', () => {
+        const players = [makePlayer({ next_3_fdr: 2.1, next_3_fdr_grade: 'easy' }),
+            makePlayer({ id: 2, web_name: 'Other' })];
+        const { fns, state } = load(players);
+        state.percentileBase = fns.buildPercentileBase(players);
+        const html = fns.createPlayerRowHtml(players[0], 0);
+        assert.match(html, /cell-badge--good"[^>]*>2\.1</, 'the fixture grade is a badge');
+        assert.match(html, /cell-badge/, 'draft team is a badge');
+    });
+});
 
 describe('player row renders', () => {
     test('produces one cell per header in index.html', () => {
