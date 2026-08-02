@@ -874,8 +874,23 @@ async function buildDraftToFplMapping() {
             }
         }
 
+        // FPL Draft's own ranking rides on the draft bootstrap, which is
+        // league-independent — so it belongs here, not inside the league load.
+        // It used to be applied only after the league's details came back, which
+        // meant a league id that no longer resolves (which is every id from last
+        // season, the moment the new game opens) left the ranking column empty
+        // even though its data had downloaded perfectly. That is the single most
+        // draft-relevant column, missing on exactly the days it is wanted.
+        const rankedNow = applyDraftRanks();
+        if (rankedNow) {
+            invalidateSignals();
+            renderTable();
+            renderDraftBoard();
+        }
+
         const total = draftData.elements.length;
         console.log(`🔗 Draft→FPL mapping: ${state.draft.draftToFplIdMap.size}/${total} matched`
+            + `${rankedNow ? ` · FPL draft rank for ${rankedNow}` : ''}`
             + ` (${exactMatches} by id, ${nameMatches} by name, ${fuzzyMatches} fuzzy)`
             + `${unmapped ? ` · ${unmapped} unmatched — expected for academy/departed players` : ''}`
             + `${unmapped && !DEBUG_LOGS ? '. Add ?debug=1 for the list.' : ''}`);

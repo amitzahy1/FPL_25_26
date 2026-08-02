@@ -206,6 +206,33 @@ describe('our own Worker stays in the chain', () => {
     });
 });
 
+describe('FPL Draft\'s own ranking does not depend on the league', () => {
+    test('the ranks are applied where the draft bootstrap is read, not where the league is', () => {
+        // The scenario this guards is the ordinary state of the days before a
+        // draft: the Draft game is back up, but the league id in settings is
+        // still last season's and no longer resolves. draft_rank rides on
+        // draft.premierleague.com/api/bootstrap-static, which is
+        // league-independent, so it is available in that state — but it used to
+        // be applied only inside the league load's success block, so the most
+        // draft-relevant column in the table stayed empty.
+        const build = SCRIPT_SRC.slice(
+            SCRIPT_SRC.indexOf('async function buildDraftToFplMapping('),
+            SCRIPT_SRC.indexOf('function showLoading('));
+
+        assert.match(build, /applyDraftRanks\(\)/,
+            'buildDraftToFplMapping must apply the ranks it just downloaded');
+
+        // And it must do so before returning, not behind a league-shaped guard.
+        const applyAt = build.indexOf('applyDraftRanks()');
+        const returnAt = build.indexOf('success: true');
+        assert.ok(applyAt > 0 && applyAt < returnAt,
+            'the ranks must be applied on the success path of the mapping itself');
+        assert.doesNotMatch(build.slice(applyAt - 400, applyAt),
+            /league_entries|state\.draft\.details/,
+            'applying the ranks must not be conditional on league data');
+    });
+});
+
 describe('the notices exist for both states', () => {
     test('each code has a renderer wired to it', () => {
         for (const [code, fn] of [
