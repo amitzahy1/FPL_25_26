@@ -622,10 +622,21 @@ async function _fetchWithCacheUncoalesced(url, cacheKey, cacheDurationMinutes = 
                     saveToCache(data);
                     return data;
                 } catch (jsonErr) {
+                    // During the summer rollover FPL serves a "Game Updating"
+                    // HTML page with a 200 status, so every proxy returns the
+                    // same non-JSON body. Walking the rest of the chain cannot
+                    // help; surface the real state so callers can explain it
+                    // instead of blaming the proxies.
+                    if (text.includes('Game Updating')) {
+                        const maint = new Error('FPL Game Updating — season-rollover maintenance');
+                        maint.code = 'GAME_UPDATING';
+                        throw maint;
+                    }
                     console.warn(`⚠️ Proxy returned non-JSON`);
                 }
             }
         } catch (e) {
+            if (e && e.code === 'GAME_UPDATING') throw e;
             // Continue
         }
     }
@@ -843,7 +854,11 @@ async function buildDraftToFplMapping() {
         };
 
     } catch (error) {
-        console.error('❌ Failed to build Draft→FPL mapping:', error);
+        if (error && error.code === 'GAME_UPDATING') {
+            console.log('⏸️ Draft API closed for the season rollover — mapping skipped until the game reopens');
+        } else {
+            console.error('❌ Failed to build Draft→FPL mapping:', error);
+        }
         return { success: false, error: error.message };
     }
 }
@@ -1068,6 +1083,17 @@ async function init() {
             .then(async () => {
                 if (!state.allPlayersData.live.raw) return;
                 if (currentSeasonIsTooEarly()) {
+                    // Staying on last season's numbers, but the new season's
+                    // market has just arrived. It is the only live signal there
+                    // is before a ball is kicked, so paint it in rather than wait
+                    // for a gameweek that is weeks away.
+                    const priced = applyMarketOverlay(state.allPlayersData.historical.processed);
+                    if (priced) {
+                        console.log(`💰 Market overlay: ${SEASON_CONFIG.seasonLabel} price and ownership for ${priced} players`);
+                        invalidateSignals();
+                        renderTable();
+                        renderDraftBoard();
+                    }
                     showSeasonBanner(finishedGameweekCount());
                     return;
                 }
@@ -1192,6 +1218,156 @@ function finishedGameweekCount() {
     const live = state.allPlayersData.live.raw;
     if (!live || !live.events) return 0;
     return live.events.filter(e => e.finished || e.finished_provisional).length;
+}
+
+// ============================================
+// PRE-SEASON MARKET OVERLAY
+// ============================================
+// Before a ball is kicked the new season's API reports every player at zero, so
+// the table shows the completed season. But two of its numbers are live from day
+// one and are not history at all: the new season's price, and the share of
+// managers who have already picked the player.
+//
+// In Draft neither is a cost — there is no budget, and every player can be taken
+// by exactly one manager. What they are is the only published read on what the
+// market expects of a player in the season about to start, which is the question
+// on draft day. A price FPL moved up over the summer, or an ownership share far
+// out of line with what the player actually produced, says the crowd is pricing
+// in a change that last season's numbers cannot show.
+//
+// The join is on `code`, the identifier that survives across seasons; `id` is
+// reassigned every year — see toFplId for what that cost the ownership join.
+
+// Keyed on the elements array itself rather than on its length: prices move
+// daily while the roster size does not, and a stale index would quietly show
+// yesterday's market.
+let _marketIndex = { source: null, byCode: null };
+
+function marketIndex() {
+    const live = state.allPlayersData.live.raw && state.allPlayersData.live.raw.elements;
+    if (!live || !live.length) return null;
+    if (_marketIndex.source !== live) {
+        _marketIndex = {
+            source: live,
+            byCode: new Map(live.filter(p => p.code).map(p => [p.code, p]))
+        };
+    }
+    return _marketIndex.byCode;
+}
+
+/** True when the row's price and ownership describe a season other than the stats. */
+function marketOverlayActive() {
+    return state.currentDataSource === 'historical' && !!marketIndex();
+}
+
+function clearMarketFields(p) {
+    p.market_cost = null;
+    p.market_ownership = null;
+    p.price_delta = null;
+    p.hype_gap = null;
+    p.market_departed = false;
+    p.market_moved_club = false;
+    p.market_status = null;
+    p.market_news = '';
+}
+
+/** Percentile rank (0-100) of a value within a sorted copy of the sample. */
+function percentileRanker(values) {
+    const sorted = values.filter(Number.isFinite).sort((a, b) => a - b);
+    if (!sorted.length) return () => 0;
+    return value => {
+        if (!Number.isFinite(value)) return 0;
+        let lo = 0, hi = sorted.length;
+        while (lo < hi) {
+            const mid = (lo + hi) >> 1;
+            if (sorted[mid] < value) lo = mid + 1; else hi = mid;
+        }
+        return (lo / sorted.length) * 100;
+    };
+}
+
+/**
+ * Attach this season's market view to last season's rows. Returns how many
+ * players matched, so callers can tell "the market has not loaded" from "the
+ * market says nothing about anyone".
+ */
+function applyMarketOverlay(players) {
+    if (!Array.isArray(players) || !players.length) return 0;
+
+    // On the live tab the row's own price and ownership already are this
+    // season's, so there is nothing to overlay and the delta would be zero by
+    // construction. Clear rather than skip: the same player objects are reused
+    // when the season flips, and a stale overlay would outlive its meaning.
+    if (state.currentDataSource !== 'historical') {
+        players.forEach(clearMarketFields);
+        return 0;
+    }
+
+    const byCode = marketIndex();
+    if (!byCode) return 0;
+
+    const matched = [];
+    for (const p of players) {
+        const live = p.code ? byCode.get(p.code) : null;
+        clearMarketFields(p);
+        if (!live) {
+            // Absent from the new season's bootstrap means he is out of the
+            // Premier League. His row is history about a player nobody can
+            // draft — the board must not recommend him and the table must say so.
+            p.market_departed = true;
+            continue;
+        }
+        p.market_cost = (live.now_cost || 0) / 10;
+        p.market_ownership = parseFloat(live.selected_by_percent) || 0;
+        p.price_delta = Math.round((p.market_cost - (p.now_cost || 0)) * 10) / 10;
+        p.market_status = live.status || 'a';
+        p.market_news = live.news || '';
+        // Team ids are reassigned every season as the promoted clubs shift the
+        // alphabetical order; only the code is stable.
+        p.market_moved_club = !!(live.team_code && p.team_code && live.team_code !== p.team_code);
+        matched.push(p);
+    }
+
+    // Hype measured against production, both as percentile ranks so the two
+    // scales are comparable: +100 is the most hyped player relative to what he
+    // actually returned, -100 the most ignored producer.
+    //
+    // Ranked WITHIN POSITION, which is not a refinement but the whole difference
+    // between a signal and an artefact. League-wide, a goalkeeper scores about
+    // half the points per 90 that a forward does no matter how good he is, so
+    // every nailed keeper came out at +85 and the list read as "the market
+    // expects a leap from Dúbravka" when it only meant "he is a keeper".
+    //
+    // The population is the players who are still here: a departed player is not
+    // competing for anyone's attention, and leaving him in would shift everyone
+    // else's percentile.
+    const byPosition = new Map();
+    for (const p of matched) {
+        const pos = p.element_type || 0;
+        if (!byPosition.has(pos)) byPosition.set(pos, []);
+        byPosition.get(pos).push(p);
+    }
+    for (const group of byPosition.values()) {
+        const ownRank = percentileRanker(group.map(p => p.market_ownership));
+        const prodRank = percentileRanker(group.map(p => p.points_per_game_90 || 0));
+        for (const p of group) {
+            p.hype_gap = Math.round(ownRank(p.market_ownership) - prodRank(p.points_per_game_90 || 0));
+        }
+    }
+
+    return matched.length;
+}
+
+/** The price the row shows: this season's when the overlay is on, else its own. */
+function displayCost(p) {
+    return Number.isFinite(p.market_cost) ? p.market_cost : (p.now_cost || 0);
+}
+
+/** The ownership the row shows, under the same rule as displayCost. */
+function displayOwnership(p) {
+    return Number.isFinite(p.market_ownership)
+        ? p.market_ownership
+        : (parseFloat(p.selected_by_percent) || 0);
 }
 
 // Fetch the live bootstrap and fixtures without processing or rendering.
@@ -1345,6 +1521,11 @@ async function fetchAndProcessData() {
             applyDraftRanks();
         }
 
+        // Outside the guard above: the pipeline runs once per season, but the
+        // live bootstrap that carries the market usually lands after it, and the
+        // prices move every day. Re-overlaying is cheap and keeps the two in step.
+        applyMarketOverlay(state.allPlayersData[state.currentDataSource].processed);
+
         document.getElementById('lastUpdated').textContent = `עדכון אחרון: ${new Date().toLocaleString('he-IL')}`;
         populateTeamFilter();
         populateSignalFilter();
@@ -1476,10 +1657,16 @@ function showSeasonBanner(playedGws) {
     if (existing) existing.remove();
 
     const showingPrevious = state.currentDataSource === 'historical';
+    // Which season each number belongs to is the one thing the reader cannot
+    // infer from the table, and before the season starts the row mixes two of
+    // them: the stats are last season's, the price and ownership are this one's.
+    const marketNote = showingPrevious && marketOverlayActive()
+        ? ` · מחיר ואחוז בחירה הם של ${SEASON_CONFIG.seasonLabel} (חיים), שאר הנתונים של ${SEASON_CONFIG.previousSeasonLabel}`
+        : '';
     const msg = showingPrevious
         ? (playedGws === 0
-            ? `מוצגים נתוני ${SEASON_CONFIG.previousSeasonLabel} המלאים — עונת ${SEASON_CONFIG.seasonLabel} טרם התחילה`
-            : `מוצגים נתוני ${SEASON_CONFIG.previousSeasonLabel} המלאים — לעונת ${SEASON_CONFIG.seasonLabel} יש רק ${playedGws} מחזורים`)
+            ? `מוצגים נתוני ${SEASON_CONFIG.previousSeasonLabel} המלאים — עונת ${SEASON_CONFIG.seasonLabel} טרם התחילה${marketNote}`
+            : `מוצגים נתוני ${SEASON_CONFIG.previousSeasonLabel} המלאים — לעונת ${SEASON_CONFIG.seasonLabel} יש רק ${playedGws} מחזורים${marketNote}`)
         : `עונת ${SEASON_CONFIG.seasonLabel} — ${playedGws} מחזורים שוחקו`;
 
     const banner = document.createElement('div');
@@ -2710,7 +2897,9 @@ function buildPercentileBase(rows) {
         predicted_points_1_gw: rows.map(p => p.predicted_points_1_gw),
         total_points: rows.map(p => p.total_points),
         points_per_game_90: rows.map(p => p.points_per_game_90),
-        selected_by_percent: rows.map(p => parseFloat(p.selected_by_percent)),
+        // Shaded against what the cell prints, which before the season starts is
+        // this season's ownership rather than the snapshot's — see applyMarketOverlay.
+        selected_by_percent: rows.map(displayOwnership),
         dreamteam_count: rows.map(p => p.dreamteam_count),
         def_contrib_per90: rows.map(p => p.def_contrib_per90),
         goals_assists: rows.map(p => (p.goals_scored || 0) + (p.assists || 0)),
@@ -2725,8 +2914,69 @@ function buildPercentileBase(rows) {
         // caused: the column the position chips sort on looked no different from
         // an unsorted one.
         points_next_5: rows.map(p => Number.isFinite(p.points_next_5) ? p.points_next_5 : null),
-        draft_rank: rows.map(p => p.draft_rank || null)
+        draft_rank: rows.map(p => p.draft_rank || null),
+        // Null outside the pre-season overlay, which leaves the cell unshaded —
+        // correct, because off-season there is no second season to compare to.
+        price_delta: rows.map(p => Number.isFinite(p.price_delta) ? p.price_delta : null),
+        hype_gap: rows.map(p => Number.isFinite(p.hype_gap) ? p.hype_gap : null)
     };
+}
+
+/**
+ * The price cell. Under the pre-season overlay it prints the new season's price
+ * with the summer move beside it, because the move is the signal: a price FPL
+ * lifted by a million over the summer is FPL's own model saying it expects more
+ * from him than last season's row shows.
+ */
+function priceCellHtml(player) {
+    const cost = displayCost(player);
+    const base = `£${cost.toFixed(1)}`;
+    if (!Number.isFinite(player.price_delta) || player.price_delta === 0) return base;
+    const d = player.price_delta;
+    const cls = d > 0 ? 'price-up' : 'price-down';
+    const sign = d > 0 ? '+' : '';
+    return `${base} <span class="price-delta ${cls}"`
+        + ` title="שינוי מול ${SEASON_CONFIG.previousSeasonLabel}: ${sign}${d.toFixed(1)}m">${sign}${d.toFixed(1)}</span>`;
+}
+
+/** Ownership, plus the gap to what the player actually produced when we know it. */
+function ownershipCellHtml(player) {
+    const own = displayOwnership(player);
+    const base = `${own.toFixed(1)}%`;
+    if (!Number.isFinite(player.hype_gap) || Math.abs(player.hype_gap) < 25) return base;
+    const hyped = player.hype_gap > 0;
+    return `${base} <span class="hype-flag ${hyped ? 'hype-over' : 'hype-under'}">${hyped ? '🔺' : '🔻'}</span>`;
+}
+
+/** Explains the ownership cell in place, so the flag never needs a legend. */
+function ownershipCellTitle(player) {
+    if (!marketOverlayActive() || !Number.isFinite(player.hype_gap)) return '';
+    const own = displayOwnership(player).toFixed(1);
+    let msg = `${own}% מהמנג'רים כבר בחרו אותו לעונת ${SEASON_CONFIG.seasonLabel}`;
+    if (player.hype_gap >= 25) {
+        msg += ` — הרבה מעבר למה שהניב ב-${SEASON_CONFIG.previousSeasonLabel}. השוק מצפה לקפיצה`;
+    } else if (player.hype_gap <= -25) {
+        msg += ` — הרבה מתחת למה שהניב ב-${SEASON_CONFIG.previousSeasonLabel}. מתחת לרדאר`;
+    }
+    return `title="${escapeHtml(msg)}"`;
+}
+
+/**
+ * Badges that only exist between seasons. "Left the league" is the important
+ * one: without it his row is a full set of strong numbers for a player who
+ * cannot be drafted at all.
+ */
+function marketBadgesHtml(player) {
+    if (!marketOverlayActive()) return '';
+    if (player.market_departed) {
+        return `<span class="status-badge status-departed"`
+            + ` title="לא מופיע בסגלי ${SEASON_CONFIG.seasonLabel} — עזב את הליגה">עזב</span>`;
+    }
+    if (player.market_moved_club) {
+        return `<span class="status-badge status-moved"`
+            + ` title="עבר קבוצה בקיץ — הנתונים כאן הם מהקבוצה הקודמת">🔁</span>`;
+    }
+    return '';
 }
 
 function createPlayerRowHtml(player, index) {
@@ -2783,6 +3033,7 @@ function createPlayerRowHtml(player, index) {
                 ${player.availability_grade !== 'available' ?
             `<span class="status-badge status-${player.availability_grade}" title="${player.news || 'Status'}">${player.chance_of_playing_next_round !== null ? player.chance_of_playing_next_round + '%' : '!'}</span>`
             : ''}
+                ${marketBadgesHtml(player)}
             </div>
         </td>
         <td>${player.position_name}</td>
@@ -2804,7 +3055,8 @@ function createPlayerRowHtml(player, index) {
         <td class="${getPercentileClass(player.total_points, displayedValues.total_points)}">${player.total_points}</td>
         <td class="${getPercentileClass(player.points_per_game_90, displayedValues.points_per_game_90)}">${player.points_per_game_90.toFixed(1)}</td>
         <td class="transfers-cell" data-tooltip="${config.columnTooltips.net_transfers_event}"><span class="${player.net_transfers_event >= 0 ? 'net-transfers-positive' : 'net-transfers-negative'}">${player.net_transfers_event.toLocaleString()}</span></td>
-        <td class="${getPercentileClass(parseFloat(player.selected_by_percent), displayedValues.selected_by_percent)}">${player.selected_by_percent}%</td>
+        <td class="${getPercentileClass(displayOwnership(player), displayedValues.selected_by_percent)}"
+            ${ownershipCellTitle(player)}>${ownershipCellHtml(player)}</td>
         <td class="signal-cell">
             <span class="signal-badge signal-${signal.tone}">${signal.label}</span>
             ${signal.why.length ? `<span class="signal-why">${signal.why.map(w => `<span>${w}</span>`).join('')}</span>` : ''}
@@ -2824,7 +3076,7 @@ function createPlayerRowHtml(player, index) {
         <td class="${getPercentileClass(player.minutes, displayedValues.minutes)}">${player.minutes}</td>
         <td class="${getPercentileClass(parseFloat(player.bonus_per90) || 0, displayedValues.bonus_per90)}">${(parseFloat(player.bonus_per90) || 0).toFixed(2)}</td>
         <td class="${getPercentileClass(parseFloat(player.clean_sheets_per90) || 0, displayedValues.clean_sheets_per90)}">${(parseFloat(player.clean_sheets_per90) || 0).toFixed(2)}</td>
-        <td>${player.now_cost.toFixed(1)}</td>
+        <td class="price-cell">${priceCellHtml(player)}</td>
         <td class="${player.set_piece_priority.penalty === 1 ? 'set-piece-yes' : 'set-piece-no'}">${player.set_piece_priority.penalty === 1 ? '🎯 (1)' : '–'}</td>
         <td class="${player.set_piece_priority.corner > 0 ? 'set-piece-yes' : 'set-piece-no'}">${player.set_piece_priority.corner > 0 ? `(${player.set_piece_priority.corner})` : '–'}</td>
         <td class="${player.set_piece_priority.free_kick > 0 ? 'set-piece-yes' : 'set-piece-no'}">${player.set_piece_priority.free_kick > 0 ? `(${player.set_piece_priority.free_kick})` : '–'}</td>
@@ -3205,6 +3457,14 @@ function processChange() {
             } else if (state.sortKey === 'xGI_per90') {
                 aValue = parseFloat(a.xGI_per90 || 0);
                 bValue = parseFloat(b.xGI_per90 || 0);
+            } else if (state.sortKey === 'now_cost' || state.sortKey === 'selected_by_percent') {
+                // Sort what the cell prints. Under the pre-season overlay these
+                // two cells show the new season's market, so sorting the
+                // snapshot's own fields would order the table by numbers that are
+                // nowhere on screen.
+                const read = state.sortKey === 'now_cost' ? displayCost : displayOwnership;
+                aValue = read(a);
+                bValue = read(b);
             } else if (state.sortKey === 'signal_rank') {
                 // Ascending rank = most actionable first, so invert to keep the
                 // "desc" default meaning "show me the opportunities".
@@ -3348,6 +3608,20 @@ function positionShortlistFilters() {
     return out;
 }
 
+/**
+ * Shared by the three market chips. All three read this season's price and
+ * ownership against last season's production, so they only mean anything on the
+ * previous-season tab with the new season's bootstrap loaded — which is exactly
+ * the pre-draft state they were built for.
+ */
+function marketUnavailable() {
+    if (state.currentDataSource !== 'historical') {
+        return `הפילטר משווה את שוק ${SEASON_CONFIG.seasonLabel} מול הביצועים ב-${SEASON_CONFIG.previousSeasonLabel}`
+            + ` — עבור לעונת ${SEASON_CONFIG.previousSeasonLabel}`;
+    }
+    return marketIndex() ? null : `נתוני השוק של ${SEASON_CONFIG.seasonLabel} עוד לא נטענו`;
+}
+
 /** Shared by both newcomer chips: the same reason either of them cannot run. */
 function newcomerUnavailable() {
     if (state.currentDataSource === 'historical') {
@@ -3417,6 +3691,38 @@ const QUICK_FILTERS = {
         },
         unavailable: newcomerUnavailable,
         sortKey: 'now_cost', sortDirection: 'desc'
+    },
+
+    // The three pre-draft market chips. Nothing here is a performance metric:
+    // they read what the market believes about the season ahead, which is the
+    // only forward-looking evidence that exists before a ball is kicked.
+    //
+    // The first two both require a real season behind them (900 minutes, i.e. a
+    // regular starter) so they answer "the crowd changed its mind about a player
+    // we have data on" rather than rediscovering the newcomers, which have their
+    // own two chips above.
+    market_breakout: {
+        filter: p => !p.market_departed && p.hype_gap >= 25 && (p.minutes || 0) >= 900,
+        unavailable: marketUnavailable,
+        sortKey: 'hype_gap', sortDirection: 'desc',
+        explain: 'אחוז הבעלות בעונה החדשה גבוה בהרבה ממה שהשחקן הניב בעונה שעברה —'
+            + ' השוק מתמחר קפיצה. סימון 🔺 בעמודת אחוז הבחירה'
+    },
+    market_value: {
+        filter: p => !p.market_departed && p.hype_gap <= -25 && (p.minutes || 0) >= 900,
+        unavailable: marketUnavailable,
+        sortKey: 'hype_gap', sortDirection: 'asc',
+        explain: 'הניב בעונה שעברה והשוק התעלם ממנו — המועמדים להיחטף מאוחר בדראפט.'
+            + ' סימון 🔻 בעמודת אחוז הבחירה'
+    },
+    // No minutes floor: a summer signing with no Premier League history is
+    // precisely the case where FPL's repricing is the only evidence available.
+    market_risers: {
+        filter: p => !p.market_departed && Number.isFinite(p.price_delta) && p.price_delta >= 0.5,
+        unavailable: marketUnavailable,
+        sortKey: 'price_delta', sortDirection: 'desc',
+        explain: 'FPL העלתה להם את המחיר לקראת העונה החדשה — המודל של המשחק עצמו מצפה ליותר.'
+            + ' השינוי מוצג לצד המחיר'
     },
 
     // nailed_starters, defcon_kings and best_value lived here. All three had no
@@ -4978,7 +5284,11 @@ function draftBoardPool() {
         (!freeAgentsOnly || !owned.has(p.id)) &&
         (!pos || p.position_name === pos) &&
         // Injured or suspended players are never a recommendation.
-        p.availability_factor > 0.5);
+        p.availability_factor > 0.5 &&
+        // Neither is a player who has left the league. On last season's numbers
+        // several of them still rank in the top twenty, and before the market
+        // overlay landed the board recommended them by name.
+        !p.market_departed);
 
     buildDropOffLadder(pool);
     return { freeAgentsOnly, position: pos, players: pool };
@@ -6873,12 +7183,42 @@ async function loadDraftLeague() {
         const totalPlayers = state.draft.ownedElementIds.size;
         showToast('ליגת דראפט נטענה בהצלחה', `${totalTeams} קבוצות, ${totalPlayers} שחקנים`, 'success', 3000);
     } catch (e) {
-        console.error('loadDraftLeague error', e);
-        draftContainer.innerHTML = `<div style="text-align:center; padding: 20px; color: red;">שגיאה בטעינת נתוני הליגה: ${e.message}</div>`;
-        showToast('שגיאה בטעינת הליגה', e.message, 'error', 5000);
+        if (e && e.code === 'GAME_UPDATING') {
+            renderDraftMaintenanceNotice(draftContainer);
+        } else {
+            console.error('loadDraftLeague error', e);
+            draftContainer.innerHTML = `<div style="text-align:center; padding: 20px; color: red;">שגיאה בטעינת נתוני הליגה: ${e.message}</div>`;
+            showToast('שגיאה בטעינת הליגה', e.message, 'error', 5000);
+        }
     } finally {
         hideLoading();
     }
+}
+
+// The between-seasons state is not an error: draft.premierleague.com takes the
+// whole game down ("Game Updating") from the end of one season until shortly
+// before the next draft window opens. Explain that, say what still works, and
+// what to do once the game returns — instead of the red proxy-blaming banner.
+function renderDraftMaintenanceNotice(container) {
+    if (!container) return;
+    container.innerHTML = `
+        <div style="max-width: 640px; margin: 40px auto; padding: 28px; text-align: center;
+                    background: var(--card-bg, rgba(255,255,255,0.05)); border-radius: 12px;">
+            <div style="font-size: 42px; margin-bottom: 12px;">🛠️</div>
+            <h3 style="margin: 0 0 12px;">משחק הדראפט של FPL סגור לתחזוקת בין-עונות</h3>
+            <p style="margin: 0 0 10px; line-height: 1.6;">
+                האתר draft.premierleague.com מציג כרגע "Game Updating" — המשחק נסגר בסוף עונת
+                2025/26 וייפתח מחדש לקראת עונת 2026/27, בדרך כלל שבועות ספורים לפני פתיחת העונה.
+            </p>
+            <p style="margin: 0 0 10px; line-height: 1.6;">
+                <strong>מה עובד בינתיים:</strong> טאב השחקנים — נתוני 2025/26 המלאים, לצד מחירים,
+                אחוזי בחירה וסטטוסים חיים של 2026/27 מהפנטזי הרגיל.
+            </p>
+            <p style="margin: 0; line-height: 1.6;">
+                <strong>כשהמשחק ייפתח:</strong> צרו את הליגה החדשה ועדכנו את מזהה הליגה בהגדרות
+                (או <code>?league=</code> בכתובת) — נתוני הליגה ייטענו מכאן אוטומטית.
+            </p>
+        </div>`;
 }
 
 /**

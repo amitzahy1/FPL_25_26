@@ -81,12 +81,16 @@ function load(players, over = {}) {
         'miniSparkHtml',
         'trendBarsHtml', 'roleTrend', 'trendBenchmark', 'benchmarkMedian',
         // the three stat boxes in the expanded row
-        'boxAttack', 'boxDefence', 'boxValue'
+        'boxAttack', 'boxDefence', 'boxValue',
+        // the pre-season market cells; inert on the live tab, which is what the
+        // rows here are, so they exercise the fallback path
+        'priceCellHtml', 'ownershipCellHtml', 'ownershipCellTitle', 'marketBadgesHtml',
+        'displayCost', 'displayOwnership', 'marketOverlayActive', 'marketIndex'
     ], {}, [
         'WATCHLIST_KEY', 'TREND_BAR_ROW_LIMIT', 'SIGNAL_RULES', 'SIGNAL_SORT_ORDER',
         'HOLD_SIGNAL', '_signalCache', '_trendPlayerIndex', '_trendDeltaCache',
         'BENCH_TOP_N', 'BENCH_MIN_MINUTES', '_trendBenchCache', 'POSITION_LABELS',
-        'gwNum', 'TREND_METRICS', 'ROLE_TREND',
+        'gwNum', 'TREND_METRICS', 'ROLE_TREND', 'SEASON_CONFIG', '_marketIndex',
         // arrow-function consts, so they load as declarations rather than names
         'num1', 'statLine', 'fmt', 'pct'
     ]);

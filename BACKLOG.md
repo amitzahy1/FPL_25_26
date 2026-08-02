@@ -32,9 +32,9 @@ Status as of the 2026/27 pre-season overhaul. Items are ordered by value, not by
 - [x] Draft board restored and made the page's lead block, replacing the six KPI
       trivia cards. The cards answered questions the table already answers by
       sorting a column; the board answers "who should I take, and why", with a
-      stated reason per pick and a top-20 behind each panel. `בטוחים בהרכב`
-      swapped for a market-movement panel that explains itself until the first
-      gameweek closes.
+      stated reason per pick and a top-20 behind each panel. (The
+      market-movement panel added alongside it was dropped again in the variant-ב
+      rework; its `emptyNote` hook is still wired and unused.)
 - [x] Signal filter, so the most actionable column is filterable and not only
       sortable
 - [x] Season selector moved to the page header — which season is on screen
@@ -46,6 +46,34 @@ Status as of the 2026/27 pre-season overhaul. Items are ordered by value, not by
       position toggle, two team charts to one quadrant, price-vs-points and the
       ICT stack dropped, and the per-gameweek history finally plotted (trend,
       opportunity board, positional VORP depth, minutes security)
+- [x] **Draft API "Game Updating" handled as a state, not an error.** FPL takes
+      the whole Draft game down between seasons and serves an HTML maintenance
+      page with a 200 status, so every proxy returned the same non-JSON body and
+      the page blamed the proxies ("run local_proxy.js") for an outage no proxy
+      could fix. Detected explicitly, the chain stops walking, and the draft tab
+      explains the state, what still works, and that the new league needs a new
+      id when the game reopens — league 689 is last season's.
+- [x] **Pre-season market overlay.** Before GW1 the new season's API reports
+      every player at zero, so the table shows the completed season — but two of
+      its numbers are live from day one and belong to the season ahead: price and
+      ownership. In Draft neither is a cost, so both are pure crowd signal. They
+      now overwrite the two cells they belong in (sorting, percentile shading and
+      the banner all follow), with the summer price move printed beside the price.
+      - `hype_gap`: ownership percentile minus points-per-90 percentile, **within
+        position**. League-wide it ranked position rather than expectation —
+        a keeper scores about half a forward's points per 90 however good he is,
+        so every nailed keeper came out at +85.
+      - Departed players (133 of the snapshot's 537 are not in 2026/27) are
+        flagged and excluded from the board pool. Salah, Bowen, Casemiro and
+        Trossard all ranked top-20 for a league they are no longer in.
+      - Three chips: 🔺 השוק מצפה לקפיצה, 🔻 מתחת לרדאר, 💸 עלו במחיר.
+
+## Pre-draft, still open
+
+- [ ] Steals-vs-ADP column: `draft_rank` is FPL Draft's own published ranking, so
+      players our `draft_score` rates far above it are the ones available a round
+      later than they should be. Blocked until the Draft API reopens.
+- [ ] Draft-day assistant — explicitly dropped for 2026/27 (2026-08-02).
 
 ## Post-draft
 

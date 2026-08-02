@@ -5676,6 +5676,38 @@ canvas {
     line-height: 1.35;
 }
 
+/* --- pre-season market overlay ---
+   Between seasons the price and ownership cells describe the season ahead while
+   the rest of the row describes the one behind. These marks are what tells the
+   two apart at a glance. */
+.price-cell { white-space: nowrap; font-variant-numeric: tabular-nums; }
+
+.price-delta {
+    display: inline-block;
+    margin-inline-start: 4px;
+    padding: 1px 5px;
+    border-radius: 5px;
+    font-size: 11px;
+    font-weight: 800;
+    direction: ltr;
+}
+
+.price-up   { background: #e7f4ec; color: #0e7a45; }
+.price-down { background: #fbeae8; color: #b93229; }
+
+.hype-flag { margin-inline-start: 3px; font-size: 11px; }
+
+.status-departed {
+    background: #e2e8f0;
+    color: #475569;
+    font-size: 11px;
+    font-weight: 800;
+    padding: 1px 6px;
+    border-radius: 5px;
+}
+
+.status-moved { font-size: 12px; }
+
 .signal-why span { display: block; white-space: normal; max-width: 210px; line-height: 1.3; }
 
 /* --- trend cells --- */

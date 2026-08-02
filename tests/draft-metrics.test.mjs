@@ -141,8 +141,10 @@ describe('smart filters', () => {
             const projectedPointsOf = (p) => p.__now === undefined ? 0 : p.__now;
             const setPieceOrder = (p) => Math.min(p.set_piece_priority.penalty,
                 p.set_piece_priority.corner, p.set_piece_priority.free_kick);
+            const marketIndex = () => globalThis.__marketLoaded ? new Map() : null;
             ${SCRIPT_SRC.slice(start, end)}
-            return { QUICK_FILTERS, newcomerSets, newcomerUnavailable, isAvailableToDraft };`)();
+            return { QUICK_FILTERS, newcomerSets, newcomerUnavailable, isAvailableToDraft,
+                marketUnavailable };`)();
     };
     const { QUICK_FILTERS } = load();
 
@@ -171,12 +173,78 @@ describe('smart filters', () => {
         const required = ['set_pieces', 'attacking_defenders', 'differentials',
             'form_kings', 'underperformers',
             'promoted_teams', 'new_to_league',
-            'best_gkp_5', 'best_def_5', 'best_mid_5', 'best_fwd_5'];
+            'best_gkp_5', 'best_def_5', 'best_mid_5', 'best_fwd_5',
+            'market_breakout', 'market_value', 'market_risers'];
         for (const name of required) {
             assert.ok(QUICK_FILTERS[name], `quick filter "${name}" is not implemented`);
             assert.equal(typeof QUICK_FILTERS[name].filter, 'function');
         }
         assert.ok(html.length > 0);
+    });
+
+    describe('pre-season market chips', () => {
+        // Fields the overlay attaches; see tests/market-overlay.test.mjs for how.
+        const marketRow = (over = {}) => ({
+            minutes: 2000, hype_gap: 0, price_delta: 0, market_departed: false, ...over
+        });
+
+        test('breakout wants hype far ahead of production, from a real starter', () => {
+            const { QUICK_FILTERS } = load();
+            assert.ok(QUICK_FILTERS.market_breakout.filter(marketRow({ hype_gap: 40 })));
+            assert.ok(!QUICK_FILTERS.market_breakout.filter(marketRow({ hype_gap: 10 })),
+                'a small gap is noise, not a signal');
+            assert.ok(!QUICK_FILTERS.market_breakout.filter(marketRow({ hype_gap: 40, minutes: 200 })),
+                'the newcomer chips already cover players with no season behind them');
+        });
+
+        test('value wants production the market ignored', () => {
+            const { QUICK_FILTERS } = load();
+            assert.ok(QUICK_FILTERS.market_value.filter(marketRow({ hype_gap: -40 })));
+            assert.ok(!QUICK_FILTERS.market_value.filter(marketRow({ hype_gap: 40 })));
+            assert.equal(QUICK_FILTERS.market_value.sortDirection, 'asc',
+                'most-ignored first, so the chip opens on its own subject');
+        });
+
+        test('risers has no minutes floor — a new signing is the point', () => {
+            const { QUICK_FILTERS } = load();
+            assert.ok(QUICK_FILTERS.market_risers.filter(marketRow({ price_delta: 1.0, minutes: 0 })));
+            assert.ok(!QUICK_FILTERS.market_risers.filter(marketRow({ price_delta: 0.2 })));
+        });
+
+        test('no chip ever recommends a player who left the league', () => {
+            const { QUICK_FILTERS } = load();
+            for (const name of ['market_breakout', 'market_value', 'market_risers']) {
+                const gone = marketRow({
+                    hype_gap: name === 'market_value' ? -40 : 40,
+                    price_delta: 1.0, market_departed: true
+                });
+                assert.ok(!QUICK_FILTERS[name].filter(gone), `${name} must exclude departed players`);
+            }
+        });
+
+        test('each chip says why it cannot run instead of showing an empty table', () => {
+            const onLive = load({ currentDataSource: 'live' });
+            assert.match(onLive.marketUnavailable(), /2025\/26/,
+                'on the live tab it must point back to the previous season');
+
+            globalThis.__marketLoaded = false;
+            const noMarket = load({ currentDataSource: 'historical' });
+            assert.ok(noMarket.marketUnavailable(), 'without the bootstrap the chip must refuse');
+
+            globalThis.__marketLoaded = true;
+            const ready = load({ currentDataSource: 'historical' });
+            assert.equal(ready.marketUnavailable(), null);
+            globalThis.__marketLoaded = false;
+        });
+
+        test('all three are wired to that explanation', () => {
+            const { QUICK_FILTERS } = load();
+            for (const name of ['market_breakout', 'market_value', 'market_risers']) {
+                assert.equal(typeof QUICK_FILTERS[name].unavailable, 'function',
+                    `${name} must explain itself when the market is missing`);
+                assert.ok(QUICK_FILTERS[name].explain, `${name} sorts on a column that needs naming`);
+            }
+        });
     });
 
     test('set-piece filter excludes non-takers (99 means "not a taker")', () => {
