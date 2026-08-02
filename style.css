@@ -1133,6 +1133,16 @@ tbody tr:last-child td {
     border-collapse: collapse;
 }
 
+/* .db-card is a flex column, and a flex item will not shrink below its
+   min-content width unless told to. The nowrap headers put that minimum at
+   ~600px, so on a phone the card (348px) clipped the value column and all three
+   supporting columns — with overflow-x: hidden, meaning no scrollbar and no way
+   to reach them. The card was showing a name and nothing else, which is the one
+   thing on it that is not the answer.
+   Only the card table: the modal's is table-layout: auto inside .lb-scroll,
+   where the intended behaviour is exactly to keep its width and scroll. */
+.db-tbl:not(.is-modal) { min-width: 0; }
+
 /* The global `th` rule is a sticky blue gradient with white text and a shadow,
    written for the players table. Everything it sets has to be undone here, or a
    card's header row renders as an unexplained coloured band. */
@@ -3487,7 +3497,11 @@ tbody tr:last-child td {
     padding-top: 10px;
     border-top: 1px solid #f1f5f9;
     justify-content: flex-start;
-    overflow-x: auto;
+    /* No overflow-x. The chips used to sit on one non-wrapping line inside a
+       scroller, so the row grew a horizontal scrollbar and the last chips were
+       simply off-screen — a filter you cannot see is a filter that does not
+       exist. They wrap now, which is why this is a row of chips and not a
+       carousel. */
 }
 
 .tb-row-label {
@@ -4718,7 +4732,12 @@ canvas {
 .quick-filters-group {
     display: flex;
     gap: 6px;
-    flex-wrap: nowrap;
+    flex-wrap: wrap;
+    /* Takes the width left over by the label and wraps inside it. Without the
+       min-width a flex item refuses to shrink below its content, which is what
+       pushed the row wider than its container in the first place. */
+    flex: 1 1 auto;
+    min-width: 0;
 }
 
 .quick-filter-btn {

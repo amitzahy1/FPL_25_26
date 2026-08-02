@@ -464,10 +464,58 @@ try {
     // Mobile: the layout must not overflow.
     await page.setViewport({ width: 390, height: 844, isMobile: true });
     await new Promise(res => setTimeout(res, 600));
-    const mob = await page.evaluate(() => ({
-        hScroll: document.documentElement.scrollWidth > document.documentElement.clientWidth + 1
-    }));
+    const mob = await page.evaluate(() => {
+        const de = document.documentElement;
+        const det = document.querySelector('details');
+        if (det) det.open = true;
+
+        // "The page does not pan" is not the same as "everything is reachable".
+        // Content wider than its box inside overflow-x:hidden is invisible with
+        // no way to scroll to it — which is how every board card was hiding four
+        // of its five columns on a phone while the page measured clean.
+        const reachable = el => {
+            let a = el.parentElement;
+            while (a && a !== document.body) {
+                const ox = getComputedStyle(a).overflowX;
+                if ((ox === 'auto' || ox === 'scroll') && a.scrollWidth > a.clientWidth + 1) return true;
+                a = a.parentElement;
+            }
+            return false;
+        };
+        const unreachable = [...document.querySelectorAll('body *')]
+            .filter(el => el.offsetParent !== null && el.getBoundingClientRect().width > window.innerWidth + 2)
+            .filter(el => !reachable(el))
+            .map(el => `${el.tagName}${el.id ? '#' + el.id : ''}=${Math.round(el.getBoundingClientRect().width)}`)
+            .slice(0, 4);
+
+        // Every board card must show its value column, not just the name.
+        const clippedCards = [...document.querySelectorAll('#draftBoard .db-card')]
+            .filter(c => c.scrollWidth > c.clientWidth + 1).length;
+
+        const chips = [...document.querySelectorAll('.quick-filter-btn')];
+        const group = document.querySelector('.quick-filters-group');
+        const row = document.querySelector('.tb-row--filters');
+        return {
+            hScroll: de.scrollWidth > de.clientWidth + 1,
+            unreachable,
+            clippedCards,
+            chipCount: chips.length,
+            // The chips used to sit on one nowrap line inside a scroller, so the
+            // last ones were simply off-screen.
+            chipsScroll: !!(group && group.scrollWidth > group.clientWidth + 1)
+                || !!(row && row.scrollWidth > row.clientWidth + 1),
+            smallTaps: chips.filter(c => c.getBoundingClientRect().height < 30).length
+        };
+    });
     check(!mob.hScroll, 'no horizontal page scroll at 390px');
+    check(mob.unreachable.length === 0,
+        `nothing overflows into an unscrollable box${mob.unreachable.length ? `: ${mob.unreachable.join(', ')}` : ''}`);
+    check(mob.clippedCards === 0,
+        `all board cards fit their columns on a phone${mob.clippedCards ? ` (${mob.clippedCards} clipped)` : ''}`);
+    check(mob.chipCount > 0 && !mob.chipsScroll,
+        `the ${mob.chipCount} quick-filter chips wrap instead of scrolling out of reach`);
+    check(mob.smallTaps === 0,
+        `every chip is a usable tap target${mob.smallTaps ? ` (${mob.smallTaps} under 30px)` : ''}`);
 
     check(pageErrors.length === 0, 'still no page errors after interaction');
 } catch (e) {

@@ -411,6 +411,17 @@
     .tb-seg, .season-switch { flex-wrap: nowrap; }
     .tb-row--filters { padding-top: 8px; }
 
+    /* Fourteen chips wrapped onto eleven rows at 320px, because each one is a
+       whole Hebrew phrase that cannot break. Tightening the horizontal padding
+       and the type packs two to a row without touching the vertical padding —
+       the tap target has to stay around 30px, which is what actually matters on
+       a phone. */
+    .quick-filter-btn {
+        padding: 7px 9px;
+        font-size: 11.5px;
+        gap: 4px;
+    }
+
     /* The season switch is the widest thing in the header on a phone. */
     .season-switch { order: -1; }
     .source-toggle-btn { padding: 6px 10px; font-size: 12.5px; }
