@@ -14,7 +14,7 @@ import assert from 'node:assert/strict';
 import { loadFunctions, extractDeclaration } from './helpers/load-script.mjs';
 
 const FNS = [
-    'getMatrixChartConfig', 'labelTop', 'chartAxis', 'ltrTick', 'displayNetTransfers',
+    'getMatrixChartConfig', 'labelTop', 'labelBudget', 'chartAxis', 'ltrTick', 'displayNetTransfers',
     'buildMarketFlowChart', 'buildSignalSpreadChart', 'buildSignalFocusChart',
     'buildUnderlyingValueChart', 'buildTeamTargetsChart', 'signalLegendHtml',
     'metricReader', 'windowRate', 'windowRateSupported', 'windowMinMinutes',
@@ -573,6 +573,50 @@ describe('who to target next', () => {
         assert.equal(buildTeamTargetsChart(club('A', { fdr: 2 }), 'att'), null);
     });
 });
+
+describe('how many names a chart prints', () => {
+    // A phone card is ~350px wide. The collision pass alone still fits dozens of
+    // names into that, which is the mat of text the cap exists to prevent — so
+    // the budget is a function of the room available, not a constant.
+    const withScreen = (narrow, full, fn) => {
+        const { labelBudget, labelTop } = load();
+        globalThis.isNarrowScreen = () => narrow;
+        globalThis._chartFull = { specId: full ? 'chart-a' : null };
+        try { fn({ labelBudget, labelTop }); } finally {
+            delete globalThis.isNarrowScreen;
+            delete globalThis._chartFull;
+        }
+    };
+
+    test('a phone prints far fewer than a desktop', () => {
+        withScreen(true, false, ({ labelBudget }) => assert.equal(labelBudget(), 22));
+        withScreen(false, false, ({ labelBudget }) => assert.equal(labelBudget(), LABEL_CANDIDATES_EXPECTED));
+    });
+
+    test('the fullscreen viewer gets the full budget back on a phone', () => {
+        // The overlay IS a full screen, so the reason for narrowing is gone.
+        withScreen(true, true, ({ labelBudget }) => assert.equal(labelBudget(), LABEL_CANDIDATES_EXPECTED));
+    });
+
+    test('headless — neither helper defined — never narrows', () => {
+        // The builders run in this very file with no viewport and no overlay.
+        const { labelBudget } = load();
+        assert.equal(labelBudget(), LABEL_CANDIDATES_EXPECTED);
+    });
+
+    test('only the budgeted points carry a printable name', () => {
+        withScreen(true, false, ({ labelTop }) => {
+            const pts = Array.from({ length: 40 }, (_, i) => ({ name: `P${i}`, x: i, y: i }));
+            const labelled = labelTop(pts, p => p.y).filter(p => p.label);
+            assert.equal(labelled.length, 22);
+            // Highest-scoring first: the collision pass keeps the earlier label
+            // of a colliding pair, so "earlier" has to mean "more worth naming".
+            assert.equal(labelled[0].label, 'P39');
+        });
+    });
+});
+
+const LABEL_CANDIDATES_EXPECTED = 120;
 
 describe('negative axis ticks on an RTL page', () => {
     test('a negative number is wrapped so it does not render as "25-"', () => {

@@ -9940,12 +9940,33 @@ const CHART_LINE_PALETTE = ['#6366f1', '#ea580c', '#059669', '#0891b2',
  * far more than ever survive it anyway.
  */
 const LABEL_CANDIDATES = 120;
+
+/**
+ * The candidate count is a function of how much room the plot has, not a
+ * constant. 120 candidates into a 340px-tall phone card still survives the
+ * collision pass a few dozen times over, and a few dozen names in that space is
+ * the "solid mat of text" described above — the exact thing the cap exists to
+ * prevent. A phone gets 22; the fullscreen viewer is a full screen, so it gets
+ * the desktop budget back while it is open.
+ */
+/* Both guards are `typeof` rather than plain reads: the builders are also run
+   headless by the chart-builder tests, where neither the overlay state nor the
+   viewport helper exists. Anything that is not demonstrably a phone gets the
+   full budget, so the narrowing can only ever happen on a real narrow screen. */
+function labelBudget() {
+    const full = typeof _chartFull !== 'undefined' && _chartFull.specId;
+    if (full) return LABEL_CANDIDATES;
+    if (typeof isNarrowScreen !== 'function' || !isNarrowScreen()) return LABEL_CANDIDATES;
+    return 22;
+}
+
 function labelTop(points, score) {
+    const budget = labelBudget();
     const ranked = [...points].sort((a, b) => score(b) - score(a));
     // An explicit empty `label` rather than just omitting the name: the formatter
     // falls back to the club when there is no player name, so leaving it off
     // printed a chart labelled with twenty repetitions of "Arsenal".
-    return ranked.map((pt, i) => ({ ...pt, label: i < LABEL_CANDIDATES ? pt.name : '' }));
+    return ranked.map((pt, i) => ({ ...pt, label: i < budget ? pt.name : '' }));
 }
 
 /**
@@ -11111,9 +11132,16 @@ function ensureChartCards() {
     grid.innerHTML = CHART_SPECS.map(spec => `
         <section class="chart-card" id="card-${spec.id}">
             <header class="chart-head">
-                <div>
-                    <h3 class="chart-title">${spec.title}</h3>
-                    <p class="chart-note">${chartNote(spec)}</p>
+                <div class="chart-title-row">
+                    <div>
+                        <h3 class="chart-title">${spec.title}</h3>
+                        <p class="chart-note">${chartNote(spec)}</p>
+                    </div>
+                    <!-- Phone-only (hidden by CSS above 768px): the card is a
+                         thumbnail on a phone, and this is how it is read. -->
+                    <button type="button" class="chart-expand"
+                        onclick="openChartFull('${spec.id}')"
+                        aria-label="הגדלת הגרף למסך מלא">⤢</button>
                 </div>
                 ${spec.positions ? `<div class="chart-seg" role="group" aria-label="עמדה">
                     ${Object.keys(POSITION_MATRIX).map(pos => `
@@ -11233,7 +11261,114 @@ function renderCharts() {
         if (spec.id === 'chart-trend') _trendHover = { chartId: null, index: null };
         charts[spec.id] = new Chart(canvas.getContext('2d'), config);
     });
+
+    // The open chart is drawn from the same specs and the same rows, so a
+    // filter change behind the overlay has to reach it too.
+    if (_chartFull.specId) drawChartFull();
 }
+
+/* --------------------------- fullscreen chart ----------------------------- */
+/*
+ * A phone card is 340px tall and about 350px wide. That is a legible preview of
+ * a bar chart and a thumbnail of a 500-point scatter — the labels have nowhere
+ * to go, which is what makes the inline version hard to read no matter how much
+ * height it is given. So the card stays a preview and this is where a chart is
+ * actually read: the same spec, rebuilt against the same filtered rows, into
+ * the whole viewport.
+ *
+ * It holds a spec id rather than a chart instance, because the underlying rows
+ * change while it is open (a filter, a position switch) and the chart is thrown
+ * away and rebuilt on every render.
+ */
+const _chartFull = { specId: null, chart: null };
+
+/** The rows the charts are drawn from — one definition, shared with renderCharts. */
+function currentChartData() {
+    return Array.isArray(state.filteredData)
+        ? state.filteredData
+        : (state.displayedData || state.allPlayersData[state.currentDataSource].processed);
+}
+
+/** (Re)draw whatever spec the overlay is showing. */
+function drawChartFull() {
+    const spec = CHART_SPECS.find(s => s.id === _chartFull.specId);
+    const canvas = document.getElementById('chartFullCanvas');
+    if (!spec || !canvas) return;
+
+    if (_chartFull.chart) {
+        _chartFull.chart.destroy();
+        _chartFull.chart = null;
+    }
+
+    let config = null;
+    try {
+        const scoped = scopeToFacet(spec, currentChartData());
+        config = spec.build(scoped, chartFacetValue(spec));
+    } catch (e) {
+        console.warn(`⚠️ fullscreen chart ${spec.id} failed to build`, e);
+    }
+    if (!config) { closeChartFull(); return; }
+
+    // cardHeight is the inline card's "grow inside your slot" request. Here the
+    // slot IS the screen, so the flex box owns the height and the hint is
+    // dropped rather than applied — honouring it would pin a 1200px canvas
+    // inside a 700px overlay.
+    delete config.cardHeight;
+
+    _chartFull.chart = new Chart(canvas.getContext('2d'), config);
+}
+
+function openChartFull(specId) {
+    const spec = CHART_SPECS.find(s => s.id === specId);
+    const overlay = document.getElementById('chartFull');
+    if (!spec || !overlay) return;
+
+    _chartFull.specId = specId;
+    const title = document.getElementById('chartFullTitle');
+    if (title) title.textContent = spec.title;
+
+    overlay.hidden = false;
+    // The page behind must not scroll under the overlay — on iOS a touch that
+    // starts on the canvas otherwise drags the document.
+    document.body.style.overflow = 'hidden';
+
+    // After the unhide, so the canvas has measured its flex height. Drawing into
+    // a display:none box is the zero-height layout the inline cards guard against.
+    requestAnimationFrame(drawChartFull);
+}
+
+function closeChartFull() {
+    const overlay = document.getElementById('chartFull');
+    if (_chartFull.chart) {
+        _chartFull.chart.destroy();
+        _chartFull.chart = null;
+    }
+    _chartFull.specId = null;
+    if (overlay) overlay.hidden = true;
+    document.body.style.overflow = '';
+}
+
+/* Rotating the phone is the point of the landscape hint, so the open chart has
+   to follow the viewport. `resize` rather than `orientationchange` alone:
+   orientationchange does not fire for the other things that change the box —
+   the mobile browser hiding its chrome, a desktop window drag, a headless
+   viewport change — and it fires *before* the new dimensions are readable on
+   some browsers. Debounced because a rotation emits a burst of them.
+
+   A rebuild, not chart.resize(): the overlay's label budget differs from the
+   card's, and a resize would re-fit the old label set into the new box. */
+let _chartFullResize = null;
+function scheduleChartFullResize() {
+    if (!_chartFull.specId) return;
+    clearTimeout(_chartFullResize);
+    _chartFullResize = setTimeout(drawChartFull, 180);
+}
+window.addEventListener('resize', scheduleChartFullResize);
+window.addEventListener('orientationchange', scheduleChartFullResize);
+
+document.addEventListener('keydown', e => {
+    if (e.key === 'Escape' && _chartFull.specId) closeChartFull();
+});
 
 // ============================================
 // VIEW SWITCHING

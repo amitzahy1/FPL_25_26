@@ -979,6 +979,21 @@
             onclick="toggleMobileSheet()"><span>☰</span>עוד</button>
     </nav>
 
+    <!-- FULLSCREEN CHART VIEWER
+         A 500-point scatter in a 260px card on a 360px screen is a thumbnail,
+         not a chart. Tapping the ⤢ on any card redraws that same chart — same
+         spec, same filtered rows — into the whole viewport, where the labels
+         have somewhere to go. Built empty; script.js owns everything in it. -->
+    <div class="chart-full" id="chartFull" hidden>
+        <div class="cf-bar">
+            <h2 class="cf-title" id="chartFullTitle"></h2>
+            <button type="button" class="cf-close" id="chartFullClose"
+                onclick="closeChartFull()" aria-label="סגירה">✕</button>
+        </div>
+        <p class="cf-hint" id="chartFullHint">סובבו את המכשיר לרוחב לתצוגה רחבה יותר</p>
+        <div class="cf-canvas"><canvas id="chartFullCanvas"></canvas></div>
+    </div>
+
     <div class="mobile-sheet" id="mobileSheet" hidden>
         <div class="ms-backdrop" onclick="toggleMobileSheet(false)"></div>
         <div class="ms-panel" role="dialog" aria-label="עוד פעולות">
