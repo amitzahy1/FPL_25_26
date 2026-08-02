@@ -282,6 +282,35 @@ try {
     check(tabs.every(([, okTab]) => okTab),
         `draft sub-tabs switch cleanly (${tabs.filter(([, o]) => o).length}/${tabs.length})`);
 
+    // Every network call is blocked in this run, so the draft tab is in exactly
+    // the failed state that used to write its message into #draftTabContent's own
+    // innerHTML — deleting the sub-navigation and every container below it. Once
+    // that had happened the tab was broken for the rest of the session even if a
+    // later load succeeded, and the page opened onto it looking like a dead site.
+    const notice = await page.evaluate(async () => {
+        showTab('draft');
+        await new Promise(r => setTimeout(r, 400));
+        const el = document.getElementById('draftNotice');
+        return {
+            noticeExists: !!el,
+            shown: !!el && !el.hidden,
+            hasWayOut: !!document.querySelector('#draftNotice button'),
+            subNavSurvived: !!document.getElementById('draftSubNav'),
+            childIds: document.querySelectorAll('#draftTabContent [id]').length
+        };
+    });
+    check(notice.noticeExists && notice.shown, 'the draft tab explains itself when it cannot load');
+    check(notice.subNavSurvived && notice.childIds > 5,
+        `the notice leaves the tab's markup intact (${notice.childIds} elements still present)`);
+    check(notice.hasWayOut, 'the notice offers a way back to the players tab');
+
+    // And the players tab must still be fully usable afterwards.
+    const stillFine = await page.evaluate(() => {
+        showTab('players');
+        return document.querySelectorAll('#playersTableBody tr.player-row').length;
+    });
+    check(stillFine > 0, `players table still renders ${stillFine} rows after a draft failure`);
+
     // הגדרות is in the always-visible page header, so it has to work from either
     // tab. It used to live inside #playersTabContent and did nothing at all from
     // the draft tab — a hidden parent hides the modal with it.

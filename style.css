@@ -5697,6 +5697,12 @@ canvas {
 
 .hype-flag { margin-inline-start: 3px; font-size: 11px; }
 
+/* While the draft game is down or the league id is stale, the tab shows only its
+   notice — but the markup underneath stays in the document, so a later load
+   renders into it normally. Replacing the tab's innerHTML instead meant the
+   first failure deleted the sub-nav and every container below it for good. */
+#draftTabContent.draft-unavailable > *:not(#draftNotice) { display: none !important; }
+
 .status-departed {
     background: #e2e8f0;
     color: #475569;

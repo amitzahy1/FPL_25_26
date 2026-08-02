@@ -325,6 +325,11 @@ const state = {
         ownershipByFplId: new Map(),
         ownershipLoaded: false,   // false => fall back to diffing rosters
         draftHasHappened: false,  // element-status shows at least one owner
+        // The Draft game is closed for the season rollover, or the league id is
+        // last season's. Either way the tab can only explain itself, so the page
+        // must not open on it — see the landing-tab choice in init().
+        apiMaintenance: false,
+        leagueMissing: false,
         // entry/{id}/history: real per-gameweek totals, replacing an estimate.
         historyByEntryId: new Map(),
         // draft/{league}/choices and draft/league/{id}/transactions.
@@ -1149,7 +1154,19 @@ async function init() {
 
     setupEventListeners();
     const lastTab = localStorage.getItem('fplToolActiveTab');
-    if (lastTab) {
+    // Between seasons the draft tab has nothing to show but an explanation, and
+    // it is the tab most people were last on — so the site opened looking dead
+    // while the whole of last season sat one click away. Open on the players tab
+    // instead, and keep the remembered preference so the draft tab comes back on
+    // its own once the game does.
+    const draftIsDown = state.draft.apiMaintenance || state.draft.leagueMissing;
+    if (lastTab === 'draft' && draftIsDown) {
+        showTab('players');
+        localStorage.setItem('fplToolActiveTab', 'draft');
+        showToast('ליגת הדראפט סגורה כרגע',
+            `משחק הדראפט של FPL בין עונות — פתחנו בנתוני ${SEASON_CONFIG.previousSeasonLabel}`,
+            'info', 6000);
+    } else if (lastTab) {
         showTab(lastTab);
     }
     initializeTooltips();
@@ -6949,7 +6966,13 @@ async function _loadDraftDataInBackground() {
                 + (ranked ? ` · FPL draft rank for ${ranked}` : ''));
         }
     } catch (error) {
-        if (error && error.code === 'NOT_FOUND') {
+        // Recorded, not just logged: init() reads these to decide which tab the
+        // page opens on, and a tab that can only apologise is not one to land on.
+        if (error && error.code === 'GAME_UPDATING') {
+            state.draft.apiMaintenance = true;
+            console.log('⏸️ Draft game closed for the season rollover — league data skipped');
+        } else if (error && error.code === 'NOT_FOUND') {
+            state.draft.leagueMissing = true;
             console.log(`⏸️ Draft league ${state.draft.leagueId} does not exist —`
                 + ' set the new season\'s league id in settings or with ?league=');
         } else {
@@ -6963,6 +6986,8 @@ async function _loadDraftDataInBackground() {
 
 async function loadDraftLeague() {
     showLoading('טוען ליגת דראפט...');
+    // A previous attempt may have left a notice up; this one gets to succeed.
+    clearDraftNotice();
     const draftContainer = document.getElementById('draftTabContent');
     const sectionsToClear = ['draftStandingsContent', 'draftRecommendations', 'draftAnalytics', 'draftComparison', 'draftMatrices'];
 
@@ -7222,8 +7247,12 @@ async function loadDraftLeague() {
         } else if (e && e.code === 'NOT_FOUND') {
             renderDraftLeagueNotFoundNotice(draftContainer, config.draftLeagueId);
         } else {
+            // Also through the notice, and for the same reason: writing the error
+            // into the tab's own innerHTML deleted the sub-navigation and every
+            // container below it, so a transient network blip permanently broke
+            // the tab for the rest of the session.
             console.error('loadDraftLeague error', e);
-            draftContainer.innerHTML = `<div style="text-align:center; padding: 20px; color: red;">שגיאה בטעינת נתוני הליגה: ${e.message}</div>`;
+            renderDraftErrorNotice(draftContainer, e.message);
             showToast('שגיאה בטעינת הליגה', e.message, 'error', 5000);
         }
     } finally {
@@ -7231,16 +7260,58 @@ async function loadDraftLeague() {
     }
 }
 
-/** Shared shell for the two states that are answers rather than errors. */
-function renderDraftNotice(container, { icon, title, body }) {
-    if (!container) return;
-    container.innerHTML = `
+/**
+ * Shared shell for the two states that are answers rather than errors.
+ *
+ * Renders into #draftNotice and hides its siblings with a class. The first
+ * version wrote straight into #draftTabContent, which deleted every element
+ * below it — the sub-navigation, the standings, the roster containers — so once
+ * the notice had shown once, nothing could render into the tab again without a
+ * page reload, even after the league loaded fine.
+ *
+ * Every notice ends with a way out. Landing on this tab and finding only an
+ * explanation reads as a dead site, when in fact the whole of last season is one
+ * click away on the players tab.
+ */
+function renderDraftNotice(_container, { icon, title, body }) {
+    const notice = document.getElementById('draftNotice');
+    const tab = document.getElementById('draftTabContent');
+    if (!notice) return;
+
+    notice.innerHTML = `
         <div style="max-width: 640px; margin: 40px auto; padding: 28px; text-align: center;
-                    background: var(--card-bg, rgba(255,255,255,0.05)); border-radius: 12px;">
+                    background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px;">
             <div style="font-size: 42px; margin-bottom: 12px;">${icon}</div>
             <h3 style="margin: 0 0 12px;">${title}</h3>
             ${body}
+            <button onclick="showTab('players')"
+                style="margin-top: 18px; padding: 11px 22px; border: none; border-radius: 10px;
+                       background: #3b82f6; color: #fff; font-weight: 800; font-size: 15px; cursor: pointer;">
+                ← לנתוני ${SEASON_CONFIG.previousSeasonLabel} ולהכנה לדראפט
+            </button>
         </div>`;
+    notice.hidden = false;
+    if (tab) tab.classList.add('draft-unavailable');
+}
+
+/** A genuine failure — still non-destructive, and still offers the way out. */
+function renderDraftErrorNotice(container, message) {
+    renderDraftNotice(container, {
+        icon: '⚠️',
+        title: 'שגיאה בטעינת נתוני הליגה',
+        body: `<p style="margin: 0; line-height: 1.6;">${escapeHtml(message || '')}</p>
+            <p style="margin: 10px 0 0; line-height: 1.6; color: #64748b; font-size: 13px;">
+                נסו לרענן את הדף. טאב השחקנים ממשיך לעבוד בכל מקרה.
+            </p>`
+    });
+}
+
+/** Put the tab back the way it was, so a later load renders normally. */
+function clearDraftNotice() {
+    const notice = document.getElementById('draftNotice');
+    const tab = document.getElementById('draftTabContent');
+    if (notice) { notice.innerHTML = ''; notice.hidden = true; }
+    if (tab) tab.classList.remove('draft-unavailable');
 }
 
 // The between-seasons state is not an error: draft.premierleague.com takes the
