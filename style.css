@@ -1352,6 +1352,29 @@ tbody tr:last-child td {
 
 .lb-scroll { overflow-x: auto; }
 
+/* --- sortable leaderboard headers ---
+   The base .db-tbl th is `cursor: help`, which is right for the card (the header
+   only explains itself) and wrong here, where it also does something. */
+.db-tbl.is-modal th.lb-sortable {
+    cursor: pointer;
+    user-select: none;
+    transition: color .12s, background .12s;
+}
+
+.db-tbl.is-modal th.lb-sortable:hover {
+    color: var(--accent);
+    background: #f8fbff;
+}
+
+.db-tbl.is-modal th.lb-sortable.is-sorted { color: var(--accent); }
+
+.lb-arrow {
+    margin-inline-start: 3px;
+    font-style: normal;
+    font-size: 7.5px;
+    vertical-align: 1px;
+}
+
 /* Player Comparison Styles */
 .comparison-header {
     text-align: center;

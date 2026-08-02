@@ -5041,50 +5041,69 @@ function compositePart(p, key) {
  * drift apart and every header sits over the values it names — the alignment was
  * off precisely because the header row and the value row were built separately.
  */
+// `get` renders, `sort` orders. They are separate on purpose: get() returns what
+// the cell prints — '–' for absent, '#12' for a rank, '+1.7' for a VORP — and
+// sorting a column by parsing that back out of the string is how a leaderboard
+// ends up ordering '#9' after '#10'. `asc: true` marks the columns where a low
+// number is the good one, so the first click on them opens on the best players
+// rather than the worst.
 const BOARD_COLS = {
     ppg: {
         label: 'נק׳/מש׳', title: 'נקודות לכל הופעה, על פני העונה',
-        get: p => { const v = seasonPointsPerApp(p); return v === null ? '–' : v.toFixed(1); }
+        get: p => { const v = seasonPointsPerApp(p); return v === null ? '–' : v.toFixed(1); },
+        sort: p => seasonPointsPerApp(p)
     },
     apps: {
         label: 'מש׳', title: 'סה״כ הופעות — המכנה של כל אחוז בשורה', soft: true,
-        get: p => appearancesOf(p)
+        get: p => appearancesOf(p),
+        sort: p => appearancesOf(p)
     },
     mins: {
         label: 'דק׳', title: 'דקות לכל הופעה', soft: true,
-        get: p => { const a = appearancesOf(p); return a ? Math.round((p.minutes || 0) / a) : '–'; }
+        get: p => { const a = appearancesOf(p); return a ? Math.round((p.minutes || 0) / a) : '–'; },
+        sort: p => { const a = appearancesOf(p); return a ? (p.minutes || 0) / a : null; }
     },
     fpl: {
         label: 'FPL', title: 'הדירוג הרשמי של FPL Draft (1 = הטוב ביותר)', soft: true,
-        get: p => p.draft_rank ? `#${p.draft_rank}` : '–'
+        get: p => p.draft_rank ? `#${p.draft_rank}` : '–',
+        sort: p => p.draft_rank || null, asc: true
     },
     dc90: {
         label: 'DC/90', title: 'תרומה הגנתית לכל 90 דקות',
-        get: p => num1(p.def_contrib_per90) === null ? '–' : num1(p.def_contrib_per90).toFixed(1)
+        get: p => num1(p.def_contrib_per90) === null ? '–' : num1(p.def_contrib_per90).toFixed(1),
+        sort: p => num1(p.def_contrib_per90)
     },
     xdiff: {
         label: 'פער', title: 'שערים ובישולים בפועל פחות הצפוי — שלילי = צפוי לתקן כלפי מעלה',
-        get: p => Number.isFinite(p.xDiff) ? p.xDiff.toFixed(1) : '–'
+        get: p => Number.isFinite(p.xDiff) ? p.xDiff.toFixed(1) : '–',
+        // Ascending: the most negative is the strongest bounce-back case, which
+        // is the whole reason the column is on the board.
+        sort: p => Number.isFinite(p.xDiff) ? p.xDiff : null, asc: true
     },
     vorp: {
         label: 'יתרון', title: 'נקודות למשחק מעל השחקן החופשי הטוב ביותר באותה עמדה',
-        get: p => formatVorp(p.vorp)
+        get: p => formatVorp(p.vorp),
+        sort: p => Number.isFinite(p.vorp) ? p.vorp : null
     },
     partOutput: {
         label: 'תפוקה%', title: 'נקודות למשחק כאחוז מחציון 20 הטובים בעמדה (100 = בדיוק ברמת העילית)',
-        get: p => partPct(p, 'output')
+        get: p => partPct(p, 'output'),
+        sort: p => compositePart(p, 'output')
     },
     partMinutes: {
         label: 'דקות%', title: 'דקות להופעה כאחוז מחציון 20 הטובים בעמדה',
-        get: p => partPct(p, 'minutes')
+        get: p => partPct(p, 'minutes'),
+        sort: p => compositePart(p, 'minutes')
     },
     partAttack: {
         label: 'התק׳%', title: 'xGI ל-90 כאחוז מחציון 20 הטובים בעמדה',
-        get: p => partPct(p, 'attack')
+        get: p => partPct(p, 'attack'),
+        sort: p => compositePart(p, 'attack')
     },
     partDefence: {
         label: 'הגנה%', title: 'אחוז DEFCON כאחוז מחציון 20 הטובים בעמדה — שוער לא נמדד בזה',
-        get: p => partPct(p, 'defence')
+        get: p => partPct(p, 'defence'),
+        sort: p => compositePart(p, 'defence')
     }
 };
 
@@ -5413,14 +5432,77 @@ function panelPicks(panel, pool, limit) {
  * A table with a header row solves all three at once, and the same builder draws
  * the top-20 modal so the two cannot look different.
  */
-function panelTableHtml(panel, picks, { modal = false } = {}) {
-    const keys = modal && panel.modalCols ? panel.modalCols : (panel.cols || []);
-    const cols = keys.map(key => BOARD_COLS[key]).filter(Boolean);
+/**
+ * Every column the leaderboard modal can be ordered by, keyed by the token its
+ * header carries. Built from the same panel and the same BOARD_COLS entries the
+ * table renders from, so a column can never appear with no way to sort it — or
+ * sort by something other than what it shows.
+ */
+function leaderboardSorters(panel, keys) {
+    const sorters = {
+        name: { get: p => p.web_name || '', text: true, asc: true },
+        key: { get: p => panel.metric(p), asc: false },
+        spark: { get: p => summariseTrend(getTrendSeries(p.id, 'pts', 'recent'), 'sum'), asc: false },
+        // Ascending: rank 1 is the most actionable verdict.
+        signal: { get: p => signalRank(p), asc: true }
+    };
+    for (const k of keys) {
+        const c = BOARD_COLS[k];
+        if (c && c.sort) sorters[`col:${k}`] = { get: c.sort, asc: !!c.asc };
+    }
+    return sorters;
+}
+
+/**
+ * Order the twenty by a chosen column. Players the column cannot speak about
+ * sink to the bottom in both directions — flipping to ascending should surface
+ * the smallest real value, not the players with no value at all.
+ */
+function sortLeaderboardPicks(picks, sorter, dir) {
+    const read = p => { try { return sorter.get(p); } catch { return null; } };
+    const blank = v => v === null || v === undefined || v === '' || (typeof v === 'number' && !Number.isFinite(v));
+    return [...picks].sort((a, b) => {
+        const x = read(a), y = read(b);
+        if (blank(x) && blank(y)) return 0;
+        if (blank(x)) return 1;
+        if (blank(y)) return -1;
+        if (sorter.text) {
+            return dir === 'asc' ? String(x).localeCompare(String(y)) : String(y).localeCompare(String(x));
+        }
+        return dir === 'asc' ? x - y : y - x;
+    });
+}
+
+function panelTableHtml(panel, picks, { modal = false, sortKey = null, sortDir = 'desc' } = {}) {
+    const requested = modal && panel.modalCols ? panel.modalCols : (panel.cols || []);
+    // Key and descriptor kept together. Filtering the descriptors alone and then
+    // indexing back into the key list by position silently pairs a column with
+    // the wrong key the moment one of them is unknown.
+    const pairs = requested.map(key => [key, BOARD_COLS[key]]).filter(([, c]) => c);
+    const keys = pairs.map(([key]) => key);
+    const cols = pairs.map(([, c]) => c);
+
+    // Only the modal is sortable: the card shows three rows chosen by the
+    // panel's own rule, and re-ordering three rows answers nothing.
+    const sorters = modal ? leaderboardSorters(panel, keys) : {};
+    const th = (token, label, { cls = '', title = '' } = {}) => {
+        const attrs = `${cls ? ` class="${cls}${sorters[token] ? ' lb-sortable' : ''}${sortKey === token ? ' is-sorted' : ''}"`
+            : sorters[token] ? ` class="lb-sortable${sortKey === token ? ' is-sorted' : ''}"` : ''}`;
+        if (!sorters[token]) return `<th${attrs} title="${escapeHtml(title)}">${escapeHtml(label)}</th>`;
+        const arrow = sortKey === token ? `<i class="lb-arrow">${sortDir === 'asc' ? '▲' : '▼'}</i>` : '';
+        const hint = title ? `${title} — ` : '';
+        return `<th${attrs} data-lbsort="${escapeHtml(token)}"`
+            + ` onclick="sortLeaderboard('${escapeHtml(token)}')"`
+            + ` title="${escapeHtml(hint)}לחצו כדי למיין לפי העמודה הזו">${escapeHtml(label)}${arrow}</th>`;
+    };
+
     const head = `<tr>
-        <th class="db-th-name">שחקן</th>
-        <th class="db-th-key" title="${escapeHtml(panel.subtitle)}">${escapeHtml(panel.unit)}</th>
-        ${cols.map(c => `<th title="${escapeHtml(c.title)}">${escapeHtml(c.label)}</th>`).join('')}
-        ${modal ? '<th class="db-th-spark">5 מחזורים</th><th class="db-th-why">למה</th><th>סיגנל</th>' : ''}
+        ${th('name', 'שחקן', { cls: 'db-th-name' })}
+        ${th('key', panel.unit, { cls: 'db-th-key', title: panel.subtitle })}
+        ${cols.map((c, i) => th(`col:${keys[i]}`, c.label, { title: c.title })).join('')}
+        ${modal ? `${th('spark', '5 מחזורים', { cls: 'db-th-spark' })}
+            <th class="db-th-why">למה</th>
+            ${th('signal', 'סיגנל')}` : ''}
     </tr>`;
 
     const body = picks.map((p, i) => {
@@ -5508,6 +5590,11 @@ const POSITION_LABELS = { GKP: 'שוערים', DEF: 'מגנים', MID: 'קשרי
  * it. Same rule, same pool, same "why" sentence — twenty deep, with the draft
  * team and the signal verdict alongside, so the answer does not need the table.
  */
+// What the open leaderboard is showing. The twenty are kept here rather than
+// recomputed per click: re-running panelPicks would re-read the pool, and a
+// re-sort must reorder the same twenty players, not quietly swap the cast.
+let _leaderboard = { panelId: null, picks: [], freeAgentsOnly: false, sortKey: null, sortDir: 'desc' };
+
 function openLeaderboard(panelId) {
     const panel = DRAFT_PANELS.find(p => p.id === panelId);
     const modal = document.getElementById('leaderboardModal');
@@ -5516,6 +5603,44 @@ function openLeaderboard(panelId) {
 
     const { players, freeAgentsOnly } = draftBoardPool();
     const picks = panelPicks(panel, players, 20);
+    // sortKey null = the order the panel's own rule produced. Sorting by the key
+    // column instead would look equivalent and is not: a panel ranks by
+    // panel.rank, which is free to break ties differently from its metric.
+    _leaderboard = { panelId, picks, freeAgentsOnly, sortKey: null, sortDir: 'desc' };
+
+    renderLeaderboard();
+    modal.style.display = 'block';
+}
+
+/**
+ * Re-order the open leaderboard by one of its columns. A second click on the
+ * same column reverses it; moving to a new one opens on that column's good end,
+ * which is not always the high end — see `asc` in BOARD_COLS.
+ */
+function sortLeaderboard(token) {
+    const panel = DRAFT_PANELS.find(p => p.id === _leaderboard.panelId);
+    if (!panel) return;
+    const keys = (panel.modalCols || panel.cols || []).filter(k => BOARD_COLS[k]);
+    const sorter = leaderboardSorters(panel, keys)[token];
+    if (!sorter) return;
+
+    _leaderboard.sortDir = _leaderboard.sortKey === token
+        ? (_leaderboard.sortDir === 'asc' ? 'desc' : 'asc')
+        : (sorter.asc ? 'asc' : 'desc');
+    _leaderboard.sortKey = token;
+    renderLeaderboard();
+}
+
+function renderLeaderboard() {
+    const panel = DRAFT_PANELS.find(p => p.id === _leaderboard.panelId);
+    const host = document.getElementById('leaderboardContent');
+    if (!panel || !host) return;
+
+    const { picks, freeAgentsOnly, sortKey, sortDir } = _leaderboard;
+    const sorters = leaderboardSorters(panel, (panel.modalCols || panel.cols || []).filter(k => BOARD_COLS[k]));
+    const rows = sortKey && sorters[sortKey]
+        ? sortLeaderboardPicks(picks, sorters[sortKey], sortDir)
+        : picks;
 
     // Same builder as the card, so the twenty read exactly like the three — one
     // set of headers, one column order, one alignment. The modal adds the reason
@@ -5530,15 +5655,13 @@ function openLeaderboard(panelId) {
             <span>
                 <h2>${panel.title}</h2>
                 <p>${panel.subtitle} · ${freeAgentsOnly ? 'שחקנים חופשיים בלבד' : 'כל השחקנים'}
-                    · ${picks.length} מועמדים</p>
+                    · ${picks.length} מועמדים${sortKey ? ' · ממוין לפי העמודה שנבחרה' : ''}</p>
             </span>
         </header>
         ${picks.length
-        ? `<div class="lb-scroll">${panelTableHtml(panel, picks, { modal: true })}</div>`
+        ? `<div class="lb-scroll">${panelTableHtml(panel, rows, { modal: true, sortKey, sortDir })}</div>`
         : `<p class="db-empty">${panel.emptyNote || 'אין מועמדים לפי הכלל הזה'}</p>`}
       </div>`;
-
-    modal.style.display = 'block';
 }
 
 /** Open a player's row in the table, from anywhere. */

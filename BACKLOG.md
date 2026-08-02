@@ -67,6 +67,16 @@ Status as of the 2026/27 pre-season overhaul. Items are ordered by value, not by
         flagged and excluded from the board pool. Salah, Bowen, Casemiro and
         Trossard all ranked top-20 for a league they are no longer in.
       - Three chips: 🔺 השוק מצפה לקפיצה, 🔻 מתחת לרדאר, 💸 עלו במחיר.
+- [x] Every column of a panel's top-20 modal sorts by clicking its header, by the
+      figure the cell holds rather than the string it prints (`sort` next to `get`
+      in `BOARD_COLS`, so `#9` cannot order after `#10`). A column whose good end
+      is the low one — the FPL rank, xDiff — opens ascending. 24 sortable columns
+      across the six leaderboards are driven and checked by the smoke test.
+- [x] Board headers were aligned by a different ruler than their values: one
+      `text-align: end` resolving to opposite edges because the value cells are
+      `direction: ltr` and the headers inherit the page's RTL. Up to 59px of
+      drift, invisible to `table-layout: fixed` because the cell boxes agreed and
+      only the text inside them was off.
 
 ## Pre-draft, still open
 

@@ -273,6 +273,52 @@ try {
     check(modal.rows > 0 && modal.whys === modal.rows,
         `every one of ${modal.rows} rows in the modal carries a reason`);
 
+    // Every column in the top-20 must be orderable by clicking its header, and
+    // must order by the figure it prints rather than by the string it prints —
+    // sorting '#9' after '#10' is the classic way this goes wrong. Direction is
+    // not assumed: a rank and an xDiff open on their LOW end, because that is
+    // their good end.
+    const sorting = await page.evaluate(() => {
+        const ids = [...new Set([...document.querySelectorAll('#draftBoard [onclick*="openLeaderboard"]')]
+            .map(el => (el.getAttribute('onclick').match(/openLeaderboard\('([^']+)'\)/) || [])[1])
+            .filter(Boolean))];
+        const num = s => { const m = String(s).match(/-?\d+(\.\d+)?/); return m ? parseFloat(m[0]) : null; };
+        const mono = (a, dir) => a.every((v, i) => i === 0
+            || (dir === 'desc' ? v <= a[i - 1] + 1e-9 : v >= a[i - 1] - 1e-9));
+        const broken = [];
+        let checked = 0, panels = 0;
+
+        for (const id of ids) {
+            window.openLeaderboard(id);
+            panels++;
+            const ths = [...document.querySelectorAll('#leaderboardContent thead th')];
+            const sortable = ths.map((th, i) => [i, th.dataset.lbsort, th.textContent.trim()])
+                .filter(([, token]) => token);
+            if (!sortable.length) { broken.push(`${id}: no sortable header`); continue; }
+
+            for (const [idx, token, label] of sortable) {
+                if (token === 'spark' || token === 'name') continue;
+                const read = () => [...document.querySelectorAll('#leaderboardContent tbody tr')]
+                    .map(tr => num(tr.children[idx]?.innerText || '')).filter(v => v !== null);
+                window.sortLeaderboard(token);
+                const first = read();
+                window.sortLeaderboard(token);
+                const second = read();
+                if (!first.length) continue;            // nothing to order (e.g. no draft_rank yet)
+                checked++;
+                const firstOk = mono(first, 'desc') || mono(first, 'asc');
+                const secondOk = mono(second, 'desc') || mono(second, 'asc');
+                const reversed = first.length < 2 || mono(first, 'desc') !== mono(second, 'desc');
+                if (!firstOk || !secondOk || !reversed) broken.push(`${id}/${label}`);
+            }
+        }
+        window.closeModal();
+        return { panels, checked, broken };
+    });
+    check(sorting.checked > 0 && sorting.broken.length === 0,
+        `all ${sorting.checked} sortable columns across ${sorting.panels} leaderboards order by value and reverse`
+        + `${sorting.broken.length ? `: ${sorting.broken.join(', ')}` : ''}`);
+
     // The charts view: every card that stays visible must have drawn a chart, and
     // a card with nothing to plot must hide itself rather than show an empty axis.
     const chartsBefore = pageErrors.length;
