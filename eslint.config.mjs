@@ -73,7 +73,8 @@ export default [
                 setFreeAgentsOnly: 'readonly', toggleFreeAgentsOnly: 'readonly',
                 openLeaderboard: 'readonly', sortLeaderboard: 'readonly',
                 signalFor: 'readonly', displayNetTransfers: 'readonly',
-                applyMarketOverlay: 'readonly', processChange: 'readonly'
+                applyMarketOverlay: 'readonly', processChange: 'readonly',
+                setChartFacet: 'readonly', renderCharts: 'readonly'
             }
         }
     },

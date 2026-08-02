@@ -15,12 +15,13 @@ import { loadFunctions } from './helpers/load-script.mjs';
 
 const FNS = [
     'getMatrixChartConfig', 'labelTop', 'chartAxis', 'ltrTick', 'displayNetTransfers',
-    'buildMarketFlowChart', 'buildSignalSpreadChart', 'buildUnderlyingValueChart',
-    'signalLegendHtml'
+    'buildMarketFlowChart', 'buildSignalSpreadChart', 'buildSignalFocusChart',
+    'buildUnderlyingValueChart', 'buildTeamTargetsChart', 'signalLegendHtml',
+    'scopeToFacet', 'chartFacetChipsHtml', 'setChartFacet', 'chartFacetValue'
 ];
 
 const DEPS = ['CHART_TOOLTIP', 'SIGNAL_TONE_COLOR', 'SIGNAL_SORT_ORDER',
-    'SIGNAL_RULES', 'HOLD_SIGNAL'];
+    'SIGNAL_RULES', 'HOLD_SIGNAL', 'CHART_FACETS', 'POSITION_COLOR', 'POSITION_LABELS'];
 
 /** A processed row with everything all three builders read. */
 function row(over = {}) {
@@ -39,10 +40,18 @@ function row(over = {}) {
  * the colours, the jitter — which should not change if a threshold does.
  */
 function load(verdicts = {}) {
-    const state = { currentDataSource: 'historical' };
+    const state = { currentDataSource: 'historical', chartFacets: {} };
     const fns = loadFunctions(FNS, { state }, DEPS);
     globalThis.signalFor = p => verdicts[p.id]
         || { key: 'hold', label: 'ניטרלי', tone: 'muted', why: [] };
+    // Stubbed: the real CHART_SPECS closes over every build function in the
+    // file. setChartFacet only reads it to find out whether a card's facet is a
+    // mode, so two entries are enough to test both branches.
+    globalThis.CHART_SPECS = [
+        { id: 'chart-a', facet: 'position' },
+        { id: 'chart-mode', facet: 'teamSide' }
+    ];
+    globalThis.renderCharts = () => {};
     Object.assign(globalThis, fns);
     return { ...fns, state };
 }
@@ -174,10 +183,135 @@ describe('signal spread chart', () => {
         assert.deepEqual(points(config).map(p => p.y), [62, 30]);
     });
 
-    test('one verdict is not a spread', () => {
+    test('one verdict is not a strip — it spreads across the plot', () => {
+        // The point of narrowing to a category is to read the names, and one
+        // column redrawn in the same 80px strip is the same pile with white
+        // space around it.
         const { buildSignalSpreadChart } = load();
-        assert.equal(buildSignalSpreadChart([row({ id: 1 }), row({ id: 2 })]), null,
-            'every player neutral means there is nothing to compare');
+        const players = [1, 2, 3, 4, 5].map(id => row({ id, draft_score: 40 + id }));
+        const config = buildSignalSpreadChart(players);
+        const pts = points(config);
+
+        assert.deepEqual(pts.map(p => p.x), [1, 2, 3, 4, 5], 'evenly spaced, one per rank');
+        assert.deepEqual(pts.map(p => p.y), [45, 44, 43, 42, 41], 'best first');
+        assert.equal(config.options.scales.x.min, 0);
+        assert.equal(config.options.scales.x.max, 6, 'the full width, not one column');
+        assert.ok(pts.every(p => p.label), 'every player is named, not just the top two');
+    });
+
+    test('the focused view spreads labels over four bands, not two', () => {
+        // Two bands still lost names: points three apart both land on the bottom
+        // row, and a pair of long names is wider than that gap.
+        const { buildSignalSpreadChart } = load();
+        const config = buildSignalSpreadChart([1, 2, 3, 4, 5].map(id => row({ id })));
+        const { align, offset } = config.options.plugins.datalabels;
+        const band = i => `${align({ dataIndex: i })}@${offset({ dataIndex: i })}`;
+        assert.equal(new Set([0, 1, 2, 3].map(band)).size, 4);
+        assert.equal(band(4), band(0), 'and then it repeats');
+    });
+
+    test('the focused axis says which verdict and how many', () => {
+        const { buildSignalSpreadChart } = load({
+            1: verdict('claim', 'קח עכשיו', 'good'),
+            2: verdict('claim', 'קח עכשיו', 'good'),
+            3: verdict('claim', 'קח עכשיו', 'good')
+        });
+        const config = buildSignalSpreadChart([1, 2, 3].map(id => row({ id })));
+        assert.match(config.options.scales.x.title.text, /קח עכשיו/);
+        assert.match(config.options.scales.x.title.text, /3 שחקנים/);
+    });
+
+    test('nobody at all is still nothing to draw', () => {
+        const { buildSignalSpreadChart } = load();
+        assert.equal(buildSignalSpreadChart([]), null);
+        assert.equal(buildSignalSpreadChart([row({ id: 1 })]), null, 'one dot is not a spread');
+    });
+});
+
+describe('per-card categories', () => {
+    const squad = () => [
+        row({ id: 1, position_name: 'DEF' }), row({ id: 2, position_name: 'DEF' }),
+        row({ id: 3, position_name: 'MID' }), row({ id: 4, position_name: 'FWD' })
+    ];
+
+    test('a card narrows to the chosen category and nothing else does', () => {
+        const { scopeToFacet, state } = load();
+        const a = { id: 'chart-a', facet: 'position' };
+        const b = { id: 'chart-b', facet: 'position' };
+        state.chartFacets['chart-a'] = 'DEF';
+
+        assert.equal(scopeToFacet(a, squad()).length, 2);
+        assert.equal(scopeToFacet(b, squad()).length, 4,
+            'the card next to it keeps the whole league');
+    });
+
+    test('a card with no category declared is never narrowed', () => {
+        const { scopeToFacet, state } = load();
+        state.chartFacets['chart-teams'] = 'DEF';
+        assert.equal(scopeToFacet({ id: 'chart-teams' }, squad()).length, 4);
+    });
+
+    test('chips are offered only for categories that are in the data', () => {
+        const { chartFacetChipsHtml } = load();
+        const html = chartFacetChipsHtml({ id: 'c', facet: 'position' },
+            [row({ id: 1, position_name: 'DEF' }), row({ id: 2, position_name: 'MID' })]);
+        assert.match(html, /מגנים/);
+        assert.match(html, /קשרים/);
+        assert.doesNotMatch(html, /שוערים/, 'a chip that empties its own card');
+        assert.match(html, /הכל/, 'and a way back');
+    });
+
+    test('a position the card cannot draw is not offered', () => {
+        // The keeper chip on the xGI card, which excludes keepers by design.
+        const { chartFacetChipsHtml } = load();
+        const html = chartFacetChipsHtml(
+            { id: 'c', facet: 'position', facetOmit: ['GKP'] },
+            [row({ id: 1, position_name: 'GKP' }), row({ id: 2, position_name: 'MID' }),
+                row({ id: 3, position_name: 'DEF' })]);
+        assert.doesNotMatch(html, /שוערים/);
+        assert.match(html, /קשרים/);
+    });
+
+    test('one category is no choice at all, so no chips are drawn', () => {
+        const { chartFacetChipsHtml } = load();
+        assert.equal(chartFacetChipsHtml({ id: 'c', facet: 'position' },
+            [row({ id: 1 }), row({ id: 2 })]), '');
+    });
+
+    test('clicking the live chip clears it', () => {
+        const { setChartFacet, state } = load();
+        setChartFacet('chart-a', 'DEF');
+        assert.equal(state.chartFacets['chart-a'], 'DEF');
+        setChartFacet('chart-a', 'DEF');
+        assert.equal(state.chartFacets['chart-a'], null, 'the chip row is its own way back');
+    });
+
+    test('a mode has no off position', () => {
+        // Clearing a filter shows everything; clearing a mode would leave the
+        // card measuring nothing at all.
+        const { setChartFacet, chartFacetValue, state } = load();
+        const spec = { id: 'chart-mode', facet: 'teamSide' };
+        assert.equal(chartFacetValue(spec), 'att', 'the first option is the default');
+        setChartFacet('chart-mode', 'def');
+        assert.equal(state.chartFacets['chart-mode'], 'def');
+        setChartFacet('chart-mode', 'def');
+        assert.equal(chartFacetValue(spec), 'def', 'still measuring something');
+    });
+
+    test('a mode picks what is measured, not which rows are read', () => {
+        // The team card computes an attack rating from the attackers and a
+        // defence rating from the defenders, so filtering by side would leave
+        // one half with nothing to measure.
+        const { scopeToFacet, state } = load();
+        state.chartFacets['chart-mode'] = 'def';
+        assert.equal(scopeToFacet({ id: 'chart-mode', facet: 'teamSide' }, squad()).length, 4);
+    });
+
+    test('a stale selection falls back to everything rather than an empty card', () => {
+        const { scopeToFacet, state } = load();
+        state.chartFacets['chart-a'] = 'GKP';
+        const scoped = scopeToFacet({ id: 'chart-a', facet: 'position' }, squad());
+        assert.equal(scoped.length, 4, 'no keeper in the data, so the card still draws');
     });
 });
 
@@ -226,11 +360,110 @@ describe('the signal key', () => {
     });
 });
 
+describe('who to target next', () => {
+    /** A club with `n` attackers and `n` defenders, all with enough minutes. */
+    function club(team, { fdr, xgi = 3, xgc = 3, n = 12, mins = 1000 } = {}) {
+        const out = [];
+        for (let i = 0; i < n; i++) {
+            out.push(row({
+                id: `${team}-a${i}`, team_name: team, position_name: 'MID',
+                minutes: mins, next_5_fdr: fdr, expected_goal_involvements: xgi
+            }));
+            out.push(row({
+                id: `${team}-d${i}`, team_name: team, position_name: 'DEF',
+                minutes: mins, next_5_fdr: fdr, expected_goals_conceded: xgc
+            }));
+        }
+        return out;
+    }
+
+    test('x is the five-game fixture run, y is the side being measured', () => {
+        const { buildTeamTargetsChart } = load();
+        const data = [
+            ...club('Easy Attack', { fdr: 2.0, xgi: 6, xgc: 5 }),
+            ...club('Hard Attack', { fdr: 4.4, xgi: 6, xgc: 5 }),
+            ...club('Easy Wall', { fdr: 2.2, xgi: 1, xgc: 1 }),
+            ...club('Hard Leak', { fdr: 4.2, xgi: 1, xgc: 9 })
+        ];
+        const att = buildTeamTargetsChart(data, 'att');
+        const byTeam = Object.fromEntries(points(att).map(p => [p.team, p]));
+        assert.equal(byTeam['Easy Attack'].x, 2.0, 'the club fixture run, not a per-player mean');
+        assert.ok(byTeam['Easy Attack'].y > byTeam['Easy Wall'].y, 'attack rating on y');
+
+        const def = buildTeamTargetsChart(data, 'def');
+        const defByTeam = Object.fromEntries(points(def).map(p => [p.team, p]));
+        assert.ok(defByTeam['Hard Leak'].y > defByTeam['Easy Wall'].y,
+            'defence view measures what is conceded');
+    });
+
+    test('easy fixtures are the good end of x on both views', () => {
+        const { buildTeamTargetsChart } = load();
+        const data = ['A', 'B', 'C', 'D'].flatMap((t, i) => club(t, { fdr: 2 + i * 0.5 }));
+        for (const side of ['att', 'def']) {
+            const config = buildTeamTargetsChart(data, side);
+            // Low difficulty must be the tinted-good side, or the green quadrant
+            // sits behind the clubs facing the title race.
+            assert.match(config.options.scales.x.title.text, /נמוך = קל/, side);
+        }
+    });
+
+    test('conceding less is better, so the defence view flips the y direction', () => {
+        const { buildTeamTargetsChart } = load();
+        const data = ['A', 'B', 'C', 'D'].flatMap((t, i) =>
+            club(t, { fdr: 2 + i * 0.4, xgc: 1 + i }));
+        const config = buildTeamTargetsChart(data, 'def');
+        const notes = config.options.plugins.annotation.annotations;
+        // Bottom-left is easy fixtures + fewest conceded: the corner to buy from.
+        assert.match(notes.labelBottomLeft.content, /לטרגט/);
+        assert.match(String(notes.labelBottomLeft.backgroundColor), /34, 197, 94/,
+            'and it is the green one');
+    });
+
+    test('a club with no fixture list yet is left off rather than plotted at zero', () => {
+        const { buildTeamTargetsChart } = load();
+        const data = [
+            ...club('A', { fdr: 2 }), ...club('B', { fdr: 3 }),
+            ...club('C', { fdr: 4 }), ...club('D', { fdr: 2.5 }),
+            ...club('No fixtures', { fdr: 0 })
+        ];
+        const teams = points(buildTeamTargetsChart(data, 'att')).map(p => p.team);
+        assert.ok(!teams.includes('No fixtures'));
+        assert.equal(teams.length, 4);
+    });
+
+    test('half a squad is not a rating', () => {
+        const { buildTeamTargetsChart } = load();
+        // Two attackers is not an attack: the per-90 would be a rate for two
+        // players compared against clubs rated on eleven.
+        const data = [
+            ...club('A', { fdr: 2 }), ...club('B', { fdr: 3 }),
+            ...club('C', { fdr: 4 }), ...club('D', { fdr: 2.5 }),
+            ...club('Thin', { fdr: 2, n: 1, mins: 400 })
+        ];
+        const teams = points(buildTeamTargetsChart(data, 'att')).map(p => p.team);
+        assert.ok(!teams.includes('Thin'));
+    });
+
+    test('too few clubs to compare is nothing to draw', () => {
+        const { buildTeamTargetsChart } = load();
+        assert.equal(buildTeamTargetsChart(club('A', { fdr: 2 }), 'att'), null);
+    });
+});
+
 describe('negative axis ticks on an RTL page', () => {
     test('a negative number is wrapped so it does not render as "25-"', () => {
         const { ltrTick, chartAxis } = load();
         assert.equal(ltrTick(-25), '⁦-25⁩');
         assert.equal(chartAxis('x').ticks.callback(-25), '⁦-25⁩');
+    });
+
+    test('the number is formatted by the scale, not stringified raw', () => {
+        // A tick callback replaces Chart.js's numeric formatter, and the values
+        // it receives are unrounded axis arithmetic — the first version printed
+        // 1.8000000000000003 on the team chart.
+        const { ltrTick } = load();
+        const scale = { getLabelForValue: v => v.toFixed(1) };
+        assert.equal(ltrTick.call(scale, 1.8000000000000003), '⁦1.8⁩');
     });
 
     test('both axes of every quadrant chart carry it', () => {

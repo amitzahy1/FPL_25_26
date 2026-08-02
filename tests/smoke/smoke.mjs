@@ -508,6 +508,93 @@ try {
         setChartPosition('DEF');
         await new Promise(r => setTimeout(r, 300));
         const afterToggle = !!charts['chart-position'];
+
+        // The per-card category chips. Two promises to keep: narrowing one card
+        // leaves the others alone, and the narrowed card spreads out — the whole
+        // reason to pick a category is to read the names, and one column redrawn
+        // in the same strip is the same pile with white space around it.
+        const cardsWithChips = [...document.querySelectorAll('.chart-facet .chart-seg')].length;
+        const before = {
+            spread: charts['chart-signal-spread'].data.datasets[0].data.length,
+            spreadWidth: charts['chart-signal-spread'].scales.x.max
+                - charts['chart-signal-spread'].scales.x.min,
+            named: charts['chart-signal-spread'].data.datasets[0].data
+                .filter(d => d.label).length,
+            minutes: charts['chart-minutes'].data.datasets[0].data.length
+        };
+        const firstVerdict = [...document.querySelectorAll(
+            '#facet-chart-signal-spread [data-facet-value]')]
+            .map(b => b.dataset.facetValue).filter(Boolean)[0];
+        setChartFacet('chart-signal-spread', firstVerdict);
+        await new Promise(r => setTimeout(r, 350));
+        const focused = {
+            points: charts['chart-signal-spread'].data.datasets[0].data.length,
+            named: charts['chart-signal-spread'].data.datasets[0].data
+                .filter(d => d.label).length,
+            width: charts['chart-signal-spread'].scales.x.max
+                - charts['chart-signal-spread'].scales.x.min,
+            // Distinct x positions: the pile is only readable if the dots stop
+            // sharing a column.
+            distinctX: new Set(charts['chart-signal-spread'].data.datasets[0].data
+                .map(d => d.x)).size,
+            othersUntouched: charts['chart-minutes'].data.datasets[0].data.length
+                === before.minutes
+        };
+
+        // A position chip on a different card, and then both cleared.
+        setChartFacet('chart-minutes', 'DEF');
+        await new Promise(r => setTimeout(r, 350));
+        const posFacet = {
+            narrowed: charts['chart-minutes'].data.datasets[0].data.length < before.minutes,
+            drew: charts['chart-minutes'].data.datasets[0].data.length > 0,
+            spreadStillFocused: charts['chart-signal-spread'].data.datasets[0].data.length
+                === focused.points
+        };
+        setChartFacet('chart-minutes', 'DEF');
+        setChartFacet('chart-signal-spread', firstVerdict);
+        await new Promise(r => setTimeout(r, 350));
+        const cleared = charts['chart-signal-spread'].data.datasets[0].data.length
+            === before.spread
+            && charts['chart-minutes'].data.datasets[0].data.length === before.minutes;
+
+        // The team card needs a fixture list, and this run has no network, so it
+        // hides — the same honest empty state as the transfer card. Its ⚔️/🛡️
+        // chips are a mode rather than a filter, and testing that needs a
+        // schedule, so one is injected here and taken back out afterwards.
+        const teamHiddenWithoutFixtures = !charts['chart-team-targets'];
+        const rows = state.allPlayersData[state.currentDataSource].processed;
+        const clubs = [...new Set(rows.map(p => p.team_name))];
+        rows.forEach(p => {
+            p.next_5_fdr = 2 + (clubs.indexOf(p.team_name) % 7) * 0.4;
+            p.next_5_count = 5;
+        });
+        processChange();
+        await new Promise(r => setTimeout(r, 400));
+
+        const teamY = () => (charts['chart-team-targets'] || {}).scales
+            ? charts['chart-team-targets'].scales.y.options.title.text : '';
+        setChartFacet('chart-team-targets', 'att');
+        await new Promise(r => setTimeout(r, 350));
+        const attY = teamY();
+        const attPoints = (charts['chart-team-targets'] || { data: { datasets: [{ data: [] }] } })
+            .data.datasets[0].data.length;
+        setChartFacet('chart-team-targets', 'def');
+        await new Promise(r => setTimeout(r, 350));
+        const defY = teamY();
+        // Re-clicking the live chip: a filter would clear, a mode must not.
+        setChartFacet('chart-team-targets', 'def');
+        await new Promise(r => setTimeout(r, 350));
+        const teamSide = {
+            att: /התקפית/.test(attY), def: /ספיגות/.test(defY),
+            changed: attY !== defY, clubs: attPoints,
+            stillDrawn: !!charts['chart-team-targets'] && /ספיגות/.test(teamY()),
+            hiddenWithoutFixtures: teamHiddenWithoutFixtures
+        };
+
+        setChartFacet('chart-team-targets', 'att');
+        rows.forEach(p => { p.next_5_fdr = 0; p.next_5_count = 0; });
+        processChange();
+        await new Promise(r => setTimeout(r, 400));
         switchMainView('table');
         return { cards: cards.length, visible: visible.length, drawn: drawn.length,
             notes: notes.length, afterToggle, faults,
@@ -515,11 +602,12 @@ try {
             hasUnderlying: !!underlying, keepersPlotted,
             underlyingPoints: underlying ? underlying.data.datasets[0].data.length : 0,
             negTicks, unisolated,
+            cardsWithChips, before, focused, posFacet, cleared, teamSide,
             // No transfer churn exists on a completed season, so this card is
             // expected to hide itself rather than draw a vertical line at zero.
             marketFlowDrawn: !!charts['chart-market-flow'] };
     });
-    check(chartsView.cards === 11, `charts view built ${chartsView.cards} cards from CHART_SPECS`);
+    check(chartsView.cards === 12, `charts view built ${chartsView.cards} cards from CHART_SPECS`);
     check(chartsView.spreadTicks.length >= 2,
         `the signal spread labels its columns (${chartsView.spreadTicks.join(', ')})`);
     check(chartsView.spreadColours > 1,
@@ -542,6 +630,33 @@ try {
         `every visible chart is legible and its caption matches what is drawn`
         + `${chartsView.faults.length ? ` — ${chartsView.faults.join('; ')}` : ''}`);
     check(chartsView.afterToggle, 'the position matrix rebuilds when the position changes');
+    check(chartsView.cardsWithChips >= 8,
+        `${chartsView.cardsWithChips} cards offer a category to narrow to`);
+    check(chartsView.teamSide.hiddenWithoutFixtures,
+        'the team-target card hides itself until a fixture list has loaded');
+    check(chartsView.teamSide.att && chartsView.teamSide.def
+        && chartsView.teamSide.changed,
+        `given one, it rates ${chartsView.teamSide.clubs} clubs and the chips switch`
+        + ' between attack and defence');
+    check(chartsView.teamSide.stillDrawn,
+        're-clicking a mode chip keeps the card measuring — a mode has no off position');
+    check(chartsView.focused.points > 1
+        && chartsView.focused.points < chartsView.before.spread,
+        `picking a verdict narrows the card to ${chartsView.focused.points} of `
+        + `${chartsView.before.spread} players`);
+    check(chartsView.focused.width > chartsView.before.spreadWidth
+        && chartsView.focused.distinctX === chartsView.focused.points,
+        `and spreads them across the whole plot — ${chartsView.focused.distinctX} `
+        + `distinct positions, axis ${Math.round(chartsView.before.spreadWidth)} → `
+        + `${Math.round(chartsView.focused.width)}`);
+    check(chartsView.focused.named > chartsView.before.named,
+        `which is the point: ${chartsView.before.named} names become `
+        + `${chartsView.focused.named}`);
+    check(chartsView.focused.othersUntouched && chartsView.posFacet.spreadStillFocused,
+        'narrowing one card leaves the others alone');
+    check(chartsView.posFacet.narrowed && chartsView.posFacet.drew,
+        'a position chip narrows its own card and it still draws');
+    check(chartsView.cleared, 'clicking the live chip again clears it');
     check(pageErrors.length === chartsBefore,
         `no errors from the charts view${pageErrors.length > chartsBefore ? `: ${pageErrors[chartsBefore]}` : ''}`);
 

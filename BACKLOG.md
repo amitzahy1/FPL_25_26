@@ -132,6 +132,47 @@ Status as of the 2026/27 pre-season overhaul. Items are ordered by value, not by
       unnamed. `chartNote(spec, data)` now passes the chart's own rows to the
       caption for exactly this.
 
+- [x] **A category chip row on every player chart.** 500 dots in one cloud is a
+      shape, not a list of players. Each card now carries its own chips —
+      position for the scatters, the verdict for the signal card — declared as
+      `facet` on the spec and applied centrally in `renderCharts`, so no builder
+      knows about it. Chart-local on purpose: narrowing one card to defenders
+      should not empty the seven next to it, and the filter panel is still there
+      when you do want that. Options are derived from the rows on screen, so a
+      chip can never lead to an empty chart; a card that cannot draw a position
+      (`facetOmit`) does not offer it — a keeper has no DEFCON and no xGI worth
+      plotting. Clicking the live chip clears it.
+      - The signal card **changes shape** when narrowed rather than just losing
+        its other columns. One column redrawn in the same 80px strip is the same
+        unreadable pile with white space around it, so x becomes rank within the
+        verdict and the players spread across the full width, evenly spaced,
+        with labels on four alternating bands. Measured: axis width 5 → 31, and
+        10 names become 30.
+      - The chip row takes a line of its own under the caption. Squeezed in
+        beside the title, six chips stacked four rows deep and pushed the
+        caption into a column two words wide.
+
+- [x] **📅 את מי לטרגט ל-5 הבאים** — club quality against the club's own
+      schedule, with ⚔️/🛡️ chips. Two things decide whether a club is worth
+      raiding and neither answers it alone: a great attack with three away trips
+      to the top four is not a target this month. Five gameweeks rather than the
+      existing three, because three answers "start him this week" while five
+      answers "is this club worth holding through", which in a draft league —
+      no free transfers — is what decides a waiver claim. `next_5_fdr` comes off
+      the same fixture walk as `next_3_fdr`, so the two cannot disagree.
+      - The chips here are a **mode**, not a filter: an attack rating comes from
+        the attackers and a defence rating from the defenders, so filtering the
+        rows by side would leave each half with nothing to measure. A mode has
+        no "הכל" chip and no off position — re-clicking the live one keeps it.
+      - Conceding less is better, so the defence view flips the y direction and
+        the green corner is bottom-left. Without that the tint sat behind the
+        clubs shipping the most goals.
+- [x] `ltrTick` was formatting the raw axis value. A tick callback *replaces*
+      Chart.js's numeric formatter, and the values it receives are the unrounded
+      results of the axis's own arithmetic — so the team chart printed
+      `1.8000000000000003` and `0.6000000000000001`. It formats through the
+      scale's `getLabelForValue` now and only wraps the result.
+
 ## Pre-draft, still open
 
 - [ ] Steals-vs-ADP column: `draft_rank` is FPL Draft's own published ranking, so

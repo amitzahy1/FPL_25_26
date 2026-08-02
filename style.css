@@ -3693,6 +3693,8 @@ tbody tr:last-child td {
     padding-bottom: 10px;
     margin-bottom: 10px;
     border-bottom: 1px solid #f1f5f9;
+    /* So the category row can take a line of its own — see .chart-facet. */
+    flex-wrap: wrap;
 }
 
 .chart-title {
@@ -3777,6 +3779,22 @@ tbody tr:last-child td {
     background: #fff;
     color: #1d4ed8;
     box-shadow: 0 1px 3px rgba(15, 23, 42, .12);
+}
+
+/* The per-card category row gets a line of its own rather than competing with
+   the title for the header's width. Squeezed in beside the text, six chips
+   stacked four rows deep and pushed the caption into a column two words wide.
+
+   It wraps rather than scrolls: a chip you have to drag sideways to reach is a
+   chip you will not find, which is the mistake the quick-filter row made once. */
+.chart-facet { flex: 1 0 100%; min-width: 0; }
+
+.chart-facet .chart-seg {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-start;
+    row-gap: 3px;
+    max-width: 100%;
 }
 
 

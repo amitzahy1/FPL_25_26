@@ -301,6 +301,10 @@ const state = {
     trendKey: null,              // "<source>:<gws>" — what trendGws currently holds
     trendLoading: false,
     openRowId: null,             // the player whose match log is expanded
+    // Per-card category, keyed by chart id. Chart-local on purpose: narrowing
+    // one scatter to defenders should not empty the seven cards next to it, and
+    // the panel's own filters are still there for when you do want that.
+    chartFacets: {},
     // Advanced filters
     searchQuery: '',
     priceRange: { min: 4, max: 15 },
@@ -1893,6 +1897,8 @@ function preprocessPlayerData(players, setPieceTakers) {
         // We need to calculate it outside or pass fixtures here. 
         // For now, we'll initialize it to 0 and calculate in a separate pass if fixtures are available.
         p.next_3_fdr = 0;
+        p.next_5_fdr = 0;
+        p.next_5_count = 0;
 
         // 2. Defensive Workrate Badge (CBIT per 90)
         // High workrate for MIDs (important for new BPS)
@@ -1942,6 +1948,16 @@ function calculateRealFDR(players, fixtures) {
     return players.map(p => {
         const teamNextFixtures = teamFixtures[p.team] || [];
         const next3 = teamNextFixtures.slice(0, 3);
+        const next5 = teamNextFixtures.slice(0, 5);
+
+        // Five as well as three, because those are two different questions. Three
+        // is "should I start him"; five is "is this club worth holding through",
+        // which in a draft league — where you cannot transfer freely — is the one
+        // that decides a waiver claim. Same fixture walk, so they cannot disagree.
+        p.next_5_fdr = next5.length
+            ? Math.round((next5.reduce((s, f) => s + f.difficulty, 0) / next5.length) * 10) / 10
+            : 0;
+        p.next_5_count = next5.length;
 
         if (next3.length === 0) {
             p.next_3_fdr = 0;
@@ -9713,9 +9729,18 @@ function labelTop(points, count, score) {
  * -25 was drawn as "25-", on every axis that goes below zero — the opportunity
  * board's momentum axis, VORP, the transfer flow. The isolate makes each label
  * its own left-to-right run.
+ *
+ * It formats through the scale rather than stringifying the raw value. A tick
+ * callback *replaces* Chart.js's numeric formatter, and the values it is handed
+ * are the unrounded results of the axis's own arithmetic — so the first version
+ * of this printed 1.8000000000000003 and 0.6000000000000001 on the team chart.
+ * `getLabelForValue` is that formatter; this only wraps what it returns.
  */
 function ltrTick(value) {
-    return `⁦${value}⁩`;
+    const formatted = (this && typeof this.getLabelForValue === 'function')
+        ? this.getLabelForValue(value)
+        : value;
+    return `⁦${formatted}⁩`;
 }
 
 /** Axis and tooltip chrome shared by the non-scatter charts. */
@@ -10224,6 +10249,13 @@ const SIGNAL_TONE_COLOR = {
  * The horizontal scatter inside a column is a fixed function of the player id,
  * not noise: it keeps the dots from stacking into one line, and it puts the
  * same player in the same place on every render.
+ *
+ * Narrowed to a single verdict, the chart changes shape rather than just losing
+ * the other columns. One column redrawn in the same 80px strip is the same
+ * unreadable pile with more white space around it, so the x axis becomes rank
+ * within the verdict and the players spread across the full width — evenly
+ * spaced, so the names have somewhere to go. That is the whole reason to pick
+ * a category: to read the names.
  */
 function buildSignalSpreadChart(data) {
     const buckets = new Map();
@@ -10240,7 +10272,8 @@ function buildSignalSpreadChart(data) {
     const columns = SIGNAL_SORT_ORDER
         .filter(key => buckets.has(key))
         .map(key => buckets.get(key));
-    if (columns.length < 2) return null;
+    if (!columns.length) return null;
+    if (columns.length === 1) return buildSignalFocusChart(columns[0]);
 
     // Knuth multiplicative hash, folded to ±0.31 of a column width.
     const jitter = id => ((((Number(id) * 2654435761) % 1000) / 1000) - 0.5) * 0.62;
@@ -10316,6 +10349,84 @@ function buildSignalSpreadChart(data) {
     };
 }
 
+/**
+ * One verdict, across the whole plot.
+ *
+ * x is the player's rank inside the verdict, best first — which is not an
+ * invented quantity the way plotting the verdicts themselves against each other
+ * would be, because within one verdict the ordering is real. Evenly spaced
+ * rather than jittered, so consecutive names cannot land on top of each other,
+ * and the labels alternate above and below the point, which roughly doubles how
+ * many survive the collision pass.
+ */
+function buildSignalFocusChart(column) {
+    const ranked = column.players.slice().sort((a, b) => b.score - a.score);
+    if (ranked.length < 2) return null;
+
+    const colour = SIGNAL_TONE_COLOR[column.sig.tone] || '#64748b';
+    const points = ranked.map(({ p, score }, i) => ({
+        x: i + 1, y: score, label: p.web_name,
+        name: p.web_name, team: p.team_name, pos: p.position_name,
+        verdict: column.sig.label, rank: i + 1
+    }));
+
+    return {
+        type: 'scatter',
+        data: {
+            datasets: [{
+                label: column.sig.label,
+                data: points,
+                // Smaller as the list grows, so 200 players stay distinguishable
+                // and 20 are not four lonely specks.
+                pointRadius: points.length > 120 ? 2.6 : points.length > 60 ? 3.4 : 4.5,
+                pointHoverRadius: 8,
+                pointBorderWidth: 0,
+                backgroundColor: `${colour}cc`
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            // Deeper top and bottom than the strip view: half the labels hang
+            // below their point here, and all four bands draw unclipped.
+            layout: { padding: { top: 38, right: 20, bottom: 34, left: 20 } },
+            scales: {
+                x: {
+                    ...chartAxis(`דירוג בתוך "${column.sig.label}" (${points.length} שחקנים)`),
+                    min: 0, max: points.length + 1,
+                    grid: { display: false }
+                },
+                y: { ...chartAxis('ציון דראפט') }
+            },
+            plugins: {
+                legend: { display: false },
+                datalabels: {
+                    display: 'auto',
+                    // Four bands, not two: above-near, below-near, above-far,
+                    // below-far. Alternating top/bottom alone still lost names,
+                    // because two points three apart both land on the bottom row
+                    // and a pair of long names is wider than that gap.
+                    align: ctx => (ctx.dataIndex % 2 ? 'bottom' : 'top'),
+                    offset: ctx => (ctx.dataIndex % 4 < 2 ? 4 : 15),
+                    formatter: (value, context) => {
+                        const d = context.dataset.data[context.dataIndex];
+                        return d.label ? `⁦${d.label}⁩` : '';
+                    },
+                    font: { size: 9, weight: 'bold' }, color: '#1e293b',
+                    clip: false, clamp: true
+                },
+                tooltip: {
+                    ...CHART_TOOLTIP,
+                    callbacks: {
+                        label: c => `#${c.raw.rank} ${c.raw.name} · ${c.raw.team} · ${c.raw.pos}`
+                            + ` — ציון ${c.raw.y.toFixed(1)}`
+                    }
+                }
+            }
+        }
+    };
+}
+
 /* --------------------------- 11. underlying vs value ---------------------- */
 
 /**
@@ -10380,6 +10491,170 @@ function signalLegendHtml(data) {
         .join('') + '</span>';
 }
 
+/* ------------------------- 12. who to target next ------------------------- */
+
+/**
+ * Which clubs are worth raiding over the next five gameweeks.
+ *
+ * Two things decide that, and neither answers it alone: how good the club is at
+ * the thing you would be buying, and who it plays. A great attack with three
+ * away trips to the top four is not a target this month; a mid-table defence
+ * with five winnable home games is.
+ *
+ * Five, not three. Three is "should I start him this week"; in a draft league
+ * you cannot transfer freely, so what decides a waiver claim is whether the club
+ * is worth holding through a run.
+ *
+ * The ⚔️/🛡️ chips switch which strength is measured, not which rows are read —
+ * an attack rating comes from the attackers and a defence rating from the
+ * defenders, so both halves of every squad are needed either way.
+ */
+function buildTeamTargetsChart(data, side) {
+    const teams = new Map();
+    for (const p of data) {
+        if (!p.team_name || p.market_departed) continue;
+        if (!teams.has(p.team_name)) {
+            teams.set(p.team_name, { attMins: 0, defMins: 0, xgi: 0, xgc: 0, fdr: 0, fdrN: 0 });
+        }
+        const t = teams.get(p.team_name);
+        if (['MID', 'FWD'].includes(p.position_name)) {
+            t.attMins += p.minutes;
+            t.xgi += parseFloat(p.expected_goal_involvements) || 0;
+        } else {
+            t.defMins += p.minutes;
+            t.xgc += parseFloat(p.expected_goals_conceded) || 0;
+        }
+        // Per club, not per player: every player at a club carries the same
+        // fixture list, so averaging over the squad would only re-weight it by
+        // how many of its players the filters left behind.
+        if (p.next_5_fdr > 0 && !t.fdrN) { t.fdr = p.next_5_fdr; t.fdrN = 1; }
+    }
+
+    const attacking = side !== 'def';
+    const points = [...teams.entries()].map(([team, t]) => {
+        // Per 90 of the players who make up that half of the club, so a squad the
+        // filters trimmed to three players is not compared against one with
+        // eleven — and skip the club if that half is too thin to rate at all.
+        const mins = attacking ? t.attMins : t.defMins;
+        if (mins < 900 || !t.fdrN) return null;
+        const rate = (attacking ? t.xgi : t.xgc) / (mins / 90);
+        return { x: t.fdr, y: rate, team, label: team, fdr: t.fdr };
+    }).filter(Boolean);
+    if (points.length < 4) return null;
+
+    // Conceding less is better, so on the defence view "good" is down. Easy
+    // fixtures are always the low end of the x axis, whichever side is showing.
+    const quads = attacking
+        ? {
+            topLeft: 'תוקפים חזק, לו״ז קל — לטרגט', topRight: 'תוקפים חזק, לו״ז קשה',
+            bottomLeft: 'לו״ז קל, אבל לא מבקיעים', bottomRight: 'לא עכשיו'
+        }
+        : {
+            bottomLeft: 'הגנה אטומה, לו״ז קל — לטרגט', bottomRight: 'הגנה אטומה, לו״ז קשה',
+            topLeft: 'לו״ז קל, אבל סופגים', topRight: 'לא עכשיו'
+        };
+
+    return getMatrixChartConfig(points,
+        'קושי ממוצע של 5 המשחקים הבאים (נמוך = קל)',
+        attacking ? 'צפי מעורבות התקפית ל-90' : 'צפי ספיגות ל-90',
+        quads, {
+            goodDirection: { x: 'low', y: attacking ? 'high' : 'low' },
+            radiusFor: () => 7,
+            tooltipFor: d => `${d.team} — קושי ${d.fdr.toFixed(1)}, `
+                + `${attacking ? 'xGI' : 'xGC'} ${d.y.toFixed(2)} ל-90`
+        });
+}
+
+/* ------------------------------ card categories --------------------------- */
+
+/**
+ * The chip row on a card, and what it narrows the card to.
+ *
+ * Chart-local rather than global: 500 dots in one cloud is a shape, not a list
+ * of players, and the way out of that is to look at one category at a time
+ * without losing the other ten cards. Options come from the rows actually on
+ * screen, so a chip never leads to an empty chart.
+ */
+const CHART_FACETS = {
+    position: {
+        label: 'עמדה',
+        options: (data, omit = []) => Object.keys(POSITION_COLOR)
+            .filter(pos => !omit.includes(pos) && data.some(p => p.position_name === pos))
+            .map(pos => ({ value: pos, label: POSITION_LABELS[pos] })),
+        test: (p, value) => p.position_name === value
+    },
+    signal: {
+        label: 'סיגנל',
+        options: (data) => SIGNAL_SORT_ORDER
+            .map(key => [...SIGNAL_RULES, HOLD_SIGNAL].find(r => r.key === key))
+            .filter(rule => rule && data.some(p => signalFor(p).key === rule.key))
+            .map(rule => ({ value: rule.key, label: rule.label })),
+        test: (p, value) => signalFor(p).key === value
+    },
+    // A mode, not a filter: it picks what the card measures rather than which
+    // rows it draws. The team chart needs every player either way — an attack
+    // rating is computed from the attackers and a defence rating from the
+    // defenders, so filtering the rows would leave each half with nothing to
+    // measure. `mode` also means there is no "הכל" chip: no side is not an
+    // option, so the first one is the default.
+    teamSide: {
+        label: 'צד',
+        mode: true,
+        options: () => [
+            { value: 'att', label: '⚔️ התקפה' },
+            { value: 'def', label: '🛡️ הגנה' }
+        ]
+    }
+};
+
+/** What a card is currently set to, with a mode's default filled in. */
+function chartFacetValue(spec) {
+    const facet = CHART_FACETS[spec.facet];
+    if (!facet) return null;
+    const value = state.chartFacets[spec.id] || null;
+    if (value) return value;
+    return facet.mode ? facet.options([], spec.facetOmit || [])[0].value : null;
+}
+
+/** The rows a card should draw: everything, or one category of it. */
+function scopeToFacet(spec, data) {
+    const facet = CHART_FACETS[spec.facet];
+    const value = state.chartFacets[spec.id];
+    if (!facet || facet.mode || !value) return data;
+    const scoped = data.filter(p => facet.test(p, value));
+    // A chip that empties its own card is worse than no chip. Options are drawn
+    // from the data, so this only happens if the data changed underneath a
+    // selection that is still set.
+    return scoped.length ? scoped : data;
+}
+
+function chartFacetChipsHtml(spec, data) {
+    const facet = CHART_FACETS[spec.facet];
+    if (!facet) return '';
+    const options = facet.options(data, spec.facetOmit || []);
+    if (options.length < 2) return '';
+    const active = chartFacetValue(spec) || '';
+    const chip = (value, label) => `<button type="button" data-facet-value="${value}"
+        aria-pressed="${String(active === value)}"
+        onclick="setChartFacet('${spec.id}', '${value}')">${label}</button>`;
+    return `<div class="chart-seg" role="group" aria-label="${facet.label}">
+        ${facet.mode ? '' : chip('', 'הכל')}${options.map(o => chip(o.value, o.label)).join('')}
+    </div>`;
+}
+
+/** Clicking the live chip clears it, so the chip row is its own way back. */
+function setChartFacet(chartId, value) {
+    const spec = CHART_SPECS.find(s => s.id === chartId);
+    const facet = spec && CHART_FACETS[spec.facet];
+    const next = value || null;
+    // A mode has no off position — clearing it would leave the card measuring
+    // nothing — so re-clicking the live chip only clears a real filter.
+    state.chartFacets[chartId] = (!facet || !facet.mode) && state.chartFacets[chartId] === next
+        ? null
+        : next;
+    renderCharts();
+}
+
 /* -------------------------------- the list ------------------------------- */
 
 const CHART_SPECS = [
@@ -10388,7 +10663,7 @@ const CHART_SPECS = [
         note: () => 'ציון דראפט מול המומנטום בחלון הנבחר. הצבע לפי הרביע: '
             + quadrantLegendHtml('איכות ומומנטום', 'לא עכשיו')
             + (rostersAreKnown() ? ' · שחקנים תפוסים מוצגים דהויים.' : ''),
-        build: buildOpportunityChart
+        build: buildOpportunityChart, facet: 'position'
     },
     {
         id: 'chart-position', title: '📊 מטריצת עמדה',
@@ -10398,17 +10673,28 @@ const CHART_SPECS = [
     {
         id: 'chart-trend', title: '📈 טרנד נקודות',
         note: 'הנקודות מחזור-מחזור של שמונת החמים בסינון הנוכחי — מי בעלייה ומי דועך.',
-        build: buildTrendChart
+        build: buildTrendChart, facet: 'position'
     },
     {
         id: 'chart-conversion', title: '⚖️ מימוש מול צפי',
         note: 'מעל הקו — מימוש יתר, צפוי לרדת. מתחת לקו — מימוש חסר, צפוי לתקן.',
-        build: buildConversionChart
+        build: buildConversionChart, facet: 'position', facetOmit: ['GKP']
     },
     {
         id: 'chart-teams', title: '🏟️ קבוצות: התקפה מול הגנה',
         note: 'למי כדאי להחזיק שחקנים. נקודה גדולה = לוח משחקים קל יותר בשלושת הבאים.',
         build: buildTeamChart
+    },
+    {
+        id: 'chart-team-targets', title: '📅 את מי לטרגט ל-5 הבאים',
+        note: data => 'איכות הקבוצה מול לוח המשחקים שלה. שמאל = לו״ז קל, '
+            + (chartFacetValue({ id: 'chart-team-targets', facet: 'teamSide' }) === 'def'
+                ? 'ולמטה = סופגת פחות — הפינה השמאלית התחתונה היא לקנות שוער ומגנים. '
+                : 'ולמעלה = מייצרת יותר — הפינה השמאלית העליונה היא לקנות קשרים וחלוצים. ')
+            + 'הצבע לפי הרביע: '
+            + quadrantLegendHtml('לטרגט', 'לא עכשיו')
+            + (data && data.some(p => p.next_5_fdr > 0) ? '' : ' · לוח המשחקים עוד לא נטען.'),
+        build: buildTeamTargetsChart, facet: 'teamSide'
     },
     {
         id: 'chart-depth', title: '📉 עומק לפי עמדה',
@@ -10418,7 +10704,7 @@ const CHART_SPECS = [
     {
         id: 'chart-minutes', title: '🔒 ביטחון דקות מול תפוקה',
         note: 'בדראפט אי אפשר פשוט להעביר שחקן, ולכן שחקן מסובב מסוכן גם אם הוא טוב.',
-        build: buildMinutesChart
+        build: buildMinutesChart, facet: 'position'
     },
     {
         id: 'chart-defcon', title: '🛡️ מכונות DEFCON',
@@ -10429,21 +10715,21 @@ const CHART_SPECS = [
         // height were not cleared at the same bar.
         note: () => 'אחוז ההופעות שבהן עברו בפועל את הסף (10 למגן, 12 לקשר/חלוץ). '
             + `ממוצע ל-90 דקות מטעה כאן. צבע = עמדה: ${positionLegendHtml()}`,
-        build: buildDefconChart
+        build: buildDefconChart, facet: 'position', facetOmit: ['GKP']
     },
     {
         id: 'chart-market-flow', title: '💱 לאן השוק זז השבוע',
         note: () => 'העברות נטו במשחק הרגיל (לא בדראפט) מול נקודות למשחק — אות המונים '
             + 'הכי מהיר שיש. שמאל למעלה = מייצר והשוק נוטש, שם מתחבאות ההזדמנויות. '
             + 'הצבע לפי הרביע: ' + quadrantLegendHtml('נחטף ובצדק', 'נזרק ובצדק'),
-        build: buildMarketFlowChart
+        build: buildMarketFlowChart, facet: 'position'
     },
     {
         id: 'chart-signal-spread', title: '🚦 פיזור איכות לפי סיגנל',
         note: data => 'כל נקודה היא שחקן, בעמודה של הסיגנל שלו. הגובה הוא ציון הדראפט, '
             + 'ולכן העמודה מראה לא רק כמה שחקנים קיבלו את הוורדיקט אלא באיזו איכות. '
             + `צבע = סיגנל: ${signalLegendHtml(data)}`,
-        build: buildSignalSpreadChart
+        build: buildSignalSpreadChart, facet: 'signal'
     },
     {
         id: 'chart-underlying', title: '🎯 יצירת סיכויים מול ערך',
@@ -10451,7 +10737,7 @@ const CHART_SPECS = [
             + 'סיכויים שעוד לא הפכו לנקודות. בלי שוערים — xGI של שוער הוא אפס מתוקף '
             + 'התפקיד. הצבע לפי הרביע: '
             + quadrantLegendHtml('איום וערך', 'חלש בשניהם'),
-        build: buildUnderlyingValueChart
+        build: buildUnderlyingValueChart, facet: 'position', facetOmit: ['GKP']
     }
 ];
 
@@ -10503,6 +10789,9 @@ function ensureChartCards() {
                         <button type="button" data-chart-pos="${pos}"
                             onclick="setChartPosition('${pos}')">${POSITION_LABELS[pos]}</button>`).join('')}
                 </div>` : ''}
+                <!-- Filled per render: the options come from the rows on screen,
+                     and the scaffolding is built exactly once. -->
+                ${spec.facet ? `<div class="chart-facet" id="facet-${spec.id}"></div>` : ''}
             </header>
             <div class="chart-canvas"><canvas id="${spec.id}"></canvas></div>
         </section>`).join('');
@@ -10537,19 +10826,33 @@ function renderCharts() {
         const canvas = document.getElementById(spec.id);
         if (!card || !canvas) return;
 
+        // The chips list the categories present in the data, so they are rebuilt
+        // whenever the data is — and before the card narrows to one of them, or
+        // the chip row would only ever offer the category already selected.
+        const facetEl = card.querySelector('.chart-facet');
+        if (facetEl) {
+            const html = chartFacetChipsHtml(spec, data);
+            if (facetEl.innerHTML !== html) facetEl.innerHTML = html;
+        }
+
+        const scoped = scopeToFacet(spec, data);
+
         // Re-read the caption every render, not only when the cards are built:
         // the ones that describe a colour encoding change what they say when the
         // encoding changes, and the scaffolding is built exactly once. Given the
         // same rows the chart gets, so a key can name what is actually drawn.
         const noteEl = card.querySelector('.chart-note');
         if (noteEl) {
-            const text = chartNote(spec, data);
+            const text = chartNote(spec, scoped);
             if (noteEl.innerHTML !== text) noteEl.innerHTML = text;
         }
 
         let config = null;
         try {
-            config = spec.build(data);
+            // The facet value goes to the builder too: a filtering facet has
+            // already been applied to `scoped`, but a mode facet has not — it
+            // decides what the card measures, which only the builder knows.
+            config = spec.build(scoped, chartFacetValue(spec));
         } catch (e) {
             console.warn(`⚠️ chart ${spec.id} failed to build`, e);
         }
