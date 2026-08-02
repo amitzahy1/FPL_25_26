@@ -5662,6 +5662,14 @@ canvas {
 .scout-btn:hover { border-color: #94a3b8; }
 .scout-btn[aria-pressed="true"] { background: #0f172a; border-color: #0f172a; color: #fff; }
 .scout-watch[aria-pressed="true"] { background: #a16207; border-color: #a16207; }
+/* Green, because "available" is the good state and the board's own quadrant
+   colouring already reads green as the thing you want. */
+.scout-free[aria-pressed="true"] { background: #15803d; border-color: #15803d; }
+
+/* Before draft night nobody owns anybody, so the switch has nothing to act on.
+   Dimmed rather than hidden: the rule it will apply later is worth stating. */
+.scout-btn:disabled { opacity: .5; cursor: not-allowed; }
+.scout-btn:disabled:hover { border-color: #e2e8f0; }
 
 .scout-count {
     display: inline-block;

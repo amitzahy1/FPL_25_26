@@ -78,6 +78,60 @@ Status as of the 2026/27 pre-season overhaul. Items are ordered by value, not by
       drift, invisible to `table-layout: fixed` because the cell boxes agreed and
       only the text inside them was off.
 
+- [x] **One free-agent switch for the whole tab.** In Draft a player belongs to
+      exactly one manager, so after draft night a recommendation you cannot act
+      on is not a recommendation. The board already narrowed to free agents, but
+      silently and with no control; the table's only way to do the same was an
+      option buried in a dropdown inside a collapsed filter panel. Now `🆓 רק
+      חופשיים` sits in the always-visible toolbar row and governs the board, the
+      table and (through `state.filteredData`) every chart from one flag —
+      `state.freeAgentsOnly`, asked through `freeAgentFilterActive()` so no
+      surface can read it without also checking whether a draft has been held.
+      Off is kept, for scouting a rival's squad or pricing a trade; before the
+      draft the switch is disabled rather than hidden, so it states the rule it
+      will apply later. Measured with rosters injected: on → 387 free agents,
+      top pick Donnarumma; off → 537 including owned, top pick Haaland, who
+      belongs to somebody else.
+      - The `שחקנים חופשיים` option is gone from the draft-team dropdown; two
+        controls for one filter can only disagree. Choosing a rival's squad while
+        the switch is on now says which one to turn off instead of silently
+        emptying the table.
+      - `renderCharts` no longer falls back to the whole league when
+        `filteredData` is empty. An empty filter result is an answer, and the
+        fallback drew owned players under a board that had just excluded them.
+- [x] **Three cards for weekly decisions**, added to `CHART_SPECS`:
+      - 💱 **לאן השוק זז השבוע** — net *classic-FPL* transfers this gameweek
+        against points per match. There are no transfers in Draft at all, so this
+        is the same crowd signal as price and ownership read weekly instead of
+        once a season; the top-left corner (producing, and being dumped) is what
+        it is for. `market_net_transfers` joins on `code` with the rest of the
+        overlay. `displayNetTransfers` returns **null**, not 0, when there is no
+        figure — a completed season has its transfer fields zeroed, and 0 there
+        would read as "the market is indifferent". The card hides on null rather
+        than drawing a vertical line at zero, which is its state today.
+      - 🚦 **פיזור איכות לפי סיגנל** — the verdict is a category, so it is a
+        column and not an axis: nine verdicts have no order and no spacing, and
+        plotting their sort rank would invent both. Height is the draft score, so
+        a column shows not just how many players got a verdict but at what
+        quality. Horizontal spread is a hash of the player id, so a dot never
+        moves between renders.
+      - 🎯 **יצירת סיכויים מול ערך** — xGI/90 against VORP, *not* against the
+        draft score: the draft score is a weighted sum of league-wide percentiles
+        that already contains xGI, so that chart would draw a diagonal by
+        construction. Goalkeepers excluded — a keeper's xGI is zero as a fact
+        about the job.
+- [x] Negative axis ticks were bidi-mangled on every chart that crosses zero:
+      the canvas inherits the page's RTL, the minus sign is neutral punctuation,
+      and `-25` rendered as `25-` on the opportunity board's momentum axis, on
+      VORP and on the transfer flow. `ltrTick` wraps every numeric tick in a
+      directional isolate — the same fix the point labels already had.
+- [x] The signal card's colour key is built from the verdicts actually drawn.
+      Tones are shared — `לא זמין` and `מימוש יתר` are both red, `למכור גבוה`
+      and `סיכון סיבוב` both amber — so a key taking the first rule per tone
+      named a verdict that was not on screen while the one that was went
+      unnamed. `chartNote(spec, data)` now passes the chart's own rows to the
+      caption for exactly this.
+
 ## Pre-draft, still open
 
 - [ ] Steals-vs-ADP column: `draft_rank` is FPL Draft's own published ranking, so

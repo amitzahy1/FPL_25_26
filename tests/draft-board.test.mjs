@@ -34,7 +34,8 @@ function gwStats(over = {}) {
 
 const FUNCTIONS = [
     'windowStats', 'windowMinMatches', 'setPieceOrder', 'defconRateFor',
-    'draftBoardPool', 'panelPicks', 'getTrendSeries', 'summariseTrend',
+    'draftBoardPool', 'draftHasBeenHeld', 'freeAgentFilterActive',
+    'panelPicks', 'getTrendSeries', 'summariseTrend',
     'trendPlayerIndex', 'gwDefensiveContribution',
     'playerScore', 'buildDropOffLadder', 'dropOffFor',
     'benchmarkMedian', 'panelBenchmark',

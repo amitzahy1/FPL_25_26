@@ -13,7 +13,7 @@ import { loadFunctions, installBrowserStubs } from './helpers/load-script.mjs';
 
 const MARKET_FNS = [
     'marketIndex', 'marketOverlayActive', 'clearMarketFields', 'percentileRanker',
-    'applyMarketOverlay', 'displayCost', 'displayOwnership'
+    'applyMarketOverlay', 'displayCost', 'displayOwnership', 'displayNetTransfers'
 ];
 
 const CELL_FNS = ['priceCellHtml', 'ownershipCellHtml', 'ownershipCellTitle', 'marketBadgesHtml'];
@@ -314,6 +314,55 @@ describe('market cells', () => {
         // One player is his own whole population, so both percentiles are 0.
         assert.equal(row.hype_gap, 0);
         assert.equal(ownershipCellHtml(row), '31.5%');
+    });
+});
+
+describe('transfer flow', () => {
+    test('net transfers come across with the rest of the overlay', () => {
+        const { applyMarketOverlay, displayNetTransfers } = load({
+            live: [liveElement({ transfers_in_event: 180000, transfers_out_event: 25000 })]
+        });
+        const row = snapshotRow();
+        applyMarketOverlay([row]);
+        assert.equal(row.market_net_transfers, 155000);
+        assert.equal(displayNetTransfers(row), 155000);
+    });
+
+    test('a player being sold reads negative, not absent', () => {
+        const { applyMarketOverlay, displayNetTransfers } = load({
+            live: [liveElement({ transfers_in_event: 4000, transfers_out_event: 90000 })]
+        });
+        const row = snapshotRow();
+        applyMarketOverlay([row]);
+        assert.equal(displayNetTransfers(row), -86000);
+    });
+
+    test('no figure at all is null, which is not the same as zero flow', () => {
+        // A completed season has its transfer fields zeroed by
+        // preprocessPlayerData, and 0 there would read as "the market is
+        // indifferent" rather than "there is nothing to read". The chart hides on
+        // null; it would draw a vertical line at zero.
+        const { displayNetTransfers, state } = load();
+        state.currentDataSource = 'historical';
+        assert.equal(displayNetTransfers(snapshotRow({ net_transfers_event: 0 })), null);
+    });
+
+    test('on the live tab the row carries its own flow', () => {
+        const { displayNetTransfers, state } = load({ source: 'live' });
+        state.currentDataSource = 'live';
+        assert.equal(displayNetTransfers({ net_transfers_event: -1200 }), -1200);
+        assert.equal(displayNetTransfers({}), null, 'missing is null, not zero');
+    });
+
+    test('the live tab clears the transfer overlay with everything else', () => {
+        const { applyMarketOverlay, state } = load();
+        const row = snapshotRow();
+        applyMarketOverlay([row]);
+        assert.equal(row.market_net_transfers, 0);
+
+        state.currentDataSource = 'live';
+        applyMarketOverlay([row]);
+        assert.equal(row.market_net_transfers, null);
     });
 });
 

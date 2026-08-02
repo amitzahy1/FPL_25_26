@@ -286,7 +286,12 @@ const state = {
     // The board has always narrowed to them automatically; this makes it a
     // choice the user can see and reverse — to scout a rival's squad, or to
     // weigh a trade — instead of an invisible rule.
-    boardFreeAgentsOnly: true,
+    //
+    // One flag, three surfaces. It governs the board, the table and the charts
+    // together, because they answer the same question about the same league and
+    // a board that has excluded owned players while the scatter under it still
+    // plots them is two different answers on one screen.
+    freeAgentsOnly: true,
     rowMode: 'trend',
     shownOptional: new Set(),   // filled by loadOptionalColumns() once the DOM is up            // 'trend' = tall rows with per-GW micro-charts, 'compact' = classic
     trendWindow: 5,              // how many recent gameweeks each micro-chart covers
@@ -1336,6 +1341,7 @@ function clearMarketFields(p) {
     p.market_moved_club = false;
     p.market_status = null;
     p.market_news = '';
+    p.market_net_transfers = null;
 }
 
 /** Percentile rank (0-100) of a value within a sorted copy of the sample. */
@@ -1389,6 +1395,12 @@ function applyMarketOverlay(players) {
         p.price_delta = Math.round((p.market_cost - (p.now_cost || 0)) * 10) / 10;
         p.market_status = live.status || 'a';
         p.market_news = live.news || '';
+        // This gameweek's net transfer flow in the *classic* game. There are no
+        // transfers in Draft at all, so this is not a move anyone here can make —
+        // it is the same crowd signal as price and ownership, read at a much
+        // higher frequency. Millions of managers re-vote on a player every week,
+        // and the vote moves days before the points do.
+        p.market_net_transfers = (live.transfers_in_event || 0) - (live.transfers_out_event || 0);
         // Team ids are reassigned every season as the promoted clubs shift the
         // alphabetical order; only the code is stable.
         p.market_moved_club = !!(live.team_code && p.team_code && live.team_code !== p.team_code);
@@ -1435,6 +1447,22 @@ function displayOwnership(p) {
     return Number.isFinite(p.market_ownership)
         ? p.market_ownership
         : (parseFloat(p.selected_by_percent) || 0);
+}
+
+/**
+ * Net classic-FPL transfers for the current gameweek, under the same rule.
+ *
+ * Returns null rather than 0 when there is no figure to show. The archived
+ * season has none by construction — preprocessPlayerData zeroes the transfer
+ * fields on a finished season, because a completed campaign has no live churn —
+ * and 0 there would read as "the market is indifferent" instead of "there is
+ * nothing to read".
+ */
+function displayNetTransfers(p) {
+    if (Number.isFinite(p.market_net_transfers)) return p.market_net_transfers;
+    if (state.currentDataSource === 'historical') return null;
+    const net = p.net_transfers_event;
+    return Number.isFinite(net) ? net : null;
 }
 
 // Fetch the live bootstrap and fixtures without processing or rendering.
@@ -1599,9 +1627,10 @@ async function fetchAndProcessData() {
         assertQuickFiltersReachable();
         loadWatchlist();
         state.shownOptional = loadOptionalColumns();
-        state.boardFreeAgentsOnly = loadBoardFreeAgentsOnly();
+        state.freeAgentsOnly = loadFreeAgentsOnly();
         invalidateSignals();
         renderDraftBoard();
+        syncFreeAgentButton();
         processChange();
 
         // The trend window is a handful of localStorage-cached gameweek fetches.
@@ -1985,7 +2014,10 @@ function populateTeamFilter() {
         draftTeamFilterGroup.parentNode.insertBefore(draftGroup, draftTeamFilterGroup.nextSibling);
     }
 
-    draftTeamFilter.innerHTML = '<option value="">כל השחקנים</option><option value="free_agents">שחקנים חופשיים</option>';
+    // No "שחקנים חופשיים" option here any more: the 🆓 button in the toolbar owns
+    // that question now, and two controls for one filter can only disagree. This
+    // dropdown answers the other one — whose squad am I looking at.
+    draftTeamFilter.innerHTML = '<option value="">כל השחקנים</option>';
     if (state.draft.details && state.draft.details.league_entries) {
         state.draft.details.league_entries.forEach(entry => {
             if (entry.entry_name) {
@@ -3474,15 +3506,24 @@ function processChange() {
         (xDiffFilter === '' || (xDiffFilter === 'positive' && p.xDiff > 0) || (xDiffFilter === 'negative' && p.xDiff < 0))
     );
 
+    // The same switch the board and the charts read. It is an AND with everything
+    // else, including the draft-team dropdown — those two contradict each other by
+    // construction (a rival's squad is owned by definition), so rather than have
+    // one silently win, the empty result says which one to turn off.
+    if (freeAgentFilterActive()) {
+        filteredData = filteredData.filter(p => !state.draft.ownedElementIds.has(p.id));
+        if (!filteredData.length) {
+            state.quickFilterNotice = draftTeamFilter
+                ? 'הפילטר "רק חופשיים" דולק, ולכן אין שחקנים בסגל של קבוצת דראפט אחרת'
+                : 'אף שחקן חופשי לא עובר את הסינון הנוכחי';
+        }
+    }
+
     if (draftTeamFilter) {
-        if (draftTeamFilter === 'free_agents') {
-            filteredData = filteredData.filter(p => !state.draft.ownedElementIds.has(p.id));
-        } else {
-            const entryId = parseInt(draftTeamFilter);
-            if (state.draft.rostersByEntryId.has(entryId)) {
-                const teamPlayerIds = new Set(state.draft.rostersByEntryId.get(entryId));
-                filteredData = filteredData.filter(p => teamPlayerIds.has(p.id));
-            }
+        const entryId = parseInt(draftTeamFilter);
+        if (state.draft.rostersByEntryId.has(entryId)) {
+            const teamPlayerIds = new Set(state.draft.rostersByEntryId.get(entryId));
+            filteredData = filteredData.filter(p => teamPlayerIds.has(p.id));
         }
     }
 
@@ -5365,10 +5406,10 @@ function draftBoardPool() {
     const players = (state.allPlayersData[state.currentDataSource] || {}).processed || [];
     const owned = state.draft.ownedElementIds;
     // Two conditions, and they mean different things. `draftHeld` is a fact about
-    // the league; boardFreeAgentsOnly is the user's choice. Before the draft the
+    // the league; freeAgentsOnly is the user's choice. Before the draft the
     // choice has nothing to act on, because nobody owns anybody.
-    const draftHeld = !!(owned && owned.size > 0);
-    const freeAgentsOnly = draftHeld && state.boardFreeAgentsOnly !== false;
+    const draftHeld = draftHasBeenHeld();
+    const freeAgentsOnly = freeAgentFilterActive();
     const pos = (document.getElementById('positionFilter') || {}).value || '';
 
     const pool = players.filter(p =>
@@ -5542,6 +5583,10 @@ function renderDraftBoard() {
     const host = document.getElementById('draftBoard');
     if (!host) return;
 
+    // The toolbar button is the same switch seen from the table, and this runs
+    // after every change that can enable it — rosters arriving above all.
+    syncFreeAgentButton();
+
     // Both the board and the position chips read these, and this is the one
     // place that runs after every change that can move them.
     applyValueIndex();
@@ -5608,32 +5653,74 @@ function renderDraftBoard() {
  * board states the rule it will apply later instead of silently applying nothing.
  */
 function boardFreeAgentToggleHtml(draftHeld) {
-    const on = draftHeld && state.boardFreeAgentsOnly !== false;
-    const title = draftHeld
-        ? 'בדראפט כל שחקן שייך למנג׳ר אחד בלבד. כבוי — הלוח יציג גם שחקנים תפוסים, לבחינת סגלים של יריבים או שווי טרייד'
-        : 'הדראפט עוד לא נערך (או שנתוני הליגה לא נטענו), ולכן כל השחקנים חופשיים ואין מה לסנן';
     return `
-        <label class="db-toggle${draftHeld ? '' : ' is-off'}" title="${escapeHtml(title)}">
-            <input type="checkbox" ${on ? 'checked' : ''} ${draftHeld ? '' : 'disabled'}
-                onchange="toggleBoardFreeAgents(this.checked)">
+        <label class="db-toggle${draftHeld ? '' : ' is-off'}" title="${escapeHtml(freeAgentTitle())}">
+            <input type="checkbox" ${freeAgentFilterActive() ? 'checked' : ''} ${draftHeld ? '' : 'disabled'}
+                onchange="setFreeAgentsOnly(this.checked)">
             <span>רק שחקנים חופשיים</span>
         </label>`;
 }
 
-const BOARD_FREE_KEY = 'fpl_board_free_only';
-
-function loadBoardFreeAgentsOnly() {
-    try { return localStorage.getItem(BOARD_FREE_KEY) !== '0'; } catch { return true; }
+/** A fact about the league, not a preference: has anybody been picked yet. */
+function draftHasBeenHeld() {
+    const owned = state.draft.ownedElementIds;
+    return !!(owned && owned.size > 0);
 }
 
-function toggleBoardFreeAgents(checked) {
-    state.boardFreeAgentsOnly = !!checked;
+/**
+ * The preference AND the fact. Before draft night nobody owns anybody, so the
+ * filter would remove nothing — every surface asks this rather than reading the
+ * flag directly, which is what keeps the board, the table and the charts from
+ * disagreeing about who is available.
+ */
+function freeAgentFilterActive() {
+    return draftHasBeenHeld() && state.freeAgentsOnly !== false;
+}
+
+function freeAgentTitle() {
+    return draftHasBeenHeld()
+        ? 'בדראפט כל שחקן שייך למנג׳ר אחד בלבד. כבוי — הטבלה, הגרפים והלוח יציגו גם שחקנים תפוסים, לבחינת סגלים של יריבים או שווי טרייד'
+        : 'הדראפט עוד לא נערך (או שנתוני הליגה לא נטענו), ולכן כל השחקנים חופשיים ואין מה לסנן';
+}
+
+// Renamed from fpl_board_free_only when the switch grew from the board alone to
+// the whole tab; the old key is still read once so a choice made before the
+// rename survives it.
+const FREE_AGENTS_KEY = 'fpl_free_agents_only';
+
+function loadFreeAgentsOnly() {
     try {
-        localStorage.setItem(BOARD_FREE_KEY, state.boardFreeAgentsOnly ? '1' : '0');
+        const stored = localStorage.getItem(FREE_AGENTS_KEY)
+            ?? localStorage.getItem('fpl_board_free_only');
+        return stored !== '0';
+    } catch { return true; }
+}
+
+/** The toolbar button is a second view of the same switch, so it is redrawn too. */
+function syncFreeAgentButton() {
+    const btn = document.getElementById('freeAgentsOnlyBtn');
+    if (!btn) return;
+    const held = draftHasBeenHeld();
+    btn.setAttribute('aria-pressed', String(freeAgentFilterActive()));
+    btn.disabled = !held;
+    btn.title = freeAgentTitle();
+}
+
+function setFreeAgentsOnly(on) {
+    state.freeAgentsOnly = !!on;
+    try {
+        localStorage.setItem(FREE_AGENTS_KEY, state.freeAgentsOnly ? '1' : '0');
     } catch { /* private browsing; the session still honours the choice */ }
     // The pool changes, so replacement level and the drop-off ladder change with
     // it — both are rebuilt per pool inside draftBoardPool.
     renderDraftBoard();
+    syncFreeAgentButton();
+    // And the table, which re-renders the charts from the same filtered set.
+    processChange();
+}
+
+function toggleFreeAgentsOnly() {
+    setFreeAgentsOnly(!freeAgentFilterActive());
 }
 
 const POSITION_LABELS = { GKP: 'שוערים', DEF: 'מגנים', MID: 'קשרים', FWD: 'חלוצים' };
@@ -9445,7 +9532,10 @@ function getMatrixChartConfig(data, xLabel, yLabel, quadLabels = {}, opts = {}) 
                         font: { weight: 'bold', size: 13 },
                         color: '#64748b'
                     },
-                    grid: { color: 'rgba(0, 0, 0, 0.05)' }
+                    grid: { color: 'rgba(0, 0, 0, 0.05)' },
+                    // Every one of these axes can go negative, and an RTL canvas
+                    // draws -25 as "25-" without the isolate. See ltrTick.
+                    ticks: { callback: ltrTick }
                 },
                 y: {
                     title: {
@@ -9454,7 +9544,8 @@ function getMatrixChartConfig(data, xLabel, yLabel, quadLabels = {}, opts = {}) 
                         font: { weight: 'bold', size: 13 },
                         color: '#64748b'
                     },
-                    grid: { color: 'rgba(0, 0, 0, 0.05)' }
+                    grid: { color: 'rgba(0, 0, 0, 0.05)' },
+                    ticks: { callback: ltrTick }
                 }
             },
             plugins: {
@@ -9614,12 +9705,25 @@ function labelTop(points, count, score) {
     return points.map(pt => ({ ...pt, label: chosen.has(pt) ? pt.name : '' }));
 }
 
+/**
+ * A tick label that survives an RTL page.
+ *
+ * The canvas inherits the document's direction, so the bidi algorithm treats a
+ * minus sign as neutral punctuation and moves it to the other end of the run:
+ * -25 was drawn as "25-", on every axis that goes below zero — the opportunity
+ * board's momentum axis, VORP, the transfer flow. The isolate makes each label
+ * its own left-to-right run.
+ */
+function ltrTick(value) {
+    return `⁦${value}⁩`;
+}
+
 /** Axis and tooltip chrome shared by the non-scatter charts. */
 function chartAxis(text) {
     return {
         title: { display: true, text, font: { weight: 'bold', size: 12 }, color: '#64748b' },
         grid: { color: 'rgba(0,0,0,0.05)' },
-        ticks: { color: '#94a3b8', font: { size: 11 } }
+        ticks: { color: '#94a3b8', font: { size: 11 }, callback: ltrTick }
     };
 }
 
@@ -10050,6 +10154,232 @@ function buildDefconChart(data) {
     };
 }
 
+/* ------------------------- 9. the classic market -------------------------- */
+
+/**
+ * Net transfers this gameweek against points per match.
+ *
+ * The transfers are from the *classic* game, and that needs saying out loud
+ * because there are no transfers in Draft at all. It is the same crowd signal
+ * as price and ownership — millions of managers re-voting on a player — only
+ * read weekly instead of once a season, which is why it moves before the price
+ * does and long before a season average does.
+ *
+ * What it is for here: the top-left corner. A player producing well whom the
+ * classic crowd is dumping is either hurt, benched or about to face a wall of
+ * hard fixtures — or he is mispriced, and in a draft league nobody else is
+ * looking. The chart does not decide which; it tells you whose row to open.
+ */
+function buildMarketFlowChart(data) {
+    const raw = data.map(p => {
+        const net = displayNetTransfers(p);
+        if (net === null || p.market_departed) return null;
+        const ppg = parseFloat(p.points_per_game) || 0;
+        return {
+            x: net / 1000, y: ppg, net,
+            name: p.web_name, team: p.team_name, pos: p.position_name
+        };
+    }).filter(Boolean);
+    if (raw.length < 4) return null;
+
+    // Every x at zero is not a chart, it is a vertical line pretending to be
+    // one. That is the normal state on the archived season and before a
+    // gameweek has been played, so the card hides instead.
+    const maxAbs = Math.max(...raw.map(pt => Math.abs(pt.x)));
+    if (!maxAbs) return null;
+
+    // Named: the productive, and the extremes of the flow in either direction —
+    // both ends are the story, so the term is absolute.
+    const points = labelTop(raw, 22, pt => pt.y * 2 + (Math.abs(pt.x) / maxAbs) * 8);
+
+    const fmt = n => `${n > 0 ? '+' : ''}${Math.round(n).toLocaleString('en-US')}`;
+    return getMatrixChartConfig(points, 'העברות נטו במחזור (באלפים)', 'נקודות למשחק', {
+        topRight: 'נחטף — ובצדק', topLeft: 'מייצר, והשוק נוטש',
+        bottomRight: 'נחטף בלי תפוקה', bottomLeft: 'נזרק, ובצדק'
+    }, {
+        radiusFor: () => 4.5,
+        tooltipFor: d => `${d.name} · ${d.team} · ${d.pos} — ${fmt(d.net)} העברות, `
+            + `${d.y.toFixed(1)} נק׳ למשחק`
+    });
+}
+
+/* ---------------------------- 10. signal spread --------------------------- */
+
+// The same colours the badges use, read off the same values, so a dot and the
+// badge in the table are the same verdict in the same ink.
+const SIGNAL_TONE_COLOR = {
+    good: '#0e7a45', info: '#1c57a8', plum: '#5c2e8f', clinical: '#0b6a63',
+    warn: '#a9620b', bad: '#b93229', muted: '#64748b'
+};
+
+/**
+ * Spread of quality inside each verdict.
+ *
+ * The signal is a category, not a quantity, so it cannot be an axis: nine
+ * verdicts have no order and no spacing, and plotting their sort rank would
+ * invent both. It is a column instead, and the height is what you actually want
+ * to know — "קח עכשיו" is only interesting if somebody in that column is up
+ * where the good players are.
+ *
+ * The horizontal scatter inside a column is a fixed function of the player id,
+ * not noise: it keeps the dots from stacking into one line, and it puts the
+ * same player in the same place on every render.
+ */
+function buildSignalSpreadChart(data) {
+    const buckets = new Map();
+    for (const p of data) {
+        const score = parseFloat(p.draft_score);
+        if (!Number.isFinite(score) || p.market_departed) continue;
+        const sig = signalFor(p);
+        if (!buckets.has(sig.key)) buckets.set(sig.key, { sig, players: [] });
+        buckets.get(sig.key).players.push({ p, score });
+    }
+
+    // In SIGNAL_SORT_ORDER — most actionable first — and only the verdicts that
+    // actually caught somebody, so the axis has no empty columns to explain.
+    const columns = SIGNAL_SORT_ORDER
+        .filter(key => buckets.has(key))
+        .map(key => buckets.get(key));
+    if (columns.length < 2) return null;
+
+    // Knuth multiplicative hash, folded to ±0.31 of a column width.
+    const jitter = id => ((((Number(id) * 2654435761) % 1000) / 1000) - 0.5) * 0.62;
+
+    const points = [];
+    columns.forEach((col, i) => {
+        const named = new Set(col.players
+            .slice().sort((a, b) => b.score - a.score).slice(0, 2).map(x => x.p.id));
+        for (const { p, score } of col.players) {
+            points.push({
+                x: i + jitter(p.id), y: score, tone: col.sig.tone,
+                label: named.has(p.id) ? p.web_name : '',
+                name: p.web_name, team: p.team_name, verdict: col.sig.label
+            });
+        }
+    });
+
+    return {
+        type: 'scatter',
+        data: {
+            datasets: [{
+                label: 'שחקנים',
+                data: points,
+                pointRadius: 3.5,
+                pointHoverRadius: 7,
+                pointBorderWidth: 0,
+                backgroundColor: ctx => ctx.raw
+                    ? `${SIGNAL_TONE_COLOR[ctx.raw.tone] || '#64748b'}cc`
+                    : '#94a3b8'
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            layout: { padding: { top: 28, right: 16, bottom: 4, left: 16 } },
+            scales: {
+                x: {
+                    ...chartAxis(''),
+                    min: -0.6, max: columns.length - 0.4,
+                    grid: { display: false },
+                    ticks: {
+                        color: '#475569', font: { size: 10.5, weight: 'bold' },
+                        // One tick per column, at the column's own centre. autoSkip
+                        // would drop labels on a narrow card and leave dots above a
+                        // blank axis, which is worse than a crowded one.
+                        stepSize: 1, autoSkip: false, maxRotation: 0, minRotation: 0,
+                        callback: v => (Number.isInteger(v) && columns[v])
+                            ? columns[v].sig.label : ''
+                    }
+                },
+                y: { ...chartAxis('ציון דראפט') }
+            },
+            plugins: {
+                legend: { display: false },
+                datalabels: {
+                    display: 'auto', align: 'top', offset: 3,
+                    formatter: (value, context) => {
+                        const d = context.dataset.data[context.dataIndex];
+                        return d.label ? `⁦${d.label}⁩` : '';
+                    },
+                    font: { size: 9, weight: 'bold' }, color: '#1e293b',
+                    clip: false, clamp: true
+                },
+                tooltip: {
+                    ...CHART_TOOLTIP,
+                    callbacks: {
+                        label: c => `${c.raw.name} · ${c.raw.team} — ${c.raw.verdict}, `
+                            + `ציון ${c.raw.y.toFixed(1)}`
+                    }
+                }
+            }
+        }
+    };
+}
+
+/* --------------------------- 11. underlying vs value ---------------------- */
+
+/**
+ * Chance creation against value, and the reason it is VORP on the y axis rather
+ * than the draft score: the draft score is a weighted sum of league-wide
+ * percentiles that already includes xGI, so plotting it against xGI would draw
+ * a diagonal by construction and the off-diagonal — the only part worth reading
+ * — would be an artefact of the weighting. VORP is built from points, with xGI
+ * entering only as a bounded conversion-luck correction.
+ *
+ * Goalkeepers are left out. A keeper's xGI is ~0 as a fact about the job, not
+ * about the player, so eleven of them on the left edge would drag the crosshair
+ * and make every outfielder look like a creator.
+ */
+function buildUnderlyingValueChart(data) {
+    const raw = data.map(p => {
+        if (p.position_name === 'GKP' || p.market_departed) return null;
+        if (!Number.isFinite(p.vorp) || p.minutes < 450) return null;
+        return {
+            x: parseFloat(p.xGI_per90) || 0, y: p.vorp,
+            name: p.web_name, team: p.team_name, pos: p.position_name
+        };
+    }).filter(Boolean);
+    if (raw.length < 4) return null;
+
+    const points = labelTop(raw, 24, pt => pt.y * 1.5 + pt.x * 4);
+
+    return getMatrixChartConfig(points, 'xG+xA ל-90 דקות', 'יתרון על החלופה בעמדה (VORP)', {
+        topRight: 'איום אמיתי, ערך אמיתי', topLeft: 'ערך בלי איום התקפי',
+        bottomRight: 'מייצר סיכויים, עוד לא נקודות', bottomLeft: 'חלש בשניהם'
+    }, {
+        radiusFor: () => 4.5,
+        tooltipFor: d => `${d.name} · ${d.team} · ${d.pos} — ${d.x.toFixed(2)} xGI/90, `
+            + `VORP ${d.y > 0 ? '+' : ''}${d.y.toFixed(2)}`
+    });
+}
+
+/**
+ * The signal→colour key, built from the verdicts actually on the chart.
+ *
+ * It has to be, for two reasons. Tones are not unique — "לא זמין" and "מימוש
+ * יתר" are both red, "למכור גבוה" and "סיכון סיבוב" both amber — so a key that
+ * took the first rule per tone named a verdict that was not on screen while the
+ * one that was went unnamed. And the filters decide which verdicts exist at all:
+ * listing nine when five are drawn is a key to a chart nobody is looking at.
+ */
+function signalLegendHtml(data) {
+    const rows = Array.isArray(data) ? data : [];
+    const byTone = new Map();
+    for (const key of SIGNAL_SORT_ORDER) {
+        const rule = [...SIGNAL_RULES, HOLD_SIGNAL].find(r => r.key === key);
+        if (!rule) continue;
+        if (!rows.some(p => Number.isFinite(parseFloat(p.draft_score))
+            && !p.market_departed && signalFor(p).key === key)) continue;
+        if (!byTone.has(rule.tone)) byTone.set(rule.tone, []);
+        byTone.get(rule.tone).push(rule.label);
+    }
+    if (!byTone.size) return '';
+    return '<span class="chart-keys">' + [...byTone]
+        .map(([tone, labels]) => `<span class="chart-key"><i style="background:${
+            SIGNAL_TONE_COLOR[tone] || '#64748b'}"></i>${labels.join(' / ')}</span>`)
+        .join('') + '</span>';
+}
+
 /* -------------------------------- the list ------------------------------- */
 
 const CHART_SPECS = [
@@ -10100,6 +10430,28 @@ const CHART_SPECS = [
         note: () => 'אחוז ההופעות שבהן עברו בפועל את הסף (10 למגן, 12 לקשר/חלוץ). '
             + `ממוצע ל-90 דקות מטעה כאן. צבע = עמדה: ${positionLegendHtml()}`,
         build: buildDefconChart
+    },
+    {
+        id: 'chart-market-flow', title: '💱 לאן השוק זז השבוע',
+        note: () => 'העברות נטו במשחק הרגיל (לא בדראפט) מול נקודות למשחק — אות המונים '
+            + 'הכי מהיר שיש. שמאל למעלה = מייצר והשוק נוטש, שם מתחבאות ההזדמנויות. '
+            + 'הצבע לפי הרביע: ' + quadrantLegendHtml('נחטף ובצדק', 'נזרק ובצדק'),
+        build: buildMarketFlowChart
+    },
+    {
+        id: 'chart-signal-spread', title: '🚦 פיזור איכות לפי סיגנל',
+        note: data => 'כל נקודה היא שחקן, בעמודה של הסיגנל שלו. הגובה הוא ציון הדראפט, '
+            + 'ולכן העמודה מראה לא רק כמה שחקנים קיבלו את הוורדיקט אלא באיזו איכות. '
+            + `צבע = סיגנל: ${signalLegendHtml(data)}`,
+        build: buildSignalSpreadChart
+    },
+    {
+        id: 'chart-underlying', title: '🎯 יצירת סיכויים מול ערך',
+        note: () => 'xG+xA ל-90 מול היתרון על החלופה באותה עמדה. ימין למטה = מייצר '
+            + 'סיכויים שעוד לא הפכו לנקודות. בלי שוערים — xGI של שוער הוא אפס מתוקף '
+            + 'התפקיד. הצבע לפי הרביע: '
+            + quadrantLegendHtml('איום וערך', 'חלש בשניהם'),
+        build: buildUnderlyingValueChart
     }
 ];
 
@@ -10111,8 +10463,8 @@ const CHART_SPECS = [
  * = taken" in front of a chart where every point is green describes a
  * distinction that does not exist yet.
  */
-function chartNote(spec) {
-    return typeof spec.note === 'function' ? spec.note() : spec.note;
+function chartNote(spec, data) {
+    return typeof spec.note === 'function' ? spec.note(data) : spec.note;
 }
 
 /**
@@ -10168,7 +10520,11 @@ function renderCharts() {
     ensureChartCards();
 
     // Pre-slice, so a "top 20" table does not reduce every scatter to 20 points.
-    const data = (state.filteredData && state.filteredData.length)
+    //
+    // An *empty* filteredData is an answer, not a missing value: it means the
+    // current filters match nobody. Falling back to the full league there drew
+    // owned players under a board that had just excluded them.
+    const data = Array.isArray(state.filteredData)
         ? state.filteredData
         : (state.displayedData || state.allPlayersData[state.currentDataSource].processed);
 
@@ -10183,10 +10539,11 @@ function renderCharts() {
 
         // Re-read the caption every render, not only when the cards are built:
         // the ones that describe a colour encoding change what they say when the
-        // encoding changes, and the scaffolding is built exactly once.
+        // encoding changes, and the scaffolding is built exactly once. Given the
+        // same rows the chart gets, so a key can name what is actually drawn.
         const noteEl = card.querySelector('.chart-note');
         if (noteEl) {
-            const text = chartNote(spec);
+            const text = chartNote(spec, data);
             if (noteEl.innerHTML !== text) noteEl.innerHTML = text;
         }
 

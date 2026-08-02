@@ -229,11 +229,30 @@ try {
             .some(id => (state.allPlayersData[state.currentDataSource].processed
                 .find(p => p.id === id) || {}).web_name === n)).length;
 
-        toggleBoardFreeAgents(false);
+        // The table and the charts read the same switch, so they are measured
+        // through it too — a board that has excluded owned players while the
+        // table under it still lists them is two answers on one screen.
+        //
+        // Re-run through the switch first: the rosters above were injected
+        // straight into state, so filteredData still holds the pre-draft answer
+        // until something re-filters.
+        const ownedInTable = () => (state.filteredData || [])
+            .filter(p => owned.has(p.id)).length;
+        setFreeAgentsOnly(true);
         await new Promise(r => setTimeout(r, 150));
-        const off = { top: top(), scope: document.querySelector('.db-scope').textContent };
+        const onTable = { rows: (state.filteredData || []).length, owned: ownedInTable() };
+        const btn = document.getElementById('freeAgentsOnlyBtn');
+        const onBtn = { pressed: btn.getAttribute('aria-pressed'), disabled: btn.disabled };
 
-        toggleBoardFreeAgents(true);
+        setFreeAgentsOnly(false);
+        await new Promise(r => setTimeout(r, 150));
+        const off = {
+            top: top(), scope: document.querySelector('.db-scope').textContent,
+            rows: (state.filteredData || []).length, owned: ownedInTable(),
+            pressed: btn.getAttribute('aria-pressed')
+        };
+
+        setFreeAgentsOnly(true);
         await new Promise(r => setTimeout(r, 150));
         return {
             enabled: !document.querySelector('.db-toggle input').disabled,
@@ -241,7 +260,10 @@ try {
             ownedShownWhileOn,
             changed: JSON.stringify(on.top) !== JSON.stringify(off.top),
             offSaysSo: /כולל תפוסים/.test(off.scope),
-            restored: JSON.stringify(top()) === JSON.stringify(on.top)
+            restored: JSON.stringify(top()) === JSON.stringify(on.top),
+            btnOn: onBtn, btnOffPressed: off.pressed,
+            tableOwnedWhileOn: onTable.owned,
+            tableGrewWhenOff: off.rows > onTable.rows && off.owned > 0
         };
     });
     check(faToggle.enabled && faToggle.onChecked,
@@ -251,6 +273,14 @@ try {
     check(faToggle.changed && faToggle.offSaysSo,
         'turning it off widens the pool to owned players and the board says so');
     check(faToggle.restored, 'turning it back on restores the free-agent recommendations');
+    check(faToggle.btnOn.pressed === 'true' && !faToggle.btnOn.disabled,
+        'the toolbar button reports the same state the board checkbox does');
+    check(faToggle.btnOffPressed === 'false',
+        'the toolbar button follows a change made from the board');
+    check(faToggle.tableOwnedWhileOn === 0,
+        'the table (and so the charts) drops owned players while the filter is on');
+    check(faToggle.tableGrewWhenOff,
+        'turning it off puts owned players back into the table');
 
     // Put it back, so the later checks see the state they expect.
     await page.evaluate(() => {
@@ -413,7 +443,65 @@ try {
             if (/צבע = עמדה|הצבע מסמן עמדה/.test(noteText) && !hasKey) {
                 faults.push(`${name}: colour means position but no key is shown`);
             }
+            if (/צבע = סיגנל/.test(noteText) && !hasKey) {
+                faults.push(`${name}: colour means the signal but no key is shown`);
+            }
         }
+
+        // The signal spread is a category axis faked on a linear scale, so the
+        // two ways it can quietly break are a tick callback that returns nothing
+        // (dots hanging over a blank axis) and every verdict resolving to one
+        // colour.
+        const spread = charts['chart-signal-spread'];
+        const spreadTicks = spread
+            ? spread.scales.x.ticks.map(t => t.label).filter(Boolean) : [];
+        const spreadColours = spread
+            ? new Set((spread.getDatasetMeta(0).data || [])
+                .map(el => String(el.options.backgroundColor))) : new Set();
+
+        // A keeper's xGI is zero as a fact about the job, so one on this chart
+        // would drag the crosshair and mislabel every outfielder.
+        //
+        // Matched on names that belong to keepers *only*. The league has a
+        // Martinez and a Henderson in goal and another of each outfield, so a
+        // plain name-to-keeper lookup reported two false keepers on a chart that
+        // was excluding them correctly.
+        const underlying = charts['chart-underlying'];
+        const byName = new Map();
+        for (const p of state.allPlayersData[state.currentDataSource].processed) {
+            if (!byName.has(p.web_name)) byName.set(p.web_name, new Set());
+            byName.get(p.web_name).add(p.position_name);
+        }
+        const keeperOnly = new Set([...byName]
+            .filter(([, poss]) => poss.size === 1 && poss.has('GKP')).map(([n]) => n));
+        const keepersPlotted = underlying
+            ? (underlying.data.datasets[0].data || []).filter(d => keeperOnly.has(d.name)).length
+            : 0;
+
+        // Negative ticks on an RTL canvas. The bidi algorithm treats the minus as
+        // neutral and moves it to the far end, so -25 was drawn as "25-" on every
+        // axis that crosses zero. Counted, not just checked, so the assertion
+        // cannot pass by finding no negatives at all.
+        let negTicks = 0, unisolated = 0;
+        for (const ch of Object.values(charts)) {
+            if (!ch || !ch.scales) continue;
+            for (const axis of ['x', 'y']) {
+                for (const t of ((ch.scales[axis] || {}).ticks || [])) {
+                    const raw = String(t.label ?? '');
+                    const bare = raw.replace(/[⁦⁩]/g, '');
+                    if (!/^-[\d.,]+$/.test(bare)) continue;
+                    negTicks++;
+                    if (!raw.includes('⁦')) unisolated++;
+                }
+            }
+        }
+
+        // The key on the signal card must name the verdicts that are drawn.
+        // Tones are shared — "לא זמין" and "מימוש יתר" are both red — so a key
+        // built per tone from the rule list named a verdict that was not there.
+        const spreadNote = document.querySelector('#card-chart-signal-spread .chart-note');
+        const legendLabels = [...(spreadNote ? spreadNote.querySelectorAll('.chart-key') : [])]
+            .flatMap(el => el.textContent.split('/').map(s => s.trim()));
 
         // Switch the position matrix and make sure it rebuilds rather than leaking
         // the destroyed instance.
@@ -422,9 +510,31 @@ try {
         const afterToggle = !!charts['chart-position'];
         switchMainView('table');
         return { cards: cards.length, visible: visible.length, drawn: drawn.length,
-            notes: notes.length, afterToggle, faults };
+            notes: notes.length, afterToggle, faults,
+            spreadTicks, spreadColours: spreadColours.size, legendLabels,
+            hasUnderlying: !!underlying, keepersPlotted,
+            underlyingPoints: underlying ? underlying.data.datasets[0].data.length : 0,
+            negTicks, unisolated,
+            // No transfer churn exists on a completed season, so this card is
+            // expected to hide itself rather than draw a vertical line at zero.
+            marketFlowDrawn: !!charts['chart-market-flow'] };
     });
-    check(chartsView.cards === 8, `charts view built ${chartsView.cards} cards from CHART_SPECS`);
+    check(chartsView.cards === 11, `charts view built ${chartsView.cards} cards from CHART_SPECS`);
+    check(chartsView.spreadTicks.length >= 2,
+        `the signal spread labels its columns (${chartsView.spreadTicks.join(', ')})`);
+    check(chartsView.spreadColours > 1,
+        `the signal spread paints ${chartsView.spreadColours} verdicts in different ink`);
+    check(chartsView.spreadTicks.length > 0
+        && chartsView.spreadTicks.every(t => chartsView.legendLabels.includes(t))
+        && chartsView.legendLabels.every(l => chartsView.spreadTicks.includes(l)),
+        'the signal key names exactly the verdicts the chart drew'
+        + ` (key: ${chartsView.legendLabels.join(', ')})`);
+    check(chartsView.negTicks > 0 && chartsView.unisolated === 0,
+        `all ${chartsView.negTicks} negative axis ticks read as -25, not 25-`);
+    check(chartsView.hasUnderlying && chartsView.keepersPlotted === 0,
+        `xGI vs value plots ${chartsView.underlyingPoints} outfielders and no keepers`);
+    check(!chartsView.marketFlowDrawn,
+        'the transfer-flow card hides itself when the season has no transfer data');
     check(chartsView.visible > 0 && chartsView.drawn === chartsView.visible,
         `all ${chartsView.visible} visible charts drew (${chartsView.cards - chartsView.visible} hid themselves)`);
     check(chartsView.notes === chartsView.visible, 'every visible chart says what it answers');

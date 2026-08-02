@@ -70,8 +70,10 @@ export default [
                 draftBoardPool: 'readonly', panelPicks: 'readonly',
                 DRAFT_PANELS: 'readonly', invalidateSignals: 'readonly',
                 computeDraftMetrics: 'readonly',
-                toggleBoardFreeAgents: 'readonly', openLeaderboard: 'readonly',
-                sortLeaderboard: 'readonly'
+                setFreeAgentsOnly: 'readonly', toggleFreeAgentsOnly: 'readonly',
+                openLeaderboard: 'readonly', sortLeaderboard: 'readonly',
+                signalFor: 'readonly', displayNetTransfers: 'readonly',
+                applyMarketOverlay: 'readonly', processChange: 'readonly'
             }
         }
     },
