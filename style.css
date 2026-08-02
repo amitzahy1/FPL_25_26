@@ -6738,3 +6738,67 @@ canvas {
 }
 
 .cols-panel .optional-chip { width: 100%; text-align: start; border-radius: 7px; padding: 6px 10px; }
+
+/* ==========================================================================
+   ONE-PAGE LAYOUT — the charts fold, the top-six swap, the bench
+   ========================================================================== */
+
+/* Desktop: the section header is unnecessary chrome — the fold exists for
+   phones. Keep the summary invisible but focusable-free on wide screens. */
+.charts-wrap > .filters-toggle { display: none; }
+
+.charts-wrap { margin: 12px 0; }
+
+/* The slot's ⇄ menu. A native <select> under an icon: zero JS to open, and the
+   full chart list with the current one checked comes free. */
+.chart-swap {
+    position: relative;
+    flex: none;
+    align-self: flex-start;
+    width: 26px;
+    height: 26px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid #e2e8f0;
+    border-radius: 7px;
+    background: #f8fafc;
+    color: #64748b;
+    font-size: 13px;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.chart-swap:hover { border-color: #94a3b8; color: #334155; }
+
+.chart-swap select {
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    cursor: pointer;
+}
+
+.more-charts { margin-top: 14px; }
+
+.more-charts > summary {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: fit-content;
+    padding: 8px 16px;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    background: #fff;
+    font-size: 14px;
+    font-weight: 700;
+    color: #475569;
+    cursor: pointer;
+    list-style: none;
+    user-select: none;
+}
+
+.more-charts > summary::-webkit-details-marker { display: none; }
+.more-charts > summary::after { content: '▾'; color: #94a3b8; transition: transform .18s ease; }
+.more-charts[open] > summary::after { transform: rotate(180deg); }
+.more-charts > summary:hover { border-color: #94a3b8; }
+.more-charts[open] > .charts-dashboard-grid { margin-top: 12px; }

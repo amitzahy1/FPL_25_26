@@ -399,7 +399,20 @@ try {
     const chartsView = await page.evaluate(async () => {
         switchMainView('charts');
         await new Promise(r => setTimeout(r, 900));
-        const cards = [...document.querySelectorAll('#chartsGrid .chart-card')];
+
+        // The page leads with six managed slots and benches the rest behind
+        // עוד גרפים. Capture the split, then open the fold so every card is
+        // measurable below.
+        const topSix = [...document.querySelectorAll('#chartsGrid .chart-card')]
+            .map(c => c.id.replace(/^card-/, ''));
+        const benched = [...document.querySelectorAll('#moreChartsGrid .chart-card')].length;
+        const foldedDrawn = [...document.querySelectorAll('#moreChartsGrid canvas')]
+            .filter(cv => charts[cv.id]).length;
+        document.getElementById('moreCharts').open = true;
+        renderCharts();
+        await new Promise(r => setTimeout(r, 700));
+
+        const cards = [...document.querySelectorAll('#mainChartsView .chart-card')];
         const visible = cards.filter(c => !c.hidden);
         const drawn = visible.filter(c => {
             const canvas = c.querySelector('canvas');
@@ -611,7 +624,7 @@ try {
         await new Promise(r => setTimeout(r, 400));
         switchMainView('table');
         return { cards: cards.length, visible: visible.length, drawn: drawn.length,
-            notes: notes.length, afterToggle, faults,
+            notes: notes.length, afterToggle, faults, topSix, benched, foldedDrawn,
             spreadTicks, spreadColours: spreadColours.size, legendLabels,
             hasUnderlying: !!underlying, keepersPlotted,
             underlyingPoints: underlying ? underlying.data.datasets[0].data.length : 0,
@@ -622,6 +635,12 @@ try {
             marketFlowDrawn: !!charts['chart-market-flow'] };
     });
     check(chartsView.cards === 12, `charts view built ${chartsView.cards} cards from CHART_SPECS`);
+    check(JSON.stringify(chartsView.topSix) === JSON.stringify(
+        ['chart-opportunity', 'chart-position', 'chart-team-targets',
+            'chart-defcon', 'chart-signal-spread', 'chart-underlying']),
+        `the six lead slots hold the chosen defaults (${chartsView.topSix.join(', ')})`);
+    check(chartsView.benched === 6 && chartsView.foldedDrawn === 0,
+        `${chartsView.benched} benched cards stay undrawn until עוד גרפים opens`);
     check(chartsView.spreadTicks.length >= 2,
         `the signal spread labels its columns (${chartsView.spreadTicks.join(', ')})`);
     check(chartsView.spreadColours > 1,
@@ -868,6 +887,55 @@ try {
     check(barDrives.panelOpen && barDrives.sheetShut,
         'and an action from the sheet runs it and gets the sheet out of the way');
     check(barDrives.backToTable, 'and the way back to the table works');
+
+    // The one-page contract: the filters at the top govern the charts, the
+    // board and the table together, and a slot swap moves cards without
+    // rebuilding anything.
+    const onePage = await page.evaluate(async () => {
+        // Order down the page: filters → charts → board → table.
+        const y = id => document.getElementById(id).getBoundingClientRect().top + window.scrollY;
+        const ordered = y('filtersPanel') < y('chartsPanel')
+            && y('chartsPanel') < y('draftBoard')
+            && y('draftBoard') < y('mainTableView');
+
+        // Filter to defenders and let the debounce fire.
+        document.getElementById('positionFilter').value = 'DEF';
+        processChange();
+        await new Promise(r => setTimeout(r, 500));
+        const boardRows = [...document.querySelectorAll('#draftBoard .db-tbl tbody tr')];
+        const posOnBoard = new Set(state.filteredData.map(p => p.position_name));
+        const scope = (document.querySelector('#draftBoard .db-scope') || {}).textContent || '';
+        const oppPoints = charts['chart-opportunity']
+            ? charts['chart-opportunity'].data.datasets[0].data.length : 0;
+        const allDef = [...posOnBoard].every(p => p === 'DEF');
+        document.getElementById('positionFilter').value = '';
+        processChange();
+        await new Promise(r => setTimeout(r, 500));
+
+        // Swap slot 0 to the trend chart and back.
+        const before0 = document.querySelector('#chartsGrid .chart-card').id;
+        swapTopChart(0, 'chart-trend');
+        await new Promise(r => setTimeout(r, 400));
+        const after0 = document.querySelector('#chartsGrid .chart-card').id;
+        const trendDrawn = !!charts['chart-trend'];
+        const stored = JSON.parse(localStorage.getItem('fpl_top_charts'))[0];
+        swapTopChart(0, 'chart-opportunity');
+        await new Promise(r => setTimeout(r, 400));
+        const restored = document.querySelector('#chartsGrid .chart-card').id === before0;
+
+        return { ordered, allDef, boardRows: boardRows.length, scope,
+            oppPoints, before0, after0, trendDrawn, stored, restored };
+    });
+    check(onePage.ordered, 'the page reads filters → charts → board → table');
+    check(onePage.allDef && onePage.boardRows > 0,
+        'filtering to defenders narrows the board to defenders, and it still recommends');
+    check(/לפי הסינון/.test(onePage.scope),
+        `and the board's scope line says it is filtered ("${onePage.scope.trim()}")`);
+    check(onePage.oppPoints > 0, 'the lead chart redraws from the same filtered set');
+    check(onePage.after0 === 'card-chart-trend' && onePage.trendDrawn
+        && onePage.stored === 'chart-trend',
+        'swapping slot 1 brings the chosen chart in, draws it, and persists');
+    check(onePage.restored, 'and swapping back restores the original slot');
 
     check(pageErrors.length === 0, 'still no page errors after interaction');
 } catch (e) {

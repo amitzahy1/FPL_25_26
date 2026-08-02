@@ -18,11 +18,13 @@ const FNS = [
     'buildMarketFlowChart', 'buildSignalSpreadChart', 'buildSignalFocusChart',
     'buildUnderlyingValueChart', 'buildTeamTargetsChart', 'signalLegendHtml',
     'barRowLabel', 'barRowTicks', 'signalFocusHeight',
-    'scopeToFacet', 'chartFacetChipsHtml', 'setChartFacet', 'chartFacetValue'
+    'scopeToFacet', 'chartFacetChipsHtml', 'setChartFacet', 'chartFacetValue',
+    'loadTopCharts', 'swapTopChart'
 ];
 
 const DEPS = ['CHART_TOOLTIP', 'SIGNAL_TONE_COLOR', 'SIGNAL_SORT_ORDER',
-    'SIGNAL_RULES', 'HOLD_SIGNAL', 'CHART_FACETS', 'POSITION_COLOR', 'POSITION_LABELS'];
+    'SIGNAL_RULES', 'HOLD_SIGNAL', 'CHART_FACETS', 'POSITION_COLOR', 'POSITION_LABELS',
+    'DEFAULT_TOP_CHARTS', 'TOP_CHARTS_KEY'];
 
 /** A processed row with everything all three builders read. */
 function row(over = {}) {
@@ -58,6 +60,61 @@ function load(verdicts = {}) {
 }
 
 const points = config => config.data.datasets[0].data;
+
+describe('the six lead slots', () => {
+    function loadWithStorage() {
+        const store = new Map();
+        globalThis.localStorage = {
+            getItem: k => (store.has(k) ? store.get(k) : null),
+            setItem: (k, v) => store.set(k, String(v))
+        };
+        const api = load();
+        // swapTopChart re-reads CHART_SPECS for validity, so give it real ids.
+        globalThis.CHART_SPECS = [
+            'chart-opportunity', 'chart-position', 'chart-team-targets',
+            'chart-defcon', 'chart-signal-spread', 'chart-underlying', 'chart-trend'
+        ].map(id => ({ id }));
+        return { ...api, store };
+    }
+
+    test('the default six are the chosen six, in order', () => {
+        const { loadTopCharts } = loadWithStorage();
+        assert.deepEqual(loadTopCharts(), [
+            'chart-opportunity', 'chart-position', 'chart-team-targets',
+            'chart-defcon', 'chart-signal-spread', 'chart-underlying'
+        ]);
+    });
+
+    test('a saved chart that no longer exists falls back to the default set', () => {
+        // A renamed chart must not leave a five-slot page.
+        const { loadTopCharts, store } = loadWithStorage();
+        store.set('fpl_top_charts', JSON.stringify([
+            'chart-opportunity', 'chart-REMOVED', 'chart-team-targets',
+            'chart-defcon', 'chart-signal-spread', 'chart-underlying']));
+        assert.equal(loadTopCharts().length, 6);
+        assert.ok(!loadTopCharts().includes('chart-REMOVED'));
+    });
+
+    test('swapping in a chart that holds another slot trades places', () => {
+        const { swapTopChart, state, store } = loadWithStorage();
+        state.topChartIds = ['chart-opportunity', 'chart-position', 'chart-trend',
+            'chart-defcon', 'chart-signal-spread', 'chart-underlying'];
+        swapTopChart(0, 'chart-trend');
+        assert.deepEqual(state.topChartIds.slice(0, 3),
+            ['chart-trend', 'chart-position', 'chart-opportunity'],
+            'slot 2 gets the evicted chart rather than a duplicate');
+        assert.equal(new Set(state.topChartIds).size, 6, 'no id twice, no slot empty');
+        assert.equal(JSON.parse(store.get('fpl_top_charts'))[0], 'chart-trend');
+    });
+
+    test('an unknown chart id is refused', () => {
+        const { swapTopChart, state } = loadWithStorage();
+        state.topChartIds = ['chart-opportunity', 'chart-position', 'chart-trend',
+            'chart-defcon', 'chart-signal-spread', 'chart-underlying'];
+        swapTopChart(0, 'chart-nope');
+        assert.equal(state.topChartIds[0], 'chart-opportunity');
+    });
+});
 
 describe('transfer flow chart', () => {
     test('plots net transfers in thousands against points per match', () => {

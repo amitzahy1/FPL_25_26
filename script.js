@@ -305,6 +305,7 @@ const state = {
     // one scatter to defenders should not empty the seven cards next to it, and
     // the panel's own filters are still there for when you do want that.
     chartFacets: {},
+    topChartIds: null,           // the six lead charts; filled from localStorage in init
     // Advanced filters
     searchQuery: '',
     priceRange: { min: 4, max: 15 },
@@ -1636,6 +1637,16 @@ async function fetchAndProcessData() {
         loadWatchlist();
         state.shownOptional = loadOptionalColumns();
         state.freeAgentsOnly = loadFreeAgentsOnly();
+        state.topChartIds = loadTopCharts();
+        // The folds skip rendering while closed, so opening one has to render
+        // what it skipped. Idempotent via the dataset flag.
+        for (const id of ['chartsPanel', 'moreCharts']) {
+            const fold = document.getElementById(id);
+            if (fold && !fold.dataset.renders) {
+                fold.dataset.renders = '1';
+                fold.addEventListener('toggle', () => { if (fold.open) renderCharts(); });
+            }
+        }
         invalidateSignals();
         renderDraftBoard();
         syncFreeAgentButton();
@@ -2242,10 +2253,15 @@ function isNarrowScreen() {
  * it on small screens, and only before the user has touched it.
  */
 function applyMobileDefaults() {
-    const panel = document.getElementById('filtersPanel');
-    if (panel && !panel.dataset.userToggled) {
-        panel.open = !isNarrowScreen();
-        panel.addEventListener('toggle', () => { panel.dataset.userToggled = '1'; }, { once: true });
+    // Same rule for both fold-away sections: open on desktop, folded on a phone
+    // until the user says otherwise. Six charts are ~2000px of canvas at 390px
+    // wide, and the board must not live three screens down.
+    for (const id of ['filtersPanel', 'chartsPanel']) {
+        const panel = document.getElementById(id);
+        if (panel && !panel.dataset.userToggled) {
+            panel.open = !isNarrowScreen();
+            panel.addEventListener('toggle', () => { panel.dataset.userToggled = '1'; }, { once: true });
+        }
     }
     // Two micro-charts per row are unreadable at 390px and cost the width the
     // real columns need.
@@ -3733,11 +3749,22 @@ function processChange() {
 
     renderTable();
 
-    // If charts view is active, re-render charts with new data
-    const chartsView = document.getElementById('mainChartsView');
-    if (chartsView && getComputedStyle(chartsView).display !== 'none') {
+    // The charts and the board read the set this function just filtered, so
+    // both refresh here — that is the whole "one page, one pipeline" contract.
+    // Debounced, because this runs on every keystroke of the search box and
+    // twelve canvases plus six panels per keystroke is a stutter the table
+    // itself never had.
+    scheduleDownstreamRender();
+}
+
+let _downstreamTimer = null;
+function scheduleDownstreamRender() {
+    if (_downstreamTimer) clearTimeout(_downstreamTimer);
+    _downstreamTimer = setTimeout(() => {
+        _downstreamTimer = null;
         renderCharts();
-    }
+        renderDraftBoard();
+    }, 180);
 }
 
 /**
@@ -5498,7 +5525,16 @@ function defconRateFor(p) {
  * what you are willing to draft, so the board ignores them.
  */
 function draftBoardPool() {
-    const players = (state.allPlayersData[state.currentDataSource] || {}).processed || [];
+    const processed = (state.allPlayersData[state.currentDataSource] || {}).processed || [];
+    // The same set the charts and the table read. The board used to ignore the
+    // filters on the theory that they describe how you *read* the league rather
+    // than what you would draft — but with the three of them on one page, a
+    // board still recommending forwards under a table filtered to defenders is
+    // two answers to one question. The scope line below says how narrow the
+    // pool is, so a filtered board is visibly filtered, never mysteriously
+    // wrong; the one filter that would make it lie is minMinutes hiding a
+    // breakout starter, and that is now the reader's stated choice.
+    const players = Array.isArray(state.filteredData) ? state.filteredData : processed;
     const owned = state.draft.ownedElementIds;
     // Two conditions, and they mean different things. `draftHeld` is a fact about
     // the league; freeAgentsOnly is the user's choice. Before the draft the
@@ -5518,7 +5554,11 @@ function draftBoardPool() {
         !p.market_departed);
 
     buildDropOffLadder(pool);
-    return { freeAgentsOnly, draftHeld, position: pos, players: pool };
+    return {
+        freeAgentsOnly, draftHeld, position: pos, players: pool,
+        // For the scope line: how much of the league the filters left in.
+        filtered: players.length < processed.length, leagueSize: processed.length
+    };
 }
 
 /**
@@ -5686,7 +5726,7 @@ function renderDraftBoard() {
     // place that runs after every change that can move them.
     applyValueIndex();
 
-    const { players, freeAgentsOnly, draftHeld, position } = draftBoardPool();
+    const { players, freeAgentsOnly, draftHeld, position, filtered, leagueSize } = draftBoardPool();
     if (!players.length) { host.innerHTML = ''; return; }
 
     const cards = DRAFT_PANELS.map((panel, cardIdx) => {
@@ -5721,6 +5761,11 @@ function renderDraftBoard() {
                 ? `${players.length} שחקנים חופשיים`
                 : `${players.length} שחקנים — כולל תפוסים`)
             : `${players.length} שחקנים — לפני הדראפט`,
+        // The board follows the page's filters now, and a narrowed board must
+        // say so: a recommendation from 84 players is a different statement
+        // than one from the whole league, and only the reader knows which one
+        // they asked for.
+        filtered ? `לפי הסינון (מתוך ${leagueSize})` : null,
         position ? POSITION_LABELS[position] || position : null,
         state.trendGws.length ? `חלון ${state.trendWindow} מחזורים` : null
     ].filter(Boolean).join(' · ');
@@ -10889,6 +10934,93 @@ function positionLegendHtml() {
     ).join('') + '</span>';
 }
 
+/* ------------------------------ the top six ------------------------------- */
+
+/**
+ * Which six cards lead the page. Chosen with the user, changeable per slot from
+ * the card itself (the ⇄ select in its header) and persisted; the rest sit
+ * behind the עוד גרפים fold. The slots are an ordering of the same physical
+ * cards, so swapping moves DOM nodes — nothing is rebuilt and no canvas id ever
+ * exists twice.
+ */
+const DEFAULT_TOP_CHARTS = [
+    'chart-opportunity', 'chart-position', 'chart-team-targets',
+    'chart-defcon', 'chart-signal-spread', 'chart-underlying'
+];
+const TOP_CHARTS_KEY = 'fpl_top_charts';
+
+function loadTopCharts() {
+    try {
+        const raw = JSON.parse(localStorage.getItem(TOP_CHARTS_KEY) || 'null');
+        if (!Array.isArray(raw)) return [...DEFAULT_TOP_CHARTS];
+        const valid = raw.filter(id => CHART_SPECS.some(spec => spec.id === id));
+        // Anything short of six full slots means a chart was renamed or removed
+        // since the choice was saved; the default is better than a gap.
+        return valid.length === DEFAULT_TOP_CHARTS.length ? valid : [...DEFAULT_TOP_CHARTS];
+    } catch { return [...DEFAULT_TOP_CHARTS]; }
+}
+
+function swapTopChart(slot, chartId) {
+    const top = state.topChartIds || (state.topChartIds = [...DEFAULT_TOP_CHARTS]);
+    const i = Number(slot);
+    if (!CHART_SPECS.some(spec => spec.id === chartId) || !(i >= 0 && i < top.length)) return;
+    // If the incoming chart already holds another slot, the two trade places —
+    // dropping it there would leave that slot empty.
+    const j = top.indexOf(chartId);
+    if (j >= 0) top[j] = top[i];
+    top[i] = chartId;
+    try { localStorage.setItem(TOP_CHARTS_KEY, JSON.stringify(top)); } catch { /* session-only */ }
+    renderCharts();
+}
+
+/** The ⇄ menu in a top card's header: this slot, offered every chart. */
+function chartSwapHtml(spec, slot) {
+    const options = CHART_SPECS.map(other =>
+        `<option value="${other.id}" ${other.id === spec.id ? 'selected' : ''}>${other.title}</option>`
+    ).join('');
+    return `<label class="chart-swap" title="החלף את הגרף במשבצת הזו">⇄
+        <select onchange="swapTopChart(${slot}, this.value)">${options}</select>
+    </label>`;
+}
+
+/**
+ * Deal the cards: the chosen six into the top grid in slot order, the rest into
+ * the עוד גרפים fold. Runs every render — a no-op when nothing changed, and
+ * cheap when it did, because appendChild MOVES a node. renderCharts destroys
+ * and recreates every Chart.js instance right after, so a moved canvas is never
+ * drawn on while detached.
+ */
+function arrangeChartCards() {
+    const grid = document.getElementById('chartsGrid');
+    const more = document.getElementById('moreChartsGrid');
+    if (!grid || !more) return;
+
+    const top = state.topChartIds || DEFAULT_TOP_CHARTS;
+    top.forEach((id, slot) => {
+        const card = document.getElementById(`card-${id}`);
+        if (!card) return;
+        if (card.parentElement !== grid || grid.children[slot] !== card) {
+            grid.insertBefore(card, grid.children[slot] || null);
+        }
+        const swap = card.querySelector('.chart-swap-host');
+        if (swap) swap.innerHTML = chartSwapHtml(
+            CHART_SPECS.find(spec => spec.id === id), slot);
+    });
+    for (const spec of CHART_SPECS) {
+        if (top.includes(spec.id)) continue;
+        const card = document.getElementById(`card-${spec.id}`);
+        if (card && card.parentElement !== more) more.appendChild(card);
+        const swap = card && card.querySelector('.chart-swap-host');
+        if (swap) swap.innerHTML = '';
+    }
+
+    const count = document.getElementById('moreChartsCount');
+    if (count) {
+        const benched = [...more.children].filter(c => !c.hidden).length;
+        count.textContent = benched ? `(${benched})` : '';
+    }
+}
+
 function ensureChartCards() {
     const grid = document.getElementById('chartsGrid');
     if (!grid || grid.dataset.built === '1') return grid;
@@ -10900,6 +11032,8 @@ function ensureChartCards() {
                     <h3 class="chart-title">${spec.title}</h3>
                     <p class="chart-note">${chartNote(spec)}</p>
                 </div>
+                <!-- Filled by arrangeChartCards for the cards holding a top slot. -->
+                <span class="chart-swap-host"></span>
                 ${spec.positions ? `<div class="chart-seg" role="group" aria-label="עמדה">
                     ${Object.keys(POSITION_MATRIX).map(pos => `
                         <button type="button" data-chart-pos="${pos}"
@@ -10919,10 +11053,16 @@ function ensureChartCards() {
 function renderCharts() {
     if (!state.allPlayersData[state.currentDataSource].processed) return;
 
+    // Folded away (the phone default) means genuinely not rendered: twelve
+    // charts drawn into zero-height canvases are twelve wrong layouts waiting
+    // for the fold to open. The ontoggle listener re-renders on open.
+    const panel = document.getElementById('chartsPanel');
+    if (panel && !panel.open) return;
     const chartsView = document.getElementById('mainChartsView');
     if (!chartsView || getComputedStyle(chartsView).display === 'none') return;
 
     ensureChartCards();
+    arrangeChartCards();
 
     // Pre-slice, so a "top 20" table does not reduce every scatter to 20 points.
     //
@@ -10961,6 +11101,15 @@ function renderCharts() {
         if (noteEl) {
             const text = chartNote(spec, scoped);
             if (noteEl.innerHTML !== text) noteEl.innerHTML = text;
+        }
+
+        // Behind the closed עוד גרפים fold nothing has a size, so drawing there
+        // produces the zero-height layouts described above. The chart instance
+        // is dropped rather than kept stale; opening the fold re-renders.
+        const moreWrap = card.closest('#moreCharts');
+        if (moreWrap && !moreWrap.open) {
+            if (charts[spec.id]) { charts[spec.id].destroy(); charts[spec.id] = null; }
+            return;
         }
 
         let config = null;
@@ -11007,37 +11156,38 @@ function renderCharts() {
 // One definition. There used to be two: a plain one here and an IIFE lower down
 // that replaced it, so the version being read was not the version running.
 
+/**
+ * Table and charts are one page now, not two views of one slot — the six
+ * charts, the board and the table read the same filtered set in that order
+ * down the page. So "switching" the view means going to it: this opens the
+ * section if it is folded (the phone default) and scrolls there.
+ *
+ * The name and signature survive from the toggle era on purpose: every
+ * onclick, the phone bar and the tests all call it, and what they all mean is
+ * "show me the charts", which is exactly what it still does.
+ */
 function switchMainView(viewName, fromUser) {
-    const tableDiv = document.getElementById('mainTableView');
-    const chartsDiv = document.getElementById('mainChartsView');
+    const charting = viewName === 'charts';
     const btnTable = document.getElementById('btnViewTable');
     const btnCharts = document.getElementById('btnViewCharts');
-
-    const charting = viewName === 'charts';
-    if (tableDiv) tableDiv.style.display = charting ? 'none' : 'block';
-    if (chartsDiv) chartsDiv.style.display = charting ? 'block' : 'none';
     if (btnTable) btnTable.classList.toggle('active', !charting);
     if (btnCharts) btnCharts.classList.toggle('active', charting);
-
-    // The phone bar shows the same choice, so it moves with it however the view
-    // was switched — from the toolbar, from the bar, or from code.
     const mbTable = document.getElementById('mbTable');
     const mbCharts = document.getElementById('mbCharts');
     if (mbTable) mbTable.setAttribute('aria-pressed', String(!charting));
     if (mbCharts) mbCharts.setAttribute('aria-pressed', String(charting));
     closeMobileSheet();
 
-    // renderCharts() bails while the view is display:none, so it has to run after
-    // the switch — and after a frame, so the canvases have a measured size.
-    if (charting) setTimeout(renderCharts, 50);
+    if (charting) {
+        const panel = document.getElementById('chartsPanel');
+        // Asking for the charts is consent to unfold them; the ontoggle listener
+        // set in init re-renders what the fold skipped.
+        if (panel && !panel.open) { panel.dataset.userToggled = '1'; panel.open = true; }
+        setTimeout(renderCharts, 50);
+    }
 
-    // On a phone, switching the view and staying put is not switching the view:
-    // the draft board and the filter panel are both above it, so tapping גרפים
-    // left the board on screen and looked like nothing happened. Only for a real
-    // interaction — init() calls this while setting up, and a page that scrolls
-    // itself on load is worse than one that does not scroll at all.
-    if (fromUser && isPhoneWidth()) {
-        const target = charting ? chartsDiv : tableDiv;
+    if (fromUser) {
+        const target = document.getElementById(charting ? 'chartsPanel' : 'mainTableView');
         if (target) setTimeout(() => target.scrollIntoView({ behavior: 'smooth', block: 'start' }), 60);
     }
 }

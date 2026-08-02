@@ -7,8 +7,8 @@
     <title>⚽ FPL Pro Analytics Hub</title>
     <!-- Inline so the tab icon needs no extra request; mirrors the header mark. -->
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='40' y2='40' gradientUnits='userSpaceOnUse'%3E%3Cstop stop-color='%2322D3EE'/%3E%3Cstop offset='.55' stop-color='%233B82F6'/%3E%3Cstop offset='1' stop-color='%236366F1'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='40' height='40' rx='9' fill='%230F172A'/%3E%3Cpath d='M20 5 8 9.7v9.9c0 7 4.9 12.4 12 14.1 7.1-1.7 12-7.1 12-14.1V9.7L20 5Z' fill='url(%23g)'/%3E%3Crect x='12.6' y='20.4' width='3.4' height='7' rx='1.2' fill='%23fff' fill-opacity='.95'/%3E%3Crect x='18.3' y='16.2' width='3.4' height='11.2' rx='1.2' fill='%23fff'/%3E%3Crect x='24' y='12' width='3.4' height='15.4' rx='1.2' fill='%23fff' fill-opacity='.95'/%3E%3C/svg%3E">
-    <link rel="stylesheet" href="style.css?v=2026.08.02.293">
-    <link rel="stylesheet" href="mobile.css?v=2026.08.02.293">
+    <link rel="stylesheet" href="style.css?v=2026.08.02.294">
+    <link rel="stylesheet" href="mobile.css?v=2026.08.02.294">
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.5.1"></script>
     <script
         src="https://cdnjs.cloudflare.com/ajax/libs/chartjs-plugin-annotation/2.2.1/chartjs-plugin-annotation.min.js"></script>
@@ -335,10 +335,6 @@
 
                 <!-- Removed Legend as requested -->
 
-                <!-- Draft board: who to take and why. Rendered by renderDraftBoard()
-                     from DRAFT_PANELS, so a new question means one entry in that list. -->
-                <div id="draftBoard" class="draft-board"></div>
-
                 <!-- On a phone the filter stack is ~1000px tall, so it is a
                      disclosure there and always-open on desktop (see mobile.css). -->
                 <details class="filters-wrap" id="filtersPanel" open>
@@ -526,6 +522,39 @@
                 </div>
 
                 <!-- TABLE VIEW WRAPPER -->
+                <!-- ONE PAGE, ONE PIPELINE.
+                     The six charts, the board and the table read the same filtered
+                     set, in that order down the page — so the filters above govern
+                     everything below, and the charts and the board can never
+                     disagree with the table under them.
+
+                     The charts section is a disclosure only so a phone can fold
+                     ~2000px of canvas away (applyMobileDefaults closes it there);
+                     on desktop it ships open. renderCharts() skips a closed
+                     section and the ontoggle re-render catches up when opened. -->
+                <details class="charts-wrap" id="chartsPanel" open>
+                    <summary class="filters-toggle">
+                        <span>📊 גרפים</span>
+                        <span class="filters-toggle-hint">הקש לפתיחה</span>
+                    </summary>
+                    <div id="mainChartsView" class="charts-view">
+                        <div class="charts-dashboard-grid" id="chartsGrid"></div>
+                        <!-- The cards that are not in the chosen six. One grid could
+                             not express this: the six are managed slots, these are
+                             the bench. Cards move between the two by DOM re-append
+                             in arrangeChartCards(), never by rebuild. -->
+                        <details class="more-charts" id="moreCharts">
+                            <summary>עוד גרפים <span id="moreChartsCount"></span></summary>
+                            <div class="charts-dashboard-grid" id="moreChartsGrid"></div>
+                        </details>
+                    </div>
+                </details>
+
+                <!-- Draft board: who to take and why. Rendered by renderDraftBoard()
+                     from DRAFT_PANELS, so a new question means one entry in that list.
+                     Below the charts, above the table: the answer, then the evidence. -->
+                <div id="draftBoard" class="draft-board"></div>
+
                 <div id="mainTableView">
                     <div class="table-container">
 
@@ -612,10 +641,6 @@
                      plus a call site in renderCharts(). `display` was declared twice on
                      this wrapper (none, then grid) and the second won, so the charts
                      rendered under the table on every page load. -->
-                <div id="mainChartsView" class="charts-view" style="display: none;">
-                    <div class="charts-dashboard-grid" id="chartsGrid"></div>
-                </div>
-
             </div> <!-- end playersTabContent -->
 
             <!-- Toast Container -->
@@ -997,7 +1022,7 @@
     <!-- Version query is bumped by scripts/stamp-version.mjs on every commit
          (npm run stamp). It was left at 4.0.0 for months, so returning
          visitors kept running a cached script.js and never saw fixes. -->
-    <script src="script.js?v=2026.08.02.293" defer></script>
+    <script src="script.js?v=2026.08.02.294" defer></script>
 </body>
 
 </html>

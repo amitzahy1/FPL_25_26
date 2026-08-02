@@ -235,13 +235,20 @@
     .filters { flex-wrap: wrap; }
     .filters .filter-group { flex: 1 1 45%; }
 
-    .filters-wrap {
+    .filters-wrap,
+    .charts-wrap {
         background: #fff;
         border: 1px solid #e2e8f0;
         border-radius: 12px;
         margin: 12px 0;
         overflow: hidden;
     }
+
+    /* The charts fold reuses the filter fold's summary chrome; on a phone the
+       summary has to exist, unlike on desktop where the section ships open. */
+    .charts-wrap > .filters-toggle { display: flex; }
+    .charts-wrap[open] > .filters-toggle { border-bottom: 1px solid #f1f5f9; }
+    .charts-wrap .charts-view { padding: 10px; }
 
     .filters-toggle {
         display: flex;

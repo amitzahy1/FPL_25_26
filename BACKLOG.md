@@ -230,6 +230,30 @@ Status as of the 2026/27 pre-season overhaul. Items are ordered by value, not by
       carrying fixed thresholds in their text colour that could disagree with
       the cell tint. An undeclared column gets no tone rather than a guess.
 
+- [x] **One page, one pipeline.** The players tab reads top-to-bottom: filters →
+      six lead charts → את מי לקחת עכשיו → the table, and all three surfaces
+      read the same filtered set — the filters (smart and regular) govern
+      everything below them. What changed to make that true:
+      - The six lead slots (`DEFAULT_TOP_CHARTS`, per the user: הזדמנויות,
+        מטריצת עמדה, לטרגט ל-5, DEFCON, פיזור סיגנל, סיכויים מול ערך), each
+        swappable from a ⇄ menu on the card itself, persisted per slot; a saved
+        id that no longer exists falls back to the default set rather than
+        leaving a five-slot page. The other six sit behind עוד גרפים, undrawn
+        until opened — a canvas in a closed fold has no size, and drawing there
+        produces zero-height layouts.
+      - The board joined the filter pipeline. It used to ignore the filters on
+        the theory that they describe how you read the league; on one page that
+        made it contradict the table under it. The scope line now appends
+        "לפי הסינון (מתוך N)" whenever the pool is narrower than the league, so
+        a filtered board is visibly filtered — the stated cost is that a
+        minMinutes filter can hide a breakout starter from the board, by choice.
+      - The table/charts toggle is gone as a toggle; switchMainView keeps its
+        name and callers but now opens the section if folded and scrolls to it.
+        On a phone both the filters and the charts sections ship folded
+        (applyMobileDefaults), so the board is not three screens down.
+      - Chart + board refresh is debounced 180ms behind the table — the filters
+        run per keystroke and twelve canvases per keystroke stutters.
+
 ## Pre-draft, still open
 
 - [ ] Steals-vs-ADP column: `draft_rank` is FPL Draft's own published ranking, so
