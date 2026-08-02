@@ -173,6 +173,30 @@ Status as of the 2026/27 pre-season overhaul. Items are ordered by value, not by
       `1.8000000000000003` and `0.6000000000000001`. It formats through the
       scale's `getLabelForValue` now and only wraps the result.
 
+- [x] **Mobile: the toolbar was inside the filter disclosure.** `<details
+      id="filtersPanel">` wrapped the view switch, the free-agent toggle, the
+      watchlist, compare, columns and CSV as well as the filters — and on a phone
+      that disclosure is closed by default, so every one of them was hidden
+      behind a control labelled 🔍 חיפוש וסינון. The quick-filter chips stay
+      inside it (they are filters); everything else moved out into a sticky view
+      toolbar above the content.
+      - **A phone action bar**, fixed at the thumb end: טבלה · גרפים · דירוג ·
+        חופשיים · עוד, with the rest one tap behind עוד. It owns no state — every
+        button calls the same function the desktop control calls, so the two can
+        differ in appearance but never in behaviour. Above 768px it is not
+        rendered at all.
+      - Switching the view on a phone now scrolls to it. The draft board and the
+        filter panel both sit above the table and the charts, so tapping גרפים
+        used to leave the board on screen and look like nothing had happened.
+        Only on a real tap — a page that scrolls itself on load is worse.
+      - The toolbar hides its own copies of the actions that are in the sheet;
+        repeating them was only height.
+- [x] The nav highlighted ליגת דראפט while #playersTabContent was the element
+      shipping with `display:block`, so every first-time visitor saw the players
+      tab with the draft tab lit up. It was corrected by `init()`, but only after
+      it finished awaiting the draft fetches — between seasons, a full timeout
+      chain. Fixed in the markup, where the inconsistency was.
+
 ## Pre-draft, still open
 
 - [ ] Steals-vs-ADP column: `draft_rank` is FPL Draft's own published ranking, so

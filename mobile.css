@@ -472,3 +472,162 @@
     /* The sub-nav sticks below the header, which is no longer 70px tall. */
     .draft-sub-nav-container { top: 0 !important; }
 }
+
+
+/* ==========================================================================
+   PHONE ACTION BAR
+   ==========================================================================
+   A phone has no room for the toolbar, and the toolbar is where the page is
+   driven from. The four controls actually reached for get a fixed bar at the
+   thumb end of the screen; the rest go one tap behind עוד.
+
+   Not rendered at all above 768px — the desktop toolbar is the whole answer
+   there, and two visible copies of the same switch is one too many.
+   ========================================================================== */
+
+.mobile-bar,
+.mobile-sheet { display: none; }
+
+@media (max-width: 768px) {
+    .mobile-bar {
+        display: grid;
+        grid-template-columns: repeat(5, 1fr);
+        position: fixed;
+        inset-inline: 0;
+        bottom: 0;
+        z-index: 900;
+        gap: 2px;
+        padding: 6px 6px calc(6px + env(safe-area-inset-bottom));
+        background: rgba(255, 255, 255, .97);
+        border-top: 1px solid #e2e8f0;
+        box-shadow: 0 -4px 16px rgba(15, 23, 42, .08);
+        backdrop-filter: blur(8px);
+    }
+
+    .mb-btn {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 2px;
+        /* 48px is the tap target; the label is what makes an icon-only bar
+           guessable, so it stays even at 10px. */
+        min-height: 48px;
+        padding: 5px 2px;
+        border: none;
+        border-radius: 10px;
+        background: transparent;
+        font-family: inherit;
+        font-size: 10.5px;
+        font-weight: 700;
+        color: #64748b;
+        cursor: pointer;
+    }
+
+    .mb-btn span { font-size: 17px; line-height: 1; }
+    .mb-btn[aria-pressed="true"] { background: #0f172a; color: #fff; }
+    .mb-free[aria-pressed="true"] { background: #15803d; color: #fff; }
+    .mb-btn:disabled { opacity: .4; }
+
+    /* The bar floats over the page, so the page needs somewhere to end. */
+    body { padding-bottom: 72px; }
+
+    .mobile-sheet { display: block; }
+    .mobile-sheet[hidden] { display: none; }
+
+    .ms-backdrop {
+        position: fixed;
+        inset: 0;
+        z-index: 940;
+        background: rgba(15, 23, 42, .38);
+    }
+
+    .ms-panel {
+        position: fixed;
+        inset-inline: 0;
+        bottom: 0;
+        z-index: 950;
+        display: grid;
+        gap: 6px;
+        padding: 8px 12px calc(80px + env(safe-area-inset-bottom));
+        background: #fff;
+        border-radius: 16px 16px 0 0;
+        box-shadow: 0 -10px 30px rgba(15, 23, 42, .18);
+        animation: msUp .18s ease;
+    }
+
+    @keyframes msUp {
+        from { transform: translateY(14px); opacity: .6; }
+        to { transform: translateY(0); opacity: 1; }
+    }
+
+    .ms-grip {
+        width: 38px;
+        height: 4px;
+        margin: 4px auto 6px;
+        border-radius: 2px;
+        background: #cbd5e1;
+    }
+
+    .ms-item {
+        min-height: 48px;
+        padding: 0 14px;
+        border: 1px solid #e2e8f0;
+        border-radius: 10px;
+        background: #f8fafc;
+        font-family: inherit;
+        font-size: 15px;
+        font-weight: 700;
+        color: #0f172a;
+        text-align: start;
+        cursor: pointer;
+    }
+
+    .ms-item:active { background: #e2e8f0; }
+}
+
+
+/* ==========================================================================
+   THE VIEW TOOLBAR ON A PHONE
+   ==========================================================================
+   It is outside the filter disclosure now, so it is always on screen — which
+   means it has to earn its height. The two controls that decide what you are
+   looking at stay; the rest are in the phone bar's עוד sheet, and repeating
+   them here only pushed the table further down.
+   ========================================================================== */
+
+@media (max-width: 768px) {
+    .controls-toolbar--view {
+        position: sticky;
+        top: 0;
+        z-index: 60;
+        margin: 8px 0;
+        padding: 8px;
+        background: rgba(248, 250, 252, .97);
+        backdrop-filter: blur(6px);
+    }
+
+    .controls-toolbar--view .tb-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+    }
+
+    .controls-toolbar--view .tb-group { flex: 1 1 100%; gap: 8px; }
+    .controls-toolbar--view .tb-seg { flex: 1 1 auto; }
+    .controls-toolbar--view .tb-seg .view-btn { flex: 1 1 0; }
+
+    .controls-toolbar--view .scout-controls {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+    }
+
+    /* Reachable from the sheet, so a second copy here is only height. */
+    .controls-toolbar--view .tb-actions,
+    .controls-toolbar--view .scout-watch { display: none; }
+
+    .controls-toolbar--view .scout-free { flex: 1 1 auto; }
+    .controls-toolbar--view .scout-toggle,
+    .controls-toolbar--view .scout-field { flex: 0 0 auto; }
+}

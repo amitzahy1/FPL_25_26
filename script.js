@@ -1196,8 +1196,12 @@ async function init() {
         showToast('ליגת הדראפט סגורה כרגע',
             `משחק הדראפט של FPL בין עונות — פתחנו בנתוני ${SEASON_CONFIG.previousSeasonLabel}`,
             'info', 6000);
-    } else if (lastTab) {
-        showTab(lastTab);
+    } else {
+        // Always, even with nothing remembered. The markup ships with ליגת דראפט
+        // carrying the active class while #playersTabContent is the visible one,
+        // so skipping this left every first-time visitor looking at the players
+        // tab with the draft tab lit up in the nav.
+        showTab(lastTab || 'players');
     }
     initializeTooltips();
 }
@@ -5714,6 +5718,7 @@ function loadFreeAgentsOnly() {
 
 /** The toolbar button is a second view of the same switch, so it is redrawn too. */
 function syncFreeAgentButton() {
+    syncMobileBar();
     const btn = document.getElementById('freeAgentsOnlyBtn');
     if (!btn) return;
     const held = draftHasBeenHeld();
@@ -9397,6 +9402,8 @@ function showTab(tabName) {
     document.querySelectorAll('.nav-item').forEach(btn => btn.classList.remove('active'));
     const activeBtn = document.getElementById(`nav-${tabName}`);
     if (activeBtn) activeBtn.classList.add('active');
+    state.currentTab = tabName;
+    closeMobileSheet();
 
     const playersView = document.getElementById('playersTabContent');
     const draftView = document.getElementById('draftTabContent');
@@ -10881,7 +10888,7 @@ function renderCharts() {
 // One definition. There used to be two: a plain one here and an IIFE lower down
 // that replaced it, so the version being read was not the version running.
 
-function switchMainView(viewName) {
+function switchMainView(viewName, fromUser) {
     const tableDiv = document.getElementById('mainTableView');
     const chartsDiv = document.getElementById('mainChartsView');
     const btnTable = document.getElementById('btnViewTable');
@@ -10893,9 +10900,103 @@ function switchMainView(viewName) {
     if (btnTable) btnTable.classList.toggle('active', !charting);
     if (btnCharts) btnCharts.classList.toggle('active', charting);
 
+    // The phone bar shows the same choice, so it moves with it however the view
+    // was switched — from the toolbar, from the bar, or from code.
+    const mbTable = document.getElementById('mbTable');
+    const mbCharts = document.getElementById('mbCharts');
+    if (mbTable) mbTable.setAttribute('aria-pressed', String(!charting));
+    if (mbCharts) mbCharts.setAttribute('aria-pressed', String(charting));
+    closeMobileSheet();
+
     // renderCharts() bails while the view is display:none, so it has to run after
     // the switch — and after a frame, so the canvases have a measured size.
     if (charting) setTimeout(renderCharts, 50);
+
+    // On a phone, switching the view and staying put is not switching the view:
+    // the draft board and the filter panel are both above it, so tapping גרפים
+    // left the board on screen and looked like nothing happened. Only for a real
+    // interaction — init() calls this while setting up, and a page that scrolls
+    // itself on load is worse than one that does not scroll at all.
+    if (fromUser && isPhoneWidth()) {
+        const target = charting ? chartsDiv : tableDiv;
+        if (target) setTimeout(() => target.scrollIntoView({ behavior: 'smooth', block: 'start' }), 60);
+    }
+}
+
+/** One definition of "phone", so the scroll behaviour and mobile.css agree. */
+function isPhoneWidth() {
+    return typeof matchMedia === 'function' && matchMedia('(max-width: 768px)').matches;
+}
+
+/* ---------------------------- the phone action bar ------------------------ */
+/*
+ * A phone has no room for the toolbar, and the toolbar is where the page is
+ * driven from. Rather than shrink it until every control is a 24px square, the
+ * four things actually reached for get a fixed bar at the thumb end of the
+ * screen and the rest go one tap behind עוד.
+ *
+ * Nothing here owns any state. Every button calls the function the desktop
+ * control calls, so the two can disagree about appearance but never about what
+ * happens — the alternative, moving the toolbar's markup into a sheet at some
+ * breakpoint, breaks every id the rest of the file looks up.
+ */
+
+/** The draft board is the page's answer to "who should I take", and on a phone
+ *  it is several screens up by the time you have scrolled the table. */
+function jumpToDraftBoard() {
+    closeMobileSheet();
+    if (state.currentTab !== 'players') showTab('players');
+    const board = document.getElementById('draftBoard');
+    if (board) board.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function closeMobileSheet() {
+    const sheet = document.getElementById('mobileSheet');
+    if (sheet) sheet.hidden = true;
+    const more = document.getElementById('mbMore');
+    if (more) more.setAttribute('aria-pressed', 'false');
+}
+
+function toggleMobileSheet(force) {
+    const sheet = document.getElementById('mobileSheet');
+    if (!sheet) return;
+    const open = force === undefined ? sheet.hidden : !!force;
+    sheet.hidden = !open;
+    const more = document.getElementById('mbMore');
+    if (more) more.setAttribute('aria-pressed', String(open));
+}
+
+/** Run a toolbar action from the sheet, and get the sheet out of the way. */
+function mobileSheetAction(fn) {
+    closeMobileSheet();
+    try { fn(); } catch (e) { console.warn('⚠️ mobile action failed', e); }
+}
+
+/** Both of these live inside a <details>, so "open it" is the whole action —
+ *  followed by scrolling to it, or the panel opens off-screen. */
+function openFiltersPanel() {
+    closeMobileSheet();
+    if (state.currentTab !== 'players') showTab('players');
+    const panel = document.getElementById('filtersPanel');
+    if (!panel) return;
+    panel.open = true;
+    panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function openColumnsMenu() {
+    closeMobileSheet();
+    const menu = document.getElementById('colsMenu');
+    if (!menu) return;
+    menu.open = true;
+    menu.scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+
+/** The 🆓 button appears twice on a phone — in the toolbar and in the bar. */
+function syncMobileBar() {
+    const btn = document.getElementById('mbFree');
+    if (!btn) return;
+    btn.disabled = !draftHasBeenHeld();
+    btn.setAttribute('aria-pressed', String(freeAgentFilterActive()));
 }
 
 

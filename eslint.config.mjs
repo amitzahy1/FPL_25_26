@@ -74,7 +74,9 @@ export default [
                 openLeaderboard: 'readonly', sortLeaderboard: 'readonly',
                 signalFor: 'readonly', displayNetTransfers: 'readonly',
                 applyMarketOverlay: 'readonly', processChange: 'readonly',
-                setChartFacet: 'readonly', renderCharts: 'readonly'
+                setChartFacet: 'readonly', renderCharts: 'readonly',
+                toggleMobileSheet: 'readonly', jumpToDraftBoard: 'readonly',
+                openFiltersPanel: 'readonly'
             }
         }
     },

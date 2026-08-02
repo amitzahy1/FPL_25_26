@@ -80,7 +80,10 @@ try {
                 const n = parseFloat(t.querySelectorAll('td')[0]?.textContent);
                 return Number.isFinite(n);
             }).length,
-            hScroll: document.documentElement.scrollWidth > document.documentElement.clientWidth + 1
+            hScroll: document.documentElement.scrollWidth > document.documentElement.clientWidth + 1,
+            navActive: ([...document.querySelectorAll('.nav-item')]
+                .find(b => b.classList.contains('active')) || {}).id || null,
+            playersShown: document.getElementById('playersTabContent').style.display !== 'none'
         };
     });
 
@@ -89,6 +92,11 @@ try {
     check(r.dupeIds.length === 0, `no duplicate element ids${r.dupeIds.length ? `: ${r.dupeIds.join(', ')}` : ''}`);
     check(!r.conflictMarkers, 'no merge-conflict markers visible on the page');
     check(r.source === 'historical', `fell back to the committed snapshot (source: ${r.source})`);
+    // The nav must name the tab you are actually looking at, from the first
+    // paint — not only once init() has finished awaiting the draft fetches,
+    // which between seasons is a full timeout chain.
+    check(r.navActive === 'nav-players' && r.playersShown,
+        `the nav highlights the tab that is on screen (${r.navActive})`);
     check(!r.hScroll, 'no horizontal page scroll at 1440px');
     check(pageErrors.length === 0, `no uncaught page errors${pageErrors.length ? `: ${pageErrors[0]}` : ''}`);
 
@@ -756,11 +764,42 @@ try {
         const chips = [...document.querySelectorAll('.quick-filter-btn')];
         const group = document.querySelector('.quick-filters-group');
         const row = document.querySelector('.tb-row--filters');
+
+        // The phone bar, and the reason it exists: the view switch used to live
+        // inside the filter disclosure, which is closed by default on a phone —
+        // so "table or charts" was hidden behind a control labelled "search and
+        // filter". Both routes to it must work with the panel shut.
+        const panel = document.querySelector('#filtersPanel');
+        if (panel) panel.open = false;
+        const bar = document.getElementById('mobileBar');
+        const barBox = bar ? bar.getBoundingClientRect() : null;
+        const visible = el => {
+            if (!el) return false;
+            const b = el.getBoundingClientRect();
+            return b.width > 0 && b.height > 0 && getComputedStyle(el).display !== 'none';
+        };
+        const inViewport = el => {
+            const b = el.getBoundingClientRect();
+            return b.top < window.innerHeight && b.bottom > 0 && b.left < window.innerWidth;
+        };
+        const toolbar = document.querySelector('.controls-toolbar--view');
+        const viewBtns = [...document.querySelectorAll('.mb-btn')];
+
         return {
             hScroll: de.scrollWidth > de.clientWidth + 1,
             unreachable,
             clippedCards,
             chipCount: chips.length,
+            barVisible: visible(bar) && !!barBox && inViewport(bar),
+            barButtons: viewBtns.length,
+            barTaps: viewBtns.filter(b => b.getBoundingClientRect().height < 44).length,
+            // The view toolbar is out of the disclosure, so it is on the page
+            // even when the panel is shut.
+            toolbarOutsidePanel: !!toolbar && !toolbar.closest('#filtersPanel'),
+            toolbarVisibleWithPanelShut: visible(toolbar),
+            // ...and the quick-filter chips, which really are filters, stayed in.
+            chipsInsidePanel: !!(row && row.closest('#filtersPanel')),
+            sheetHiddenByDefault: !!(document.getElementById('mobileSheet') || {}).hidden,
             // The chips used to sit on one nowrap line inside a scroller, so the
             // last ones were simply off-screen.
             chipsScroll: !!(group && group.scrollWidth > group.clientWidth + 1)
@@ -777,6 +816,50 @@ try {
         `the ${mob.chipCount} quick-filter chips wrap instead of scrolling out of reach`);
     check(mob.smallTaps === 0,
         `every chip is a usable tap target${mob.smallTaps ? ` (${mob.smallTaps} under 30px)` : ''}`);
+    check(mob.toolbarOutsidePanel && mob.chipsInsidePanel,
+        'the view toolbar is out of the filter disclosure and the quick filters are still in');
+    check(mob.toolbarVisibleWithPanelShut,
+        'so table-or-charts is reachable with the filter panel closed');
+    check(mob.barVisible && mob.barButtons === 5 && mob.barTaps === 0,
+        `the phone bar is on screen with ${mob.barButtons} thumb-sized actions`);
+    check(mob.sheetHiddenByDefault, 'the עוד sheet stays shut until it is asked for');
+
+    // The bar has to actually drive the page, not just look like it does.
+    const barDrives = await page.evaluate(async () => {
+        const pressed = id => document.getElementById(id).getAttribute('aria-pressed');
+        switchMainView('charts', true);
+        await new Promise(r => setTimeout(r, 500));
+        const onCharts = {
+            charts: document.getElementById('mainChartsView').style.display !== 'none',
+            barSaysCharts: pressed('mbCharts') === 'true' && pressed('mbTable') === 'false',
+            // The desktop toolbar is the same switch seen from elsewhere.
+            toolbarSaysCharts: document.getElementById('btnViewCharts').classList.contains('active')
+        };
+        toggleMobileSheet(true);
+        await new Promise(r => setTimeout(r, 200));
+        const sheetOpen = !document.getElementById('mobileSheet').hidden;
+        // Opening the filter panel from the sheet must also shut the sheet.
+        openFiltersPanel();
+        await new Promise(r => setTimeout(r, 200));
+        const afterFilters = {
+            panelOpen: document.getElementById('filtersPanel').open,
+            sheetShut: document.getElementById('mobileSheet').hidden
+        };
+        jumpToDraftBoard();
+        await new Promise(r => setTimeout(r, 300));
+        switchMainView('table', true);
+        await new Promise(r => setTimeout(r, 400));
+        return {
+            ...onCharts, sheetOpen, ...afterFilters,
+            backToTable: document.getElementById('mainTableView').style.display !== 'none'
+        };
+    });
+    check(barDrives.charts && barDrives.barSaysCharts && barDrives.toolbarSaysCharts,
+        'tapping גרפים switches the view and both copies of the switch agree');
+    check(barDrives.sheetOpen, 'עוד opens the sheet');
+    check(barDrives.panelOpen && barDrives.sheetShut,
+        'and an action from the sheet runs it and gets the sheet out of the way');
+    check(barDrives.backToTable, 'and the way back to the table works');
 
     check(pageErrors.length === 0, 'still no page errors after interaction');
 } catch (e) {
