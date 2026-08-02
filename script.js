@@ -2692,6 +2692,106 @@ function getTrendSeries(playerId, metricKey, window = 'recent') {
     });
 }
 
+/* ------------------------- window-measured metrics ------------------------ */
+
+/**
+ * The same rates the charts plot, measured over the momentum window instead of
+ * the whole season — "xGI per 90 in the last five" rather than "xGI per 90".
+ *
+ * `read` takes one gameweek's stats; `per: 'per90'` divides the total by the
+ * minutes actually played in the window, `'total'` leaves it as a count.
+ * `needs` names a field the per-gameweek record must actually carry: the
+ * committed snapshot logs points, minutes, xGI, defcon, bps, saves, goals,
+ * assists and bonus and nothing else, so xGC over a window is measurable on the
+ * live season and not on the archive. A chart asks whether its metric is
+ * available before using it and says which span it drew — see windowAxisLabel.
+ */
+const WINDOW_RATES = {
+    points_per_game_90: { read: s => gwNum(s.total_points), per: 'per90' },
+    xGI_per90: {
+        read: s => gwNum(s.expected_goals) + gwNum(s.expected_assists), per: 'per90'
+    },
+    def_contrib_per90: {
+        read: (s, p) => gwDefensiveContribution(s, p.element_type), per: 'per90'
+    },
+    bonus_per90: { read: s => gwNum(s.bonus), per: 'per90' },
+    saves_per_90: { read: s => gwNum(s.saves), per: 'per90', needs: 'saves' },
+    expected_goals_conceded_per_90: {
+        read: s => gwNum(s.expected_goals_conceded), per: 'per90',
+        needs: 'expected_goals_conceded'
+    },
+    goals_assists: {
+        read: s => gwNum(s.goals_scored) + gwNum(s.assists), per: 'total'
+    },
+    expected_goal_involvements: {
+        read: s => gwNum(s.expected_goals) + gwNum(s.expected_assists), per: 'total'
+    }
+};
+
+/**
+ * Minutes needed before a windowed per-90 is a rate rather than an anecdote.
+ * Scaled to the window, because the season guards cannot survive here: five
+ * gameweeks hold 450 minutes at the very most, so a `minutes < 450` filter —
+ * which is what the position matrix used — would empty the chart.
+ */
+function windowMinMinutes() {
+    return Math.max(90, Math.round((state.trendWindow || 5) * 27));
+}
+
+/** Whether this metric can be measured over the window from the current source. */
+function windowRateSupported(key) {
+    const spec = WINDOW_RATES[key];
+    if (!spec || !state.trendGws.length) return false;
+    if (!spec.needs) return true;
+    // One record carrying the field is enough: it is a property of the source,
+    // not of the player.
+    return state.trendGws.some(({ stats }) => {
+        for (const s of stats.values()) if (s[spec.needs] !== undefined) return true;
+        return false;
+    });
+}
+
+/** One player's windowed figure, or null when he has too little of the window. */
+function windowRate(player, key) {
+    const spec = WINDOW_RATES[key];
+    if (!spec) return null;
+    let total = 0, minutes = 0, apps = 0;
+    for (const { stats } of state.trendGws) {
+        const s = stats.get(Number(player.id));
+        if (!s) continue;
+        total += spec.read(s, player);
+        minutes += gwNum(s.minutes);
+        apps++;
+    }
+    if (!apps) return null;
+    if (spec.per !== 'per90') return total;
+    return minutes >= windowMinMinutes() ? total / (minutes / 90) : null;
+}
+
+/**
+ * How a chart should read one metric: over the window where that is possible,
+ * over the season where it is not. Decided once per chart rather than per
+ * player — half an axis measured over five games and half over thirty-eight is
+ * not an axis.
+ */
+function metricReader(key) {
+    if (windowRateSupported(key)) {
+        return { windowed: true, read: p => windowRate(p, key) };
+    }
+    return {
+        windowed: false,
+        read: p => {
+            const v = parseFloat(p[key]);
+            return Number.isFinite(v) ? v : null;
+        }
+    };
+}
+
+/** Axis text that states the span it was measured over. */
+function windowAxisLabel(base, windowed) {
+    return windowed ? `${base} · ${state.trendWindow} מחזורים` : `${base} · כל העונה`;
+}
+
 /* ------------------------- top-20 position benchmark ---------------------- */
 
 /**
@@ -9975,20 +10075,34 @@ function rostersAreKnown() {
 function buildPositionMatrix(data) {
     const pos = POSITION_MATRIX[state.chartPosition] ? state.chartPosition : 'MID';
     const spec = POSITION_MATRIX[pos];
-    const players = data.filter(p => p.position_name === pos && p.minutes > spec.minMinutes);
+    // Both axes over the momentum window where the per-gameweek log carries
+    // them. The x metric decides on its own: xGC is not in the archived log, so
+    // the goalkeeper matrix measures its x over the season while its y follows
+    // the window — which the two axis labels then say outright.
+    const xr = metricReader(spec.key);
+    const yr = metricReader('points_per_game_90');
+
+    // The season guard cannot survive a window: five gameweeks hold 450 minutes
+    // at most, and this asked for more than that. windowRate applies its own
+    // scaled minimum and returns null below it.
+    const players = data.filter(p => p.position_name === pos
+        && (xr.windowed && yr.windowed ? true : p.minutes > spec.minMinutes));
     if (players.length < 3) return null;
 
-    const raw = players.map(p => ({
-        x: parseFloat(p[spec.key]) || 0,
-        y: parseFloat(p.points_per_game_90) || 0,
-        name: p.web_name, team: p.team_name
-    }));
+    const raw = players.map(p => {
+        const x = xr.read(p), y = yr.read(p);
+        if (x === null || y === null) return null;
+        return { x, y, name: p.web_name, team: p.team_name };
+    }).filter(Boolean);
+    if (raw.length < 3) return null;
 
     // Named: the ones in the good quadrant, by output.
     const dir = spec.good === 'low' ? -1 : 1;
     const points = labelTop(raw, pt => pt.y * 2 + pt.x * dir);
 
-    return getMatrixChartConfig(points, spec.label, 'נקודות ל-90 דקות', spec.quads, {
+    return getMatrixChartConfig(points,
+        windowAxisLabel(spec.label, xr.windowed),
+        windowAxisLabel('נקודות ל-90 דקות', yr.windowed), spec.quads, {
         goodDirection: { x: spec.good, y: 'high' },
         radiusFor: () => 5,
         tooltipFor: d => `${d.name} · ${pos}`
@@ -10115,13 +10229,19 @@ function buildTrendChart(data) {
 /* ---------------------------- 4. conversion ------------------------------ */
 
 function buildConversionChart(data) {
+    const xr = metricReader('expected_goal_involvements');
+    const yr = metricReader('goals_assists');
+    const windowed = xr.windowed && yr.windowed;
+    // Both axes are totals, so the "enough to judge" bar scales with the span:
+    // 2 xGI is a season's worth of nothing and a window's worth of plenty.
+    const floor = windowed ? 0.6 : 2;
+
     const raw = data.map(p => {
-        const xgi = parseFloat(p.expected_goal_involvements) || 0;
-        if (p.minutes < 450 || xgi < 2) return null;
-        return {
-            x: xgi, y: (p.goals_scored || 0) + (p.assists || 0),
-            name: p.web_name, team: p.team_name, pos: p.position_name
-        };
+        if (!windowed && p.minutes < 450) return null;
+        const x = xr.read(p);
+        const y = windowed ? yr.read(p) : (p.goals_scored || 0) + (p.assists || 0);
+        if (x === null || y === null || x < floor) return null;
+        return { x, y, name: p.web_name, team: p.team_name, pos: p.position_name };
     }).filter(Boolean);
     if (raw.length < 4) return null;
 
@@ -10133,7 +10253,9 @@ function buildConversionChart(data) {
     // on this chart that are telling you to do something.
     const points = labelTop(raw, pt => Math.abs(pt.y - pt.x));
 
-    return getMatrixChartConfig(points, 'צפי מעורבות (xGI)', 'מעורבות בפועל (G+A)', {}, {
+    return getMatrixChartConfig(points,
+        windowAxisLabel('צפי מעורבות (xGI)', windowed),
+        windowAxisLabel('מעורבות בפועל (G+A)', windowed), {}, {
         diagonal: true,
         colorFor: pt => pt.y - pt.x >= GAP ? 'rgba(251, 146, 60, 0.9)'
             : pt.x - pt.y >= GAP ? 'rgba(59, 130, 246, 0.9)'
@@ -10260,11 +10382,16 @@ function buildDepthChart(data) {
 /* --------------------------- 7. minutes security ------------------------- */
 
 function buildMinutesChart(data) {
+    // Only the output axis is windowable: start share is a season fact about a
+    // role, and over five games it is a fraction with a denominator of five.
+    const yr = metricReader('points_per_game_90');
     const raw = data.map(p => {
-        if (p.rotation_risk === null || p.rotation_risk === undefined || p.minutes < 600) return null;
+        if (p.rotation_risk === null || p.rotation_risk === undefined) return null;
+        if (!yr.windowed && p.minutes < 600) return null;
+        const y = yr.read(p);
+        if (y === null) return null;
         return {
-            x: Math.round(p.rotation_risk * 100),
-            y: parseFloat(p.points_per_game_90) || 0,
+            x: Math.round(p.rotation_risk * 100), y,
             name: p.web_name, team: p.team_name, pos: p.position_name
         };
     }).filter(Boolean);
@@ -10273,7 +10400,8 @@ function buildMinutesChart(data) {
     // Named: nailed and productive, plus the productive-but-rotated risks.
     const points = labelTop(raw, pt => pt.y * 2 + pt.x / 25);
 
-    return getMatrixChartConfig(points, 'אחוז ההופעות שבהן פתח בהרכב', 'נקודות ל-90 דקות', {
+    return getMatrixChartConfig(points, 'אחוז ההופעות שבהן פתח בהרכב · כל העונה',
+        windowAxisLabel('נקודות ל-90 דקות', yr.windowed), {
         topRight: 'קבוע ומייצר', bottomLeft: 'מסובב ולא מייצר',
         topLeft: 'מייצר אבל מסובב', bottomRight: 'קבוע אבל לא מייצר'
     }, {
@@ -10595,19 +10723,25 @@ function signalFocusHeight(count) {
  * and make every outfielder look like a creator.
  */
 function buildUnderlyingValueChart(data) {
+    // xGI follows the window; VORP does not, and should not — it is a valuation
+    // built on a season of evidence, and recomputing it from five games would
+    // make "יתרון על החלופה" mean something different on every axis it appears.
+    const xr = metricReader('xGI_per90');
     const raw = data.map(p => {
         if (p.position_name === 'GKP' || p.market_departed) return null;
-        if (!Number.isFinite(p.vorp) || p.minutes < 450) return null;
-        return {
-            x: parseFloat(p.xGI_per90) || 0, y: p.vorp,
-            name: p.web_name, team: p.team_name, pos: p.position_name
-        };
+        if (!Number.isFinite(p.vorp)) return null;
+        if (!xr.windowed && p.minutes < 450) return null;
+        const x = xr.read(p);
+        if (x === null) return null;
+        return { x, y: p.vorp, name: p.web_name, team: p.team_name, pos: p.position_name };
     }).filter(Boolean);
     if (raw.length < 4) return null;
 
     const points = labelTop(raw, pt => pt.y * 1.5 + pt.x * 4);
 
-    return getMatrixChartConfig(points, 'xG+xA ל-90 דקות', 'יתרון על החלופה בעמדה (VORP)', {
+    return getMatrixChartConfig(points,
+        windowAxisLabel('xG+xA ל-90 דקות', xr.windowed),
+        'יתרון על החלופה בעמדה (VORP) · כל העונה', {
         topRight: 'איום אמיתי, ערך אמיתי', topLeft: 'ערך בלי איום התקפי',
         bottomRight: 'מייצר סיכויים, עוד לא נקודות', bottomLeft: 'חלש בשניהם'
     }, {

@@ -17,13 +17,16 @@ const FNS = [
     'getMatrixChartConfig', 'labelTop', 'chartAxis', 'ltrTick', 'displayNetTransfers',
     'buildMarketFlowChart', 'buildSignalSpreadChart', 'buildSignalFocusChart',
     'buildUnderlyingValueChart', 'buildTeamTargetsChart', 'signalLegendHtml',
+    'metricReader', 'windowRate', 'windowRateSupported', 'windowMinMinutes',
+    'windowAxisLabel', 'gwDefensiveContribution',
     'barRowLabel', 'barRowTicks', 'signalFocusHeight',
     'scopeToFacet', 'chartFacetChipsHtml', 'setChartFacet', 'chartFacetValue'
 ];
 
 const DEPS = ['CHART_TOOLTIP', 'SIGNAL_TONE_COLOR', 'SIGNAL_SORT_ORDER',
     'SIGNAL_RULES', 'HOLD_SIGNAL', 'CHART_FACETS', 'POSITION_COLOR', 'POSITION_LABELS',
-    'DEFAULT_TOP_CHARTS', 'LABEL_CANDIDATES'];
+    'DEFAULT_TOP_CHARTS', 'LABEL_CANDIDATES', 'WINDOW_RATES', 'gwNum',
+    'DEFCON_THRESHOLD'];
 
 /** A processed row with everything all three builders read. */
 function row(over = {}) {
@@ -41,8 +44,11 @@ function row(over = {}) {
  * what this file is checking is the chart's handling of them — the column order,
  * the colours, the jitter — which should not change if a threshold does.
  */
-function load(verdicts = {}) {
-    const state = { currentDataSource: 'historical', chartFacets: {} };
+function load(verdicts = {}, over = {}) {
+    // trendGws empty by default: every chart then measures over the season, which
+    // is the fallback path these tests were written against.
+    const state = { currentDataSource: 'historical', chartFacets: {},
+        trendWindow: 5, trendGws: [], ...over };
     const fns = loadFunctions(FNS, { state }, DEPS);
     globalThis.signalFor = p => verdicts[p.id]
         || { key: 'hold', label: 'ניטרלי', tone: 'muted', why: [] };
@@ -59,6 +65,87 @@ function load(verdicts = {}) {
 }
 
 const points = config => config.data.datasets[0].data;
+
+describe('window-measured metrics', () => {
+    /** A window of `n` gameweeks in which the player played 90 minutes each. */
+    function window_(n, per, ids = [1]) {
+        return Array.from({ length: n }, (_, i) => ({
+            gw: 30 + i,
+            stats: new Map(ids.map(id => [id, { minutes: 90, ...per }]))
+        }));
+    }
+
+    test('a per-90 is measured over the window, not the season', () => {
+        const { windowRate } = load({}, { trendGws: window_(5, { total_points: 8 }) });
+        // 40 points in 450 minutes = 8 per 90, whatever the season says.
+        assert.equal(windowRate(row({ id: 1, points_per_game_90: 2 }),
+            'points_per_game_90'), 8);
+    });
+
+    test('too little of the window is no rate at all', () => {
+        // One appearance in five gameweeks: 90 minutes, under the scaled floor.
+        const gws = window_(5, { total_points: 9 });
+        for (let i = 1; i < 5; i++) gws[i].stats.clear();
+        const { windowRate, windowMinMinutes } = load({}, { trendGws: gws });
+        assert.equal(windowMinMinutes(), 135, 'scaled to the window, not a fixed 450');
+        assert.equal(windowRate(row({ id: 1 }), 'points_per_game_90'), null);
+    });
+
+    test('a total is a total, and is not divided by minutes', () => {
+        const { windowRate } = load({},
+            { trendGws: window_(4, { goals_scored: 1, assists: 1 }) });
+        assert.equal(windowRate(row({ id: 1 }), 'goals_assists'), 8);
+    });
+
+    test('a metric the source does not log is not measurable over a window', () => {
+        // The committed snapshot logs points, minutes, xGI, defcon, bps, saves,
+        // goals, assists and bonus — no xGC. The goalkeeper matrix asks for it,
+        // so it must fall back rather than plot zeros.
+        const { windowRateSupported } = load({},
+            { trendGws: window_(5, { total_points: 4, saves: 3 }) });
+        assert.equal(windowRateSupported('points_per_game_90'), true);
+        assert.equal(windowRateSupported('expected_goals_conceded_per_90'), false);
+    });
+
+    test('and is measurable once the source does log it', () => {
+        const { windowRateSupported, windowRate } = load({},
+            { trendGws: window_(5, { expected_goals_conceded: 1.2 }) });
+        assert.equal(windowRateSupported('expected_goals_conceded_per_90'), true);
+        assert.equal(windowRate(row({ id: 1 }), 'expected_goals_conceded_per_90'), 1.2);
+    });
+
+    test('with no window loaded, every reader falls back to the season figure', () => {
+        const { metricReader } = load();
+        const r = metricReader('xGI_per90');
+        assert.equal(r.windowed, false);
+        assert.equal(r.read(row({ id: 1, xGI_per90: 0.45 })), 0.45);
+    });
+
+    test('the axis says which span it was measured over', () => {
+        const { windowAxisLabel } = load({}, { trendWindow: 10 });
+        assert.equal(windowAxisLabel('נקודות ל-90', true), 'נקודות ל-90 · 10 מחזורים');
+        assert.equal(windowAxisLabel('נקודות ל-90', false), 'נקודות ל-90 · כל העונה');
+    });
+
+    test('one axis can be windowed while the other is not, and both say so', () => {
+        // Exactly the goalkeeper matrix: points/90 over five, xGC over the season.
+        const { buildUnderlyingValueChart } = load({},
+            { trendGws: window_(5, { expected_goals: 0.3 }, [1, 2, 3, 4]) });
+        const players = [1, 2, 3, 4].map(id => row({ id, vorp: id * 0.5 }));
+        const config = buildUnderlyingValueChart(players);
+        assert.match(config.options.scales.x.title.text, /5 מחזורים/);
+        assert.match(config.options.scales.y.title.text, /כל העונה/);
+    });
+
+    test('the season minutes guard is dropped once the window governs', () => {
+        // 450 minutes is the entire content of a five-gameweek window, so a
+        // season guard of "more than 450" would empty the chart.
+        const gws = window_(5, { expected_goals: 0.4 }, [1, 2, 3, 4]);
+        const { buildUnderlyingValueChart } = load({}, { trendGws: gws });
+        const thin = [1, 2, 3, 4].map(id => row({ id, minutes: 300, vorp: id * 0.4 }));
+        assert.equal(points(buildUnderlyingValueChart(thin)).length, 4);
+    });
+});
 
 describe('the six lead slots', () => {
     test('the defaults are the six the user chose, in order', () => {

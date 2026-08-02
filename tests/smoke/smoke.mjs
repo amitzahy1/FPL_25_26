@@ -979,6 +979,52 @@ try {
         'and the draft board');
     check(windowAndFocus.restored, 'and setting it back restores them');
 
+    // The window reaches the per-90 metrics themselves, not only the axes that
+    // were already deltas — and every axis states the span it was measured over,
+    // because the archived snapshot logs no xGC and that one cannot follow.
+    const spans = await page.evaluate(async () => {
+        const axes = () => {
+            const out = {};
+            for (const [id, ch] of Object.entries(charts)) {
+                if (!ch || !ch.options || !ch.options.scales) continue;
+                out[id] = ['x', 'y']
+                    .map(a => (((ch.options.scales[a] || {}).title || {}).text) || '')
+                    .join(' | ');
+            }
+            return out;
+        };
+        setChartPosition('MID');
+        await new Promise(r => setTimeout(r, 400));
+        const at5 = axes();
+        const midX = charts['chart-position'].data.datasets[0].data.map(d => d.x);
+        setTrendWindow(10);
+        await new Promise(r => setTimeout(r, 2500));
+        const at10 = axes();
+        const midX10 = charts['chart-position'].data.datasets[0].data.map(d => d.x);
+        // The goalkeeper matrix: xGC has no per-gameweek record in the archive.
+        setChartPosition('GKP');
+        await new Promise(r => setTimeout(r, 400));
+        const gk = ['x', 'y'].map(a =>
+            charts['chart-position'].options.scales[a].title.text);
+        setChartPosition('MID');
+        setTrendWindow(5);
+        await new Promise(r => setTimeout(r, 2500));
+        return {
+            labelled: Object.values(at5).filter(t => /מחזורים|כל העונה/.test(t)).length,
+            total: Object.keys(at5).length,
+            midMoved: JSON.stringify(midX) !== JSON.stringify(midX10),
+            at5: at5['chart-position'], at10: at10['chart-position'],
+            gkX: gk[0], gkY: gk[1]
+        };
+    });
+    check(spans.midMoved,
+        'the window reshapes the position matrix itself, not just its label');
+    check(/5 מחזורים/.test(spans.at5) && /10 מחזורים/.test(spans.at10),
+        `and the axes say which span (${spans.at5})`);
+    check(/כל העונה/.test(spans.gkX) && /מחזורים/.test(spans.gkY),
+        `xGC has no per-gameweek record, so that axis stays season-long`
+        + ` while its partner follows the window (${spans.gkX})`);
+
     check(pageErrors.length === 0, 'still no page errors after interaction');
 } catch (e) {
     failures.push(`smoke run threw: ${e.message}`);

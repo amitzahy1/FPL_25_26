@@ -295,6 +295,30 @@ Status as of the 2026/27 pre-season overhaul. Items are ordered by value, not by
       *inside* the card now (`.chart-scroll` in a scrolling `.chart-canvas`), so
       the card keeps its slot and its height and all 53 names are still there.
 
+- [x] **The momentum window reaches the metrics, not just the deltas.** It
+      already drove the two axes that were literally window measurements; every
+      other chart plotted season per-90s and ignored it. `WINDOW_RATES` now
+      re-measures a metric over `state.trendGws` — points/90, xGI/90, DC/90,
+      bonus/90, saves/90, G+A, xGI total, xGC/90 — and `metricReader(key)`
+      decides *per chart* whether to use it, never per player: half an axis over
+      five games and half over thirty-eight is not an axis. Every axis appends
+      the span it was measured over.
+      - **xGC is the exception, and it is a data limit, not a choice.** The
+        committed snapshot's per-appearance log carries points, minutes, xGI,
+        defcon, bps, saves, goals, assists and bonus — no xGC. So the goalkeeper
+        matrix measures its x over the season and its y over the window, and
+        both labels say so. On the live season `event/{gw}/live` does carry
+        `expected_goals_conceded`, and `windowRateSupported` picks it up with no
+        further change.
+      - The season minute guards had to go with it: five gameweeks hold 450
+        minutes at the very most, and the position matrix required *more* than
+        450, so a windowed chart would have been empty. `windowMinMinutes()`
+        scales to the window (~27 min per gameweek, floor 90) and a player under
+        it is dropped rather than plotted from two appearances.
+      - VORP and start-share stay season-long by choice, and say so: VORP is a
+        valuation built on a season of evidence, and a start share over five
+        games is a fraction with a denominator of five.
+
 ## Pre-draft, still open
 
 - [ ] Steals-vs-ADP column: `draft_rank` is FPL Draft's own published ranking, so
