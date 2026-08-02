@@ -9568,6 +9568,7 @@ function buildOpportunityChart(data) {
         if (delta === null || p.minutes < 450) return null;
         return {
             x: p.draft_score, y: delta, name: p.web_name, team: p.team_name,
+            pos: p.position_name,
             free: !rosterKnown || !owned.has(p.id)
         };
     }).filter(Boolean);
@@ -9582,14 +9583,27 @@ function buildOpportunityChart(data) {
         topRight: 'איכות ומומנטום', topLeft: 'מתחמם אבל חלש',
         bottomRight: 'איכות שמתקררת', bottomLeft: 'לא עכשיו'
     }, {
-        // Colour by availability, not by quadrant: the best player on the chart is
-        // usually already on someone's roster, so "can I have him" outranks
+        // Colour by availability once rosters exist: the best player on the chart
+        // is usually already on someone's roster, so "can I have him" outranks
         // "is he good" as the first thing to see.
-        colorFor: pt => pt.free ? 'rgba(34, 197, 94, 0.85)' : 'rgba(148, 163, 184, 0.35)',
-        radiusFor: pt => pt.free ? 5.5 : 3.5,
-        tooltipFor: d => `${d.name} · ${d.team}${d.free ? ' · 🆓 חופשי' : ' · תפוס'} — `
-            + `ציון ${d.x.toFixed(1)}, ${d.y > 0 ? '+' : ''}${d.y.toFixed(1)} נק׳`
+        //
+        // Before the draft nobody is taken, so that rule painted all ~500 points
+        // one shade of green and spent the colour channel on a distinction that
+        // does not exist yet. Position is the dimension the axes do not already
+        // carry, and it is the one a draft is actually organised around.
+        colorFor: pt => rosterKnown
+            ? (pt.free ? 'rgba(34, 197, 94, 0.85)' : 'rgba(148, 163, 184, 0.35)')
+            : (POSITION_COLOR[pt.pos] || '#64748b'),
+        radiusFor: pt => rosterKnown ? (pt.free ? 5.5 : 3.5) : 4.5,
+        tooltipFor: d => `${d.name} · ${d.team} · ${d.pos}`
+            + (rosterKnown ? (d.free ? ' · 🆓 חופשי' : ' · תפוס') : '')
+            + ` — ציון ${d.x.toFixed(1)}, ${d.y > 0 ? '+' : ''}${d.y.toFixed(1)} נק׳`
     });
+}
+
+/** True once the league's rosters are known, i.e. the draft has been held. */
+function rostersAreKnown() {
+    return !!(state.draft.ownedElementIds && state.draft.ownedElementIds.size > 0);
 }
 
 /* --------------------------- 2. position matrix --------------------------- */
@@ -9895,7 +9909,10 @@ function buildDefconChart(data) {
 const CHART_SPECS = [
     {
         id: 'chart-opportunity', title: '🎯 לוח הזדמנויות',
-        note: 'ציון דראפט מול המומנטום בחלון הנבחר. ירוק = פנוי, אפור = תפוס.',
+        note: () => 'ציון דראפט מול המומנטום בחלון הנבחר. '
+            + (rostersAreKnown()
+                ? 'ירוק = פנוי, אפור = תפוס.'
+                : `לפני הדראפט כולם פנויים, ולכן הצבע מסמן עמדה: ${positionLegendHtml()}`),
         build: buildOpportunityChart
     },
     {
@@ -9930,12 +9947,36 @@ const CHART_SPECS = [
     },
     {
         id: 'chart-defcon', title: '🛡️ מכונות DEFCON',
-        note: 'אחוז ההופעות שבהן עברו בפועל את הסף. ממוצע ל-90 דקות מטעה כאן.',
+        // The bars have always been coloured by position; nothing said so, which
+        // made a chart of green bars with four indigo ones look arbitrary. The
+        // distinction matters here more than anywhere: the DEFCON threshold is
+        // 10 for a defender and 12 for a midfielder, so two bars at the same
+        // height were not cleared at the same bar.
+        note: () => 'אחוז ההופעות שבהן עברו בפועל את הסף (10 למגן, 12 לקשר/חלוץ). '
+            + `ממוצע ל-90 דקות מטעה כאן. צבע = עמדה: ${positionLegendHtml()}`,
         build: buildDefconChart
     }
 ];
 
 /** Builds the card scaffolding once, from CHART_SPECS. */
+/**
+ * A card's caption, which for some charts depends on what the chart is currently
+ * able to say. The opportunity board colours by availability once rosters exist
+ * and by position before that, and a fixed caption promising "green = free, grey
+ * = taken" in front of a chart where every point is green describes a
+ * distinction that does not exist yet.
+ */
+function chartNote(spec) {
+    return typeof spec.note === 'function' ? spec.note() : spec.note;
+}
+
+/** The position→colour key, for the charts that spend colour on position. */
+function positionLegendHtml() {
+    return '<span class="chart-keys">' + Object.keys(POSITION_COLOR).map(pos =>
+        `<span class="chart-key"><i style="background:${POSITION_COLOR[pos]}"></i>${POSITION_LABELS[pos]}</span>`
+    ).join('') + '</span>';
+}
+
 function ensureChartCards() {
     const grid = document.getElementById('chartsGrid');
     if (!grid || grid.dataset.built === '1') return grid;
@@ -9945,7 +9986,7 @@ function ensureChartCards() {
             <header class="chart-head">
                 <div>
                     <h3 class="chart-title">${spec.title}</h3>
-                    <p class="chart-note">${spec.note}</p>
+                    <p class="chart-note">${chartNote(spec)}</p>
                 </div>
                 ${spec.positions ? `<div class="chart-seg" role="group" aria-label="עמדה">
                     ${Object.keys(POSITION_MATRIX).map(pos => `
@@ -9981,6 +10022,15 @@ function renderCharts() {
         const card = document.getElementById(`card-${spec.id}`);
         const canvas = document.getElementById(spec.id);
         if (!card || !canvas) return;
+
+        // Re-read the caption every render, not only when the cards are built:
+        // the ones that describe a colour encoding change what they say when the
+        // encoding changes, and the scaffolding is built exactly once.
+        const noteEl = card.querySelector('.chart-note');
+        if (noteEl) {
+            const text = chartNote(spec);
+            if (noteEl.innerHTML !== text) noteEl.innerHTML = text;
+        }
 
         let config = null;
         try {

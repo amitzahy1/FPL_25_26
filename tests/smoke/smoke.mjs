@@ -332,6 +332,53 @@ try {
             return canvas && charts[canvas.id];
         });
         const notes = visible.filter(c => (c.querySelector('.chart-note') || {}).textContent);
+
+        // Beyond "it drew": a chart can be technically alive and still tell the
+        // reader nothing. Three ways that happened here — a canvas collapsed to
+        // no height, NaN coordinates plotted as invisible points, and a caption
+        // promising a colour code in front of a chart painted one colour (all
+        // ~500 points green, because "green = free" was true of everybody before
+        // the draft).
+        const faults = [];
+        for (const c of visible) {
+            const canvas = c.querySelector('canvas');
+            const chart = canvas && charts[canvas.id];
+            if (!chart) continue;
+            const name = (c.querySelector('.chart-title') || {}).textContent.trim();
+            const note = c.querySelector('.chart-note');
+            const noteText = (note && note.innerText) || '';
+            const box = canvas.getBoundingClientRect();
+            if (box.height < 120 || box.width < 120) {
+                faults.push(`${name}: canvas ${Math.round(box.width)}x${Math.round(box.height)}`);
+            }
+            const ds = chart.data.datasets;
+            const real = ds.reduce((n, d) => n + (d.data || []).filter(v => v !== null && v !== undefined).length, 0);
+            if (!real) faults.push(`${name}: no values plotted`);
+            const bad = ds.flatMap(d => (d.data || []).flatMap(v => {
+                const nums = (v && typeof v === 'object') ? [v.x, v.y] : [v];
+                return nums.filter(n => typeof n === 'number' && !Number.isFinite(n));
+            })).length;
+            if (bad) faults.push(`${name}: ${bad} NaN/Infinity values`);
+
+            // Resolved per element, because these charts set backgroundColor as a
+            // scriptable function — reading the config value counts every scatter
+            // as one colour.
+            const colours = new Set();
+            ds.forEach((d, i) => {
+                const meta = chart.getDatasetMeta(i);
+                (meta.data || []).forEach(el => el.options
+                    && el.options.backgroundColor && colours.add(String(el.options.backgroundColor)));
+            });
+            const claimsColourCode = /ירוק =|אפור =|צבע = עמדה|הצבע מסמן/.test(noteText);
+            const hasKey = !!(note && note.querySelector('.chart-key i'));
+            if (claimsColourCode && colours.size <= 1 && !hasKey) {
+                faults.push(`${name}: caption describes a colour code but one colour is drawn`);
+            }
+            if (/צבע = עמדה|הצבע מסמן עמדה/.test(noteText) && !hasKey) {
+                faults.push(`${name}: colour means position but no key is shown`);
+            }
+        }
+
         // Switch the position matrix and make sure it rebuilds rather than leaking
         // the destroyed instance.
         setChartPosition('DEF');
@@ -339,12 +386,15 @@ try {
         const afterToggle = !!charts['chart-position'];
         switchMainView('table');
         return { cards: cards.length, visible: visible.length, drawn: drawn.length,
-            notes: notes.length, afterToggle };
+            notes: notes.length, afterToggle, faults };
     });
     check(chartsView.cards === 8, `charts view built ${chartsView.cards} cards from CHART_SPECS`);
     check(chartsView.visible > 0 && chartsView.drawn === chartsView.visible,
         `all ${chartsView.visible} visible charts drew (${chartsView.cards - chartsView.visible} hid themselves)`);
     check(chartsView.notes === chartsView.visible, 'every visible chart says what it answers');
+    check(chartsView.faults.length === 0,
+        `every visible chart is legible and its caption matches what is drawn`
+        + `${chartsView.faults.length ? ` — ${chartsView.faults.join('; ')}` : ''}`);
     check(chartsView.afterToggle, 'the position matrix rebuilds when the position changes');
     check(pageErrors.length === chartsBefore,
         `no errors from the charts view${pageErrors.length > chartsBefore ? `: ${pageErrors[chartsBefore]}` : ''}`);
