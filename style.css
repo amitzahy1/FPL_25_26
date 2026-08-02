@@ -989,40 +989,8 @@ span.tone-down { background: none !important; color: #1d4ed8; font-weight: 700; 
 
 /* The free-agent switch. It reads as a control rather than a caption because it
    is the one thing on this bar that changes what the board recommends. */
-.db-toggle {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    padding: 3px 10px 3px 8px;
-    border-radius: 100px;
-    background: #eef2ff;
-    border: 1px solid #e0e7ff;
-    font-size: 11.5px;
-    font-weight: 800;
-    color: #4338ca;
-    cursor: pointer;
-    user-select: none;
-    white-space: nowrap;
-}
-
-.db-toggle input {
-    accent-color: #4f46e5;
-    width: 14px;
-    height: 14px;
-    margin: 0;
-    cursor: pointer;
-}
-
-/* Before the draft there is nothing to filter, so the control states the rule
-   without pretending to apply it. */
-.db-toggle.is-off {
-    background: #f1f5f9;
-    border-color: #e2e8f0;
-    color: #94a3b8;
-    cursor: help;
-}
-
-.db-toggle.is-off input { cursor: not-allowed; }
+/* .db-toggle rules removed with the board's own checkbox — the header's 🆓
+   button is the one site-wide control. */
 
 /* Fixed column counts, not auto-fill. With six panels, auto-fill produced five
    across and one stranded on its own row on a wide screen; three columns always
@@ -3510,7 +3478,12 @@ span.tone-down { background: none !important; color: #1d4ed8; font-weight: 700; 
 }
 
 .tb-row--filters {
-    gap: 10px;
+    /* The label takes a line of its own so the chips get the container's full
+       width — with thirteen of them, sharing the row with a 120px label was the
+       difference between one row and two. */
+    flex-direction: column;
+    align-items: stretch;
+    gap: 6px;
     padding-top: 10px;
     border-top: 1px solid #f1f5f9;
     justify-content: flex-start;
@@ -3743,7 +3716,9 @@ span.tone-down { background: none !important; color: #1d4ed8; font-weight: 700; 
    height, which collapsed every canvas to about half the space it asked for. */
 .chart-canvas {
     position: relative;
-    height: 330px;
+    /* 250, down from 330: six always-visible cards have to earn their scroll,
+       and the labels are 9px — the extra 80px was mostly whitespace. */
+    height: 250px;
 }
 
 .chart-seg {
@@ -4782,17 +4757,16 @@ canvas {
 /* Quick Filters Styles */
 .quick-filters-group {
     display: flex;
-    gap: 6px;
+    /* wrap stays as the safety net for narrow windows, but the chips are sized
+       so all of them fit one row on a desktop — a second row was the complaint. */
     flex-wrap: wrap;
-    /* Takes the width left over by the label and wraps inside it. Without the
-       min-width a flex item refuses to shrink below its content, which is what
-       pushed the row wider than its container in the first place. */
+    gap: 5px;
     flex: 1 1 auto;
     min-width: 0;
 }
 
 .quick-filter-btn {
-    padding: 6px 12px;
+    padding: 5px 9px;
     background: #f8fafc;
     border: 1px solid #eef2f7;
     border-radius: 20px;
@@ -5808,13 +5782,8 @@ canvas {
 .signal-bad   { background: #fbeae8; color: #b93229; }
 .signal-muted { background: #f1f5f9; color: #64748b; }
 
-.signal-why {
-    display: block;
-    margin-top: 3px;
-    font-size: 11.5px;
-    color: #64748b;
-    line-height: 1.35;
-}
+/* .signal-why removed: the sentence is the badge's hover now, and the
+   expanded row still prints it in full. It made every row three lines tall. */
 
 /* --- pre-season market overlay ---
    Between seasons the price and ownership cells describe the season ahead while
@@ -6749,34 +6718,7 @@ canvas {
 
 .charts-wrap { margin: 12px 0; }
 
-/* The slot's ⇄ menu. A native <select> under an icon: zero JS to open, and the
-   full chart list with the current one checked comes free. */
-.chart-swap {
-    position: relative;
-    flex: none;
-    align-self: flex-start;
-    width: 26px;
-    height: 26px;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    border: 1px solid #e2e8f0;
-    border-radius: 7px;
-    background: #f8fafc;
-    color: #64748b;
-    font-size: 13px;
-    font-weight: 700;
-    cursor: pointer;
-}
-
-.chart-swap:hover { border-color: #94a3b8; color: #334155; }
-
-.chart-swap select {
-    position: absolute;
-    inset: 0;
-    opacity: 0;
-    cursor: pointer;
-}
+/* .chart-swap removed with the per-slot swap control. */
 
 .more-charts { margin-top: 14px; }
 
@@ -6802,3 +6744,25 @@ canvas {
 .more-charts[open] > summary::after { transform: rotate(180deg); }
 .more-charts > summary:hover { border-color: #94a3b8; }
 .more-charts[open] > .charts-dashboard-grid { margin-top: 12px; }
+
+
+/* ==========================================================================
+   TABLE BAR — the table's own controls, on the table
+   ==========================================================================
+   Density, columns, compare, export: everything here changes how the rows
+   read, nothing here filters the page. The page-wide switches (מעקב, רק
+   חופשיים) live in the header, and the page-wide window lives in the filters —
+   which is what emptied the old toolbar row and let it die. */
+
+.table-bar {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin: 10px 0;
+}
+
+.table-bar-gap { flex: 1 1 auto; }
+
+/* The two header switches sit between the season toggle and the GW pill. */
+.user-actions .scout-btn { flex: none; }

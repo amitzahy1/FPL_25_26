@@ -254,6 +254,34 @@ Status as of the 2026/27 pre-season overhaul. Items are ordered by value, not by
       - Chart + board refresh is debounced 180ms behind the table — the filters
         run per keystroke and twelve canvases per keystroke stutters.
 
+- [x] **The toolbar row deleted, its controls sent where they belong.** With one
+      page there is no table-or-charts choice to make, so those two buttons went
+      first; then the row had nothing holding it together. The page-wide
+      switches (★ מעקב, 🆓 רק חופשיים) moved to the header — one button each for
+      the whole site, governing charts, board and table alike — and 📅 חלון
+      joined the filters, where it now scopes every surface rather than only the
+      table's micro-charts. What is left is table-only (density, איפוס, השוואה,
+      עמודות, CSV) and sits in a slim bar on the table. `.user-actions` wraps on
+      a phone; without it the two new header buttons pushed the season toggle
+      off the right edge.
+- [x] Chart cards 330px → 250px, and the per-slot ⇄ swap removed — עוד גרפים
+      already answers "where is the rest".
+- [x] Hover on a chart is the player's name and position, nothing else. The
+      axes already print the numbers, and a tooltip that repeats them is a
+      paragraph where a glance was wanted.
+- [x] `labelTop` stopped enforcing a quota. It ranked points by interest and
+      then labelled the top 22 — so 22 was the ceiling however much room there
+      was. Every point is a candidate now, sorted best-first, and the collision
+      pass decides; since 'auto' keeps the earlier label of a colliding pair,
+      sorting by score means the survivors are the ones worth naming.
+- [x] The סיגנל cell prints the badge only. The sentence that earned it made
+      every row three lines tall; it is the badge's hover now, and the expanded
+      row still prints it in full.
+- [x] Quick filters on one row: יהלומים deleted (ownership is a classic-game
+      signal and the chip earned its place the least), the other thirteen
+      relabelled short, and the ✨ label moved above the chips so they get the
+      container's full width. Measured at 1400px and 1600px: one row at both.
+
 ## Pre-draft, still open
 
 - [ ] Steals-vs-ADP column: `draft_rank` is FPL Draft's own published ranking, so

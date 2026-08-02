@@ -471,7 +471,17 @@
     .brand-info h1 { font-size: 15px; }
     .brand-subtitle { display: none; }
 
-    .user-actions { order: 2; margin-inline-start: auto; gap: 6px; }
+    /* Four controls share this row now (season, מעקב, חופשיים, GW, הגדרות), so
+       it wraps rather than pushing the season toggle off the right edge — which
+       is exactly what it did when the two switches moved up here. */
+    .user-actions {
+        order: 2;
+        margin-inline-start: auto;
+        gap: 6px;
+        flex-wrap: wrap;
+        justify-content: flex-end;
+        min-width: 0;
+    }
     .status-pill { padding: 5px 9px; font-size: 12px; }
     .settings-trigger span { display: none; }
     .settings-trigger { padding: 7px 9px; }
@@ -594,47 +604,14 @@
 }
 
 
-/* ==========================================================================
-   THE VIEW TOOLBAR ON A PHONE
-   ==========================================================================
-   It is outside the filter disclosure now, so it is always on screen — which
-   means it has to earn its height. The two controls that decide what you are
-   looking at stay; the rest are in the phone bar's עוד sheet, and repeating
-   them here only pushed the table further down.
-   ========================================================================== */
+/* The view-toolbar block that lived here died with the toolbar itself: its
+   surviving controls moved to the header and to the table bar. */
+
 
 @media (max-width: 768px) {
-    .controls-toolbar--view {
-        position: sticky;
-        top: 0;
-        z-index: 60;
-        margin: 8px 0;
-        padding: 8px;
-        background: rgba(248, 250, 252, .97);
-        backdrop-filter: blur(6px);
-    }
+    /* Header switches, phone-sized: four things now share the header row. */
+    .user-actions .scout-btn { padding: 5px 8px; font-size: 12px; }
+    .user-actions .scout-count { min-width: 16px; font-size: 11px; }
 
-    .controls-toolbar--view .tb-row {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 8px;
-    }
-
-    .controls-toolbar--view .tb-group { flex: 1 1 100%; gap: 8px; }
-    .controls-toolbar--view .tb-seg { flex: 1 1 auto; }
-    .controls-toolbar--view .tb-seg .view-btn { flex: 1 1 0; }
-
-    .controls-toolbar--view .scout-controls {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 6px;
-    }
-
-    /* Reachable from the sheet, so a second copy here is only height. */
-    .controls-toolbar--view .tb-actions,
-    .controls-toolbar--view .scout-watch { display: none; }
-
-    .controls-toolbar--view .scout-free { flex: 1 1 auto; }
-    .controls-toolbar--view .scout-toggle,
-    .controls-toolbar--view .scout-field { flex: 0 0 auto; }
+    .table-bar { gap: 6px; }
 }

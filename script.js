@@ -305,7 +305,6 @@ const state = {
     // one scatter to defenders should not empty the seven cards next to it, and
     // the panel's own filters are still there for when you do want that.
     chartFacets: {},
-    topChartIds: null,           // the six lead charts; filled from localStorage in init
     // Advanced filters
     searchQuery: '',
     priceRange: { min: 4, max: 15 },
@@ -1637,7 +1636,6 @@ async function fetchAndProcessData() {
         loadWatchlist();
         state.shownOptional = loadOptionalColumns();
         state.freeAgentsOnly = loadFreeAgentsOnly();
-        state.topChartIds = loadTopCharts();
         // The folds skip rendering while closed, so opening one has to render
         // what it skipped. Idempotent via the dataset flag.
         for (const id of ['chartsPanel', 'moreCharts']) {
@@ -3272,8 +3270,11 @@ function createPlayerRowHtml(player, index) {
         <td class="${toneClass('xGI_per90', parseFloat(player.xGI_per90) || 0, displayedValues.xGI_per90)}">${(parseFloat(player.xGI_per90) || 0).toFixed(2)}</td>
         <td class="${toneClass('goals_assists', (player.goals_scored || 0) + (player.assists || 0), displayedValues.goals_assists)}">${(player.goals_scored || 0) + (player.assists || 0)}</td>
         <td class="signal-cell">
-            <span class="signal-badge signal-${signal.tone}">${signal.label}</span>
-            ${signal.why.length ? `<span class="signal-why">${signal.why.map(w => `<span>${w}</span>`).join('')}</span>` : ''}
+            <!-- Badge only. The sentence that earned it printed under the badge
+                 and made every row three lines tall; it is the hover now, and
+                 still printed in full in the expanded row. -->
+            <span class="signal-badge signal-${signal.tone}"${signal.why.length
+        ? ` title="${escapeHtml(signal.why.join(' · '))}"` : ''}>${signal.label}</span>
         </td>
         ${trendKeys.map(key => trendCellHtml(player, key, index)).join('')}
         <td class="${toneClass('defcon_hit_rate', player.defcon_hit_rate, displayedValues.defcon_hit_rate)}" data-tooltip="${config.columnTooltips.defcon_hit_rate}">${formatDefconRate(player.defcon_hit_rate)}</td>
@@ -3877,10 +3878,6 @@ const QUICK_FILTERS = {
         filter: p => p.position_name === 'DEF' && p.minutes > 300,
         sortKey: 'xGI_per90'
     },
-    differentials: {
-        filter: p => parseFloat(p.selected_by_percent) < 10 && p.draft_score > 40,
-        sortKey: 'draft_score'
-    },
     // "form > 0" matched essentially the whole league. Require a genuinely
     // strong recent return from someone who is actually playing.
     form_kings: {
@@ -3984,12 +3981,9 @@ function assertQuickFiltersReachable() {
 // Filters whose inputs simply do not exist yet outside a live season, so an
 // empty result is expected and should be explained rather than shown as a
 // blank table.
-const FILTER_PREREQS = {
-    differentials: {
-        available: () => state.currentDataSource === 'live',
-        reason: 'אחוזי בחירה משקפים את העונה שהסתיימה ולא את הדראפט הקרוב'
-    }
-};
+// (Empty since the יהלומים chip was removed; kept because toggleQuickFilter
+// reads it and the next season-gated filter will need it again.)
+const FILTER_PREREQS = {};
 
 function applyQuickFilter(filterName) {
     const spec = QUICK_FILTERS[filterName];
@@ -5774,7 +5768,6 @@ function renderDraftBoard() {
         <div class="db-bar">
             <h2 class="db-heading"><span class="db-heading-icon">🎯</span>את מי לקחת עכשיו</h2>
             <span class="db-scope">${scope}</span>
-            ${boardFreeAgentToggleHtml(draftHeld)}
             <span class="db-legend" title="לכל מדד נמצא חציון 20 השחקנים הטובים באותה עמדה, והמספר האפור הוא היחס אליו. חציון ולא ממוצע, כדי ששחקן קיצוני אחד לא יזיז את הרף">
                 עילית = חציון 20 הטובים בעמדה
             </span>
@@ -5782,24 +5775,9 @@ function renderDraftBoard() {
         <div class="db-grid">${cards}</div>`;
 }
 
-/**
- * The one filter this board cannot do without. In Draft a player belongs to
- * exactly one manager, so a recommendation you cannot act on is not a
- * recommendation — after draft night the only players available to you are the
- * free agents.
- *
- * Off is still worth having: it is how you scout a rival's squad or judge what a
- * trade would cost. Before the draft it is disabled rather than hidden, so the
- * board states the rule it will apply later instead of silently applying nothing.
- */
-function boardFreeAgentToggleHtml(draftHeld) {
-    return `
-        <label class="db-toggle${draftHeld ? '' : ' is-off'}" title="${escapeHtml(freeAgentTitle())}">
-            <input type="checkbox" ${freeAgentFilterActive() ? 'checked' : ''} ${draftHeld ? '' : 'disabled'}
-                onchange="setFreeAgentsOnly(this.checked)">
-            <span>רק שחקנים חופשיים</span>
-        </label>`;
-}
+// The board's own "רק שחקנים חופשיים" checkbox lived here. Removed when the
+// switch became site-wide: the header's 🆓 button is the one control, and two
+// controls for one flag is the mistake the draft-team dropdown already made.
 
 /** A fact about the league, not a preference: has anybody been picked yet. */
 function draftHasBeenHeld() {
@@ -9732,7 +9710,7 @@ function getMatrixChartConfig(data, xLabel, yLabel, quadLabels = {}, opts = {}) 
                         label: function (context) {
                             const d = context.raw;
                             if (opts.tooltipFor) return opts.tooltipFor(d);
-                            return `${d.player || d.team}: (${d.x.toFixed(2)}, ${d.y.toFixed(2)})`;
+                            return `${d.player || d.name || d.team}`;
                         }
                     }
                 },
@@ -9839,14 +9817,21 @@ const CHART_LINE_PALETTE = ['#6366f1', '#ea580c', '#059669', '#0891b2',
  * Every point keeps `name` for the tooltip; only the chosen ones get `player`,
  * which is what the label formatter reads.
  */
-function labelTop(points, count, score) {
-    const chosen = new Set([...points]
-        .sort((a, b) => score(b) - score(a))
-        .slice(0, count));
+/**
+ * As many names as fit, not a fixed quota. Every point in the candidate set is
+ * labelled and the datalabels collision pass ('auto') drops whatever would
+ * overlap — and since it keeps the *earlier* label of a colliding pair, the
+ * points are sorted by the caller's score so "earlier" means "more worth
+ * naming". The cap only bounds the O(n²) collision pass on a 500-point cloud;
+ * far more than ever survive it anyway.
+ */
+const LABEL_CANDIDATES = 120;
+function labelTop(points, score) {
+    const ranked = [...points].sort((a, b) => score(b) - score(a));
     // An explicit empty `label` rather than just omitting the name: the formatter
     // falls back to the club when there is no player name, so leaving it off
     // printed a chart labelled with twenty repetitions of "Arsenal".
-    return points.map(pt => ({ ...pt, label: chosen.has(pt) ? pt.name : '' }));
+    return ranked.map((pt, i) => ({ ...pt, label: i < LABEL_CANDIDATES ? pt.name : '' }));
 }
 
 /**
@@ -9942,7 +9927,7 @@ function buildOpportunityChart(data) {
 
     // Named: the free agents who are both good and climbing. That is the whole
     // question the card asks, and nothing else on it needs a printed name.
-    const points = labelTop(raw, 22, pt => (pt.free ? 1000 : 0) + pt.x + pt.y * 3);
+    const points = labelTop(raw, pt => (pt.free ? 1000 : 0) + pt.x + pt.y * 3);
 
     return getMatrixChartConfig(points, 'ציון דראפט',
         `שינוי נקודות מול ${state.trendWindow} המחזורים שלפני`, {
@@ -9960,9 +9945,9 @@ function buildOpportunityChart(data) {
         // free, so every point came out the same green.
         fadeFor: pt => rosterKnown && !pt.free,
         radiusFor: pt => (rosterKnown && !pt.free) ? 3 : 5,
-        tooltipFor: d => `${d.name} · ${d.team} · ${d.pos}`
-            + (rosterKnown ? (d.free ? ' · 🆓 חופשי' : ' · תפוס') : '')
-            + ` — ציון ${d.x.toFixed(1)}, ${d.y > 0 ? '+' : ''}${d.y.toFixed(1)} נק׳`
+        // Name and position, nothing else: the axes already say the numbers, and
+        // a hover that repeats them is a paragraph where a glance was wanted.
+        tooltipFor: d => `${d.name} · ${d.pos}`
     });
 }
 
@@ -9987,13 +9972,12 @@ function buildPositionMatrix(data) {
 
     // Named: the ones in the good quadrant, by output.
     const dir = spec.good === 'low' ? -1 : 1;
-    const points = labelTop(raw, 24, pt => pt.y * 2 + pt.x * dir);
+    const points = labelTop(raw, pt => pt.y * 2 + pt.x * dir);
 
     return getMatrixChartConfig(points, spec.label, 'נקודות ל-90 דקות', spec.quads, {
         goodDirection: { x: spec.good, y: 'high' },
         radiusFor: () => 5,
-        tooltipFor: d => `${d.name} · ${d.team} — ${spec.label}: ${d.x.toFixed(2)}, `
-            + `${d.y.toFixed(1)} נק׳/90`
+        tooltipFor: d => `${d.name} · ${pos}`
     });
 }
 
@@ -10122,7 +10106,7 @@ function buildConversionChart(data) {
         if (p.minutes < 450 || xgi < 2) return null;
         return {
             x: xgi, y: (p.goals_scored || 0) + (p.assists || 0),
-            name: p.web_name, team: p.team_name
+            name: p.web_name, team: p.team_name, pos: p.position_name
         };
     }).filter(Boolean);
     if (raw.length < 4) return null;
@@ -10133,7 +10117,7 @@ function buildConversionChart(data) {
     const GAP = 1.5;
     // Named: the ones furthest off the line in either direction — the only points
     // on this chart that are telling you to do something.
-    const points = labelTop(raw, 24, pt => Math.abs(pt.y - pt.x));
+    const points = labelTop(raw, pt => Math.abs(pt.y - pt.x));
 
     return getMatrixChartConfig(points, 'צפי מעורבות (xGI)', 'מעורבות בפועל (G+A)', {}, {
         diagonal: true,
@@ -10141,12 +10125,7 @@ function buildConversionChart(data) {
             : pt.x - pt.y >= GAP ? 'rgba(59, 130, 246, 0.9)'
                 : 'rgba(148, 163, 184, 0.4)',
         radiusFor: pt => Math.abs(pt.y - pt.x) >= GAP ? 6 : 3.5,
-        tooltipFor: d => {
-            const gap = d.y - d.x;
-            const verdict = gap >= GAP ? 'מימוש יתר — צפוי לרדת'
-                : gap <= -GAP ? 'מימוש חסר — צפוי לתקן' : 'ממש לפי הצפי';
-            return `${d.name} · ${d.team} — xGI ${d.x.toFixed(1)}, G+A ${d.y} (${verdict})`;
-        }
+        tooltipFor: d => `${d.name} · ${d.pos}`
     });
 }
 
@@ -10272,20 +10251,20 @@ function buildMinutesChart(data) {
         return {
             x: Math.round(p.rotation_risk * 100),
             y: parseFloat(p.points_per_game_90) || 0,
-            name: p.web_name, team: p.team_name
+            name: p.web_name, team: p.team_name, pos: p.position_name
         };
     }).filter(Boolean);
     if (raw.length < 4) return null;
 
     // Named: nailed and productive, plus the productive-but-rotated risks.
-    const points = labelTop(raw, 22, pt => pt.y * 2 + pt.x / 25);
+    const points = labelTop(raw, pt => pt.y * 2 + pt.x / 25);
 
     return getMatrixChartConfig(points, 'אחוז ההופעות שבהן פתח בהרכב', 'נקודות ל-90 דקות', {
         topRight: 'קבוע ומייצר', bottomLeft: 'מסובב ולא מייצר',
         topLeft: 'מייצר אבל מסובב', bottomRight: 'קבוע אבל לא מייצר'
     }, {
         radiusFor: () => 4.5,
-        tooltipFor: d => `${d.name} · ${d.team} — ${d.x}% פתיחות, ${d.y.toFixed(1)} נק׳/90`
+        tooltipFor: d => `${d.name} · ${d.pos}`
     });
 }
 
@@ -10331,7 +10310,7 @@ function buildDefconChart(data) {
                 tooltip: {
                     ...CHART_TOOLTIP,
                     callbacks: {
-                        label: c => `${Math.round(c.parsed.x)}% מההופעות מעל הסף`
+                        label: c => `${top[c.dataIndex].web_name} · ${top[c.dataIndex].position_name}`
                     }
                 }
             }
@@ -10375,7 +10354,7 @@ function buildMarketFlowChart(data) {
 
     // Named: the productive, and the extremes of the flow in either direction —
     // both ends are the story, so the term is absolute.
-    const points = labelTop(raw, 22, pt => pt.y * 2 + (Math.abs(pt.x) / maxAbs) * 8);
+    const points = labelTop(raw, pt => pt.y * 2 + (Math.abs(pt.x) / maxAbs) * 8);
 
     const fmt = n => `${n > 0 ? '+' : ''}${Math.round(n).toLocaleString('en-US')}`;
     return getMatrixChartConfig(points, 'העברות נטו במחזור (באלפים)', 'נקודות למשחק', {
@@ -10383,8 +10362,7 @@ function buildMarketFlowChart(data) {
         bottomRight: 'נחטף בלי תפוקה', bottomLeft: 'נזרק, ובצדק'
     }, {
         radiusFor: () => 4.5,
-        tooltipFor: d => `${d.name} · ${d.team} · ${d.pos} — ${fmt(d.net)} העברות, `
-            + `${d.y.toFixed(1)} נק׳ למשחק`
+        tooltipFor: d => `${d.name} · ${d.pos}`
     });
 }
 
@@ -10440,16 +10418,18 @@ function buildSignalSpreadChart(data) {
 
     const points = [];
     columns.forEach((col, i) => {
-        const named = new Set(col.players
-            .slice().sort((a, b) => b.score - a.score).slice(0, 2).map(x => x.p.id));
         for (const { p, score } of col.players) {
             points.push({
                 x: i + jitter(p.id), y: score, tone: col.sig.tone,
-                label: named.has(p.id) ? p.web_name : '',
-                name: p.web_name, team: p.team_name, verdict: col.sig.label
+                label: p.web_name,
+                name: p.web_name, team: p.team_name, pos: p.position_name,
+                verdict: col.sig.label
             });
         }
     });
+    // Best first, so the collision pass drops the least interesting names —
+    // every point is a label candidate now, and 'auto' keeps the earlier one.
+    points.sort((a, b) => b.y - a.y);
 
     return {
         type: 'scatter',
@@ -10500,8 +10480,7 @@ function buildSignalSpreadChart(data) {
                 tooltip: {
                     ...CHART_TOOLTIP,
                     callbacks: {
-                        label: c => `${c.raw.name} · ${c.raw.team} — ${c.raw.verdict}, `
-                            + `ציון ${c.raw.y.toFixed(1)}`
+                        label: c => `${c.raw.name} · ${c.raw.pos}`
                     }
                 }
             }
@@ -10568,8 +10547,7 @@ function buildSignalFocusChart(column) {
                     callbacks: {
                         label: c => {
                             const { p } = ranked[c.dataIndex];
-                            return `#${c.dataIndex + 1} ${p.web_name} · ${p.team_name} · `
-                                + `${p.position_name} — ציון ${c.parsed.x.toFixed(1)}`;
+                            return `${p.web_name} · ${p.position_name}`;
                         }
                     }
                 }
@@ -10613,15 +10591,14 @@ function buildUnderlyingValueChart(data) {
     }).filter(Boolean);
     if (raw.length < 4) return null;
 
-    const points = labelTop(raw, 24, pt => pt.y * 1.5 + pt.x * 4);
+    const points = labelTop(raw, pt => pt.y * 1.5 + pt.x * 4);
 
     return getMatrixChartConfig(points, 'xG+xA ל-90 דקות', 'יתרון על החלופה בעמדה (VORP)', {
         topRight: 'איום אמיתי, ערך אמיתי', topLeft: 'ערך בלי איום התקפי',
         bottomRight: 'מייצר סיכויים, עוד לא נקודות', bottomLeft: 'חלש בשניהם'
     }, {
         radiusFor: () => 4.5,
-        tooltipFor: d => `${d.name} · ${d.team} · ${d.pos} — ${d.x.toFixed(2)} xGI/90, `
-            + `VORP ${d.y > 0 ? '+' : ''}${d.y.toFixed(2)}`
+        tooltipFor: d => `${d.name} · ${d.pos}`
     });
 }
 
@@ -10937,51 +10914,14 @@ function positionLegendHtml() {
 /* ------------------------------ the top six ------------------------------- */
 
 /**
- * Which six cards lead the page. Chosen with the user, changeable per slot from
- * the card itself (the ⇄ select in its header) and persisted; the rest sit
- * behind the עוד גרפים fold. The slots are an ordering of the same physical
- * cards, so swapping moves DOM nodes — nothing is rebuilt and no canvas id ever
- * exists twice.
+ * Which six cards lead the page, in order — chosen with the user; the rest sit
+ * behind the עוד גרפים fold. (A per-slot swap menu existed for one release and
+ * was removed on request: the fold already answers "where is the rest".)
  */
 const DEFAULT_TOP_CHARTS = [
     'chart-opportunity', 'chart-position', 'chart-team-targets',
     'chart-defcon', 'chart-signal-spread', 'chart-underlying'
 ];
-const TOP_CHARTS_KEY = 'fpl_top_charts';
-
-function loadTopCharts() {
-    try {
-        const raw = JSON.parse(localStorage.getItem(TOP_CHARTS_KEY) || 'null');
-        if (!Array.isArray(raw)) return [...DEFAULT_TOP_CHARTS];
-        const valid = raw.filter(id => CHART_SPECS.some(spec => spec.id === id));
-        // Anything short of six full slots means a chart was renamed or removed
-        // since the choice was saved; the default is better than a gap.
-        return valid.length === DEFAULT_TOP_CHARTS.length ? valid : [...DEFAULT_TOP_CHARTS];
-    } catch { return [...DEFAULT_TOP_CHARTS]; }
-}
-
-function swapTopChart(slot, chartId) {
-    const top = state.topChartIds || (state.topChartIds = [...DEFAULT_TOP_CHARTS]);
-    const i = Number(slot);
-    if (!CHART_SPECS.some(spec => spec.id === chartId) || !(i >= 0 && i < top.length)) return;
-    // If the incoming chart already holds another slot, the two trade places —
-    // dropping it there would leave that slot empty.
-    const j = top.indexOf(chartId);
-    if (j >= 0) top[j] = top[i];
-    top[i] = chartId;
-    try { localStorage.setItem(TOP_CHARTS_KEY, JSON.stringify(top)); } catch { /* session-only */ }
-    renderCharts();
-}
-
-/** The ⇄ menu in a top card's header: this slot, offered every chart. */
-function chartSwapHtml(spec, slot) {
-    const options = CHART_SPECS.map(other =>
-        `<option value="${other.id}" ${other.id === spec.id ? 'selected' : ''}>${other.title}</option>`
-    ).join('');
-    return `<label class="chart-swap" title="החלף את הגרף במשבצת הזו">⇄
-        <select onchange="swapTopChart(${slot}, this.value)">${options}</select>
-    </label>`;
-}
 
 /**
  * Deal the cards: the chosen six into the top grid in slot order, the rest into
@@ -10995,23 +10935,18 @@ function arrangeChartCards() {
     const more = document.getElementById('moreChartsGrid');
     if (!grid || !more) return;
 
-    const top = state.topChartIds || DEFAULT_TOP_CHARTS;
+    const top = DEFAULT_TOP_CHARTS;
     top.forEach((id, slot) => {
         const card = document.getElementById(`card-${id}`);
         if (!card) return;
         if (card.parentElement !== grid || grid.children[slot] !== card) {
             grid.insertBefore(card, grid.children[slot] || null);
         }
-        const swap = card.querySelector('.chart-swap-host');
-        if (swap) swap.innerHTML = chartSwapHtml(
-            CHART_SPECS.find(spec => spec.id === id), slot);
     });
     for (const spec of CHART_SPECS) {
         if (top.includes(spec.id)) continue;
         const card = document.getElementById(`card-${spec.id}`);
         if (card && card.parentElement !== more) more.appendChild(card);
-        const swap = card && card.querySelector('.chart-swap-host');
-        if (swap) swap.innerHTML = '';
     }
 
     const count = document.getElementById('moreChartsCount');
@@ -11032,8 +10967,6 @@ function ensureChartCards() {
                     <h3 class="chart-title">${spec.title}</h3>
                     <p class="chart-note">${chartNote(spec)}</p>
                 </div>
-                <!-- Filled by arrangeChartCards for the cards holding a top slot. -->
-                <span class="chart-swap-host"></span>
                 ${spec.positions ? `<div class="chart-seg" role="group" aria-label="עמדה">
                     ${Object.keys(POSITION_MATRIX).map(pos => `
                         <button type="button" data-chart-pos="${pos}"
@@ -11168,10 +11101,6 @@ function renderCharts() {
  */
 function switchMainView(viewName, fromUser) {
     const charting = viewName === 'charts';
-    const btnTable = document.getElementById('btnViewTable');
-    const btnCharts = document.getElementById('btnViewCharts');
-    if (btnTable) btnTable.classList.toggle('active', !charting);
-    if (btnCharts) btnCharts.classList.toggle('active', charting);
     const mbTable = document.getElementById('mbTable');
     const mbCharts = document.getElementById('mbCharts');
     if (mbTable) mbTable.setAttribute('aria-pressed', String(!charting));

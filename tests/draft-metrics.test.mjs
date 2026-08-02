@@ -170,7 +170,9 @@ describe('smart filters', () => {
     test('every chip in the UI has an implementation', () => {
         // Five chips previously fell through the switch and silently did nothing.
         const html = SCRIPT_SRC; // filters are referenced from index.html, checked below
-        const required = ['set_pieces', 'attacking_defenders', 'differentials',
+        // 'differentials' was deleted with its chip (2026-08-02): ownership is a
+        // classic-game signal and the chip earned its row the least.
+        const required = ['set_pieces', 'attacking_defenders',
             'form_kings', 'underperformers',
             'promoted_teams', 'new_to_league',
             'best_gkp_5', 'best_def_5', 'best_mid_5', 'best_fwd_5',

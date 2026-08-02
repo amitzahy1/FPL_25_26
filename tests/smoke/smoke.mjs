@@ -232,7 +232,7 @@ try {
         const top = () => [...document.querySelectorAll('#draftBoard .db-nm b')]
             .slice(0, 3).map(e => e.textContent);
         const owned = state.draft.ownedElementIds;
-        const on = { top: top(), checked: document.querySelector('.db-toggle input').checked };
+        const on = { top: top(), checked: document.getElementById('freeAgentsOnlyBtn').getAttribute('aria-pressed') === 'true' };
         const ownedShownWhileOn = top().filter(n => [...owned]
             .some(id => (state.allPlayersData[state.currentDataSource].processed
                 .find(p => p.id === id) || {}).web_name === n)).length;
@@ -263,7 +263,7 @@ try {
         setFreeAgentsOnly(true);
         await new Promise(r => setTimeout(r, 150));
         return {
-            enabled: !document.querySelector('.db-toggle input').disabled,
+            enabled: !document.getElementById('freeAgentsOnlyBtn').disabled,
             onChecked: on.checked,
             ownedShownWhileOn,
             changed: JSON.stringify(on.top) !== JSON.stringify(off.top),
@@ -282,9 +282,9 @@ try {
         'turning it off widens the pool to owned players and the board says so');
     check(faToggle.restored, 'turning it back on restores the free-agent recommendations');
     check(faToggle.btnOn.pressed === 'true' && !faToggle.btnOn.disabled,
-        'the toolbar button reports the same state the board checkbox does');
+        'the one site-wide 🆓 button reports the live state');
     check(faToggle.btnOffPressed === 'false',
-        'the toolbar button follows a change made from the board');
+        'and follows a change made in code');
     check(faToggle.tableOwnedWhileOn === 0,
         'the table (and so the charts) drops owned players while the filter is on');
     check(faToggle.tableGrewWhenOff,
@@ -809,7 +809,7 @@ try {
             const b = el.getBoundingClientRect();
             return b.top < window.innerHeight && b.bottom > 0 && b.left < window.innerWidth;
         };
-        const toolbar = document.querySelector('.controls-toolbar--view');
+        const tableBar = document.querySelector('.table-bar');
         const viewBtns = [...document.querySelectorAll('.mb-btn')];
 
         return {
@@ -820,10 +820,11 @@ try {
             barVisible: visible(bar) && !!barBox && inViewport(bar),
             barButtons: viewBtns.length,
             barTaps: viewBtns.filter(b => b.getBoundingClientRect().height < 44).length,
-            // The view toolbar is out of the disclosure, so it is on the page
-            // even when the panel is shut.
-            toolbarOutsidePanel: !!toolbar && !toolbar.closest('#filtersPanel'),
-            toolbarVisibleWithPanelShut: visible(toolbar),
+            // The page-wide switches live in the header, so they are reachable
+            // with every fold shut; the table's own controls sit on the table.
+            headerSwitches: ['watchlistOnlyBtn', 'freeAgentsOnlyBtn']
+                .filter(id => visible(document.getElementById(id))).length,
+            tableBarOnTable: !!tableBar && !!tableBar.closest('#mainTableView'),
             // ...and the quick-filter chips, which really are filters, stayed in.
             chipsInsidePanel: !!(row && row.closest('#filtersPanel')),
             sheetHiddenByDefault: !!(document.getElementById('mobileSheet') || {}).hidden,
@@ -843,10 +844,9 @@ try {
         `the ${mob.chipCount} quick-filter chips wrap instead of scrolling out of reach`);
     check(mob.smallTaps === 0,
         `every chip is a usable tap target${mob.smallTaps ? ` (${mob.smallTaps} under 30px)` : ''}`);
-    check(mob.toolbarOutsidePanel && mob.chipsInsidePanel,
-        'the view toolbar is out of the filter disclosure and the quick filters are still in');
-    check(mob.toolbarVisibleWithPanelShut,
-        'so table-or-charts is reachable with the filter panel closed');
+    check(mob.headerSwitches === 2 && mob.chipsInsidePanel,
+        'both site-wide switches are in the header, and the quick filters stay in the panel');
+    check(mob.tableBarOnTable, "and the table's own controls sit on the table");
     check(mob.barVisible && mob.barButtons === 5 && mob.barTaps === 0,
         `the phone bar is on screen with ${mob.barButtons} thumb-sized actions`);
     check(mob.sheetHiddenByDefault, 'the עוד sheet stays shut until it is asked for');
@@ -859,8 +859,8 @@ try {
         const onCharts = {
             charts: document.getElementById('mainChartsView').style.display !== 'none',
             barSaysCharts: pressed('mbCharts') === 'true' && pressed('mbTable') === 'false',
-            // The desktop toolbar is the same switch seen from elsewhere.
-            toolbarSaysCharts: document.getElementById('btnViewCharts').classList.contains('active')
+            // The charts section unfolds rather than replacing the table.
+            toolbarSaysCharts: document.getElementById('chartsPanel').open
         };
         toggleMobileSheet(true);
         await new Promise(r => setTimeout(r, 200));
@@ -912,19 +912,13 @@ try {
         processChange();
         await new Promise(r => setTimeout(r, 500));
 
-        // Swap slot 0 to the trend chart and back.
-        const before0 = document.querySelector('#chartsGrid .chart-card').id;
-        swapTopChart(0, 'chart-trend');
-        await new Promise(r => setTimeout(r, 400));
-        const after0 = document.querySelector('#chartsGrid .chart-card').id;
-        const trendDrawn = !!charts['chart-trend'];
-        const stored = JSON.parse(localStorage.getItem('fpl_top_charts'))[0];
-        swapTopChart(0, 'chart-opportunity');
-        await new Promise(r => setTimeout(r, 400));
-        const restored = document.querySelector('#chartsGrid .chart-card').id === before0;
+        // The six lead slots are pinned; the rest are behind the fold.
+        const lead = [...document.querySelectorAll('#chartsGrid .chart-card')]
+            .map(c => c.id.replace(/^card-/, ''));
+        const noSwapControl = document.querySelectorAll('.chart-swap').length === 0;
 
         return { ordered, allDef, boardRows: boardRows.length, scope,
-            oppPoints, before0, after0, trendDrawn, stored, restored };
+            oppPoints, lead, noSwapControl };
     });
     check(onePage.ordered, 'the page reads filters → charts → board → table');
     check(onePage.allDef && onePage.boardRows > 0,
@@ -932,10 +926,9 @@ try {
     check(/לפי הסינון/.test(onePage.scope),
         `and the board's scope line says it is filtered ("${onePage.scope.trim()}")`);
     check(onePage.oppPoints > 0, 'the lead chart redraws from the same filtered set');
-    check(onePage.after0 === 'card-chart-trend' && onePage.trendDrawn
-        && onePage.stored === 'chart-trend',
-        'swapping slot 1 brings the chosen chart in, draws it, and persists');
-    check(onePage.restored, 'and swapping back restores the original slot');
+    check(onePage.lead[0] === 'chart-opportunity' && onePage.lead.length === 6,
+        'the six lead slots are pinned and survive a filter round-trip');
+    check(onePage.noSwapControl, 'and carry no per-slot swap control');
 
     check(pageErrors.length === 0, 'still no page errors after interaction');
 } catch (e) {

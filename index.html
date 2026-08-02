@@ -7,8 +7,8 @@
     <title>⚽ FPL Pro Analytics Hub</title>
     <!-- Inline so the tab icon needs no extra request; mirrors the header mark. -->
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='40' y2='40' gradientUnits='userSpaceOnUse'%3E%3Cstop stop-color='%2322D3EE'/%3E%3Cstop offset='.55' stop-color='%233B82F6'/%3E%3Cstop offset='1' stop-color='%236366F1'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='40' height='40' rx='9' fill='%230F172A'/%3E%3Cpath d='M20 5 8 9.7v9.9c0 7 4.9 12.4 12 14.1 7.1-1.7 12-7.1 12-14.1V9.7L20 5Z' fill='url(%23g)'/%3E%3Crect x='12.6' y='20.4' width='3.4' height='7' rx='1.2' fill='%23fff' fill-opacity='.95'/%3E%3Crect x='18.3' y='16.2' width='3.4' height='11.2' rx='1.2' fill='%23fff'/%3E%3Crect x='24' y='12' width='3.4' height='15.4' rx='1.2' fill='%23fff' fill-opacity='.95'/%3E%3C/svg%3E">
-    <link rel="stylesheet" href="style.css?v=2026.08.02.294">
-    <link rel="stylesheet" href="mobile.css?v=2026.08.02.294">
+    <link rel="stylesheet" href="style.css?v=2026.08.02.295">
+    <link rel="stylesheet" href="mobile.css?v=2026.08.02.295">
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.5.1"></script>
     <script
         src="https://cdnjs.cloudflare.com/ajax/libs/chartjs-plugin-annotation/2.2.1/chartjs-plugin-annotation.min.js"></script>
@@ -87,6 +87,17 @@
                             <button class="source-toggle-btn" id="historicalDataBtn"
                                 onclick="switchDataSource('historical')"></button>
                         </div>
+
+                        <!-- Site-wide switches. One button each for the whole page:
+                             both flags govern the charts, the board and the table
+                             together, which is why they live at header level and not
+                             in any section's own chrome. -->
+                        <button class="scout-btn scout-watch" id="watchlistOnlyBtn" aria-pressed="false"
+                            onclick="toggleWatchlistOnly()" title="הצג רק שחקנים שסימנת בכוכב">
+                            ★ מעקב <span class="scout-count" id="watchlistCount">0</span>
+                        </button>
+                        <button class="scout-btn scout-free" id="freeAgentsOnlyBtn" aria-pressed="false"
+                            disabled onclick="toggleFreeAgentsOnly()">🆓 רק חופשיים</button>
 
                         <div class="status-pill">
                             <span class="status-dot"></span>
@@ -373,6 +384,15 @@
                          from a fresh page load. -->
                     <div class="filter-group"><label title="מסנן שחקנים מתחת למספר הדקות הזה">⏳ דקות</label><input type="number" id="minMinutes"
                             onkeyup="processChange()" value="120" placeholder="0"></div>
+                    <div class="filter-group"><label title="כמה מחזורים אחורה כל חלון מדוד — הגרפים, הלוח והטבלה קוראים את אותו חלון">📅 חלון</label>
+                        <select id="trendWindowSelect" onchange="setTrendWindow(this.value)">
+                            <option value="3">3 מחזורים</option>
+                            <option value="5" selected>5 מחזורים</option>
+                            <option value="6">6 מחזורים</option>
+                            <option value="10">10 מחזורים</option>
+                        </select>
+                    </div>
+
                     <div class="filter-group">
                         <label title="החלון שהנתונים מחושבים עליו">📅 טווח</label>
                         <select id="statsRange" onchange="processChange()">
@@ -418,108 +438,34 @@
                     <div class="tb-row tb-row--filters">
                         <span class="tb-row-label">✨ פילטרים חכמים</span>
                         <div class="quick-filters-group">
-                            <button class="quick-filter-btn" onclick="toggleQuickFilter(this, 'set_pieces')">🎯 מצבים
-                                נייחים</button>
+                            <button class="quick-filter-btn" onclick="toggleQuickFilter(this, 'set_pieces')">🎯 נייחים</button>
                             <button class="quick-filter-btn"
-                                onclick="toggleQuickFilter(this, 'attacking_defenders')">🛡️ מגנים תוקפים</button>
-                            <button class="quick-filter-btn" onclick="toggleQuickFilter(this, 'differentials')">💎
-                                יהלומים (Diffs)</button>
-                            <button class="quick-filter-btn" onclick="toggleQuickFilter(this, 'underperformers')">📈
-                                חייבים להתפוצץ (xGI)</button>
-                            <button class="quick-filter-btn" onclick="toggleQuickFilter(this, 'form_kings')">🔥 בכושר
-                                שיא</button>
+                                onclick="toggleQuickFilter(this, 'attacking_defenders')">🛡️ מגן תוקף</button>
+                            <button class="quick-filter-btn" onclick="toggleQuickFilter(this, 'underperformers')">📈 מימוש חסר</button>
+                            <button class="quick-filter-btn" onclick="toggleQuickFilter(this, 'form_kings')">🔥 בכושר</button>
                             <button class="quick-filter-btn" onclick="toggleQuickFilter(this, 'best_gkp_5')"
-                                title="השוערים הפנויים המומלצים ביותר ל-5 המחזורים הבאים — לפי נקודות מעל החלופה בעמדה, כולל לוח המשחקים">🧤 שוערים
-                                ל-5 הבאים</button>
+                                title="השוערים הפנויים המומלצים ביותר ל-5 המחזורים הבאים — לפי נקודות מעל החלופה בעמדה, כולל לוח המשחקים">🧤 שוערים ל-5</button>
                             <button class="quick-filter-btn" onclick="toggleQuickFilter(this, 'best_def_5')"
-                                title="המגנים הפנויים המומלצים ביותר ל-5 המחזורים הבאים — לפי נקודות מעל החלופה בעמדה, כולל לוח המשחקים">🛡️ מגנים
-                                ל-5 הבאים</button>
+                                title="המגנים הפנויים המומלצים ביותר ל-5 המחזורים הבאים — לפי נקודות מעל החלופה בעמדה, כולל לוח המשחקים">🛡️ מגנים ל-5</button>
                             <button class="quick-filter-btn" onclick="toggleQuickFilter(this, 'best_mid_5')"
-                                title="הקשרים הפנויים המומלצים ביותר ל-5 המחזורים הבאים — לפי נקודות מעל החלופה בעמדה, כולל לוח המשחקים">🎽 קשרים
-                                ל-5 הבאים</button>
+                                title="הקשרים הפנויים המומלצים ביותר ל-5 המחזורים הבאים — לפי נקודות מעל החלופה בעמדה, כולל לוח המשחקים">🎽 קשרים ל-5</button>
                             <button class="quick-filter-btn" onclick="toggleQuickFilter(this, 'best_fwd_5')"
-                                title="החלוצים הפנויים המומלצים ביותר ל-5 המחזורים הבאים — לפי נקודות מעל החלופה בעמדה, כולל לוח המשחקים">⚽ חלוצים
-                                ל-5 הבאים</button>
+                                title="החלוצים הפנויים המומלצים ביותר ל-5 המחזורים הבאים — לפי נקודות מעל החלופה בעמדה, כולל לוח המשחקים">⚽ חלוצים ל-5</button>
                             <button class="quick-filter-btn"
                                 onclick="toggleQuickFilter(this, 'promoted_teams')"
-                                title="כל השחקנים של הקבוצות שעלו ליגה — אין להם נתוני ליגה מהעונה שעברה">⬆️ קבוצות
-                                שעלו</button>
+                                title="כל השחקנים של הקבוצות שעלו ליגה — אין להם נתוני ליגה מהעונה שעברה">⬆️ עלו ליגה</button>
                             <button class="quick-filter-btn" onclick="toggleQuickFilter(this, 'new_to_league')"
-                                title="שחקנים שלא היו בליגה בעונה שעברה ולא הגיעו עם קבוצה שעלתה — העברות מבחוץ">🆕 חדשים
-                                בליגה</button>
+                                title="שחקנים שלא היו בליגה בעונה שעברה ולא הגיעו עם קבוצה שעלתה — העברות מבחוץ">🆕 חדשים</button>
                             <button class="quick-filter-btn" onclick="toggleQuickFilter(this, 'market_breakout')"
-                                title="אחוז הבעלות בעונה החדשה גבוה בהרבה ממה שהשחקן הניב בעונה שעברה — השוק מתמחר קפיצה">🔺 השוק
-                                מצפה לקפיצה</button>
+                                title="אחוז הבעלות בעונה החדשה גבוה בהרבה ממה שהשחקן הניב בעונה שעברה — השוק מתמחר קפיצה">🔺 קפיצה צפויה</button>
                             <button class="quick-filter-btn" onclick="toggleQuickFilter(this, 'market_value')"
-                                title="הניב בעונה שעברה והשוק מתעלם ממנו — מועמדים להיחטף מאוחר בדראפט">🔻 מתחת
-                                לרדאר</button>
+                                title="הניב בעונה שעברה והשוק מתעלם ממנו — מועמדים להיחטף מאוחר בדראפט">🔻 מתחת לרדאר</button>
                             <button class="quick-filter-btn" onclick="toggleQuickFilter(this, 'market_risers')"
-                                title="FPL העלתה להם את המחיר לקראת העונה החדשה — המודל של המשחק מצפה ליותר">💸 עלו
-                                במחיר</button>
+                                title="FPL העלתה להם את המחיר לקראת העונה החדשה — המודל של המשחק מצפה ליותר">💸 עלו במחיר</button>
                         </div>
                     </div>
                 </div>
                 </details>
-
-                <!-- VIEW TOOLBAR
-                     Outside the filter disclosure on purpose. "Table or charts" is
-                     navigation, not a filter, and on a phone the disclosure is closed
-                     by default — so the view switch, the free-agent toggle and every
-                     action button were all hidden behind 🔍 חיפוש וסינון. -->
-                <div class="controls-toolbar controls-toolbar--view">
-                    <div class="tb-row">
-                        <div class="tb-group">
-                            <div class="tb-seg" role="group" aria-label="תצוגה">
-                                <button class="view-btn active" onclick="switchMainView('table', true)"
-                                    id="btnViewTable">📋 טבלה</button>
-                                <button class="view-btn" onclick="switchMainView('charts', true)"
-                                    id="btnViewCharts">📊 גרפים</button>
-                            </div>
-
-                            <!-- Scouting controls: watchlist, row density, trend window -->
-                            <div class="scout-controls">
-                                <button class="scout-btn scout-watch" id="watchlistOnlyBtn" aria-pressed="false"
-                                    onclick="toggleWatchlistOnly()" title="הצג רק שחקנים שסימנת בכוכב">
-                                    ★ מעקב <span class="scout-count" id="watchlistCount">0</span>
-                                </button>
-                                <!-- The one filter a draft league cannot do without, so it sits
-                                     in the always-visible row rather than inside the collapsed
-                                     filter panel. State, title and disabled-ness are all set by
-                                     syncFreeAgentButton() — this is only the shell. -->
-                                <button class="scout-btn scout-free" id="freeAgentsOnlyBtn" aria-pressed="false"
-                                    disabled onclick="toggleFreeAgentsOnly()">🆓 רק חופשיים</button>
-                                <div class="scout-toggle">
-                                    <button class="scout-btn" data-row-mode="trend" aria-pressed="true"
-                                        onclick="setRowMode('trend')" title="שורות עם גרף מחזורים אחרונים">טרנד</button>
-                                    <button class="scout-btn" data-row-mode="compact" aria-pressed="false"
-                                        onclick="setRowMode('compact')" title="שורות צרות בלי גרפים">קומפקטי</button>
-                                </div>
-                                <label class="scout-field">חלון
-                                    <select id="trendWindowSelect" onchange="setTrendWindow(this.value)">
-                                        <option value="3">3 מחזורים</option>
-                                        <option value="5" selected>5 מחזורים</option>
-                                        <option value="6">6 מחזורים</option>
-                                        <option value="10">10 מחזורים</option>
-                                    </select>
-                                </label>
-                            </div>
-                        </div>
-
-                        <div class="tb-actions">
-                            <button class="tb-btn" onclick="showAllPlayers(this)"
-                                title="נקה את כל הסינונים">🔄 איפוס</button>
-                            <button class="tb-btn tb-btn--primary" id="compareBtn"
-                                onclick="compareSelectedPlayers()" title="השווה את השחקנים שסימנת">⚖️ השוואה</button>
-                            <details class="cols-menu" id="colsMenu">
-                                <summary class="tb-btn" title="הצג או הסתר עמודות">🧩 עמודות
-                                    <span class="cols-count" id="colsCount"></span></summary>
-                                <div class="cols-panel" id="optionalCols"></div>
-                            </details>
-                            <button class="tb-btn tb-btn--good" onclick="exportToCsv()"
-                                title="ייצא את הטבלה הנוכחית">📥 CSV</button>
-                        </div>
-                    </div>
-                </div>
 
                 <!-- TABLE VIEW WRAPPER -->
                 <!-- ONE PAGE, ONE PIPELINE.
@@ -556,6 +502,29 @@
                 <div id="draftBoard" class="draft-board"></div>
 
                 <div id="mainTableView">
+                    <!-- The table's own controls, on the table — everything here
+                         changes how the rows read (density, columns, export),
+                         nothing here filters the page. -->
+                    <div class="table-bar">
+                        <div class="scout-toggle">
+                            <button class="scout-btn" data-row-mode="trend" aria-pressed="true"
+                                onclick="setRowMode('trend')" title="שורות עם גרף מחזורים אחרונים">טרנד</button>
+                            <button class="scout-btn" data-row-mode="compact" aria-pressed="false"
+                                onclick="setRowMode('compact')" title="שורות צרות בלי גרפים">קומפקטי</button>
+                        </div>
+                        <span class="table-bar-gap"></span>
+                        <button class="tb-btn" onclick="showAllPlayers(this)"
+                            title="נקה את כל הסינונים">🔄 איפוס</button>
+                        <button class="tb-btn tb-btn--primary" id="compareBtn"
+                            onclick="compareSelectedPlayers()" title="השווה את השחקנים שסימנת">⚖️ השוואה</button>
+                        <details class="cols-menu" id="colsMenu">
+                            <summary class="tb-btn" title="הצג או הסתר עמודות">🧩 עמודות
+                                <span class="cols-count" id="colsCount"></span></summary>
+                            <div class="cols-panel" id="optionalCols"></div>
+                        </details>
+                        <button class="tb-btn tb-btn--good" onclick="exportToCsv()"
+                            title="ייצא את הטבלה הנוכחית">📥 CSV</button>
+                    </div>
                     <div class="table-container">
 
                         <table id="playersTable">
@@ -1022,7 +991,7 @@
     <!-- Version query is bumped by scripts/stamp-version.mjs on every commit
          (npm run stamp). It was left at 4.0.0 for months, so returning
          visitors kept running a cached script.js and never saw fixes. -->
-    <script src="script.js?v=2026.08.02.294" defer></script>
+    <script src="script.js?v=2026.08.02.295" defer></script>
 </body>
 
 </html>
