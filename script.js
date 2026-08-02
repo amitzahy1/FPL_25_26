@@ -85,6 +85,12 @@ function getLeagueId() {
 // ORIGINAL CONFIG
 // ============================================
 
+// Named separately from config.corsProxy because the fetch layer has to compare
+// against it by identity: config.corsProxy is reassigned to whichever fallback
+// answered first, and only *our* Worker is known to forward the upstream status
+// untouched — which is what makes a 404 from it trustworthy.
+const OWN_PROXY = 'https://fpl-proxy.amitzahy1.workers.dev/?url=';
+
 const config = {
     urls: {
         bootstrap: 'https://fantasy.premierleague.com/api/bootstrap-static/',
@@ -109,7 +115,7 @@ const config = {
     //
     // Kept as one ordered list rather than the three divergent copies that
     // used to exist. A custom URL set in settings still overrides this.
-    corsProxy: 'https://fpl-proxy.amitzahy1.workers.dev/?url=',
+    corsProxy: OWN_PROXY,
     corsProxyFallbacks: [
         'https://api.codetabs.com/v1/proxy?quest=',
         'https://corsproxy.io/?',
@@ -610,6 +616,20 @@ async function _fetchWithCacheUncoalesced(url, cacheKey, cacheDurationMinutes = 
             const response = await fetch(targetUrl, { signal: controller.signal });
             clearTimeout(timeoutId);
 
+            // Our own Worker forwards the upstream status untouched, so a 404 or
+            // 403 from it is FPL answering "no such thing" — not a proxy failing.
+            // Walking the rest of the chain cannot turn that into data, and the
+            // message at the bottom of this function would blame the proxies for
+            // it. This is the state a stale league id lands in once the Draft
+            // game reopens: the API is healthy and the league is simply gone.
+            if (!response.ok && currentProxy === OWN_PROXY
+                && (response.status === 404 || response.status === 403)) {
+                const missing = new Error(`FPL returned ${response.status} for ${originalUrl}`);
+                missing.code = 'NOT_FOUND';
+                missing.status = response.status;
+                throw missing;
+            }
+
             if (response.ok) {
                 const text = await response.text();
                 try {
@@ -636,7 +656,9 @@ async function _fetchWithCacheUncoalesced(url, cacheKey, cacheDurationMinutes = 
                 }
             }
         } catch (e) {
-            if (e && e.code === 'GAME_UPDATING') throw e;
+            // Both are answers, not failures: another proxy would return the
+            // same one, more slowly.
+            if (e && (e.code === 'GAME_UPDATING' || e.code === 'NOT_FOUND')) throw e;
             // Continue
         }
     }
@@ -6920,7 +6942,12 @@ async function _loadDraftDataInBackground() {
                 + (ranked ? ` · FPL draft rank for ${ranked}` : ''));
         }
     } catch (error) {
-        console.log('Draft data not available:', error.message);
+        if (error && error.code === 'NOT_FOUND') {
+            console.log(`⏸️ Draft league ${state.draft.leagueId} does not exist —`
+                + ' set the new season\'s league id in settings or with ?league=');
+        } else {
+            console.log('Draft data not available:', error.message);
+        }
         // Silently fail - not critical for main page
     }
 }
@@ -7185,6 +7212,8 @@ async function loadDraftLeague() {
     } catch (e) {
         if (e && e.code === 'GAME_UPDATING') {
             renderDraftMaintenanceNotice(draftContainer);
+        } else if (e && e.code === 'NOT_FOUND') {
+            renderDraftLeagueNotFoundNotice(draftContainer, config.draftLeagueId);
         } else {
             console.error('loadDraftLeague error', e);
             draftContainer.innerHTML = `<div style="text-align:center; padding: 20px; color: red;">שגיאה בטעינת נתוני הליגה: ${e.message}</div>`;
@@ -7195,30 +7224,65 @@ async function loadDraftLeague() {
     }
 }
 
+/** Shared shell for the two states that are answers rather than errors. */
+function renderDraftNotice(container, { icon, title, body }) {
+    if (!container) return;
+    container.innerHTML = `
+        <div style="max-width: 640px; margin: 40px auto; padding: 28px; text-align: center;
+                    background: var(--card-bg, rgba(255,255,255,0.05)); border-radius: 12px;">
+            <div style="font-size: 42px; margin-bottom: 12px;">${icon}</div>
+            <h3 style="margin: 0 0 12px;">${title}</h3>
+            ${body}
+        </div>`;
+}
+
 // The between-seasons state is not an error: draft.premierleague.com takes the
 // whole game down ("Game Updating") from the end of one season until shortly
 // before the next draft window opens. Explain that, say what still works, and
 // what to do once the game returns — instead of the red proxy-blaming banner.
 function renderDraftMaintenanceNotice(container) {
-    if (!container) return;
-    container.innerHTML = `
-        <div style="max-width: 640px; margin: 40px auto; padding: 28px; text-align: center;
-                    background: var(--card-bg, rgba(255,255,255,0.05)); border-radius: 12px;">
-            <div style="font-size: 42px; margin-bottom: 12px;">🛠️</div>
-            <h3 style="margin: 0 0 12px;">משחק הדראפט של FPL סגור לתחזוקת בין-עונות</h3>
+    renderDraftNotice(container, {
+        icon: '🛠️',
+        title: 'משחק הדראפט של FPL סגור לתחזוקת בין-עונות',
+        body: `
             <p style="margin: 0 0 10px; line-height: 1.6;">
                 האתר draft.premierleague.com מציג כרגע "Game Updating" — המשחק נסגר בסוף עונת
-                2025/26 וייפתח מחדש לקראת עונת 2026/27, בדרך כלל שבועות ספורים לפני פתיחת העונה.
+                ${SEASON_CONFIG.previousSeasonLabel} וייפתח מחדש לקראת עונת ${SEASON_CONFIG.seasonLabel},
+                בדרך כלל שבועות ספורים לפני פתיחת העונה.
             </p>
             <p style="margin: 0 0 10px; line-height: 1.6;">
-                <strong>מה עובד בינתיים:</strong> טאב השחקנים — נתוני 2025/26 המלאים, לצד מחירים,
-                אחוזי בחירה וסטטוסים חיים של 2026/27 מהפנטזי הרגיל.
+                <strong>מה עובד בינתיים:</strong> טאב השחקנים — נתוני ${SEASON_CONFIG.previousSeasonLabel}
+                המלאים, לצד מחירים, אחוזי בחירה וסטטוסים חיים של ${SEASON_CONFIG.seasonLabel}
+                מהפנטזי הרגיל.
             </p>
             <p style="margin: 0; line-height: 1.6;">
                 <strong>כשהמשחק ייפתח:</strong> צרו את הליגה החדשה ועדכנו את מזהה הליגה בהגדרות
                 (או <code>?league=</code> בכתובת) — נתוני הליגה ייטענו מכאן אוטומטית.
+            </p>`
+    });
+}
+
+// The Draft game is up and answering, and it says this league does not exist.
+// That is what a league id from last season looks like once the new game opens:
+// leagues are not carried over, so the id in settings has to be replaced. Before
+// this was told apart from a network failure it surfaced as "run local_proxy.js",
+// which sends you to debug a proxy that is working perfectly.
+function renderDraftLeagueNotFoundNotice(container, leagueId) {
+    renderDraftNotice(container, {
+        icon: '🔎',
+        title: `ליגה ${escapeHtml(String(leagueId))} לא נמצאה`,
+        body: `
+            <p style="margin: 0 0 10px; line-height: 1.6;">
+                השרת של FPL Draft עובד ומשיב — והוא מדווח שהליגה הזו לא קיימת. ליגות לא עוברות
+                בין עונות, כך שמזהה מ-${SEASON_CONFIG.previousSeasonLabel} מפסיק לעבוד ברגע
+                שמשחק ${SEASON_CONFIG.seasonLabel} נפתח.
             </p>
-        </div>`;
+            <p style="margin: 0; line-height: 1.6;">
+                <strong>מה לעשות:</strong> פתחו את הליגה החדשה ב-draft.premierleague.com, העתיקו את
+                המספר מכתובת הליגה, והזינו אותו ב<strong>הגדרות</strong> (או הוסיפו
+                <code>?league=המספר</code> לכתובת — הוא נשמר אוטומטית).
+            </p>`
+    });
 }
 
 /**

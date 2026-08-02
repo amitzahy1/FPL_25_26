@@ -17,8 +17,18 @@ export const REPO_ROOT = ROOT;
 
 /** Extract a top-level `function name(...) { ... }` by brace matching. */
 export function extractFunction(name, src = SCRIPT_SRC) {
-    const start = src.indexOf(`function ${name}(`);
+    let start = src.indexOf(`function ${name}(`);
     if (start < 0) throw new Error(`function ${name} not found in script.js`);
+
+    // Take the `async` with it. Searching for `function name(` lands *after* the
+    // keyword, so an async function came out as a plain one and every `await` in
+    // its body became a syntax error — reported as "await is only valid in async
+    // functions", which reads like a defect in the function rather than in this
+    // extractor.
+    const asyncPrefix = src.lastIndexOf('async ', start);
+    if (asyncPrefix >= 0 && src.slice(asyncPrefix, start).trim() === 'async') {
+        start = asyncPrefix;
+    }
 
     // Step over the parameter list before looking for the body. A destructured
     // parameter — `function f(a, { flag = false } = {})` — puts a brace inside

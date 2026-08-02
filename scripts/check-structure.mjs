@@ -53,11 +53,23 @@ check(stamps.length >= 2, 'assets are missing the ?v= cache-buster');
 check(new Set(stamps).size <= 1, `assets carry mismatched cache-busters: ${[...new Set(stamps)].join(', ')}`);
 
 // 5. no localhost-only proxy as the shipped default
-const proxy = js.match(/corsProxy:\s*'([^']+)'/);
+// corsProxy is set from the OWN_PROXY constant (the fetch layer compares against
+// it by identity), so resolve the constant rather than only reading a literal —
+// otherwise this check silently stops checking anything the day it moves.
+const proxy = js.match(/corsProxy:\s*(?:'([^']+)'|(OWN_PROXY))/);
 check(!!proxy, 'config.corsProxy not found');
 if (proxy) {
-    check(!/localhost|127\.0\.0\.1/.test(proxy[1]),
-        `config.corsProxy points at a local address: ${proxy[1]}`);
+    let value = proxy[1];
+    if (proxy[2]) {
+        const own = js.match(/const OWN_PROXY = '([^']+)'/);
+        check(!!own, 'config.corsProxy is OWN_PROXY but OWN_PROXY is not defined');
+        value = own && own[1];
+    }
+    check(!!value, 'config.corsProxy could not be resolved to a value');
+    if (value) {
+        check(!/localhost|127\.0\.0\.1/.test(value),
+            `config.corsProxy points at a local address: ${value}`);
+    }
 }
 
 // 6. the minutes floor is written in two places and they drifted apart, so איפוס
