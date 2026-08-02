@@ -451,11 +451,26 @@
     .chart-title { font-size: 14px; }
     .chart-note { font-size: 10.5px; }
 
-    /* 340, up from 260. A scatter needs AREA, and on a phone the width is fixed
-       at whatever the screen is — height is the only dimension left to give it.
-       The fullscreen viewer is where a dense cloud is actually read; this is
-       what makes the inline card legible enough to decide to open it. */
-    .chart-canvas { height: 340px; }
+    /* 420, up from 340 and originally 260. Once the page scrolls as one document
+       (see .tab-content below) the whole viewport is available, so height is the
+       one dimension a phone can still give a scatter. */
+    .chart-canvas { height: 420px; }
+
+    /* --- the page scrolls, not a box inside it ---------------------------
+       .tab-content is `overflow-y: auto; max-height: calc(100vh - 140px)`, which
+       assumes a 140px header. On a phone the header, the season toggle, the
+       filter row and the tabs come to ~470px, so the inner box runs off the
+       bottom of the screen and the document itself can only scroll about 200px.
+       The header therefore never scrolls away — it behaves exactly like a sticky
+       header without being one, which is why unsticking things did not help —
+       and every chart is read through a ~300px slot.
+       Letting the document scroll gives the charts the whole screen and lets the
+       header leave. The padding clears the fixed bottom bar. */
+    .tab-content {
+        overflow: visible;
+        max-height: none;
+        padding-bottom: 84px;
+    }
     .chart-head { flex-direction: column; align-items: stretch; gap: 8px; }
     .matrix-grid { grid-template-columns: 1fr !important; }
 }
