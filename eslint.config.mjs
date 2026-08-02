@@ -69,7 +69,9 @@ export default [
                 openSettings: 'readonly', renderDraftBoard: 'readonly',
                 draftBoardPool: 'readonly', panelPicks: 'readonly',
                 DRAFT_PANELS: 'readonly', invalidateSignals: 'readonly',
-                computeDraftMetrics: 'readonly'
+                computeDraftMetrics: 'readonly',
+                toggleBoardFreeAgents: 'readonly', openLeaderboard: 'readonly',
+                sortLeaderboard: 'readonly'
             }
         }
     },

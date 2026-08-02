@@ -216,6 +216,42 @@ try {
     check(postDraft.rows > 0 && postDraft.blankFigures === 0,
         `every one of ${postDraft.rows} post-draft picks still prints its figure`);
 
+    // The free-agent switch. In Draft a player belongs to exactly one manager,
+    // so recommending an owned player is recommending something the user cannot
+    // do — with the filter off the board's top pick is whoever is best outright,
+    // which after a draft is somebody on a rival's roster.
+    const faToggle = await page.evaluate(async () => {
+        const top = () => [...document.querySelectorAll('#draftBoard .db-nm b')]
+            .slice(0, 3).map(e => e.textContent);
+        const owned = state.draft.ownedElementIds;
+        const on = { top: top(), checked: document.querySelector('.db-toggle input').checked };
+        const ownedShownWhileOn = top().filter(n => [...owned]
+            .some(id => (state.allPlayersData[state.currentDataSource].processed
+                .find(p => p.id === id) || {}).web_name === n)).length;
+
+        toggleBoardFreeAgents(false);
+        await new Promise(r => setTimeout(r, 150));
+        const off = { top: top(), scope: document.querySelector('.db-scope').textContent };
+
+        toggleBoardFreeAgents(true);
+        await new Promise(r => setTimeout(r, 150));
+        return {
+            enabled: !document.querySelector('.db-toggle input').disabled,
+            onChecked: on.checked,
+            ownedShownWhileOn,
+            changed: JSON.stringify(on.top) !== JSON.stringify(off.top),
+            offSaysSo: /כולל תפוסים/.test(off.scope),
+            restored: JSON.stringify(top()) === JSON.stringify(on.top)
+        };
+    });
+    check(faToggle.enabled && faToggle.onChecked,
+        'the free-agent filter is live and on once the draft has been held');
+    check(faToggle.ownedShownWhileOn === 0,
+        `the board never recommends an owned player while the filter is on`);
+    check(faToggle.changed && faToggle.offSaysSo,
+        'turning it off widens the pool to owned players and the board says so');
+    check(faToggle.restored, 'turning it back on restores the free-agent recommendations');
+
     // Put it back, so the later checks see the state they expect.
     await page.evaluate(() => {
         state.draft.ownedElementIds = new Set();

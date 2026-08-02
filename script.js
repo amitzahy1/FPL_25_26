@@ -281,6 +281,12 @@ const state = {
     // --- scouting view ---
     watchlist: new Set(),        // player ids, persisted in localStorage
     watchlistOnly: false,        // filter the table down to the watchlist
+    // In Draft a player belongs to exactly one manager, so once the draft has
+    // been held the only players you can actually acquire are the free agents.
+    // The board has always narrowed to them automatically; this makes it a
+    // choice the user can see and reverse — to scout a rival's squad, or to
+    // weigh a trade — instead of an invisible rule.
+    boardFreeAgentsOnly: true,
     rowMode: 'trend',
     shownOptional: new Set(),   // filled by loadOptionalColumns() once the DOM is up            // 'trend' = tall rows with per-GW micro-charts, 'compact' = classic
     trendWindow: 5,              // how many recent gameweeks each micro-chart covers
@@ -1593,6 +1599,7 @@ async function fetchAndProcessData() {
         assertQuickFiltersReachable();
         loadWatchlist();
         state.shownOptional = loadOptionalColumns();
+        state.boardFreeAgentsOnly = loadBoardFreeAgentsOnly();
         invalidateSignals();
         renderDraftBoard();
         processChange();
@@ -5357,7 +5364,11 @@ function defconRateFor(p) {
 function draftBoardPool() {
     const players = (state.allPlayersData[state.currentDataSource] || {}).processed || [];
     const owned = state.draft.ownedElementIds;
-    const freeAgentsOnly = owned && owned.size > 0;
+    // Two conditions, and they mean different things. `draftHeld` is a fact about
+    // the league; boardFreeAgentsOnly is the user's choice. Before the draft the
+    // choice has nothing to act on, because nobody owns anybody.
+    const draftHeld = !!(owned && owned.size > 0);
+    const freeAgentsOnly = draftHeld && state.boardFreeAgentsOnly !== false;
     const pos = (document.getElementById('positionFilter') || {}).value || '';
 
     const pool = players.filter(p =>
@@ -5371,7 +5382,7 @@ function draftBoardPool() {
         !p.market_departed);
 
     buildDropOffLadder(pool);
-    return { freeAgentsOnly, position: pos, players: pool };
+    return { freeAgentsOnly, draftHeld, position: pos, players: pool };
 }
 
 /**
@@ -5535,7 +5546,7 @@ function renderDraftBoard() {
     // place that runs after every change that can move them.
     applyValueIndex();
 
-    const { players, freeAgentsOnly, position } = draftBoardPool();
+    const { players, freeAgentsOnly, draftHeld, position } = draftBoardPool();
     if (!players.length) { host.innerHTML = ''; return; }
 
     const cards = DRAFT_PANELS.map((panel, cardIdx) => {
@@ -5565,7 +5576,11 @@ function renderDraftBoard() {
     if (!cards) { host.innerHTML = ''; return; }
 
     const scope = [
-        freeAgentsOnly ? `${players.length} שחקנים חופשיים` : `${players.length} שחקנים — לפני הדראפט`,
+        draftHeld
+            ? (freeAgentsOnly
+                ? `${players.length} שחקנים חופשיים`
+                : `${players.length} שחקנים — כולל תפוסים`)
+            : `${players.length} שחקנים — לפני הדראפט`,
         position ? POSITION_LABELS[position] || position : null,
         state.trendGws.length ? `חלון ${state.trendWindow} מחזורים` : null
     ].filter(Boolean).join(' · ');
@@ -5574,11 +5589,51 @@ function renderDraftBoard() {
         <div class="db-bar">
             <h2 class="db-heading"><span class="db-heading-icon">🎯</span>את מי לקחת עכשיו</h2>
             <span class="db-scope">${scope}</span>
+            ${boardFreeAgentToggleHtml(draftHeld)}
             <span class="db-legend" title="לכל מדד נמצא חציון 20 השחקנים הטובים באותה עמדה, והמספר האפור הוא היחס אליו. חציון ולא ממוצע, כדי ששחקן קיצוני אחד לא יזיז את הרף">
                 עילית = חציון 20 הטובים בעמדה
             </span>
         </div>
         <div class="db-grid">${cards}</div>`;
+}
+
+/**
+ * The one filter this board cannot do without. In Draft a player belongs to
+ * exactly one manager, so a recommendation you cannot act on is not a
+ * recommendation — after draft night the only players available to you are the
+ * free agents.
+ *
+ * Off is still worth having: it is how you scout a rival's squad or judge what a
+ * trade would cost. Before the draft it is disabled rather than hidden, so the
+ * board states the rule it will apply later instead of silently applying nothing.
+ */
+function boardFreeAgentToggleHtml(draftHeld) {
+    const on = draftHeld && state.boardFreeAgentsOnly !== false;
+    const title = draftHeld
+        ? 'בדראפט כל שחקן שייך למנג׳ר אחד בלבד. כבוי — הלוח יציג גם שחקנים תפוסים, לבחינת סגלים של יריבים או שווי טרייד'
+        : 'הדראפט עוד לא נערך (או שנתוני הליגה לא נטענו), ולכן כל השחקנים חופשיים ואין מה לסנן';
+    return `
+        <label class="db-toggle${draftHeld ? '' : ' is-off'}" title="${escapeHtml(title)}">
+            <input type="checkbox" ${on ? 'checked' : ''} ${draftHeld ? '' : 'disabled'}
+                onchange="toggleBoardFreeAgents(this.checked)">
+            <span>רק שחקנים חופשיים</span>
+        </label>`;
+}
+
+const BOARD_FREE_KEY = 'fpl_board_free_only';
+
+function loadBoardFreeAgentsOnly() {
+    try { return localStorage.getItem(BOARD_FREE_KEY) !== '0'; } catch { return true; }
+}
+
+function toggleBoardFreeAgents(checked) {
+    state.boardFreeAgentsOnly = !!checked;
+    try {
+        localStorage.setItem(BOARD_FREE_KEY, state.boardFreeAgentsOnly ? '1' : '0');
+    } catch { /* private browsing; the session still honours the choice */ }
+    // The pool changes, so replacement level and the drop-off ladder change with
+    // it — both are rebuilt per pool inside draftBoardPool.
+    renderDraftBoard();
 }
 
 const POSITION_LABELS = { GKP: 'שוערים', DEF: 'מגנים', MID: 'קשרים', FWD: 'חלוצים' };
@@ -9295,17 +9350,23 @@ function getMatrixChartConfig(data, xLabel, yLabel, quadLabels = {}, opts = {}) 
     const good = { x: 'high', y: 'high', ...(opts.goodDirection || {}) };
     const isGood = (v, mean, dir) => dir === 'low' ? v <= mean : v >= mean;
 
-    const GREEN = 'rgba(34, 197, 94, 0.85)';
-    const RED = 'rgba(239, 68, 68, 0.85)';
-    const AMBER = 'rgba(251, 146, 60, 0.85)';
+    // Written as alpha-taking functions so a point can be faded without changing
+    // what its colour means. `opts.fadeFor` marks the points that should recede
+    // — a drafted player, say — while still being read as the category they are
+    // in. Recolouring them instead makes the colour mean two things at once.
+    const TONE = {
+        good: a => `rgba(34, 197, 94, ${a})`,
+        bad: a => `rgba(239, 68, 68, ${a})`,
+        mixed: a => `rgba(251, 146, 60, ${a})`
+    };
 
     const getPointColor = (point) => {
         if (opts.colorFor) return opts.colorFor(point);
         const gx = isGood(point.x, xMean, good.x);
         const gy = isGood(point.y, yMean, good.y);
-        if (gx && gy) return GREEN;
-        if (!gx && !gy) return RED;
-        return AMBER;
+        const tone = (gx && gy) ? TONE.good : (!gx && !gy) ? TONE.bad : TONE.mixed;
+        const faded = opts.fadeFor && opts.fadeFor(point);
+        return tone(faded ? 0.18 : 0.85);
     };
 
     // Quadrant labels are placed by grid corner, but which corner is "good"
@@ -9371,7 +9432,10 @@ function getMatrixChartConfig(data, xLabel, yLabel, quadLabels = {}, opts = {}) 
             responsive: true,
             maintainAspectRatio: false,
             layout: {
-                padding: { top: 30, right: 20, bottom: 10, left: 10 }
+                // Room on every side for a name sitting on an edge point, now
+                // that labels draw unclipped. The interesting points are the
+                // extreme ones, so the edges are exactly where the labels are.
+                padding: { top: 34, right: 34, bottom: 12, left: 34 }
             },
             scales: {
                 x: {
@@ -9403,11 +9467,23 @@ function getMatrixChartConfig(data, xLabel, yLabel, quadLabels = {}, opts = {}) 
                     // where every point is worth naming.
                     formatter: (value, context) => {
                         const d = context.dataset.data[context.dataIndex];
-                        return d.label !== undefined ? d.label : (d.player || d.team || '');
+                        const text = d.label !== undefined ? d.label : (d.player || d.team || '');
+                        // Wrapped in a directional isolate. The canvas inherits the
+                        // page's RTL, and the bidi algorithm then moves a Latin
+                        // name's trailing punctuation to the other end — "Bruno G."
+                        // rendered as ".Bruno G". The isolate makes each label its
+                        // own left-to-right run without affecting anything around it.
+                        return text ? `⁦${text}⁩` : '';
                     },
-                    font: { size: 10, weight: 'bold' },
+                    // 9px, because these labels are the value of the chart and the
+                    // limit on how many fit is collision, not legibility.
+                    font: { size: 9, weight: 'bold' },
                     color: '#1e293b',
-                    clip: true,
+                    // clip: false, or a label on a point at the edge of the plot is
+                    // sliced in half by the chart area — which is exactly where the
+                    // most interesting points sit. clamp keeps it in the canvas, and
+                    // the 30px layout padding is there to receive it.
+                    clip: false,
                     clamp: true
                 },
                 tooltip: {
@@ -9576,25 +9652,24 @@ function buildOpportunityChart(data) {
 
     // Named: the free agents who are both good and climbing. That is the whole
     // question the card asks, and nothing else on it needs a printed name.
-    const points = labelTop(raw, 12, pt => (pt.free ? 1000 : 0) + pt.x + pt.y * 3);
+    const points = labelTop(raw, 22, pt => (pt.free ? 1000 : 0) + pt.x + pt.y * 3);
 
     return getMatrixChartConfig(points, 'ציון דראפט',
         `שינוי נקודות מול ${state.trendWindow} המחזורים שלפני`, {
         topRight: 'איכות ומומנטום', topLeft: 'מתחמם אבל חלש',
         bottomRight: 'איכות שמתקררת', bottomLeft: 'לא עכשיו'
     }, {
-        // Colour by availability once rosters exist: the best player on the chart
-        // is usually already on someone's roster, so "can I have him" outranks
-        // "is he good" as the first thing to see.
+        // No colorFor: the colour is the quadrant, which is the category the four
+        // corner labels already name. Green is "איכות ומומנטום", red is "לא
+        // עכשיו", amber is one of the two but not both — so a point's colour and
+        // the label above it say the same thing.
         //
-        // Before the draft nobody is taken, so that rule painted all ~500 points
-        // one shade of green and spent the colour channel on a distinction that
-        // does not exist yet. Position is the dimension the axes do not already
-        // carry, and it is the one a draft is actually organised around.
-        colorFor: pt => rosterKnown
-            ? (pt.free ? 'rgba(34, 197, 94, 0.85)' : 'rgba(148, 163, 184, 0.35)')
-            : (POSITION_COLOR[pt.pos] || '#64748b'),
-        radiusFor: pt => rosterKnown ? (pt.free ? 5.5 : 3.5) : 4.5,
+        // Availability is shown by prominence rather than by hue. Colouring by it
+        // made the colour mean two different things depending on whether a draft
+        // had happened, and before one it meant nothing at all: everybody was
+        // free, so every point came out the same green.
+        fadeFor: pt => rosterKnown && !pt.free,
+        radiusFor: pt => (rosterKnown && !pt.free) ? 3 : 5,
         tooltipFor: d => `${d.name} · ${d.team} · ${d.pos}`
             + (rosterKnown ? (d.free ? ' · 🆓 חופשי' : ' · תפוס') : '')
             + ` — ציון ${d.x.toFixed(1)}, ${d.y > 0 ? '+' : ''}${d.y.toFixed(1)} נק׳`
@@ -9622,7 +9697,7 @@ function buildPositionMatrix(data) {
 
     // Named: the ones in the good quadrant, by output.
     const dir = spec.good === 'low' ? -1 : 1;
-    const points = labelTop(raw, 14, pt => pt.y * 2 + pt.x * dir);
+    const points = labelTop(raw, 24, pt => pt.y * 2 + pt.x * dir);
 
     return getMatrixChartConfig(points, spec.label, 'נקודות ל-90 דקות', spec.quads, {
         goodDirection: { x: spec.good, y: 'high' },
@@ -9639,6 +9714,21 @@ function setChartPosition(pos) {
 
 /* ------------------------------- 3. trend -------------------------------- */
 
+// Which line the pointer is on. Eight series over five gameweeks cross each
+// other constantly, and a legend twelve names long is a lookup table, not a
+// reading aid: you find the swatch, carry the colour back to the plot, and by
+// then you have lost the line. Hovering lifts one series and pushes the rest
+// back, so the answer is where the pointer already is.
+let _trendHover = { chartId: null, index: null };
+
+/** Same colour at a chosen opacity, for the lines that are not being hovered. */
+function fadeHex(hex, alpha) {
+    const m = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex || '');
+    if (!m) return hex;
+    const [r, g, b] = [1, 2, 3].map(i => parseInt(m[i], 16));
+    return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
 function buildTrendChart(data) {
     if (state.trendGws.length < 2) return null;
 
@@ -9649,30 +9739,86 @@ function buildTrendChart(data) {
         .slice(0, 8);
     if (ranked.length < 2) return null;
 
+    const dimmed = ctx => _trendHover.index !== null && _trendHover.index !== ctx.datasetIndex;
+    const baseColour = i => CHART_LINE_PALETTE[i % CHART_LINE_PALETTE.length];
+    // The last gameweek a player actually featured in — where his name goes.
+    const lastIndexOf = series => {
+        for (let i = series.length - 1; i >= 0; i--) {
+            if (series[i] !== null && series[i] !== undefined) return i;
+        }
+        return -1;
+    };
+
+    const seriesFor = x => getTrendSeries(x.p.id, 'pts', 'recent').map(pt => pt.value);
+    const endIndex = ranked.map(x => lastIndexOf(seriesFor(x)));
+
     return {
         type: 'line',
         data: {
             labels: state.trendGws.map(g => `מחזור ${g.gw}`),
             datasets: ranked.map((x, i) => ({
                 label: x.p.web_name,
-                data: getTrendSeries(x.p.id, 'pts', 'recent').map(pt => pt.value),
-                borderColor: CHART_LINE_PALETTE[i % CHART_LINE_PALETTE.length],
-                backgroundColor: CHART_LINE_PALETTE[i % CHART_LINE_PALETTE.length],
-                borderWidth: 2, tension: 0.3, pointRadius: 3, pointHoverRadius: 6
+                data: seriesFor(x),
+                borderColor: ctx => dimmed(ctx) ? fadeHex(baseColour(i), 0.15) : baseColour(i),
+                backgroundColor: ctx => dimmed(ctx) ? fadeHex(baseColour(i), 0.15) : baseColour(i),
+                borderWidth: ctx => (_trendHover.index === ctx.datasetIndex ? 3.5 : 2),
+                tension: 0.3,
+                pointRadius: ctx => dimmed(ctx) ? 0 : 3,
+                pointHoverRadius: 6
             }))
         },
         options: {
             responsive: true,
             maintainAspectRatio: false,
-            interaction: { mode: 'index', intersect: false },
+            // 'nearest' rather than 'index': the question this chart is asked is
+            // "whose line is that", and an index tooltip answers with all eight
+            // at once — the same wall of names the legend already is.
+            interaction: { mode: 'nearest', intersect: false, axis: 'xy' },
+            layout: { padding: { right: 58, top: 12 } },
+            onHover: (event, active, chart) => {
+                const next = active.length ? active[0].datasetIndex : null;
+                if (next === _trendHover.index) return;
+                _trendHover = { chartId: chart.id, index: next };
+                chart.update('none');
+            },
             scales: {
                 x: chartAxis(''),
                 y: { ...chartAxis('נקודות במחזור'), beginAtZero: true }
             },
             plugins: {
+                // The legend stays for toggling a line off, but it is no longer
+                // how you identify one — the name is written at the end of its
+                // own line, which is the shortest possible distance between the
+                // question and the answer.
                 legend: { position: 'bottom', labels: { boxWidth: 10, font: { size: 11 }, color: '#475569' } },
-                datalabels: { display: false },
-                tooltip: CHART_TOOLTIP
+                datalabels: {
+                    // 'auto', not true: several lines can finish on the same
+                    // value, and forcing every name on printed them through each
+                    // other ("J.Palhinha" and "Bowen" came out as one unreadable
+                    // word). 'auto' drops a name that would collide — and
+                    // hovering that line dims the others, which hides their
+                    // labels and brings the one you asked for back on its own.
+                    display: ctx => (ctx.dataIndex === endIndex[ctx.datasetIndex]
+                        && !dimmed(ctx)) ? 'auto' : false,
+                    align: 'right',
+                    anchor: 'end',
+                    offset: 6,
+                    // Directional isolate: the canvas inherits the page's RTL and
+                    // would otherwise move a Latin name's punctuation to the far
+                    // end — "B.Fernandes" came out as "B.Fernandes" reversed.
+                    formatter: (v, ctx) => `⁦${ctx.dataset.label}⁩`,
+                    font: { size: 9.5, weight: 'bold' },
+                    color: ctx => baseColour(ctx.datasetIndex),
+                    clip: false,
+                    clamp: true
+                },
+                tooltip: {
+                    ...CHART_TOOLTIP,
+                    callbacks: {
+                        title: items => items.length ? items[0].label : '',
+                        label: c => `${c.dataset.label}: ${c.parsed.y} נק׳`
+                    }
+                }
             }
         }
     };
@@ -9697,7 +9843,7 @@ function buildConversionChart(data) {
     const GAP = 1.5;
     // Named: the ones furthest off the line in either direction — the only points
     // on this chart that are telling you to do something.
-    const points = labelTop(raw, 14, pt => Math.abs(pt.y - pt.x));
+    const points = labelTop(raw, 24, pt => Math.abs(pt.y - pt.x));
 
     return getMatrixChartConfig(points, 'צפי מעורבות (xGI)', 'מעורבות בפועל (G+A)', {}, {
         diagonal: true,
@@ -9842,7 +9988,7 @@ function buildMinutesChart(data) {
     if (raw.length < 4) return null;
 
     // Named: nailed and productive, plus the productive-but-rotated risks.
-    const points = labelTop(raw, 12, pt => pt.y * 2 + pt.x / 25);
+    const points = labelTop(raw, 22, pt => pt.y * 2 + pt.x / 25);
 
     return getMatrixChartConfig(points, 'אחוז ההופעות שבהן פתח בהרכב', 'נקודות ל-90 דקות', {
         topRight: 'קבוע ומייצר', bottomLeft: 'מסובב ולא מייצר',
@@ -9909,10 +10055,9 @@ function buildDefconChart(data) {
 const CHART_SPECS = [
     {
         id: 'chart-opportunity', title: '🎯 לוח הזדמנויות',
-        note: () => 'ציון דראפט מול המומנטום בחלון הנבחר. '
-            + (rostersAreKnown()
-                ? 'ירוק = פנוי, אפור = תפוס.'
-                : `לפני הדראפט כולם פנויים, ולכן הצבע מסמן עמדה: ${positionLegendHtml()}`),
+        note: () => 'ציון דראפט מול המומנטום בחלון הנבחר. הצבע לפי הרביע: '
+            + quadrantLegendHtml('איכות ומומנטום', 'לא עכשיו')
+            + (rostersAreKnown() ? ' · שחקנים תפוסים מוצגים דהויים.' : ''),
         build: buildOpportunityChart
     },
     {
@@ -9968,6 +10113,19 @@ const CHART_SPECS = [
  */
 function chartNote(spec) {
     return typeof spec.note === 'function' ? spec.note() : spec.note;
+}
+
+/**
+ * The quadrant key, for the scatters that colour by category. The wording comes
+ * from the caller's own corner labels so the key and the chart cannot drift.
+ */
+function quadrantLegendHtml(bothLabel, neitherLabel) {
+    const key = (c, t) => `<span class="chart-key"><i style="background:${c}"></i>${t}</span>`;
+    return '<span class="chart-keys">'
+        + key('rgba(34, 197, 94, 0.85)', bothLabel)
+        + key('rgba(251, 146, 60, 0.85)', 'אחד מהשניים')
+        + key('rgba(239, 68, 68, 0.85)', neitherLabel)
+        + '</span>';
 }
 
 /** The position→colour key, for the charts that spend colour on position. */
@@ -10050,6 +10208,9 @@ function renderCharts() {
         card.hidden = !config;
         if (!config) return;
 
+        // The hover highlight is keyed on a dataset index, and the datasets are
+        // rebuilt here. Carrying the old index over would dim the wrong line.
+        if (spec.id === 'chart-trend') _trendHover = { chartId: null, index: null };
         charts[spec.id] = new Chart(canvas.getContext('2d'), config);
     });
 }
