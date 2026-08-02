@@ -1936,6 +1936,10 @@ span.tone-down { background: none !important; color: #1d4ed8; font-weight: 700; 
 /* Tooltip */
 .tooltip {
     position: absolute;
+    /* A whole sentence needs a bound, or the box spans the window. */
+    max-width: 360px;
+    line-height: 1.45;
+    text-align: start;
     background-color: rgba(30, 41, 59, 0.95);
     color: #fff;
     padding: 10px 16px;

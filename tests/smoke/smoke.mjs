@@ -298,6 +298,33 @@ try {
         renderDraftBoard();
     });
 
+    // Hover explanations. The app had two kinds — [data-tooltip] with a styled
+    // box, and plain `title` drawn by the browser after a second and never on a
+    // touch screen — and the second kind is what most explanations used.
+    const tips = await page.evaluate(async () => {
+        const tip = document.getElementById('tooltip');
+        const sample = sel => document.querySelector(sel);
+        const results = {};
+        for (const [name, sel] of [['title', '.signal-badge[title]'], ['data', 'td[data-tooltip]']]) {
+            const el = sample(sel);
+            if (!el) { results[name] = 'missing'; continue; }
+            el.dispatchEvent(new MouseEvent('mouseover', { bubbles: true }));
+            await new Promise(r => setTimeout(r, 30));
+            const r = tip.getBoundingClientRect();
+            results[name] = {
+                shown: tip.classList.contains('visible') && getComputedStyle(tip).display !== 'none',
+                hasText: tip.textContent.trim().length > 10,
+                inViewport: r.left >= 0 && r.right <= window.innerWidth
+            };
+            el.dispatchEvent(new MouseEvent('mouseout', { bubbles: true, relatedTarget: document.body }));
+        }
+        return results;
+    });
+    check(tips.title && tips.title.shown && tips.title.hasText && tips.title.inViewport,
+        `a native title renders as the styled tooltip (${JSON.stringify(tips.title)})`);
+    check(tips.data && tips.data.shown && tips.data.hasText,
+        `a data-tooltip still renders (${JSON.stringify(tips.data)})`);
+
     // Column *order*, not just column count.
     //
     // The structural check counts headers against cells, which passed while the

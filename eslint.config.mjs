@@ -62,7 +62,7 @@ export default [
             sourceType: 'module',
             globals: {
                 document: 'readonly', window: 'readonly', state: 'readonly',
-                charts: 'readonly',
+                charts: 'readonly', MouseEvent: 'readonly', getComputedStyle: 'readonly',
                 switchDraftTab: 'readonly', showTab: 'readonly', setRowMode: 'readonly',
                 sortTable: 'readonly', setTrendWindow: 'readonly',
                 switchMainView: 'readonly', setChartPosition: 'readonly',

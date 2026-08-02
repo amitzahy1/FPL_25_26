@@ -1997,27 +1997,115 @@ function setupEventListeners() {
     setupTableSorting();
 }
 
+/**
+ * One tooltip for the whole page, for [data-tooltip] *and* for plain title.
+ *
+ * The app grew two kinds of hover: a handful of table cells with data-tooltip,
+ * which got this styled instant tooltip, and everything else with a native
+ * title — the verdict definitions, the chart captions, the card headers — which
+ * the browser draws itself after about a second and never draws at all on a
+ * touch screen. That is the "hover is not working" everyone means.
+ *
+ * So a title is borrowed while the pointer is on the element: removed so the
+ * browser cannot draw its own on top, shown here instead, and put back on the
+ * way out. Nothing else in the app has to change, and every hover it already
+ * has becomes instant.
+ */
 function initializeTooltips() {
     const tooltipEl = document.getElementById('tooltip');
+    if (!tooltipEl) return;
+    let borrowedFrom = null;
 
-    document.body.addEventListener('mouseover', (e) => {
-        const target = e.target.closest('[data-tooltip]');
-        if (!target) return;
+    const restore = () => {
+        if (!borrowedFrom) return;
+        if (borrowedFrom.dataset.nativeTitle) {
+            borrowedFrom.setAttribute('title', borrowedFrom.dataset.nativeTitle);
+            delete borrowedFrom.dataset.nativeTitle;
+        }
+        borrowedFrom = null;
+    };
 
-        tooltipEl.textContent = target.dataset.tooltip;
+    const hide = () => {
+        tooltipEl.classList.remove('visible');
+        tooltipEl.style.display = 'none';
+        shownFor = null;
+        restore();
+    };
+
+    const show = (target, text) => {
+        tooltipEl.textContent = text;
         tooltipEl.style.display = 'block';
         tooltipEl.classList.add('visible');
 
+        // Measured after it is filled, and kept inside the viewport: these
+        // strings are whole sentences, and a sentence centred on a card at the
+        // edge of the screen hangs off it.
         const rect = target.getBoundingClientRect();
-        tooltipEl.style.left = `${rect.left + window.scrollX + (rect.width / 2) - (tooltipEl.offsetWidth / 2)}px`;
-        tooltipEl.style.top = `${rect.top + window.scrollY - tooltipEl.offsetHeight - 5}px`;
-    });
+        const w = tooltipEl.offsetWidth;
+        const h = tooltipEl.offsetHeight;
+        const margin = 8;
+        let left = rect.left + (rect.width / 2) - (w / 2);
+        left = Math.max(margin, Math.min(left, window.innerWidth - w - margin));
+        // Above by default, below when there is no room above.
+        const above = rect.top - h - 6;
+        const top = above >= margin ? above : Math.min(rect.bottom + 6, window.innerHeight - h - margin);
+        tooltipEl.style.left = `${left + window.scrollX}px`;
+        tooltipEl.style.top = `${top + window.scrollY}px`;
+    };
 
-    document.body.addEventListener('mouseout', (e) => {
-        if (e.target.closest('[data-tooltip]')) {
-            tooltipEl.classList.remove('visible');
-        }
+    const textFor = target => {
+        if (target.dataset.tooltip) return target.dataset.tooltip;
+        const native = target.getAttribute('title');
+        if (!native || !native.trim()) return '';
+        target.dataset.nativeTitle = native;
+        target.removeAttribute('title');
+        borrowedFrom = target;
+        return native;
+    };
+
+    // data-native-title is in the selector because borrowing removes `title`:
+    // without it the element stops matching the moment it is explained, the
+    // pointer's own mouseout finds an ancestor with a title instead, and the
+    // tooltip is hidden in the same frame it appeared.
+    const SEL = '[data-tooltip], [title], [data-native-title]';
+    let shownFor = null;
+
+    const onEnter = e => {
+        const target = e.target.closest && e.target.closest(SEL);
+        if (!target || target === shownFor) return;
+        restore();
+        const text = textFor(target);
+        if (text) { shownFor = target; show(target, text); } else { hide(); }
+    };
+
+    document.addEventListener('mouseover', onEnter);
+    document.addEventListener('focusin', onEnter);
+    document.addEventListener('mouseout', e => {
+        const target = e.target.closest && e.target.closest(SEL);
+        if (!target) return;
+        // Moving between an element's own children is not leaving it.
+        if (e.relatedTarget && target.contains(e.relatedTarget)) return;
+        hide();
     });
+    document.addEventListener('focusout', hide);
+    // A touch screen has no hover at all, so a tap on something explainable
+    // shows the explanation; the next tap anywhere clears it.
+    document.addEventListener('click', e => {
+        const target = e.target.closest && e.target.closest(SEL);
+        if (!target) { hide(); return; }
+        const text = textFor(target);
+        if (text) { shownFor = target; show(target, text); }
+    });
+    // Follow the element rather than vanish. A scroll happens for reasons that
+    // have nothing to do with the pointer — a container settling, the browser
+    // bringing a focused element into view — and hiding on all of them made the
+    // tooltip look broken. It only goes away once its element is off screen.
+    window.addEventListener('scroll', () => {
+        if (!shownFor) return;
+        const r = shownFor.getBoundingClientRect();
+        if (r.bottom < 0 || r.top > window.innerHeight) { hide(); return; }
+        show(shownFor, tooltipEl.textContent);
+    }, true);
 }
 
 function populateTeamFilter() {
