@@ -156,6 +156,56 @@ describe('the ordinary paths still work', () => {
     });
 });
 
+describe('our own Worker stays in the chain', () => {
+    test('it is still tried after a fallback has been promoted', async () => {
+        // config.corsProxy is reassigned to whichever fallback answered first.
+        // When the chain was built from that field alone the Worker dropped out
+        // for the rest of the session — and it is the only proxy that serves the
+        // ~1.5 MB bootstrap without a 413, so the session never got it back.
+        installBrowserStubs();
+        globalThis.IS_LOCAL_DEV = false;
+        globalThis.DEBUG_LOGS = false;
+        globalThis.dbg = () => {};
+        globalThis.evictCacheEntries = () => false;
+
+        const promoted = 'https://api.codetabs.com/v1/proxy?quest=';
+        const config = {
+            corsProxy: promoted,             // a fallback won earlier this session
+            corsProxyFallbacks: [promoted, 'https://corsproxy.io/?']
+        };
+        const { _fetchWithCacheUncoalesced: fetchWithCache } =
+            loadFunctions(['_fetchWithCacheUncoalesced'], { config }, ['OWN_PROXY']);
+
+        const calls = stubFetch(url => url.startsWith(OWN_PROXY)
+            ? { status: 200, body: JSON.stringify({ big: 'payload' }) }
+            : { status: 413, body: 'Payload Too Large' });
+
+        const data = await fetchWithCache(TARGET, 'k', 5);
+        assert.deepEqual(data, { big: 'payload' });
+        assert.ok(calls.some(u => u.startsWith(OWN_PROXY)), 'the Worker must still be reachable');
+    });
+
+    test('and its 404 is therefore still trusted in that state', async () => {
+        installBrowserStubs();
+        globalThis.IS_LOCAL_DEV = false;
+        globalThis.DEBUG_LOGS = false;
+        globalThis.dbg = () => {};
+        globalThis.evictCacheEntries = () => false;
+
+        const promoted = 'https://api.codetabs.com/v1/proxy?quest=';
+        const config = { corsProxy: promoted, corsProxyFallbacks: [promoted] };
+        const { _fetchWithCacheUncoalesced: fetchWithCache } =
+            loadFunctions(['_fetchWithCacheUncoalesced'], { config }, ['OWN_PROXY']);
+
+        stubFetch(url => url.startsWith(OWN_PROXY)
+            ? { status: 404, body: 'Not Found' }
+            : { status: 500, body: '' });
+
+        await assert.rejects(() => fetchWithCache(TARGET, 'k', 5),
+            err => err.code === 'NOT_FOUND');
+    });
+});
+
 describe('the notices exist for both states', () => {
     test('each code has a renderer wired to it', () => {
         for (const [code, fn] of [

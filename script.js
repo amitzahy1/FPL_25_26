@@ -599,7 +599,14 @@ async function _fetchWithCacheUncoalesced(url, cacheKey, cacheDurationMinutes = 
     // production have been removed: thingproxy.freeboard.io no longer resolves
     // and dummy-cors-proxy.herokuapp.com returns 404 without CORS headers.
     // Walking those cost several seconds before reaching a working one.
-    const proxies = [config.corsProxy, ...config.corsProxyFallbacks]
+    // OWN_PROXY is listed explicitly and not only through config.corsProxy,
+    // which is reassigned to whichever fallback answered first. Once that
+    // happened the Worker fell out of the chain for the rest of the session —
+    // and it is the only proxy that reliably serves the ~1.5 MB bootstrap (the
+    // public ones 413 it), so the session never got it back. It also carries the
+    // upstream status untouched, which is what makes the 404 below trustworthy;
+    // with the Worker dropped, that branch could never run.
+    const proxies = [config.corsProxy, OWN_PROXY, ...config.corsProxyFallbacks]
         .filter(p => p && p !== customProxy);
 
     const uniqueProxies = [...new Set(proxies)];
