@@ -535,16 +535,22 @@ try {
             .map(b => b.dataset.facetValue).filter(Boolean)[0];
         setChartFacet('chart-signal-spread', firstVerdict);
         await new Promise(r => setTimeout(r, 350));
+        // Focused, the card becomes a ranked bar list: the name is an axis tick,
+        // which is the only layout where fifty of them cannot overlap.
+        const fc = charts['chart-signal-spread'];
+        const focusCard = document.getElementById('card-chart-signal-spread');
         const focused = {
-            points: charts['chart-signal-spread'].data.datasets[0].data.length,
-            named: charts['chart-signal-spread'].data.datasets[0].data
-                .filter(d => d.label).length,
-            width: charts['chart-signal-spread'].scales.x.max
-                - charts['chart-signal-spread'].scales.x.min,
-            // Distinct x positions: the pile is only readable if the dots stop
-            // sharing a column.
-            distinctX: new Set(charts['chart-signal-spread'].data.datasets[0].data
-                .map(d => d.x)).size,
+            points: fc.data.datasets[0].data.length,
+            type: fc.config.type,
+            indexAxis: fc.options.indexAxis,
+            // Every player named, and nothing thinned away by autoSkip.
+            named: fc.data.labels.filter(Boolean).length,
+            tickLabels: fc.scales.y.ticks.filter(t => t.label).length,
+            autoSkip: fc.options.scales.y.ticks.autoSkip,
+            // The card grows a row per player instead of squeezing them into 330px.
+            canvasHeight: Math.round(
+                focusCard.querySelector('.chart-canvas').getBoundingClientRect().height),
+            spansGrid: focusCard.classList.contains('is-tall'),
             othersUntouched: charts['chart-minutes'].data.datasets[0].data.length
                 === before.minutes
         };
@@ -652,14 +658,16 @@ try {
         && chartsView.focused.points < chartsView.before.spread,
         `picking a verdict narrows the card to ${chartsView.focused.points} of `
         + `${chartsView.before.spread} players`);
-    check(chartsView.focused.width > chartsView.before.spreadWidth
-        && chartsView.focused.distinctX === chartsView.focused.points,
-        `and spreads them across the whole plot — ${chartsView.focused.distinctX} `
-        + `distinct positions, axis ${Math.round(chartsView.before.spreadWidth)} → `
-        + `${Math.round(chartsView.focused.width)}`);
-    check(chartsView.focused.named > chartsView.before.named,
-        `which is the point: ${chartsView.before.named} names become `
-        + `${chartsView.focused.named}`);
+    check(chartsView.focused.type === 'bar' && chartsView.focused.indexAxis === 'y'
+        && chartsView.focused.autoSkip === false,
+        'and turns into a ranked bar list, with every name an axis tick');
+    check(chartsView.focused.named === chartsView.focused.points
+        && chartsView.focused.tickLabels === chartsView.focused.points,
+        `which is the point: ${chartsView.before.named} readable names become `
+        + `${chartsView.focused.tickLabels} of ${chartsView.focused.points}`);
+    check(chartsView.focused.spansGrid
+        && chartsView.focused.canvasHeight >= chartsView.focused.points * 14,
+        `the card grows to ${chartsView.focused.canvasHeight}px so nothing is squeezed`);
     check(chartsView.focused.othersUntouched && chartsView.posFacet.spreadStillFocused,
         'narrowing one card leaves the others alone');
     check(chartsView.posFacet.narrowed && chartsView.posFacet.drew,

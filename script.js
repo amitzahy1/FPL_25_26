@@ -3177,15 +3177,15 @@ function createPlayerRowHtml(player, index) {
         <td class="transfers-cell" data-tooltip="${config.columnTooltips.net_transfers_event}"><span class="${player.net_transfers_event >= 0 ? 'net-transfers-positive' : 'net-transfers-negative'}">${player.net_transfers_event.toLocaleString()}</span></td>
         <td class="${getPercentileClass(displayOwnership(player), displayedValues.selected_by_percent)}"
             ${ownershipCellTitle(player)}>${ownershipCellHtml(player)}</td>
+        <td class="${getPercentileClass(player.def_contrib_per90, displayedValues.def_contrib_per90)}" data-tooltip="${config.columnTooltips.def_contrib_per90}">${player.def_contrib_per90.toFixed(1)}</td>
+        <td class="${getPercentileClass(parseFloat(player.xGI_per90) || 0, displayedValues.xGI_per90)}">${(parseFloat(player.xGI_per90) || 0).toFixed(2)}</td>
+        <td class="${getPercentileClass((player.goals_scored || 0) + (player.assists || 0), displayedValues.goals_assists)}">${(player.goals_scored || 0) + (player.assists || 0)}</td>
         <td class="signal-cell">
             <span class="signal-badge signal-${signal.tone}">${signal.label}</span>
             ${signal.why.length ? `<span class="signal-why">${signal.why.map(w => `<span>${w}</span>`).join('')}</span>` : ''}
         </td>
         ${trendKeys.map(key => trendCellHtml(player, key, index)).join('')}
         <td data-tooltip="${config.columnTooltips.defcon_hit_rate}">${formatDefconRate(player.defcon_hit_rate)}</td>
-        <td class="${getPercentileClass(player.def_contrib_per90, displayedValues.def_contrib_per90)}" data-tooltip="${config.columnTooltips.def_contrib_per90}">${player.def_contrib_per90.toFixed(1)}</td>
-        <td class="${getPercentileClass(parseFloat(player.xGI_per90) || 0, displayedValues.xGI_per90)}">${(parseFloat(player.xGI_per90) || 0).toFixed(2)}</td>
-        <td class="${getPercentileClass((player.goals_scored || 0) + (player.assists || 0), displayedValues.goals_assists)}">${(player.goals_scored || 0) + (player.assists || 0)}</td>
         <td class="fdr-cell">${fdrBadge}</td>
         <td class="fixtures-cell">${fixturesHTML}</td>
         <td class="bold-cell stability-cell ${getPercentileClass(player.stability_index || 0, displayedValues.stability_index)}">${(player.stability_index || 0).toFixed(0)}</td>
@@ -9759,6 +9759,39 @@ function chartAxis(text) {
     };
 }
 
+/**
+ * Name and value in one axis tick, for a horizontal bar chart.
+ *
+ * Both bar charts printed the figure as a datalabel anchored to the end of the
+ * bar, and on both it came out sitting *on* the fill — 10px grey on saturated
+ * green, which reads as neither. The cause is that chartjs-plugin-datalabels
+ * mirrors horizontal alignment on an RTL canvas, so `align: 'right'` resolved
+ * inward; every value of `align` was measured and all of them landed inside.
+ *
+ * Rather than depend on which way the plugin mirrors, the figure moves into the
+ * tick, where it is ordinary axis text: it cannot overlap the bar, cannot be
+ * clipped by the chart area, and cannot be dropped by collision detection. A
+ * ranked list reading "Senesi · 70%" is also just how a leaderboard reads.
+ */
+function barRowLabel(name, value) {
+    return `⁦${name} · ${value}⁩`;
+}
+
+/** Shared tick config for those charts: every row labelled, none thinned. */
+function barRowTicks(count) {
+    return {
+        // autoSkip is what turns a list of fifty into a list of twelve with no
+        // indication that the rest are missing.
+        autoSkip: false,
+        color: '#334155',
+        font: { size: count > 60 ? 8.5 : 10, weight: 'bold' },
+        callback(value) {
+            const text = this.getLabelForValue(value);
+            return text || '';
+        }
+    };
+}
+
 const CHART_TOOLTIP = {
     backgroundColor: 'rgba(15, 23, 42, 0.95)',
     titleColor: '#fff',
@@ -10150,7 +10183,7 @@ function buildDefconChart(data) {
     return {
         type: 'bar',
         data: {
-            labels: top.map(p => p.web_name),
+            labels: top.map(p => barRowLabel(p.web_name, `${Math.round(p.defcon_hit_rate)}%`)),
             datasets: [{
                 label: 'אחוז משחקים מעל הסף',
                 data: top.map(p => p.defcon_hit_rate),
@@ -10162,19 +10195,18 @@ function buildDefconChart(data) {
             responsive: true,
             maintainAspectRatio: false,
             indexAxis: 'y',
+            layout: { padding: { right: 14, left: 6 } },
             scales: {
                 x: { ...chartAxis('% מההופעות'), beginAtZero: true, max: 100 },
-                y: { ...chartAxis(''), grid: { display: false } }
+                y: {
+                    ...chartAxis(''), grid: { display: false },
+                    ticks: barRowTicks(top.length)
+                }
             },
             plugins: {
                 legend: { display: false },
-                datalabels: {
-                    // 'right', not 'end': on a horizontal bar 'end' resolved to the
-                    // bar's own end and the figure straddled the edge of the fill.
-                    anchor: 'end', align: 'right', offset: 4, clamp: true,
-                    formatter: v => `${Math.round(v)}%`,
-                    font: { size: 10, weight: 'bold' }, color: '#475569'
-                },
+                // The figure is in the tick — see barRowLabel.
+                datalabels: { display: false },
                 tooltip: {
                     ...CHART_TOOLTIP,
                     callbacks: {
@@ -10357,81 +10389,82 @@ function buildSignalSpreadChart(data) {
 }
 
 /**
- * One verdict, across the whole plot.
+ * One verdict, as a ranked list.
  *
- * x is the player's rank inside the verdict, best first — which is not an
- * invented quantity the way plotting the verdicts themselves against each other
- * would be, because within one verdict the ordering is real. Evenly spaced
- * rather than jittered, so consecutive names cannot land on top of each other,
- * and the labels alternate above and below the point, which roughly doubles how
- * many survive the collision pass.
+ * The first attempt kept it a scatter — rank on x, score on y — and it failed
+ * for a reason worth writing down: sorted by score, the points lie on a
+ * monotone curve, so consecutive players are close in *both* axes and their
+ * names collide however the labels are staggered. Fifty-three players, eighteen
+ * readable names.
+ *
+ * A bar per player fixes it by construction. The name is an axis tick, not a
+ * floating label, so nothing can overlap anything: the layout gives every
+ * player his own row and the card grows to fit. Which is also the honest shape
+ * for the question — once you have picked a verdict, what you want is the list
+ * in order, not a cloud.
  */
 function buildSignalFocusChart(column) {
     const ranked = column.players.slice().sort((a, b) => b.score - a.score);
     if (ranked.length < 2) return null;
 
     const colour = SIGNAL_TONE_COLOR[column.sig.tone] || '#64748b';
-    const points = ranked.map(({ p, score }, i) => ({
-        x: i + 1, y: score, label: p.web_name,
-        name: p.web_name, team: p.team_name, pos: p.position_name,
-        verdict: column.sig.label, rank: i + 1
-    }));
-
-    return {
-        type: 'scatter',
+    const config = {
+        type: 'bar',
         data: {
+            labels: ranked.map(({ p, score }) => barRowLabel(p.web_name, score.toFixed(1))),
             datasets: [{
                 label: column.sig.label,
-                data: points,
-                // Smaller as the list grows, so 200 players stay distinguishable
-                // and 20 are not four lonely specks.
-                pointRadius: points.length > 120 ? 2.6 : points.length > 60 ? 3.4 : 4.5,
-                pointHoverRadius: 8,
-                pointBorderWidth: 0,
-                backgroundColor: `${colour}cc`
+                data: ranked.map(({ score }) => score),
+                backgroundColor: `${colour}dd`,
+                borderRadius: 3,
+                // A fixed row height beats a proportion: the card is sized from
+                // the same number below, so the bars fill it either way, and a
+                // proportion made twelve players into twelve slabs.
+                barThickness: ranked.length > 60 ? 9 : ranked.length > 30 ? 12 : 16
             }]
         },
         options: {
             responsive: true,
             maintainAspectRatio: false,
-            // Deeper top and bottom than the strip view: half the labels hang
-            // below their point here, and all four bands draw unclipped.
-            layout: { padding: { top: 38, right: 20, bottom: 34, left: 20 } },
+            indexAxis: 'y',
+            layout: { padding: { right: 14, left: 6 } },
             scales: {
                 x: {
-                    ...chartAxis(`דירוג בתוך "${column.sig.label}" (${points.length} שחקנים)`),
-                    min: 0, max: points.length + 1,
-                    grid: { display: false }
+                    ...chartAxis(`ציון דראפט — ${ranked.length} שחקנים ב"${column.sig.label}"`),
+                    beginAtZero: true
                 },
-                y: { ...chartAxis('ציון דראפט') }
+                y: {
+                    ...chartAxis(''),
+                    grid: { display: false },
+                    ticks: barRowTicks(ranked.length)
+                }
             },
             plugins: {
                 legend: { display: false },
-                datalabels: {
-                    display: 'auto',
-                    // Four bands, not two: above-near, below-near, above-far,
-                    // below-far. Alternating top/bottom alone still lost names,
-                    // because two points three apart both land on the bottom row
-                    // and a pair of long names is wider than that gap.
-                    align: ctx => (ctx.dataIndex % 2 ? 'bottom' : 'top'),
-                    offset: ctx => (ctx.dataIndex % 4 < 2 ? 4 : 15),
-                    formatter: (value, context) => {
-                        const d = context.dataset.data[context.dataIndex];
-                        return d.label ? `⁦${d.label}⁩` : '';
-                    },
-                    font: { size: 9, weight: 'bold' }, color: '#1e293b',
-                    clip: false, clamp: true
-                },
+                datalabels: { display: false },
                 tooltip: {
                     ...CHART_TOOLTIP,
                     callbacks: {
-                        label: c => `#${c.raw.rank} ${c.raw.name} · ${c.raw.team} · ${c.raw.pos}`
-                            + ` — ציון ${c.raw.y.toFixed(1)}`
+                        label: c => {
+                            const { p } = ranked[c.dataIndex];
+                            return `#${c.dataIndex + 1} ${p.web_name} · ${p.team_name} · `
+                                + `${p.position_name} — ציון ${c.parsed.x.toFixed(1)}`;
+                        }
                     }
                 }
             }
         }
     };
+    // One row per player, so nothing is dropped and nothing is squeezed. Read
+    // and removed by renderCharts — Chart.js never sees it.
+    config.cardHeight = signalFocusHeight(ranked.length);
+    return config;
+}
+
+/** Row height plus the axis chrome, floored so a three-player list is not a strip. */
+function signalFocusHeight(count) {
+    const row = count > 60 ? 15 : count > 30 ? 19 : 26;
+    return Math.max(300, Math.round(count * row) + 60);
 }
 
 /* --------------------------- 11. underlying vs value ---------------------- */
@@ -10874,6 +10907,16 @@ function renderCharts() {
         // yet" — which is the normal state before a season has been played.
         card.hidden = !config;
         if (!config) return;
+
+        // A chart may ask for its own height — the focused verdict list grows a
+        // row per player, and a fixed 330px box would squeeze fifty names into
+        // twelve. Read and removed here so Chart.js never sees the key, and the
+        // card spans the grid so a tall one does not stretch its neighbours.
+        const box = card.querySelector('.chart-canvas');
+        const wanted = config.cardHeight;
+        delete config.cardHeight;
+        if (box) box.style.height = wanted ? `${wanted}px` : '';
+        card.classList.toggle('is-tall', !!wanted);
 
         // The hover highlight is keyed on a dataset index, and the datasets are
         // rebuilt here. Carrying the old index over would dim the wrong line.

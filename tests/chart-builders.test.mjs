@@ -17,6 +17,7 @@ const FNS = [
     'getMatrixChartConfig', 'labelTop', 'chartAxis', 'ltrTick', 'displayNetTransfers',
     'buildMarketFlowChart', 'buildSignalSpreadChart', 'buildSignalFocusChart',
     'buildUnderlyingValueChart', 'buildTeamTargetsChart', 'signalLegendHtml',
+    'barRowLabel', 'barRowTicks', 'signalFocusHeight',
     'scopeToFacet', 'chartFacetChipsHtml', 'setChartFacet', 'chartFacetValue'
 ];
 
@@ -183,31 +184,51 @@ describe('signal spread chart', () => {
         assert.deepEqual(points(config).map(p => p.y), [62, 30]);
     });
 
-    test('one verdict is not a strip — it spreads across the plot', () => {
-        // The point of narrowing to a category is to read the names, and one
-        // column redrawn in the same 80px strip is the same pile with white
-        // space around it.
+    test('the value is in the tick, where the bar cannot cover it', () => {
+        // chartjs-plugin-datalabels mirrors horizontal align on an RTL canvas, so
+        // every value of `align` put the figure inside the fill. Measured, then
+        // moved out of the plugin's hands entirely.
+        const { buildSignalSpreadChart } = load();
+        const config = buildSignalSpreadChart(
+            [1, 2, 3].map(id => row({ id, web_name: `P${id}`, draft_score: 40 + id })));
+        assert.deepEqual(config.data.labels,
+            ['⁦P3 · 43.0⁩', '⁦P2 · 42.0⁩', '⁦P1 · 41.0⁩']);
+        assert.equal(config.options.plugins.datalabels.display, false,
+            'and no floating label competing with it');
+    });
+
+    test('one verdict is a ranked list, not a strip', () => {
+        // Sorted by score, a scatter puts consecutive players close in *both*
+        // axes, and their names collide however the labels are staggered —
+        // fifty-three players came out with eighteen readable names. A bar per
+        // player makes the name an axis tick, which cannot overlap anything.
         const { buildSignalSpreadChart } = load();
         const players = [1, 2, 3, 4, 5].map(id => row({ id, draft_score: 40 + id }));
         const config = buildSignalSpreadChart(players);
-        const pts = points(config);
 
-        assert.deepEqual(pts.map(p => p.x), [1, 2, 3, 4, 5], 'evenly spaced, one per rank');
-        assert.deepEqual(pts.map(p => p.y), [45, 44, 43, 42, 41], 'best first');
-        assert.equal(config.options.scales.x.min, 0);
-        assert.equal(config.options.scales.x.max, 6, 'the full width, not one column');
-        assert.ok(pts.every(p => p.label), 'every player is named, not just the top two');
+        assert.equal(config.type, 'bar');
+        assert.equal(config.options.indexAxis, 'y');
+        assert.equal(config.data.labels.length, 5);
+        assert.deepEqual(config.data.datasets[0].data, [45, 44, 43, 42, 41], 'best first');
     });
 
-    test('the focused view spreads labels over four bands, not two', () => {
-        // Two bands still lost names: points three apart both land on the bottom
-        // row, and a pair of long names is wider than that gap.
+    test('every name is an axis tick and none are thinned away', () => {
         const { buildSignalSpreadChart } = load();
-        const config = buildSignalSpreadChart([1, 2, 3, 4, 5].map(id => row({ id })));
-        const { align, offset } = config.options.plugins.datalabels;
-        const band = i => `${align({ dataIndex: i })}@${offset({ dataIndex: i })}`;
-        assert.equal(new Set([0, 1, 2, 3].map(band)).size, 4);
-        assert.equal(band(4), band(0), 'and then it repeats');
+        const config = buildSignalSpreadChart(
+            Array.from({ length: 50 }, (_, i) => row({ id: i + 1, draft_score: 60 - i })));
+        assert.equal(config.data.labels.length, 50);
+        assert.equal(config.options.scales.y.ticks.autoSkip, false,
+            'autoSkip turns a list of fifty into a list of twelve, silently');
+    });
+
+    test('the card asks for a height that fits one row per player', () => {
+        const { buildSignalSpreadChart } = load();
+        const small = buildSignalSpreadChart([1, 2, 3].map(id => row({ id })));
+        const big = buildSignalSpreadChart(
+            Array.from({ length: 50 }, (_, i) => row({ id: i + 1, draft_score: 60 - i })));
+        assert.ok(big.cardHeight > small.cardHeight);
+        assert.ok(small.cardHeight >= 300, 'a three-player list is not a strip either');
+        assert.ok(big.cardHeight >= 50 * 15, `50 players need room, got ${big.cardHeight}`);
     });
 
     test('the focused axis says which verdict and how many', () => {

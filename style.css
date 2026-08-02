@@ -3658,12 +3658,28 @@ tbody tr:last-child td {
 
 .charts-view { padding-bottom: 32px; }
 
+/* Three across at most, not "as many as fit".
+   auto-fill at 440px put four cards on a wide monitor, and a scatter of 500
+   players in a 420px box is a smudge — the names are the value of these charts
+   and they are the first thing a narrow card drops. A hard cap of three trades
+   a column for room to read. */
 .charts-dashboard-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(min(100%, 440px), 1fr));
     gap: 14px;
     margin-top: 14px;
 }
+
+@media (min-width: 1120px) {
+    .charts-dashboard-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+
+/* A card that sized its own canvas — the focused verdict list grows a row per
+   player — spans the grid, because a 1200px-tall column would drag the two
+   beside it down with it. */
+.chart-card.is-tall { grid-column: 1 / -1; }
+
+.chart-card.is-tall .chart-canvas { max-height: 78vh; }
 
 .chart-card {
     display: flex;

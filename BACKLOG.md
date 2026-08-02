@@ -197,6 +197,25 @@ Status as of the 2026/27 pre-season overhaul. Items are ordered by value, not by
       it finished awaiting the draft fetches — between seasons, a full timeout
       chain. Fixed in the markup, where the inconsistency was.
 
+- [x] Charts capped at **three per row** above 1120px. `auto-fill` at 440px put
+      four on a wide monitor, and 500 players in a 420px box is a smudge — the
+      names are the value of these cards and a narrow card drops them first.
+- [x] The focused verdict view is a **ranked bar list**, not a scatter. As a
+      scatter sorted by score the points sit on a monotone curve, so consecutive
+      players are close in *both* axes and their names collide however the
+      labels are staggered: 53 players, 18 readable names. A bar per player
+      makes the name an axis tick, which cannot overlap anything — 53 of 53. The
+      card asks for its own height (`config.cardHeight`, read and removed by
+      `renderCharts`) and spans the grid so a tall one does not stretch its
+      neighbours.
+- [x] Both horizontal bar charts printed their figure *on* the fill — 10px grey
+      on saturated green. The cause: chartjs-plugin-datalabels mirrors horizontal
+      alignment on an RTL canvas, so `align: 'right'` resolved inward. Every
+      value of `align` was measured and all of them landed inside, so the figure
+      moved into the axis tick instead ("Senesi · 70%"), where it is ordinary
+      axis text that cannot be overlapped, clipped or collision-dropped.
+- [x] DC/90, xGI and G+A moved to sit directly after % בחירה.
+
 ## Pre-draft, still open
 
 - [ ] Steals-vs-ADP column: `draft_rank` is FPL Draft's own published ranking, so
