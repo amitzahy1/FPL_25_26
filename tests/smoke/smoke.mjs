@@ -114,6 +114,39 @@ try {
         };
     });
     check(board.cards >= 4, `draft board rendered ${board.cards} panels`);
+
+    // Header over value, measured on the text rather than the cell box — the
+    // boxes are identical by construction under table-layout: fixed, so they
+    // agreed while the text inside them was up to 59px apart. The cause was one
+    // `text-align: end` read under two directions: the value cells are ltr (so a
+    // minus sign leads and figures stay tabular), the headers inherit the page's
+    // rtl, and `end` therefore meant opposite edges.
+    const drift = await page.evaluate(() => {
+        const textRight = el => {
+            const r = document.createRange();
+            r.selectNodeContents(el);
+            const rects = [...r.getClientRects()];
+            return rects.length ? Math.max(...rects.map(x => x.right)) : null;
+        };
+        const out = [];
+        for (const tbl of document.querySelectorAll('#draftBoard .db-tbl')) {
+            const ths = [...tbl.querySelectorAll('thead th')];
+            const row = tbl.querySelector('tbody tr');
+            if (!row) continue;
+            const tds = [...row.querySelectorAll('td')];
+            ths.forEach((th, i) => {
+                if (!tds[i]) return;
+                const h = textRight(th), v = textRight(tds[i]);
+                if (h === null || v === null) return;
+                out.push({ col: th.textContent.trim(), d: Math.abs(h - v) });
+            });
+        }
+        return out;
+    });
+    const worst = drift.reduce((m, x) => x.d > m.d ? x : m, drift[0] || { col: 'none', d: 0 });
+    check(drift.length > 0 && worst.d <= 1,
+        `all ${drift.length} board headers sit over their own values`
+        + ` (worst drift ${worst.d.toFixed(1)}px on "${worst.col}")`);
     check(board.rows > 0 && board.keyed === board.rows,
         `every one of ${board.rows} picks shows its figure`);
     check(board.rows > 0 && board.thinRows === 0,
