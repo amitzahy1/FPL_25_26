@@ -2314,6 +2314,7 @@ function pointsConcentration(player) {
 const SIGNAL_RULES = [
     {
         key: 'out', label: 'לא זמין', tone: 'bad',
+        blurb: 'פצוע, מורחק, או ספק להרכב — לא לסמוך עליו למחזור הקרוב',
         test: p => p.availability_grade && p.availability_grade !== 'available',
         why: p => [p.chance_of_playing_next_round !== null && p.chance_of_playing_next_round < 100
             ? `סיכוי ${p.chance_of_playing_next_round}% לשחק במחזור הקרוב`
@@ -2321,12 +2322,14 @@ const SIGNAL_RULES = [
     },
     {
         key: 'clinical', label: 'יעיל', tone: 'clinical',
+        blurb: 'מסיים מעל הצפוי, ולאורך הרבה משחקים — כשזה עקבי זו יכולת ולא מזל',
         test: p => p.xDiff >= 1.5 && p.minutes >= 900 && (parseFloat(p.xGI_per90) || 0) >= 0.35
             && (pointsConcentration(p) === null || pointsConcentration(p) < 0.5),
         why: p => [`מסיים טוב יותר מהצפוי, ובאופן עקבי לאורך ${Math.round(p.minutes / 90)} משחקים`]
     },
     {
         key: 'overperf', label: 'מימוש יתר', tone: 'bad',
+        blurb: 'הנקודות גבוהות ממה שהביצועים מצדיקים, או שרובן הגיעו ממחזור בודד — הצפי הוא ירידה',
         test: p => {
             if (p.xDiff < 1.5 || p.minutes < 270) return false;
             const thin = (parseFloat(p.xGI_per90) || 0) < 0.30;
@@ -2342,16 +2345,19 @@ const SIGNAL_RULES = [
     },
     {
         key: 'sell', label: 'למכור גבוה', tone: 'warn',
+        blurb: 'הערך שלו בשיא ולו״ז קשה מחכה — נקודת הזמן הטובה להציע אותו בטרייד',
         test: p => p.xDiff >= 2 && p.next_3_fdr >= 3.4,
         why: p => ['הערך שלו בשיא ולו״ז קשה מחכה — הזמן להציע אותו בטרייד']
     },
     {
         key: 'buylow', label: 'קנייה בזול', tone: 'info',
+        blurb: 'מגיע להזדמנויות והנקודות עוד לא באו — בדרך כלל זה מתיישר',
         test: p => p.xDiff <= -1.5 && p.minutes >= 360,
         why: p => ['מגיע להזדמנויות אבל הנקודות לא באו — בדרך כלל זה מתיישר']
     },
     {
         key: 'claim', label: 'קח עכשיו', tone: 'good',
+        blurb: 'חופשי בליגה, ובאיכות של שחקן שפותח אצל רוב הקבוצות',
         // ownedElementIds is what the "שחקנים חופשיים" filter tests, so the verdict
         // and the filter cannot disagree about who is available. The roster walk it
         // used before could say "free" for a player the filter had already excluded.
@@ -2363,17 +2369,22 @@ const SIGNAL_RULES = [
     },
     {
         key: 'swing', label: 'לו״ז מתהפך', tone: 'plum',
+        blurb: 'שלושת המשחקים הבאים שלו מהקלים בליגה — חלון קצר שכדאי לנצל',
         test: p => p.next_3_fdr > 0 && p.next_3_fdr <= 2.4 && p.minutes >= 270,
         why: p => ['שלושת המשחקים הבאים שלו מהקלים בליגה']
     },
     {
         key: 'rotation', label: 'סיכון סיבוב', tone: 'warn',
+        blurb: 'לא מובטח בהרכב — רמה טובה שלא תמיד נמצאת על הדשא',
         test: p => Number.isFinite(p.rotation_risk) && p.rotation_risk < 0.6 && p.minutes >= 180,
         why: p => [`לא מובטח בהרכב — פתח רק ב-${Math.round(p.rotation_risk * 100)}% מהמשחקים`]
     }
 ];
 
-const HOLD_SIGNAL = { key: 'hold', label: 'ניטרלי', tone: 'muted', why: [] };
+const HOLD_SIGNAL = {
+    key: 'hold', label: 'ניטרלי', tone: 'muted', why: [],
+    blurb: 'אף כלל לא נדלק עליו — אין ממצא חריג לכאן או לכאן'
+};
 
 /**
  * Cached per player. Every rule reads fields that only change when the data is
@@ -2394,11 +2405,33 @@ function signalFor(player) {
         if (!matched) continue;
         let why = [];
         try { why = (rule.why(player) || []).filter(Boolean).slice(0, 1); } catch (e) { why = []; }
-        result = { key: rule.key, label: rule.label, tone: rule.tone, why };
+        result = { key: rule.key, label: rule.label, tone: rule.tone, blurb: rule.blurb, why };
         break;
     }
     _signalCache.set(player.id, result);
     return result;
+}
+
+/**
+ * The hover text for a verdict badge: what the category *means*, then why this
+ * particular player is in it.
+ *
+ * These labels are invented — "מימוש יתר", "סיכון סיבוב", "לו״ז מתהפך" are this
+ * app's words, not FPL's — so a reader has no way to know what they claim unless
+ * the badge says so. The per-player line alone did not: it explains the instance
+ * and assumes the category.
+ */
+function signalTitle(signal) {
+    if (!signal) return '';
+    const parts = [signal.blurb, ...(signal.why || [])].filter(Boolean);
+    return parts.join(' — ');
+}
+
+/** Explanation for a verdict looked up by key, for chips that have no player. */
+function signalBlurbFor(key) {
+    if (key === HOLD_SIGNAL.key) return HOLD_SIGNAL.blurb;
+    const rule = SIGNAL_RULES.find(r => r.key === key);
+    return rule ? rule.blurb : '';
 }
 
 /** Rank used when sorting by the סיגנל column: actionable buckets first. */
@@ -2421,7 +2454,9 @@ function populateSignalFilter() {
     const options = SIGNAL_SORT_ORDER
         .map(key => byKey.get(key))
         .filter(Boolean)
-        .map(r => `<option value="${r.key}">${r.label}</option>`)
+        // A <option> shows its title on hover in every desktop browser, which is
+        // the only place these invented names can explain themselves in a select.
+        .map(r => `<option value="${r.key}" title="${escapeHtml(r.blurb || '')}">${r.label}</option>`)
         .join('');
     select.innerHTML = `<option value="">כל הסיגנלים</option>${options}`;
 }
@@ -3133,7 +3168,8 @@ function playerDetailRowHtml(player, colSpan) {
                         <span class="detail-tag">${player.team_name}</span>
                         <span class="detail-tag ${owner ? 'is-owned' : 'is-free'}">${owner || '🆓 חופשי'}</span>
                     </span>
-                    <span class="signal-badge signal-${signal.tone}">${signal.label}</span>
+                    <span class="signal-badge signal-${signal.tone}"
+                        title="${escapeHtml(signalTitle(signal))}">${signal.label}</span>
                     ${signal.why.length ? `<span class="detail-reason">${signal.why.join(' · ')}</span>` : ''}
                     <span class="detail-spacer"></span>
                     <button class="detail-btn ${watched ? 'is-on' : ''}"
@@ -3387,8 +3423,8 @@ function createPlayerRowHtml(player, index) {
             <!-- Badge only. The sentence that earned it printed under the badge
                  and made every row three lines tall; it is the hover now, and
                  still printed in full in the expanded row. -->
-            <span class="signal-badge signal-${signal.tone}"${signal.why.length
-        ? ` title="${escapeHtml(signal.why.join(' · '))}"` : ''}>${signal.label}</span>
+            <span class="signal-badge signal-${signal.tone}"
+                title="${escapeHtml(signalTitle(signal))}">${signal.label}</span>
         </td>
         ${trendKeys.map(key => trendCellHtml(player, key, index)).join('')}
         <td class="${toneClass('defcon_hit_rate', player.defcon_hit_rate, displayedValues.defcon_hit_rate)}" data-tooltip="${config.columnTooltips.defcon_hit_rate}">${formatDefconRate(player.defcon_hit_rate)}</td>
@@ -4346,7 +4382,8 @@ function generateComparisonTableHTML(players) {
                         ${(() => { const o = getDraftTeamForPlayer(p.id);
                             return `<span class="detail-tag ${o ? 'is-owned' : 'is-free'}">${o || '🆓 חופשי'}</span>`; })()}
                         ${(() => { const sig = signalFor(p);
-                            return `<span class="signal-badge signal-${sig.tone}">${sig.label}</span>`; })()}
+                            return `<span class="signal-badge signal-${sig.tone}"
+                                title="${escapeHtml(signalTitle(sig))}">${sig.label}</span>`; })()}
                     </div>
                     
                     <!-- Quick Stats Grid -->
@@ -5814,7 +5851,8 @@ function panelTableHtml(panel, picks, { modal = false, sortKey = null, sortDir =
             ${cols.map(c => `<td class="${c.soft ? 'db-td-soft' : ''}">${escapeHtml(String(c.get(p)))}</td>`).join('')}
             ${modal ? `<td class="db-td-spark">${miniSparkHtml(p.id, 'pts')}</td>
                 <td class="db-td-why">${escapeHtml(panel.why(p))}</td>
-                <td><span class="signal-badge signal-${signal.tone}">${signal.label}</span></td>` : ''}
+                <td><span class="signal-badge signal-${signal.tone}"
+                    title="${escapeHtml(signalTitle(signal))}">${signal.label}</span></td>` : ''}
         </tr>`;
     }).join('');
 
@@ -10895,7 +10933,9 @@ const CHART_FACETS = {
         options: (data) => SIGNAL_SORT_ORDER
             .map(key => [...SIGNAL_RULES, HOLD_SIGNAL].find(r => r.key === key))
             .filter(rule => rule && data.some(p => signalFor(p).key === rule.key))
-            .map(rule => ({ value: rule.key, label: rule.label })),
+            // The verdict names are this app's inventions, so the chip that
+            // filters by one has to be able to say what it means.
+            .map(rule => ({ value: rule.key, label: rule.label, title: rule.blurb })),
         test: (p, value) => signalFor(p).key === value
     },
     // A mode, not a filter: it picks what the card measures rather than which
@@ -10941,11 +10981,12 @@ function chartFacetChipsHtml(spec, data) {
     const options = facet.options(data, spec.facetOmit || []);
     if (options.length < 2) return '';
     const active = chartFacetValue(spec) || '';
-    const chip = (value, label) => `<button type="button" data-facet-value="${value}"
-        aria-pressed="${String(active === value)}"
+    const chip = (value, label, title) => `<button type="button" data-facet-value="${value}"
+        aria-pressed="${String(active === value)}"${title ? ` title="${escapeHtml(title)}"` : ''}
         onclick="setChartFacet('${spec.id}', '${value}')">${label}</button>`;
     return `<div class="chart-seg" role="group" aria-label="${facet.label}">
-        ${facet.mode ? '' : chip('', 'הכל')}${options.map(o => chip(o.value, o.label)).join('')}
+        ${facet.mode ? '' : chip('', 'הכל', 'בלי סינון — כל השחקנים בגרף')}${
+        options.map(o => chip(o.value, o.label, o.title)).join('')}
     </div>`;
 }
 
@@ -11135,7 +11176,7 @@ function ensureChartCards() {
                 <div class="chart-title-row">
                     <div>
                         <h3 class="chart-title">${spec.title}</h3>
-                        <p class="chart-note">${chartNote(spec)}</p>
+                        <p class="chart-note" title="${escapeHtml(chartNote(spec).replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim())}">${chartNote(spec)}</p>
                     </div>
                     <!-- Phone-only (hidden by CSS above 768px): the card is a
                          thumbnail on a phone, and this is how it is read. -->

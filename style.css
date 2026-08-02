@@ -3643,7 +3643,7 @@ span.tone-down { background: none !important; color: #1d4ed8; font-weight: 700; 
     display: flex;
     flex-direction: column;
     background: #fff;
-    padding: 14px 16px 12px;
+    padding: 11px 13px 9px;
     border-radius: 14px;
     border: 1px solid #eef2f7;
     box-shadow: 0 1px 3px rgba(15, 23, 42, .04);
@@ -3659,21 +3659,27 @@ span.tone-down { background: none !important; color: #1d4ed8; font-weight: 700; 
    broken chart rather than as "this needs data the season does not have yet". */
 .chart-card[hidden] { display: none; }
 
+/* One row, not three.
+   The head used to stack: a title, a wrapping sentence under it, then the
+   position chips on a line of their own and the facet chips on another. Four
+   rows of chrome above a 250px plot spent more of the card on describing the
+   chart than on the chart. Title and sentence on the reading side, every filter
+   pushed to the far side of the same line. */
 .chart-head {
     display: flex;
-    align-items: flex-start;
-    justify-content: space-between;
-    gap: 12px;
-    padding-bottom: 10px;
-    margin-bottom: 10px;
+    align-items: center;
+    gap: 10px;
+    padding-bottom: 7px;
+    margin-bottom: 8px;
     border-bottom: 1px solid #f1f5f9;
-    /* So the category row can take a line of its own — see .chart-facet. */
     flex-wrap: wrap;
 }
 
+.chart-title-row { flex: 1 1 190px; min-width: 0; }
+
 .chart-title {
     margin: 0;
-    font-size: 15px;
+    font-size: 13px;
     font-weight: 800;
     color: #0f172a;
     letter-spacing: -.2px;
@@ -3681,12 +3687,19 @@ span.tone-down { background: none !important; color: #1d4ed8; font-weight: 700; 
 
 /* One line per card saying what question it answers. Eight scatter plots with
    only axis labels leave the reader to work out why each one is there. */
+/* Clamped to one line, with the whole sentence on hover. It is worth a line of
+   the card, not three — and on a narrow card it was taking three. */
 .chart-note {
-    margin: 3px 0 0;
-    font-size: 11px;
+    margin: 1px 0 0;
+    font-size: 10px;
     font-weight: 500;
-    line-height: 1.4;
+    line-height: 1.35;
     color: #94a3b8;
+    display: -webkit-box;
+    -webkit-line-clamp: 1;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    cursor: help;
 }
 
 /* The colour key for the charts that spend colour on position. Written into the
@@ -3721,9 +3734,10 @@ span.tone-down { background: none !important; color: #1d4ed8; font-weight: 700; 
    height, which collapsed every canvas to about half the space it asked for. */
 .chart-canvas {
     position: relative;
-    /* 250, down from 330: six always-visible cards have to earn their scroll,
-       and the labels are 9px — the extra 80px was mostly whitespace. */
-    height: 250px;
+    /* 360. A scatter of 400 players in a 600x250 box is a wide, flat smear — the
+       cloud has nowhere to separate vertically. The head gave back three rows of
+       chrome; they go here, where they buy resolution rather than describe it. */
+    height: 360px;
 }
 
 .chart-seg {
@@ -3763,12 +3777,15 @@ span.tone-down { background: none !important; color: #1d4ed8; font-weight: 700; 
 
    It wraps rather than scrolls: a chip you have to drag sideways to reach is a
    chip you will not find, which is the mistake the quick-filter row made once. */
-.chart-facet { flex: 1 0 100%; min-width: 0; }
+/* At the end of the head's row, not on a row of its own. */
+.chart-facet { flex: 0 1 auto; min-width: 0; margin-inline-start: auto; }
+.chart-head > .chart-seg { margin-inline-start: auto; }
+.chart-head > .chart-seg + .chart-facet { margin-inline-start: 0; }
 
 .chart-facet .chart-seg {
     display: flex;
     flex-wrap: wrap;
-    justify-content: flex-start;
+    justify-content: flex-end;
     row-gap: 3px;
     max-width: 100%;
 }
@@ -5494,7 +5511,10 @@ canvas {
     }
 
     .chart-canvas { height: 270px; }
-    .chart-head { flex-direction: column; }
+    .chart-head { flex-direction: column; align-items: stretch; }
+    .chart-head > .chart-seg,
+    .chart-facet { margin-inline-start: 0; }
+    .chart-note { -webkit-line-clamp: 2; }
 
     /* Stats Cards */
     .lineup-stats-card {
@@ -5769,6 +5789,10 @@ canvas {
 
 /* --- signal badge --- */
 .signal-cell { text-align: start; min-width: 132px; }
+
+/* These verdict names are invented by this app, so every badge carries its
+   definition as a title. The help cursor is the affordance that says so. */
+.signal-badge[title] { cursor: help; }
 
 .signal-badge {
     display: inline-block;

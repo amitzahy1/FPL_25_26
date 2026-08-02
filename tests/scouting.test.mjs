@@ -45,10 +45,11 @@ function load(stateOver = {}) {
         ...stateOver
     };
     globalThis.state = state;
+    globalThis.escapeHtml = s => String(s);
     globalThis.console = console;
     const fns = loadFunctions([
         'loadWatchlist', 'saveWatchlist',
-        'signalFor', 'signalRank', 'invalidateSignals',
+        'signalFor', 'signalRank', 'invalidateSignals', 'signalTitle', 'signalBlurbFor',
         'gwDefensiveContribution', 'getTrendSeries', 'summariseTrend', 'trendDelta',
         'computeTrendScales', 'fourthTrendMetric', 'fixtureForGw',
         // Two signal rules call this; without it in scope signalFor's try/catch
@@ -176,6 +177,33 @@ describe('signal verdicts', () => {
         state.allPlayersData.live.processed = [claim];
         const out = makePlayer({ id: 3, availability_grade: 'injured' });
         assert.ok(fns.signalRank(claim) < fns.signalRank(out));
+    });
+});
+
+describe('the verdict names explain themselves', () => {
+    test('every invented category carries a definition, not just a label', () => {
+        // "מימוש יתר", "סיכון סיבוב", "לו״ז מתהפך" are this app's words, not
+        // FPL's. A reader has no way to know what they claim unless the badge
+        // says so, and the per-player line explains the instance while assuming
+        // the category.
+        const { fns } = load();
+        for (const key of ['out', 'clinical', 'overperf', 'sell', 'buylow',
+            'claim', 'swing', 'rotation', 'hold']) {
+            const blurb = fns.signalBlurbFor(key);
+            assert.ok(blurb && blurb.trim().length > 15,
+                `verdict "${key}" has no definition for its hover`);
+        }
+    });
+
+    test('the hover says what the category means before why he is in it', () => {
+        const { fns } = load();
+        const title = fns.signalTitle({
+            key: 'overperf', label: 'מימוש יתר', tone: 'bad',
+            blurb: 'הנקודות גבוהות ממה שהביצועים מצדיקים',
+            why: ['כמעט כל הנקודות שלו הגיעו ממחזור אחד']
+        });
+        assert.match(title, /^הנקודות גבוהות/, 'the definition comes first');
+        assert.match(title, /מחזור אחד/, 'the player-specific reason is kept');
     });
 });
 

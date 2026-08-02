@@ -75,6 +75,8 @@ function load(players, over = {}) {
     const fns = loadFunctions([
         'createPlayerRowHtml', 'playerDetailRowHtml', 'trendCellHtml', 'buildPercentileBase',
         'toneClass', 'quantileBand', 'cellBadge', 'signalFor', 'signalRank', 'invalidateSignals',
+        // Every verdict badge carries its definition as a title now.
+        'signalTitle',
         'getTrendSeries', 'summariseTrend', 'trendDelta', 'gwDefensiveContribution',
         'fourthTrendMetric', 'fixtureForGw', 'getDraftTeamForPlayer', 'trendPlayerIndex',
         'pointsConcentration',

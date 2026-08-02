@@ -60,6 +60,9 @@ function load(verdicts = {}, over = {}) {
         { id: 'chart-mode', facet: 'teamSide' }
     ];
     globalThis.renderCharts = () => {};
+    // The facet chips carry the verdict definitions as titles, and escape them.
+    globalThis.escapeHtml = v => String(v)
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
     Object.assign(globalThis, fns);
     return { ...fns, state };
 }
