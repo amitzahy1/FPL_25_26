@@ -4512,15 +4512,15 @@ const RADAR_MAX_AXES = 8;
  */
 const RADAR_AXES = [
     {
-        key: 'output', label: 'תפוקה', title: 'נקודות לכל הופעה',
+        key: 'output', label: 'נק׳/מש׳', title: 'נקודות לכל הופעה',
         value: p => seasonPointsPerApp(p)
     },
     {
-        key: 'minutes', label: 'דקות', title: 'דקות לכל הופעה — הרמה שווה כלום אם הוא לא על הדשא',
+        key: 'minutes', label: 'דק׳/מש׳', title: 'דקות לכל הופעה — הרמה שווה כלום אם הוא לא על הדשא',
         value: p => { const a = appearancesOf(p); return a ? (p.minutes || 0) / a : null; }
     },
     {
-        key: 'involve', label: 'מעורבות', title: 'שערים ובישולים ל-90 דקות, בפועל',
+        key: 'involve', label: 'G+A/90', title: 'שערים ובישולים ל-90 דקות, בפועל',
         positions: ['DEF', 'MID', 'FWD'],
         value: p => {
             const mins90 = (p.minutes || 0) / 90;
@@ -4528,36 +4528,36 @@ const RADAR_AXES = [
         }
     },
     {
-        key: 'shooting', label: 'סיום', title: 'xG ל-90 דקות — איכות ההזדמנויות שהוא מגיע אליהן',
+        key: 'shooting', label: 'xG/90', title: 'שערים צפויים ל-90 דקות — איכות ההזדמנויות שהוא מגיע אליהן',
         positions: ['DEF', 'MID', 'FWD'],
         value: p => num1(p.expected_goals_per_90)
     },
     {
-        key: 'creation', label: 'יצירה', title: 'xA ל-90 דקות — איכות ההזדמנויות שהוא מייצר לאחרים',
+        key: 'creation', label: 'xA/90', title: 'בישולים צפויים ל-90 דקות — איכות ההזדמנויות שהוא מייצר לאחרים',
         positions: ['DEF', 'MID', 'FWD'],
         value: p => num1(p.expected_assists_per_90)
     },
     {
-        key: 'defence', label: 'הגנה', title: 'תרומה הגנתית ל-90 דקות',
+        key: 'defence', label: 'DEFCON/90', title: 'תרומה הגנתית (חטיפות, חסימות, יירוטים, החזרות) ל-90 דקות',
         positions: ['DEF', 'MID', 'FWD'],
         value: p => num1(p.def_contrib_per90)
     },
     {
-        key: 'saves', label: 'הצלות', title: 'הצלות ל-90 דקות',
+        key: 'saves', label: 'הצלות/90', title: 'הצלות ל-90 דקות',
         positions: ['GKP'],
         value: p => num1(p.saves_per_90)
     },
     {
-        key: 'clean', label: 'שער נקי', title: 'שערים נקיים ל-90 דקות',
+        key: 'clean', label: 'CS/90', title: 'שערים נקיים (clean sheets) ל-90 דקות',
         positions: ['GKP', 'DEF'],
         value: p => num1(p.clean_sheets_per90)
     },
     {
-        key: 'bonus', label: 'בונוס', title: 'נקודות בונוס ל-90 דקות — מה שהוא באמת אסף, לא BPS',
+        key: 'bonus', label: 'בונוס/90', title: 'נקודות בונוס ל-90 דקות — מה שהוא באמת אסף, לא BPS',
         value: p => num1(p.bonus_per90)
     },
     {
-        key: 'impact', label: 'השפעה', title: 'מדד ICT ל-90 דקות',
+        key: 'impact', label: 'ICT/90', title: 'מדד ההשפעה, היצירתיות והאיום של FPL (ICT) ל-90 דקות',
         value: p => num1(p.ict_index_per90)
     }
 ];
@@ -4905,7 +4905,9 @@ function comparisonRowsFor(players) {
 
 /** Lazily-held view state for the trend chart's own controls. */
 function compareState() {
-    if (!state.compare) state.compare = { metric: 'pts', cumulative: false, ids: [] };
+    if (!state.compare) {
+        state.compare = { metric: 'pts', cumulative: false, span: 'window', ids: [] };
+    }
     return state.compare;
 }
 
@@ -4969,13 +4971,28 @@ function compareRadarConfig(players) {
             },
             plugins: {
                 datalabels: { display: false },
-                legend: { display: false },
+                // Six translucent polygons and no legend is a puzzle. The dot
+                // colour is the same one the player's card, his trend line and
+                // his table column carry.
+                legend: {
+                    display: true, position: 'bottom',
+                    labels: {
+                        boxWidth: 9, boxHeight: 9, usePointStyle: true, pointStyle: 'circle',
+                        padding: 10, font: { size: 11, weight: '700' }, color: '#334155'
+                    }
+                },
                 tooltip: {
                     ...CHART_TOOLTIP,
                     callbacks: {
                         title: items => {
                             const axis = axes[items[0].dataIndex];
                             return axis ? axis.label : '';
+                        },
+                        // The spoke names are metric names, not categories, but a
+                        // metric name still deserves its definition somewhere.
+                        afterBody: items => {
+                            const axis = axes[items[0].dataIndex];
+                            return axis ? axis.title : '';
                         },
                         label: item => {
                             const p = drawn[item.datasetIndex];
@@ -5000,12 +5017,75 @@ function compareRadarConfig(players) {
     };
 }
 
-function compareTrendConfig(players, metricKey, cumulative) {
+/**
+ * How far back the trend chart looks.
+ *
+ * The momentum window is a site-wide setting that drives the board and the
+ * charts; this is local to the comparison, because "who has been better lately"
+ * and "who has been better all year" are both fair questions and the answer
+ * often flips between them.
+ */
+const COMPARE_SPANS = [
+    { id: 'window', label: 'החלון', title: 'חלון המומנטום שנבחר לכל האתר' },
+    { id: 'ten', label: '10 מחזורים', n: 10, title: 'עשרת המחזורים האחרונים' },
+    { id: 'season', label: 'כל העונה', n: null, title: 'כל המחזורים שהושלמו בעונה' }
+];
+
+/**
+ * Every gameweek table the current source can offer, oldest first.
+ *
+ * The committed snapshot carries a per-appearance log for the whole season, so
+ * "all of it" is free there — it is only rebuilt when the source changes. A live
+ * season is fetched one gameweek at a time, so all that exists is whatever the
+ * momentum window has already loaded; a span asking for more gets what there is
+ * and the caption says how many gameweeks that turned out to be, rather than
+ * claiming a season it does not have.
+ */
+let _compareGwCache = { key: null, gws: null };
+function compareAllGameweeks() {
+    const source = state.currentDataSource;
+    if (state.allPlayersData[source]?.raw?.__snapshot) {
+        if (_compareGwCache.key !== source) {
+            _compareGwCache = { key: source, gws: snapshotGameweekStats() };
+        }
+        return _compareGwCache.gws;
+    }
+    const loaded = [...(state.trendPrevGws || []), ...(state.trendGws || [])];
+    return loaded.slice().sort((a, b) => a.gw - b.gw);
+}
+
+/** The gameweek tables one span covers, oldest first. */
+function compareSpanGws(spanId) {
+    const span = COMPARE_SPANS.find(s => s.id === spanId) || COMPARE_SPANS[0];
+    if (span.id === 'window') return state.trendGws || [];
+    const all = compareAllGameweeks();
+    return span.n ? all.slice(-span.n) : all;
+}
+
+/**
+ * One player's per-gameweek values over a span.
+ *
+ * Same shape as getTrendSeries, and the same reading of a missing entry: a
+ * gameweek he did not play is a zero that is flagged unplayed, not a hole, so
+ * the cumulative line stays flat across it instead of breaking.
+ */
+function compareSeries(playerId, metricKey, spanId) {
     const def = TREND_METRICS[metricKey];
-    if (!def || !state.trendGws.length) return null;
+    if (!def) return [];
+    const id = Number(playerId);
+    const player = trendPlayerIndex().get(id) || { element_type: 3 };
+    return compareSpanGws(spanId).map(({ gw, stats }) => {
+        const s = stats.get(id);
+        return { gw, value: s ? def.read(s, player) : 0, played: !!s };
+    });
+}
+
+function compareTrendConfig(players, metricKey, cumulative, spanId) {
+    const def = TREND_METRICS[metricKey];
+    if (!def) return null;
 
     const drawn = compareChartPlayers(players);
-    const series = drawn.map(p => getTrendSeries(p.id, metricKey, 'recent'));
+    const series = drawn.map(p => compareSeries(p.id, metricKey, spanId));
     if (!series.length || !series[0].length) return null;
 
     const labels = series[0].map(pt => `GW${pt.gw}`);
@@ -5034,7 +5114,10 @@ function compareTrendConfig(players, metricKey, cumulative) {
     // position — two positions have two different bars and one line would be
     // wrong for at least one of them.
     const positions = [...new Set(drawn.map(p => p.position_name))];
-    if (!cumulative && positions.length === 1) {
+    // trendBenchmark measures the site-wide window, so the line is only honest
+    // over that span. Drawing it beside a whole-season series would compare a
+    // season to five gameweeks.
+    if (!cumulative && spanId === 'window' && positions.length === 1) {
         const bench = trendBenchmark(metricKey, positions[0]);
         if (bench !== null) {
             datasets.push({
@@ -5268,18 +5351,24 @@ function compareChartsHtml(players) {
             onclick="setCompareTrend('${key}')">${TREND_METRICS[key].label}</button>`;
     }).join('');
 
+    const spanChips = COMPARE_SPANS.map(span => `<button type="button"
+        class="cmp-chip cmp-chip--span" aria-pressed="${cs.span === span.id}"
+        title="${escapeHtml(span.title)}"
+        onclick="setCompareSpan('${span.id}')">${span.label}</button>`).join('');
+
     return `<div class="cmp-charts">
         ${radarCard}
         <section class="cmp-chart-card">
             <header class="cmp-chart-head">
                 <div>
                     <h4>מגמה לפי מחזור</h4>
-                    <p title="חלון המחזורים האחרונים. איקס במקום עיגול = מחזור שבו לא שיחק">${state.trendWindow || 5} המחזורים האחרונים</p>
+                    <p id="cmpTrendNote" title="איקס במקום עיגול = מחזור שבו לא שיחק">${compareSpanNote(cs.span)}</p>
                 </div>
                 <div class="cmp-chart-controls">
+                    <div class="cmp-chips cmp-chips--span">${spanChips}</div>
                     <div class="cmp-chips">${chips}</div>
                     <button type="button" class="cmp-chip cmp-chip--toggle" aria-pressed="${cs.cumulative}"
-                        onclick="toggleCompareCumulative()" title="סכימה מצטברת לאורך החלון, במקום ערך לכל מחזור">מצטבר</button>
+                        onclick="toggleCompareCumulative()" title="סכימה מצטברת לאורך הטווח, במקום ערך לכל מחזור">מצטבר</button>
                 </div>
             </header>
             <div class="cmp-canvas"><canvas id="cmpTrend"></canvas></div>
@@ -5307,6 +5396,7 @@ function compareMetricsHtml(players) {
                 if (value === null) return `<div class="cmp-cell is-empty"><span class="cmp-val">–</span></div>`;
 
                 const isBest = competitive && value === best;
+                const isWorst = competitive && value === worst;
                 // Share of the leader, so the bar shows the size of the gap
                 // rather than just its direction.
                 const share = row.asc
@@ -5314,17 +5404,25 @@ function compareMetricsHtml(players) {
                     : (best !== 0 ? Math.abs(value / best) : 1);
                 const width = Math.max(Math.min(share * 100, 100), 4);
 
+                // Merit, not identity. The player's own colour lives on his card,
+                // his polygon, his line and his column header — inside the table a
+                // colour has to answer "who is winning this row", which is the
+                // only question the table is being asked.
+                const tone = row.neutral ? ' is-flat'
+                    : isBest ? ' is-best'
+                        : isWorst ? ' is-worst' : ' is-mid';
+
                 // The value, the trend and the trophy are all inline and the cell
                 // stays RTL, so they read right-to-left in that order. Only the
                 // digits get an LTR isolate — a cell-wide direction flip put the
                 // number at the far edge and dropped the trophy on top of it.
                 const delta = row.trend ? compareDeltaHtml(p, row.trend) : '';
-                return `<div class="cmp-cell${isBest ? ' is-best' : ''}" style="--cmp-hue: ${compareColor(i)}">
+                return `<div class="cmp-cell${tone}">
                     <span class="cmp-val">
                         <span class="cmp-num">${row.fmt(value)}</span>${delta}
                         ${isBest ? '<span class="cmp-crown" aria-hidden="true">🏆</span>' : ''}
                     </span>
-                    <span class="cmp-bar${row.neutral ? ' is-neutral' : ''}"><i style="width: ${width.toFixed(1)}%"></i></span>
+                    <span class="cmp-bar"><i style="width: ${width.toFixed(1)}%"></i></span>
                 </div>`;
             }).join('');
 
@@ -5456,16 +5554,39 @@ function renderCompareTrend(players) {
     const list = players || comparePlayersFromState();
     if (!list.length) return;
     const cs = compareState();
-    mountCompareChart('trend', 'cmpTrend', compareTrendConfig(list, cs.metric, cs.cumulative));
-    document.querySelectorAll('.cmp-chips .cmp-chip').forEach(btn => {
+    mountCompareChart('trend', 'cmpTrend',
+        compareTrendConfig(list, cs.metric, cs.cumulative, cs.span));
+
+    document.querySelectorAll('.cmp-chips:not(.cmp-chips--span) .cmp-chip').forEach(btn => {
         const key = (btn.getAttribute('onclick') || '').match(/'([a-z0-9_]+)'/);
         if (key) btn.setAttribute('aria-pressed', String(key[1] === cs.metric));
     });
+    document.querySelectorAll('.cmp-chips--span .cmp-chip').forEach(btn => {
+        const key = (btn.getAttribute('onclick') || '').match(/'([a-z0-9_]+)'/);
+        if (key) btn.setAttribute('aria-pressed', String(key[1] === cs.span));
+    });
+    const note = document.getElementById('cmpTrendNote');
+    if (note) note.textContent = compareSpanNote(cs.span);
+}
+
+/** What the chosen span actually covers — counted, not assumed. */
+function compareSpanNote(spanId) {
+    const gws = compareSpanGws(spanId);
+    if (!gws.length) return 'אין נתוני מחזורים';
+    const span = COMPARE_SPANS.find(s => s.id === spanId) || COMPARE_SPANS[0];
+    return `${gws.length} מחזורים · ${span.id === 'window' ? 'חלון המומנטום' : span.label}`
+        + ` (GW${gws[0].gw}–GW${gws[gws.length - 1].gw})`;
 }
 
 window.setCompareTrend = function (metricKey) {
     if (!TREND_METRICS[metricKey]) return;
     compareState().metric = metricKey;
+    renderCompareTrend();
+};
+
+window.setCompareSpan = function (spanId) {
+    if (!COMPARE_SPANS.some(s => s.id === spanId)) return;
+    compareState().span = spanId;
     renderCompareTrend();
 };
 
@@ -5551,7 +5672,7 @@ function renderPlayerSearchMenu() {
     menu.innerHTML = matches.map(p => {
         const on = state.selectedForComparison.has(p.id);
         return `<button type="button" class="ps-row${on ? ' is-on' : ''}" role="option"
-            aria-selected="${on}" onclick="togglePlayerCompare(${p.id})">
+            data-player-id="${p.id}" aria-selected="${on}" onclick="togglePlayerCompare(${p.id})">
             <span class="ps-name">${escapeHtml(p.web_name)}</span>
             <span class="ps-meta">${escapeHtml(teamShort(p))} · ${p.position_name}</span>
             <span class="ps-check" aria-hidden="true">${on ? '✓' : ''}</span>
@@ -5568,17 +5689,36 @@ function hidePlayerSearchMenu() {
     if (input) input.setAttribute('aria-expanded', 'false');
 }
 
-/** Tick or untick one player, from the menu or from a chip. */
+/**
+ * Tick or untick one player, from the menu or from a chip.
+ *
+ * The menu row is updated in place rather than by re-rendering the list. Two
+ * reasons, and the second one was a bug: re-rendering threw away the scroll
+ * position mid-selection, and it detached the very button that was clicked — so
+ * by the time the click reached the document-level outside-click handler,
+ * closest('.player-search') on a detached node returned null and the menu shut
+ * itself on every tick. Ticking three players took three searches.
+ */
 function togglePlayerCompare(playerId) {
     const id = Number(playerId);
     if (state.selectedForComparison.has(id)) state.selectedForComparison.delete(id);
     else state.selectedForComparison.add(id);
+    const on = state.selectedForComparison.has(id);
 
     // The row checkbox is the same selection seen from the table.
     const box = document.querySelector(`.player-select[data-player-id="${id}"]`);
-    if (box) box.checked = state.selectedForComparison.has(id);
+    if (box) box.checked = on;
 
-    renderPlayerSearchMenu();
+    const row = document.querySelector(`.ps-row[data-player-id="${id}"]`);
+    if (row) {
+        row.classList.toggle('is-on', on);
+        row.setAttribute('aria-selected', String(on));
+        const tick = row.querySelector('.ps-check');
+        if (tick) tick.textContent = on ? '✓' : '';
+    } else {
+        // Unticked from a chip while the menu is closed or showing other names.
+        renderPlayerSearchMenu();
+    }
     renderCompareChips();
 }
 
@@ -5636,8 +5776,17 @@ function initPlayerSearch() {
             if (first) { e.preventDefault(); togglePlayerCompare(first.id); }
         }
     });
+    // Two listeners, one decision. The capture pass runs before any onclick can
+    // rearrange the menu, so it sees where the click really came from; the bubble
+    // pass acts on that. Testing e.target after the fact is what closed the menu
+    // on every tick, because a re-rendered row is no longer in the document and
+    // has no ancestors to find.
+    let clickedInside = false;
     document.addEventListener('click', e => {
-        if (!e.target.closest || !e.target.closest('.player-search')) hidePlayerSearchMenu();
+        clickedInside = !!(e.target.closest && e.target.closest('.player-search'));
+    }, true);
+    document.addEventListener('click', () => {
+        if (!clickedInside) hidePlayerSearchMenu();
     });
     renderCompareChips();
 }

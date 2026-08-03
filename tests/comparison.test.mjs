@@ -19,7 +19,8 @@ const FUNCTIONS = [
     'compareChartPlayers', 'compareColor', 'fadeHex', 'poolPercentile',
     'isAvailableToDraft',
     // trend
-    'compareTrendConfig', 'getTrendSeries', 'trendPlayerIndex',
+    'compareTrendConfig', 'compareSeries', 'compareSpanGws', 'compareAllGameweeks',
+    'compareSpanNote', 'getTrendSeries', 'trendPlayerIndex',
     'gwDefensiveContribution', 'trendBenchmark', 'chartAxis', 'ltrTick',
     // table + verdict
     'comparisonRowsFor', 'compareVerdict', 'compareRankLabel', 'compareSections',
@@ -32,8 +33,8 @@ const DEPS = [
     'BENCH_TOP_N', 'BENCH_MIN_MINUTES', '_partBenchCache', '_axisBenchCache',
     '_compositeCache', '_trendBenchCache', '_windowStatsCache', '_trendPlayerIndex',
     '_dropOff', '_compareSections', 'COMPOSITE_PARTS', 'COMPOSITE_CAP', 'RADAR_MAX_AXES',
-    'COMPARE_CHART_LIMIT', 'TREND_METRICS', 'DEFCON_THRESHOLD', 'CHART_TOOLTIP',
-    'CHART_LINE_PALETTE', 'gwNum', 'num1'
+    'COMPARE_CHART_LIMIT', 'COMPARE_SPANS', 'TREND_METRICS', 'DEFCON_THRESHOLD',
+    'CHART_TOOLTIP', 'CHART_LINE_PALETTE', '_compareGwCache', 'gwNum', 'num1'
 ];
 
 /**
@@ -42,7 +43,10 @@ const DEPS = [
  * rather than going through loadFunctions().
  */
 function load(players, over = {}) {
+    // Two distinct five-gameweek windows, so a span that asks for more than the
+    // momentum window has somewhere to get it from.
     const gws = [34, 35, 36, 37, 38];
+    const prevGws = [29, 30, 31, 32, 33];
     const gwStats = (pts = 5) => ({
         total_points: pts, minutes: 90, goals_scored: 1, assists: 0,
         expected_goals: 0.4, expected_assists: 0.2, bps: 24, bonus: 1, saves: 0,
@@ -59,7 +63,7 @@ function load(players, over = {}) {
         trendWindow: 5,
         trendKey: 'live:5:38',
         trendGws: gws.map(gw => ({ gw, stats: new Map(players.map(p => [p.id, gwStats()])) })),
-        trendPrevGws: gws.map(gw => ({ gw, stats: new Map(players.map(p => [p.id, gwStats(3)])) })),
+        trendPrevGws: prevGws.map(gw => ({ gw, stats: new Map(players.map(p => [p.id, gwStats(3)])) })),
         draft: { ownedElementIds: new Set(), draftHasHappened: false },
         ...over
     };
@@ -163,6 +167,28 @@ describe('the radar spokes', () => {
         // Three or fewer are filled; more and the overlaps stop being readable.
         assert.equal(config.data.datasets[0].fill, true);
         assert.equal(config.options.scales.r.suggestedMax, 150);
+    });
+
+    test('the spokes are named after the metrics, not after invented categories', () => {
+        const cmp = load(squad(8));
+        const labels = cmp.RADAR_AXES.map(a => a.label);
+        for (const real of ['xG/90', 'xA/90', 'DEFCON/90', 'ICT/90', 'CS/90', 'G+A/90']) {
+            assert.ok(labels.includes(real), `${real} should be on a spoke`);
+        }
+        // Every spoke still carries its definition for the hover.
+        for (const axis of cmp.RADAR_AXES) {
+            assert.ok(axis.title && axis.title.length > 10, `${axis.key} needs a definition`);
+        }
+    });
+
+    test('the radar names its colours', () => {
+        const pool = squad(8);
+        const cmp = load(pool);
+        const config = cmp.compareRadarConfig([pool[0], pool[1], pool[2]]);
+        assert.equal(config.options.plugins.legend.display, true,
+            'three translucent polygons and no legend is a puzzle');
+        assert.deepEqual(config.data.datasets.map(d => d.label),
+            [pool[0].web_name, pool[1].web_name, pool[2].web_name]);
     });
 
     test('caps the polygons at six and stops filling them past three', () => {
@@ -384,7 +410,7 @@ describe('the trend chart', () => {
     test('one line per player, over the gameweeks in the window', () => {
         const pool = squad(8);
         const cmp = load(pool);
-        const config = cmp.compareTrendConfig([pool[0], pool[1]], 'pts', false);
+        const config = cmp.compareTrendConfig([pool[0], pool[1]], 'pts', false, 'window');
         assert.equal(config.type, 'line');
         const players = config.data.datasets.filter(d => d.label !== 'רמת העילית');
         assert.equal(players.length, 2);
@@ -394,7 +420,7 @@ describe('the trend chart', () => {
     test('cumulative mode never goes down', () => {
         const pool = squad(8);
         const cmp = load(pool);
-        const config = cmp.compareTrendConfig([pool[0]], 'pts', true);
+        const config = cmp.compareTrendConfig([pool[0]], 'pts', true, 'window');
         const data = config.data.datasets[0].data;
         for (let i = 1; i < data.length; i++) {
             assert.ok(data[i] >= data[i - 1], `dropped at ${i}: ${data}`);
@@ -408,19 +434,61 @@ describe('the trend chart', () => {
             .map((p, i) => ({ ...p, id: 300 + i }));
         const cmp = load([...mids, ...keepers]);
 
-        const same = cmp.compareTrendConfig([mids[0], mids[1]], 'pts', false);
+        const same = cmp.compareTrendConfig([mids[0], mids[1]], 'pts', false, 'window');
         assert.ok(same.data.datasets.some(d => d.label === 'רמת העילית'),
             'one position has one bar');
 
-        const mixed = cmp.compareTrendConfig([mids[0], keepers[0]], 'pts', false);
+        const mixed = cmp.compareTrendConfig([mids[0], keepers[0]], 'pts', false, 'window');
         assert.ok(!mixed.data.datasets.some(d => d.label === 'רמת העילית'),
             'two positions have two bars, and one line would be wrong for one of them');
     });
 
+    test('the span picks how far back the chart looks', () => {
+        const pool = squad(8);
+        const cmp = load(pool);
+        // The momentum window is five gameweeks; ten reaches back into the
+        // previous window; the season takes everything loaded.
+        assert.deepEqual(cmp.compareSpanGws('window').map(t => t.gw), [34, 35, 36, 37, 38]);
+        assert.deepEqual(cmp.compareSpanGws('ten').map(t => t.gw),
+            [29, 30, 31, 32, 33, 34, 35, 36, 37, 38]);
+        assert.equal(cmp.compareSpanGws('season').length, 10);
+        // An unknown span falls back to the window rather than drawing nothing.
+        assert.deepEqual(cmp.compareSpanGws('nonsense').map(t => t.gw), [34, 35, 36, 37, 38]);
+    });
+
+    test('the caption counts the gameweeks it actually drew', () => {
+        const cmp = load(squad(8));
+        // Not "all season" — the number of gameweeks that turned out to exist,
+        // which on a live season is only what has been fetched so far.
+        assert.match(cmp.compareSpanNote('ten'), /^10 מחזורים/);
+        assert.match(cmp.compareSpanNote('ten'), /GW29–GW38/);
+        assert.match(cmp.compareSpanNote('window'), /^5 מחזורים/);
+    });
+
+    test('a wider span draws more points per player', () => {
+        const pool = squad(8);
+        const cmp = load(pool);
+        const win = cmp.compareTrendConfig([pool[0]], 'pts', false, 'window');
+        const ten = cmp.compareTrendConfig([pool[0]], 'pts', false, 'ten');
+        assert.equal(win.data.labels.length, 5);
+        assert.equal(ten.data.labels.length, 10);
+    });
+
+    test('the elite line is withheld outside the window it measures', () => {
+        // trendBenchmark measures the site-wide window, so beside a ten-gameweek
+        // series it would be comparing two different spans.
+        const pool = squad(8);
+        const cmp = load(pool);
+        const win = cmp.compareTrendConfig([pool[0], pool[1]], 'pts', false, 'window');
+        const ten = cmp.compareTrendConfig([pool[0], pool[1]], 'pts', false, 'ten');
+        assert.ok(win.data.datasets.some(d => d.label === 'רמת העילית'));
+        assert.ok(!ten.data.datasets.some(d => d.label === 'רמת העילית'));
+    });
+
     test('no window, no chart', () => {
         const cmp = load(squad(8), { trendGws: [] });
-        assert.equal(cmp.compareTrendConfig([player()], 'pts', false), null);
-        assert.equal(cmp.compareTrendConfig([player()], 'nonsense', false), null);
+        assert.equal(cmp.compareTrendConfig([player()], 'pts', false, 'window'), null);
+        assert.equal(cmp.compareTrendConfig([player()], 'nonsense', false, 'window'), null);
     });
 });
 
@@ -431,7 +499,7 @@ describe('the colour identity', () => {
         const config = cmp.compareRadarConfig([pool[0], pool[1]]);
         assert.equal(config.data.datasets[0].borderColor, cmp.compareColor(0));
         assert.equal(config.data.datasets[1].borderColor, cmp.compareColor(1));
-        const trend = cmp.compareTrendConfig([pool[0], pool[1]], 'pts', false);
+        const trend = cmp.compareTrendConfig([pool[0], pool[1]], 'pts', false, 'window');
         assert.equal(trend.data.datasets[0].borderColor, cmp.compareColor(0));
         assert.equal(trend.data.datasets[1].borderColor, cmp.compareColor(1));
     });

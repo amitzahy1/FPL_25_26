@@ -791,22 +791,26 @@
     .cmp-verdict-line { font-size: 12.5px; gap: 6px; }
     .cmp-verdict-tag { font-size: 9.5px; padding: 2px 7px; }
 
-    .cmp-cards { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; }
-    .cmp-card { padding: 9px; gap: 8px; }
-    .cmp-photo { width: 42px; height: 54px; }
-    .cmp-name { font-size: 13px; }
-    .cmp-fig { padding: 5px 6px; }
-    .cmp-fig-value { font-size: 15px; }
+    .cmp-cards { grid-template-columns: repeat(auto-fit, minmax(144px, 1fr)); gap: 7px; }
+    .cmp-card { padding: 8px; gap: 6px; }
+    .cmp-photo { width: 36px; height: 46px; }
+    .cmp-name { font-size: 12.5px; }
+    .cmp-fig { padding: 4px 6px; }
+    /* Two figures to a row inside a ~170px card leaves ~75px for a label;
+       at 9px "צפי 5 מחזורים" wrapped and made every card taller than it
+       needed to be. */
+    .cmp-fig-label { font-size: 8.5px; line-height: 1.15; }
+    .cmp-fig-value { font-size: 14px; }
 
     /* Taller than the desktop card, not shorter: a radar squeezed into 200px of
        a phone screen cannot be read at all. */
-    .cmp-canvas { height: 300px; min-height: 300px; }
-    .cmp-canvas--radar { height: 330px; min-height: 330px; }
+    .cmp-canvas { height: 270px; min-height: 270px; }
+    .cmp-canvas--radar { height: 310px; min-height: 310px; }
     .cmp-chart-card { padding: 10px 10px 12px; }
     .cmp-chart-head { margin-bottom: 6px; }
 
     .cmp-row,
-    .cmp-row--head { grid-template-columns: 84px repeat(var(--cmp-cols, 2), minmax(0, 1fr)); }
+    .cmp-row--head { grid-template-columns: 76px repeat(var(--cmp-cols, 2), minmax(0, 1fr)); }
 
     /* One line of chips that scrolls, rather than three lines that shove the
        chart off the screen. */
@@ -814,10 +818,10 @@
     .cmp-chips { flex-wrap: nowrap; overflow-x: auto; padding-bottom: 2px; }
     .cmp-chips::-webkit-scrollbar { height: 0; }
     .cmp-chip { flex: none; }
-    .cmp-row-label { padding: 6px 7px; font-size: 10.5px; }
-    .cmp-col-head { padding: 6px 7px; font-size: 11px; }
-    .cmp-cell { padding: 6px 7px; }
-    .cmp-val { font-size: 12.5px; }
+    .cmp-row-label { padding: 5px 6px; font-size: 10px; }
+    .cmp-col-head { padding: 5px 6px; font-size: 10.5px; }
+    .cmp-cell { padding: 4px 6px; }
+    .cmp-num { font-size: 11.5px; }
     .cmp-section-head { padding: 7px 10px; }
     .cmp-section-head span { display: none; }
 }

@@ -330,15 +330,24 @@ try {
         const nameText = nameCell ? nameCell.textContent.trim() : '';
 
         second[0].click();
+        // Ticking must not shut the menu. It used to: the tick re-rendered the
+        // list, which detached the clicked row, and the document-level
+        // outside-click handler then found no .player-search ancestor on it and
+        // closed the menu on every single selection.
+        const menu = document.getElementById('playerSearchMenu');
+        const stayedOpen = !menu.hidden && !!document.querySelector('.ps-row');
+        const tickedInPlace = !!document.querySelector('.ps-row.is-on .ps-check');
         const chips = [...document.querySelectorAll('.ps-chip')].length;
         const go = document.querySelector('.ps-go');
         const enabled = go && !go.disabled;
-        return { afterOne, chips, enabled, nameWidth, nameText };
+        return { afterOne, chips, enabled, nameWidth, nameText, stayedOpen, tickedInPlace };
     });
     check(!picker.error && picker.afterOne === 1 && picker.chips === 2 && picker.enabled,
         `the search box picks players for a comparison (${JSON.stringify(picker)})`);
     check(picker.nameWidth > 40 && picker.nameText.length > 1,
         `a match row shows the player's name (${picker.nameWidth}px, "${picker.nameText}")`);
+    check(picker.stayedOpen && picker.tickedInPlace,
+        `ticking a player leaves the menu open (${JSON.stringify({ open: picker.stayedOpen, tick: picker.tickedInPlace })})`);
 
     // The comparison itself, opened from the two ticks that are already in place.
     const cmp = await page.evaluate(async () => {
@@ -360,10 +369,41 @@ try {
             radarSpokes: radarChart ? radarChart.data.labels.length : 0,
             rows: document.querySelectorAll('.cmp-row').length,
             sections: document.querySelectorAll('.cmp-section').length,
-            // Every bar must belong to a player by colour, or the table needs a
-            // legend it does not have.
+            // Every column header must carry its player's own colour, or the
+            // charts need a legend the table cannot provide.
             hues: new Set([...document.querySelectorAll('.cmp-col-head')]
-                .map(el => getComputedStyle(el).borderBottomColor)).size
+                .map(el => getComputedStyle(el).borderBottomColor)).size,
+            // Inside the table the colour answers "who is winning this row", so
+            // every competitive row has exactly one leader and one laggard.
+            tones: (() => {
+                const rows = [...document.querySelectorAll('.cmp-section .cmp-row')];
+                let contested = 0, unmarked = 0;
+                for (const r of rows) {
+                    const cells = [...r.querySelectorAll('.cmp-cell')];
+                    // A neutral metric has no winner, and neither does a tie —
+                    // marking one of two identical figures as the leader would be
+                    // an invention. Only rows with a real spread are checked.
+                    if (cells.some(c => c.classList.contains('is-flat')
+                        || c.classList.contains('is-empty'))) continue;
+                    const nums = cells.map(c => (c.querySelector('.cmp-num') || {}).textContent);
+                    if (new Set(nums).size < 2) continue;
+                    contested++;
+                    const best = cells.filter(c => c.classList.contains('is-best')).length;
+                    const worst = cells.filter(c => c.classList.contains('is-worst')).length;
+                    if (best < 1 || worst < 1) unmarked++;
+                }
+                return { rows: rows.length, contested, unmarked };
+            })(),
+            spans: [...document.querySelectorAll('.cmp-chips--span .cmp-chip')]
+                .map(b => b.textContent.trim()),
+            legend: (() => {
+                const c = Chart.getChart(document.getElementById('cmpRadar'));
+                return c ? c.options.plugins.legend.display : null;
+            })(),
+            spokes2: (() => {
+                const c = Chart.getChart(document.getElementById('cmpRadar'));
+                return c ? c.data.labels : [];
+            })()
         };
     });
     check(cmp.open && cmp.cards === 2, `the comparison opens with both players (${JSON.stringify(cmp)})`);
@@ -374,6 +414,27 @@ try {
     check(cmp.rows >= 20 && cmp.sections >= 4,
         `the metric table is grouped and full (${cmp.rows} rows, ${cmp.sections} sections)`);
     check(cmp.hues === 2, `each player column carries its own colour (${cmp.hues})`);
+    check(cmp.tones.contested > 10 && cmp.tones.unmarked === 0,
+        `every contested row marks its leader and its laggard (${JSON.stringify(cmp.tones)})`);
+    check(cmp.legend === true, 'the radar names its colours');
+    check(cmp.spokes2.includes('xG/90') && cmp.spokes2.includes('DEFCON/90'),
+        `the spokes are metric names (${cmp.spokes2.join(', ')})`);
+    check(cmp.spans.length === 3, `the trend offers three spans (${cmp.spans.join(' | ')})`);
+
+    // Widening the span must actually widen the chart.
+    const span = await page.evaluate(async () => {
+        const points = () => Chart.getChart(document.getElementById('cmpTrend')).data.labels.length;
+        const before = points();
+        setCompareSpan('season');
+        await new Promise(r => setTimeout(r, 400));
+        const after = points();
+        const note = document.getElementById('cmpTrendNote').textContent;
+        setCompareSpan('window');
+        await new Promise(r => setTimeout(r, 300));
+        return { before, after, note, back: points() };
+    });
+    check(span.after > span.before && span.back === span.before,
+        `the season span widens the chart and the window narrows it again (${JSON.stringify(span)})`);
 
     // Re-opening must not leak the previous instances onto replaced canvases.
     const reopen = await page.evaluate(async () => {

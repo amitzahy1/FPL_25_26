@@ -79,7 +79,7 @@ export default [
                 openFiltersPanel: 'readonly', swapTopChart: 'readonly',
                 DEFAULT_TOP_CHARTS: 'readonly', arrangeChartCards: 'readonly',
                 Chart: 'readonly', closeModal: 'readonly',
-                compareSelectedPlayers: 'readonly'
+                compareSelectedPlayers: 'readonly', setCompareSpan: 'readonly'
             }
         }
     },
