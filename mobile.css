@@ -630,7 +630,13 @@
         justify-content: flex-end;
         min-width: 0;
     }
+    /* The health word is the first thing to go on a phone header; the dot
+       and the gameweek still carry the state. */
     .status-pill { padding: 5px 9px; font-size: 12px; }
+    .status-pill .status-sep,
+    .status-pill #statusHealth { display: none; }
+    .status-pill.is-warn #statusHealth,
+    .status-pill.is-error #statusHealth { display: inline; font-size: 11px; }
     .settings-trigger span { display: none; }
     .settings-trigger { padding: 7px 9px; }
 

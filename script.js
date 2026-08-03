@@ -974,6 +974,68 @@ function hideProgressBar() {
 }
 
 // Toast Notification System
+/**
+ * The header's health line.
+ *
+ * Loading used to announce every step as a toast — data loaded, league loaded,
+ * all done — three popups over a page nobody had asked a question of. A toast is
+ * for something that needs an answer or has gone wrong; steady state belongs
+ * somewhere it can simply be read. `detail` becomes the hover, so the counts are
+ * still there for anyone who wants them.
+ */
+const APP_STATUS_LEVELS = ['ok', 'busy', 'warn', 'error'];
+function setAppStatus(level, label, detail) {
+    const pill = document.getElementById('statusPill');
+    const text = document.getElementById('statusHealth');
+    if (!pill || !text) return;
+    const use = APP_STATUS_LEVELS.includes(level) ? level : 'ok';
+    for (const l of APP_STATUS_LEVELS) pill.classList.toggle(`is-${l}`, l === use && l !== 'ok');
+    text.textContent = label;
+    pill.title = detail || label;
+}
+
+/**
+ * Work out what the pill should say from what actually loaded.
+ *
+ * Called at every point that used to raise a "loaded successfully" toast, so the
+ * line is recomputed rather than asserted: it says הכל תקין only when the player
+ * data is in and the draft league is either loaded or genuinely not expected.
+ * Anything missing is named, because "fine" covering a half-loaded page is worse
+ * than the popups this replaced.
+ */
+function reportAppStatus() {
+    const src = state.allPlayersData[state.currentDataSource] || {};
+    const players = (src.processed || []).length;
+    if (!players) {
+        setAppStatus('error', 'אין נתוני שחקנים', 'נתוני השחקנים לא נטענו');
+        return;
+    }
+
+    const bits = [`${players} שחקנים`];
+    const season = state.currentDataSource === 'historical'
+        ? SEASON_CONFIG.previousSeasonLabel : SEASON_CONFIG.seasonLabel;
+    bits.push(`עונת ${season}`);
+
+    const draft = state.draft || {};
+    const teams = (draft.rostersByEntryId && draft.rostersByEntryId.size) || 0;
+    const owned = (draft.ownedElementIds && draft.ownedElementIds.size) || 0;
+    if (teams) bits.push(`${teams} קבוצות · ${owned} שחקנים תפוסים`);
+
+    const ranked = (src.processed || []).filter(p => p.draft_rank).length;
+    if (ranked) bits.push(`${ranked} עם דירוג דראפט`);
+    if (state.lastUpdatedAt) bits.push(`עדכון: ${state.lastUpdatedAt}`);
+
+    // The draft game closes between seasons. That is a fact about the game, not a
+    // fault, but it does mean part of the page is unavailable — so it is a caveat
+    // rather than a clean bill of health.
+    if (draft.apiMaintenance || draft.leagueMissing) {
+        setAppStatus('warn', 'ליגת הדראפט סגורה',
+            `${bits.join(' · ')} · משחק הדראפט של FPL סגור כרגע`);
+        return;
+    }
+    setAppStatus('ok', 'הכל תקין', bits.join(' · '));
+}
+
 function showToast(title, message, type = 'info', duration = 4000) {
     const container = document.getElementById('toastContainer');
     if (!container) return;
@@ -1095,7 +1157,7 @@ async function processManualData() {
         state.allPlayersData.live.raw = data;
 
         document.getElementById('manualDataModal').style.display = 'none';
-        showToast('הצלחה', 'נתונים נטענו ידנית בהצלחה!', 'success');
+        reportAppStatus();
 
         // Re-run init process
         await fetchAndProcessData();
@@ -1167,9 +1229,10 @@ async function init() {
         // 3. Finally load Draft data (now mapping is ready!)
         await loadDraftDataInBackground();
 
-        showToast('טעינה הושלמה', 'כל הנתונים נטענו בהצלחה!', 'success', 3000);
+        reportAppStatus();
     } catch (error) {
         console.error('Error loading data:', error);
+        setAppStatus('error', 'שגיאה בטעינה', `שגיאה בטעינת הנתונים: ${error.message}`);
         showToast('שגיאה', 'שגיאה בטעינת הנתונים', 'error', 4000);
     } finally {
         hideLoading();
@@ -1186,9 +1249,9 @@ async function init() {
     if (lastTab === 'draft' && draftIsDown) {
         showTab('players');
         localStorage.setItem('fplToolActiveTab', 'draft');
-        showToast('ליגת הדראפט סגורה כרגע',
-            `משחק הדראפט של FPL בין עונות — פתחנו בנתוני ${SEASON_CONFIG.previousSeasonLabel}`,
-            'info', 6000);
+        // The tab itself explains this at length; the pill is the standing note.
+        setAppStatus('warn', 'ליגת הדראפט סגורה',
+            `משחק הדראפט של FPL סגור בין עונות — מוצגים נתוני ${SEASON_CONFIG.previousSeasonLabel}`);
     } else {
         // Always, even with nothing remembered. The markup ships with ליגת דראפט
         // carrying the active class while #playersTabContent is the visible one,
@@ -1623,7 +1686,10 @@ async function fetchAndProcessData() {
         // prices move every day. Re-overlaying is cheap and keeps the two in step.
         applyMarketOverlay(state.allPlayersData[state.currentDataSource].processed);
 
-        document.getElementById('lastUpdated').textContent = `עדכון אחרון: ${new Date().toLocaleString('he-IL')}`;
+        // Hidden holder, kept for anything that wants the timestamp. It also
+        // feeds the status pill's hover, which is the only place it is read.
+        state.lastUpdatedAt = new Date().toLocaleString('he-IL');
+        document.getElementById('lastUpdated').textContent = `עדכון אחרון: ${state.lastUpdatedAt}`;
         populateTeamFilter();
         populateSignalFilter();
         assertQuickFiltersReachable();
@@ -1662,8 +1728,7 @@ async function fetchAndProcessData() {
         // Load draft data in background (for team filter)
         loadDraftDataInBackground();
 
-        // Show success toast
-        showToast('נתונים נטענו בהצלחה', `${state.allPlayersData[state.currentDataSource].processed.length} שחקנים נטענו`, 'success', 3000);
+        reportAppStatus();
     } catch (error) {
         console.error('Error in fetchAndProcessData:', error);
 
@@ -1682,6 +1747,7 @@ async function fetchAndProcessData() {
 
         const tbody = document.getElementById('playersTableBody');
         if (tbody) tbody.innerHTML = `<tr><td colspan="26" style="padding: 20px;">${errorMsg}</td></tr>`;
+        setAppStatus('error', 'הנתונים לא נטענו', 'שגיאה בטעינת נתוני השחקנים — נסו להריץ את local_proxy.js');
         showToast('שגיאה בטעינת נתונים', 'נסה להריץ את local_proxy.js', 'error', 10000);
     } finally {
         hideLoading();
@@ -1741,7 +1807,8 @@ function showEmptySeasonState() {
     if (board) board.innerHTML = '';
 
     showSeasonBanner(played);
-    showToast(`אין נתוני ${SEASON_CONFIG.seasonLabel}`, 'העונה החדשה טרם החלה', 'warning', 4000);
+    setAppStatus('warn', `אין נתוני ${SEASON_CONFIG.seasonLabel}`,
+        `עונת ${SEASON_CONFIG.seasonLabel} טרם החלה — אין דקות ונקודות, יש מחיר ובעלות`);
 }
 
 function clearEmptySeasonState() {
@@ -5183,6 +5250,43 @@ function playerPhotoFallback(name, color) {
 }
 
 /**
+ * One row's figures as bars on a single axis.
+ *
+ * They used to be one bar per cell, each measured against its own cell's edge.
+ * Same scale, three different origins — so telling which was longer meant
+ * eyeballing across two gaps, and the answer was in the numbers anyway. Here all
+ * the bars share one track, one origin and one scale, stacked in column order and
+ * carrying each player's own colour, so "who is higher" is the shape of it.
+ *
+ * The scale runs from min(0, lowest) to max(0, highest), so a bar is the figure
+ * itself rather than a share of the leader. On a row where low wins the longest
+ * bar is the loser, which is what the ↓ on the label and the trophy in the cell
+ * are for: the bar answers "how big", the trophy answers "who wins".
+ */
+function compareAxisHtml(players, row) {
+    const real = row.values.filter(v => v !== null);
+    if (real.length < 2) return '<div class="cmp-axis"></div>';
+
+    const lo = Math.min(0, ...real);
+    const hi = Math.max(0, ...real);
+    const span = hi - lo;
+
+    const bars = players.map((p, i) => {
+        const value = row.values[i];
+        if (value === null) return '<span class="cmp-axis-row"></span>';
+        // Everything equal is everything full, rather than a row of slivers from
+        // dividing by nothing.
+        const pct = span > 0 ? ((value - lo) / span) * 100 : 100;
+        const label = `${p.web_name}: ${row.fmt(value)}`;
+        return `<span class="cmp-axis-row" title="${escapeHtml(label)}">
+            <i style="width: ${Math.max(pct, 1.5).toFixed(1)}%; --cmp-hue: ${compareColor(i)}"></i>
+        </span>`;
+    }).join('');
+
+    return `<div class="cmp-axis">${bars}</div>`;
+}
+
+/**
  * The window trend beside a value.
  *
  * The arrow is a different measurement from the number it sits next to — the
@@ -5405,12 +5509,6 @@ function compareMetricsHtml(players) {
 
                 const isBest = competitive && value === best;
                 const isWorst = competitive && value === worst;
-                // Share of the leader, so the bar shows the size of the gap
-                // rather than just its direction.
-                const share = row.asc
-                    ? (value !== 0 ? Math.abs(best / value) : 1)
-                    : (best !== 0 ? Math.abs(value / best) : 1);
-                const width = Math.max(Math.min(share * 100, 100), 4);
 
                 // Merit, not identity. The player's own colour lives on his card,
                 // his polygon, his line and his column header — inside the table a
@@ -5430,13 +5528,13 @@ function compareMetricsHtml(players) {
                         <span class="cmp-num">${row.fmt(value)}</span>${delta}
                         ${isBest ? '<span class="cmp-crown" aria-hidden="true">🏆</span>' : ''}
                     </span>
-                    <span class="cmp-bar"><i style="width: ${width.toFixed(1)}%"></i></span>
                 </div>`;
             }).join('');
 
             return `<div class="cmp-row">
                 <div class="cmp-row-label" title="${escapeHtml(row.title)}">${row.label}${row.asc ? '<span class="cmp-asc" title="נמוך = טוב יותר">↓</span>' : ''}</div>
                 ${cells}
+                ${compareAxisHtml(players, row)}
             </div>`;
         }).join('');
 
@@ -5623,6 +5721,8 @@ window.toggleCompareCumulative = function () {
  * players who share no letters can still end up in the same comparison.
  */
 const PLAYER_SEARCH_LIMIT = 20;
+/** Browsing with no query shows more, because scrolling a list is the point. */
+const PLAYER_SEARCH_BROWSE_LIMIT = 60;
 
 /** Lowercase and strip accents, so "Ekitike" finds "Ekitiké". */
 function normalizeSearch(value) {
@@ -5638,7 +5738,11 @@ function normalizeSearch(value) {
  */
 function playerSearchMatches(query, players, limit = PLAYER_SEARCH_LIMIT) {
     const q = normalizeSearch(query).trim();
-    if (!q) return [];
+    // No query is a request to browse, not a request for nothing: the list opens
+    // on the pool as the filters have already narrowed it, best draft rank first,
+    // so picking "the top free keeper" needs no typing at all.
+    if (!q) return playerSearchBrowse(players, limit);
+
     const starts = [];
     const contains = [];
     for (const p of players || []) {
@@ -5656,9 +5760,51 @@ function playerSearchMatches(query, players, limit = PLAYER_SEARCH_LIMIT) {
     return [...starts, ...contains].slice(0, limit);
 }
 
+/**
+ * The browse list: FPL Draft's own ranking, best first.
+ *
+ * Draft rank rather than last season's points, because the question being asked
+ * while browsing is "who is the best one left", and that is the ranking built to
+ * answer it. Players it does not cover fall to the bottom by points rather than
+ * disappearing — newcomers have no rank at all.
+ */
+function playerSearchBrowse(players, limit = PLAYER_SEARCH_BROWSE_LIMIT) {
+    return (players || []).slice().sort((a, b) => {
+        const ra = a.draft_rank || Infinity;
+        const rb = b.draft_rank || Infinity;
+        if (ra !== rb) return ra - rb;
+        return (b.total_points || 0) - (a.total_points || 0);
+    }).slice(0, limit);
+}
+
+/**
+ * What the menu is allowed to offer.
+ *
+ * The filtered set, not the whole league: the box sits inside the filter panel,
+ * so choosing goalkeepers and free-agents-only has to narrow it too, or the
+ * panel contradicts itself. state.filteredData is the same set the table and the
+ * charts read, and an empty one is an answer — no player matches the filters —
+ * rather than a reason to fall back to everybody.
+ */
 function playerSearchPool() {
+    if (Array.isArray(state.filteredData)) return state.filteredData;
     const src = state.allPlayersData[state.currentDataSource];
     return (src && src.processed) || [];
+}
+
+/** The filters in force, spelled out, so the list never looks arbitrary. */
+function playerSearchScope() {
+    const bits = [];
+    const pos = (document.getElementById('positionFilter') || {}).value || '';
+    if (pos) bits.push(POSITION_LABELS[pos] || pos);
+    const team = (document.getElementById('teamFilter') || {}).value || '';
+    if (team && state.teamsData) {
+        const t = Object.values(state.teamsData).find(x => String(x.id) === String(team));
+        if (t) bits.push(t.short_name || t.name);
+    }
+    if (typeof freeAgentFilterActive === 'function' && freeAgentFilterActive()) bits.push('חופשיים');
+    if (state.watchlistOnly) bits.push('מעקב');
+    return bits;
 }
 
 function renderPlayerSearchMenu() {
@@ -5666,10 +5812,18 @@ function renderPlayerSearchMenu() {
     const menu = document.getElementById('playerSearchMenu');
     if (!input || !menu) return;
 
-    const matches = playerSearchMatches(input.value, playerSearchPool());
+    const pool = playerSearchPool();
+    const browsing = !normalizeSearch(input.value).trim();
+    const limit = browsing ? PLAYER_SEARCH_BROWSE_LIMIT : PLAYER_SEARCH_LIMIT;
+    const matches = playerSearchMatches(input.value, pool, limit);
+
     if (!matches.length) {
-        menu.hidden = true;
-        input.setAttribute('aria-expanded', 'false');
+        // Not silence: an empty list under active filters is a finding, and the
+        // menu is the only place that can say which filters produced it.
+        const scope = playerSearchScope();
+        menu.innerHTML = `<p class="ps-empty">אין שחקנים${scope.length ? ` ב${scope.join(' · ')}` : ''}</p>`;
+        menu.hidden = false;
+        input.setAttribute('aria-expanded', 'true');
         return;
     }
 
@@ -5677,15 +5831,29 @@ function renderPlayerSearchMenu() {
     // the club and the position. The points used to have a column of their own,
     // and between them the two auto-width columns squeezed the name — the only
     // thing anyone reads — down to nothing inside a ~200px filter group.
-    menu.innerHTML = matches.map(p => {
+    const rows = matches.map(p => {
         const on = state.selectedForComparison.has(p.id);
+        const rank = p.draft_rank ? `#${p.draft_rank}` : '';
         return `<button type="button" class="ps-row${on ? ' is-on' : ''}" role="option"
             data-player-id="${p.id}" aria-selected="${on}" onclick="togglePlayerCompare(${p.id})">
             <span class="ps-name">${escapeHtml(p.web_name)}</span>
             <span class="ps-meta">${escapeHtml(teamShort(p))} · ${p.position_name}</span>
+            ${rank ? `<span class="ps-rank" title="${escapeHtml(BOARD_COLS.fpl.title)}">${rank}</span>` : '<span></span>'}
             <span class="ps-check" aria-hidden="true">${on ? '✓' : ''}</span>
         </button>`;
     }).join('');
+
+    // Browsing states the scope and the ranking, because a list of 60 out of 183
+    // that does not say so looks like the whole thing.
+    const scope = playerSearchScope();
+    const head = browsing
+        ? `<p class="ps-head">${scope.length ? `${escapeHtml(scope.join(' · '))} · ` : ''}${matches.length}${
+            matches.length < pool.length ? ` מתוך ${pool.length}` : ''} · לפי דירוג דראפט</p>`
+        : '';
+    const more = browsing && matches.length < pool.length
+        ? '<p class="ps-more">הקלידו שם כדי לצמצם</p>' : '';
+
+    menu.innerHTML = head + rows + more;
     menu.hidden = false;
     input.setAttribute('aria-expanded', 'true');
 }
@@ -9022,9 +9190,7 @@ async function loadDraftLeague() {
         populateTeamFilter();
 
         // Show success toast
-        const totalTeams = state.draft.rostersByEntryId.size;
-        const totalPlayers = state.draft.ownedElementIds.size;
-        showToast('ליגת דראפט נטענה בהצלחה', `${totalTeams} קבוצות, ${totalPlayers} שחקנים`, 'success', 3000);
+        reportAppStatus();
     } catch (e) {
         if (e && e.code === 'GAME_UPDATING') {
             renderDraftMaintenanceNotice(draftContainer);

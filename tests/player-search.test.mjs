@@ -9,8 +9,9 @@ import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import { loadFunctions } from './helpers/load-script.mjs';
 
-const { playerSearchMatches, normalizeSearch } =
-    loadFunctions(['playerSearchMatches', 'normalizeSearch'], {}, ['PLAYER_SEARCH_LIMIT']);
+const { playerSearchMatches, playerSearchBrowse, normalizeSearch } = loadFunctions(
+    ['playerSearchMatches', 'playerSearchBrowse', 'normalizeSearch'],
+    {}, ['PLAYER_SEARCH_LIMIT', 'PLAYER_SEARCH_BROWSE_LIMIT']);
 
 const p = (over = {}) => ({
     id: 1, web_name: 'Test', first_name: 'Test', second_name: 'Player',
@@ -56,9 +57,43 @@ describe('the player search', () => {
         assert.equal(normalizeSearch('Ekitiké'), 'ekitike');
     });
 
-    test('an empty query offers nothing rather than everything', () => {
-        assert.deepEqual(playerSearchMatches('', SQUAD), []);
-        assert.deepEqual(playerSearchMatches('   ', SQUAD), []);
+    test('an empty query opens the list rather than closing it', () => {
+        // Browsing is a real way to use this: pick goalkeepers in the filter
+        // panel and the list should already be the goalkeepers, no typing needed.
+        // It used to return nothing at all, so the menu simply never opened.
+        assert.equal(playerSearchMatches('', SQUAD).length, SQUAD.length);
+        assert.equal(playerSearchMatches('   ', SQUAD).length, SQUAD.length);
+    });
+
+    test('the browse list is ordered by FPL Draft rank, best first', () => {
+        const ranked = [
+            p({ id: 1, web_name: 'Third', draft_rank: 30, total_points: 300 }),
+            p({ id: 2, web_name: 'First', draft_rank: 4, total_points: 40 }),
+            p({ id: 3, web_name: 'Second', draft_rank: 11, total_points: 100 })
+        ];
+        // Rank, not points: the highest scorer of last season is third here.
+        assert.deepEqual(names(playerSearchBrowse(ranked)), ['First', 'Second', 'Third']);
+        assert.deepEqual(names(playerSearchMatches('', ranked)), ['First', 'Second', 'Third']);
+    });
+
+    test('unranked players fall to the bottom instead of to the top', () => {
+        // A newcomer has no draft rank at all, and a missing rank must not sort
+        // as zero — that would put every unknown player ahead of the field.
+        const mixed = [
+            p({ id: 1, web_name: 'Newcomer', draft_rank: undefined, total_points: 0 }),
+            p({ id: 2, web_name: 'Ranked', draft_rank: 90, total_points: 10 }),
+            p({ id: 3, web_name: 'AlsoNew', draft_rank: null, total_points: 55 })
+        ];
+        assert.deepEqual(names(playerSearchBrowse(mixed)), ['Ranked', 'AlsoNew', 'Newcomer'],
+            'ranked first, then the unranked by what they actually scored');
+    });
+
+    test('the browse list is capped too, but higher than a search', () => {
+        const many = Array.from({ length: 200 }, (_, i) =>
+            p({ id: 500 + i, web_name: `B${i}`, draft_rank: i + 1 }));
+        assert.equal(playerSearchBrowse(many).length, 60);
+        assert.equal(playerSearchBrowse(many, 5).length, 5);
+        assert.deepEqual(names(playerSearchBrowse(many, 3)), ['B0', 'B1', 'B2']);
     });
 
     test('caps the list, so the menu never becomes the table', () => {

@@ -100,6 +100,28 @@ try {
     check(!r.hScroll, 'no horizontal page scroll at 1440px');
     check(pageErrors.length === 0, `no uncaught page errors${pageErrors.length ? `: ${pageErrors[0]}` : ''}`);
 
+    // Loading used to stack up three "loaded successfully" toasts over a page
+    // nobody had asked a question of. The header says it once instead, and keeps
+    // saying it, with the counts on the hover.
+    const status = await page.evaluate(() => {
+        const pill = document.getElementById('statusPill');
+        return {
+            toasts: document.querySelectorAll('.toast').length,
+            label: (document.getElementById('statusHealth').textContent || '').trim(),
+            title: pill.title,
+            level: pill.className.replace('status-pill', '').trim(),
+            // innerText, not textContent: the timestamp holder is display:none and
+            // must not leak into what is actually on screen.
+            visible: pill.innerText.replace(/\s+/g, ' ').trim()
+        };
+    });
+    check(status.toasts === 0, `loading raises no toasts (${status.toasts})`);
+    check(/הכל תקין|סגורה|אין נתוני/.test(status.label),
+        `the header states the app's health instead (${JSON.stringify(status)})`);
+    check(/שחקנים/.test(status.title), 'and carries the counts on its hover');
+    check(!/עדכון אחרון/.test(status.visible),
+        `the hidden timestamp stays hidden (${status.visible})`);
+
     // The draft board is the first thing on the page, and every panel is only as
     // good as the sentence explaining its pick — a panel rendering three names
     // with no "why" line is the regression worth catching.
@@ -359,6 +381,51 @@ try {
     check(Math.abs(picker.menuTopAfter - picker.menuTopBefore) <= 4,
         `and leaves it where it was (${picker.menuTopBefore}px -> ${picker.menuTopAfter}px)`);
 
+    // Browsing with no query, and the filter panel narrowing what it offers: the
+    // box lives inside that panel, so a list ignoring it would contradict the
+    // controls sitting right above it.
+    const browse = await page.evaluate(async () => {
+        const input = document.getElementById('searchName');
+        const fold = input.closest('details');
+        if (fold && !fold.open) fold.open = true;
+        const open = async () => {
+            input.value = '';
+            input.dispatchEvent(new Event('input', { bubbles: true }));
+            input.dispatchEvent(new Event('focus'));
+            await new Promise(r => setTimeout(r, 150));
+            return {
+                open: !document.getElementById('playerSearchMenu').hidden,
+                rows: document.querySelectorAll('.ps-row').length,
+                head: (document.querySelector('.ps-head') || {}).textContent || '',
+                positions: new Set([...document.querySelectorAll('.ps-meta')]
+                    .map(m => m.textContent.trim().split('·').pop().trim()))
+            };
+        };
+        const all = await open();
+        const pos = document.getElementById('positionFilter');
+        pos.value = 'GKP';
+        pos.dispatchEvent(new Event('change'));
+        await new Promise(r => setTimeout(r, 350));
+        const gkp = await open();
+        pos.value = '';
+        pos.dispatchEvent(new Event('change'));
+        await new Promise(r => setTimeout(r, 300));
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+        return {
+            allOpen: all.open, allRows: all.rows, allPositions: [...all.positions].sort(),
+            gkpOpen: gkp.open, gkpRows: gkp.rows, gkpPositions: [...gkp.positions],
+            gkpHead: gkp.head.replace(/\s+/g, ' ').trim()
+        };
+    });
+    check(browse.allOpen && browse.allRows > 20,
+        `an empty query opens the list rather than closing it (${browse.allRows} rows)`);
+    check(browse.gkpOpen && browse.gkpPositions.length === 1 && browse.gkpPositions[0] === 'GKP',
+        `the position filter narrows it to keepers (${JSON.stringify(browse.gkpPositions)})`);
+    check(browse.gkpRows > 5 && browse.gkpRows < browse.allRows,
+        `and to fewer of them (${browse.gkpRows} of ${browse.allRows})`);
+    check(/דירוג דראפט/.test(browse.gkpHead) && /שוערים/.test(browse.gkpHead),
+        `the list says what it is showing ("${browse.gkpHead}")`);
+
     // The comparison itself, opened from the two ticks that are already in place.
     const cmp = await page.evaluate(async () => {
         document.querySelector('.ps-go')?.click();
@@ -406,6 +473,33 @@ try {
             })(),
             spans: [...document.querySelectorAll('.cmp-chips--span .cmp-chip')]
                 .map(b => b.textContent.trim()),
+            // One bar per cell, each measured off its own cell's edge, meant
+            // comparing lengths across two gaps. Every bar in a row now shares one
+            // track, one origin and one scale, so longer is higher.
+            axis: (() => {
+                const rows = [...document.querySelectorAll('.cmp-section .cmp-row')];
+                let checked = 0, offOrigin = 0, offScale = 0, wrongOrder = 0;
+                for (const r of rows) {
+                    const tracks = [...r.querySelectorAll('.cmp-axis-row')];
+                    const nums = [...r.querySelectorAll('.cmp-num')]
+                        .map(n => parseFloat(n.textContent.replace(/[^\d.+-]/g, '')));
+                    if (tracks.length < 2 || nums.length !== tracks.length) continue;
+                    checked++;
+                    const rights = tracks.map(t => Math.round(t.getBoundingClientRect().right));
+                    const widths = tracks.map(t => Math.round(t.getBoundingClientRect().width));
+                    if (new Set(rights).size !== 1) offOrigin++;
+                    if (new Set(widths).size !== 1) offScale++;
+                    // The widest fill must belong to the biggest figure.
+                    const fills = tracks.map(t => {
+                        const i = t.querySelector('i');
+                        return i ? i.getBoundingClientRect().width : 0;
+                    });
+                    const biggest = nums.indexOf(Math.max(...nums));
+                    const widest = fills.indexOf(Math.max(...fills));
+                    if (Math.max(...nums) > 0 && biggest !== widest) wrongOrder++;
+                }
+                return { checked, offOrigin, offScale, wrongOrder };
+            })(),
             // Two players stretched over the full modal put the two figures being
             // compared half a screen apart, with a metre of bar between them.
             width: (() => {
@@ -444,6 +538,10 @@ try {
     check(cmp.spans.length === 3, `the trend offers three spans (${cmp.spans.join(' | ')})`);
     check(cmp.width && cmp.width.cols === '2' && cmp.width.table < cmp.width.body * 0.75,
         `two players do not stretch across the page (${JSON.stringify(cmp.width)})`);
+    check(cmp.axis.checked > 10 && cmp.axis.offOrigin === 0 && cmp.axis.offScale === 0,
+        `every row's bars share one axis (${JSON.stringify(cmp.axis)})`);
+    check(cmp.axis.wrongOrder === 0,
+        `and the longest bar is the biggest figure (${cmp.axis.wrongOrder} rows disagree)`);
 
     // Widening the span must actually widen the chart.
     const span = await page.evaluate(async () => {

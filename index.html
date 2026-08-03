@@ -99,9 +99,14 @@
                         <button class="scout-btn scout-free" id="freeAgentsOnlyBtn" aria-pressed="false"
                             disabled onclick="toggleFreeAgentsOnly()">🆓 רק חופשיים</button>
 
-                        <div class="status-pill">
+                        <!-- Loading used to announce itself with a stack of
+                             toasts nobody had asked a question of. The pill says
+                             the same thing once, quietly, and keeps saying it. -->
+                        <div class="status-pill is-busy" id="statusPill" title="טוען נתונים">
                             <span class="status-dot"></span>
                             <span id="headerGW">GW--</span>
+                            <span class="status-sep" aria-hidden="true">·</span>
+                            <span id="statusHealth" aria-live="polite">טוען…</span>
                             <span id="lastUpdated" style="display:none;"></span> <!-- Hidden holder for JS -->
                         </div>
 
@@ -249,6 +254,36 @@
                     border-radius: 50%;
                     animation: pulse 2s infinite;
                 }
+
+                /* Four states, one pill. Green is the resting state and says so
+                   rather than popping up to announce it; amber is a real caveat
+                   worth reading; red is something that failed. */
+                .status-pill .status-sep { opacity: .5; }
+                .status-pill[title] { cursor: help; }
+
+                .status-pill.is-busy {
+                    background: #f1f5f9;
+                    border-color: #e2e8f0;
+                    color: #475569;
+                }
+
+                .status-pill.is-busy .status-dot { background: #94a3b8; }
+
+                .status-pill.is-warn {
+                    background: #fffbeb;
+                    border-color: #fde68a;
+                    color: #b45309;
+                }
+
+                .status-pill.is-warn .status-dot { background: #f59e0b; animation: none; }
+
+                .status-pill.is-error {
+                    background: #fef2f2;
+                    border-color: #fecaca;
+                    color: #b91c1c;
+                }
+
+                .status-pill.is-error .status-dot { background: #ef4444; animation: none; }
 
                 .user-profile-mini {
                     display: flex;
