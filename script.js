@@ -4688,24 +4688,29 @@ function compareSections() {
         rows: [
             {
                 key: 'ppg', label: 'נק׳/מש׳', title: BOARD_COLS.ppg.title,
-                read: p => seasonPointsPerApp(p), fmt: v => v.toFixed(2)
+                read: p => seasonPointsPerApp(p), fmt: v => v.toFixed(2),
+                gw: t => (t.apps ? t.points / t.apps : null)
             },
             {
-                key: 'total_points', label: 'נקודות עונה', title: 'סך הנקודות שאסף בעונה',
-                read: p => num1(p.total_points), fmt: v => v.toFixed(0)
+                key: 'total_points', label: 'נקודות', title: 'סך הנקודות שאסף',
+                read: p => num1(p.total_points), fmt: v => v.toFixed(0),
+                gw: t => t.points
             },
             {
                 key: 'ga', label: 'שערים + בישולים', title: 'שערים ובישולים, בפועל',
-                read: p => (p.goals_scored || 0) + (p.assists || 0), fmt: v => v.toFixed(0), trend: 'ga'
+                read: p => (p.goals_scored || 0) + (p.assists || 0), fmt: v => v.toFixed(0),
+                gw: t => t.goals + t.assists
             },
             {
                 key: 'bonus90', label: 'בונוס/90', title: 'נקודות בונוס ל-90 דקות — מה שהוא אסף, לא BPS',
-                read: p => num1(p.bonus_per90), fmt: v => v.toFixed(2)
+                read: p => num1(p.bonus_per90), fmt: v => v.toFixed(2),
+                gw: t => spanRate(t.bonus, t.per90)
             },
             {
                 key: 'bps90', label: 'BPS/90', title: 'נקודות מערכת הבונוס ל-90 דקות — הקרבה לשלישייה, גם כשלא נכנס אליה',
                 read: p => { const m = (p.minutes || 0) / 90; return m > 0 ? (p.bps || 0) / m : null; },
-                fmt: v => v.toFixed(1)
+                fmt: v => v.toFixed(1),
+                gw: t => spanRate(t.bps, t.per90)
             },
             {
                 key: 'dreamteam', label: 'הרכב החלומות', title: 'מספר הפעמים שנבחר להרכב המחזור',
@@ -4726,7 +4731,11 @@ function compareSections() {
             },
             {
                 key: 'xgi90', label: 'xGI/90', title: 'שערים ובישולים צפויים ל-90 דקות',
-                read: p => num1(p.xGI_per90), fmt: v => v.toFixed(2)
+                read: p => num1(p.xGI_per90), fmt: v => v.toFixed(2),
+                // xG and xA have no separate per-match record — the snapshot stores
+                // their sum and splits it in half — so only the combined figure can
+                // honestly be windowed. The two halves stay season-long.
+                gw: t => spanRate(t.xgi, t.per90)
             },
             {
                 key: 'xdiff', label: 'פער מימוש', title: BOARD_COLS.xdiff.title,
@@ -4744,15 +4753,18 @@ function compareSections() {
             {
                 key: 'mins_app', label: 'דקות/הופעה', title: BOARD_COLS.mins.title,
                 read: p => { const a = appearancesOf(p); return a ? (p.minutes || 0) / a : null; },
-                fmt: v => v.toFixed(0), trend: 'mins'
+                fmt: v => v.toFixed(0),
+                gw: t => (t.apps ? t.minutes / t.apps : null)
             },
             {
                 key: 'apps', label: 'הופעות', title: BOARD_COLS.apps.title,
-                read: p => appearancesOf(p) || null, fmt: v => v.toFixed(0)
+                read: p => appearancesOf(p) || null, fmt: v => v.toFixed(0),
+                gw: t => t.apps || null
             },
             {
-                key: 'minutes_total', label: 'סך דקות', title: 'סך הדקות שצבר בעונה',
-                read: p => num1(p.minutes), fmt: v => v.toLocaleString('en-US')
+                key: 'minutes_total', label: 'סך דקות', title: 'סך הדקות שצבר',
+                read: p => num1(p.minutes), fmt: v => v.toLocaleString('en-US'),
+                gw: t => t.minutes
             },
             {
                 key: 'starts', label: 'אחוז פתיחות', title: 'אחוז ההופעות שבהן פתח בהרכב — מתחת ל-60% זה סיכון סיבוב',
@@ -4771,12 +4783,14 @@ function compareSections() {
         rows: [
             {
                 key: 'dc90', label: 'DC/90', title: BOARD_COLS.dc90.title,
-                read: p => num1(p.def_contrib_per90), fmt: v => v.toFixed(1), trend: 'dc'
+                read: p => num1(p.def_contrib_per90), fmt: v => v.toFixed(1),
+                gw: t => spanRate(t.defcon, t.per90)
             },
             {
                 key: 'defcon_rate', label: 'אחוז DEFCON',
                 title: 'אחוז המשחקים שבהם עבר את סף התרומה ההגנתית וזכה בנקודות — שוער לא נמדד בזה',
-                read: p => defconRateFor(p), fmt: v => `${v.toFixed(0)}%`
+                read: p => defconRateFor(p), fmt: v => `${v.toFixed(0)}%`,
+                gw: t => (t.defconApps ? (t.defconHits / t.defconApps) * 100 : null)
             },
             {
                 key: 'cs90', label: 'שער נקי/90', title: 'שערים נקיים ל-90 דקות',
@@ -4788,7 +4802,8 @@ function compareSections() {
             },
             {
                 key: 'saves90', label: 'הצלות/90', title: 'הצלות ל-90 דקות',
-                read: p => num1(p.saves_per_90), fmt: v => v.toFixed(2), trend: 'saves'
+                read: p => num1(p.saves_per_90), fmt: v => v.toFixed(2),
+                gw: t => spanRate(t.saves, t.per90)
             }
         ]
     },
@@ -4953,16 +4968,46 @@ function compareVerdict(players) {
  * it was measured. A row where one player is genuinely at zero survives: that is
  * a comparison, not an absence.
  */
-function comparisonRowsFor(players) {
+function comparisonRowsFor(players, spanId = 'season') {
+    const windowed = spanId !== 'season' && !!COMPARE_SPANS.find(s => s.id === spanId && s.n);
+    const gws = windowed ? compareSpanGws(spanId) : [];
+    const prev = windowed ? comparePrevSpanGws(spanId) : [];
+
+    // One pass over the gameweek record per player, reused by every row, rather
+    // than re-summing thirty times.
+    const totals = windowed
+        ? players.map(p => compareSpanTotals(p.id, gws, p.element_type)) : [];
+    const before = windowed && prev.length
+        ? players.map(p => compareSpanTotals(p.id, prev, p.element_type)) : [];
+
     return compareSections().map(section => {
         const rows = section.rows.map(row => {
-            const values = players.map(p => {
+            // A row the per-match record cannot answer keeps its season figure and
+            // says so, rather than being dropped or silently mixed in.
+            const canWindow = windowed && typeof row.gw === 'function';
+            const values = players.map((p, i) => {
                 let v = null;
-                try { v = row.read(p); } catch (e) { v = null; }
+                try { v = canWindow ? row.gw(totals[i], p) : row.read(p); } catch (e) { v = null; }
                 return Number.isFinite(v) ? v : null;
             });
+            // The delta is the same measure over the preceding span of equal
+            // length — like for like, in the row's own unit, which the old
+            // window-total arrows next to per-90 rates were not.
+            const deltas = canWindow && before.length
+                ? players.map((p, i) => {
+                    let now = null, was = null;
+                    try { now = row.gw(totals[i], p); was = row.gw(before[i], p); } catch (e) { return null; }
+                    if (!Number.isFinite(now) || !Number.isFinite(was)) return null;
+                    return now - was;
+                })
+                : players.map(() => null);
+
             const real = values.filter(v => v !== null);
-            return { ...row, values, any: real.length > 0 && real.some(v => v !== 0) };
+            return {
+                ...row, values, deltas,
+                seasonOnly: windowed && !canWindow,
+                any: real.length > 0 && real.some(v => v !== 0)
+            };
         }).filter(row => row.any);
         return { ...section, rows };
     }).filter(section => section.rows.length);
@@ -4973,7 +5018,7 @@ function comparisonRowsFor(players) {
 /** Lazily-held view state for the trend chart's own controls. */
 function compareState() {
     if (!state.compare) {
-        state.compare = { metric: 'pts', cumulative: false, span: 'window', ids: [] };
+        state.compare = { metric: 'pts', cumulative: false, span: COMPARE_DEFAULT_SPAN, ids: [] };
     }
     return state.compare;
 }
@@ -5093,10 +5138,14 @@ function compareRadarConfig(players) {
  * often flips between them.
  */
 const COMPARE_SPANS = [
-    { id: 'window', label: 'החלון', title: 'חלון המומנטום שנבחר לכל האתר' },
-    { id: 'ten', label: '10 מחזורים', n: 10, title: 'עשרת המחזורים האחרונים' },
+    { id: 'g3', label: '3 אחרונים', n: 3, title: 'שלושת המחזורים האחרונים שהושלמו' },
+    { id: 'g5', label: '5 אחרונים', n: 5, title: 'חמשת המחזורים האחרונים' },
+    { id: 'g10', label: '10 אחרונים', n: 10, title: 'עשרת המחזורים האחרונים' },
     { id: 'season', label: 'כל העונה', n: null, title: 'כל המחזורים שהושלמו בעונה' }
 ];
+
+/** Whole season is the default: every figure means one thing and nothing is mixed. */
+const COMPARE_DEFAULT_SPAN = 'season';
 
 /**
  * Every gameweek table the current source can offer, oldest first.
@@ -5123,10 +5172,66 @@ function compareAllGameweeks() {
 
 /** The gameweek tables one span covers, oldest first. */
 function compareSpanGws(spanId) {
-    const span = COMPARE_SPANS.find(s => s.id === spanId) || COMPARE_SPANS[0];
-    if (span.id === 'window') return state.trendGws || [];
+    const span = COMPARE_SPANS.find(s => s.id === spanId)
+        || COMPARE_SPANS.find(s => s.id === COMPARE_DEFAULT_SPAN);
     const all = compareAllGameweeks();
     return span.n ? all.slice(-span.n) : all;
+}
+
+/** The gameweeks immediately before a span, for a like-for-like comparison. */
+function comparePrevSpanGws(spanId) {
+    const span = COMPARE_SPANS.find(s => s.id === spanId);
+    if (!span || !span.n) return [];
+    const all = compareAllGameweeks();
+    return all.slice(Math.max(0, all.length - 2 * span.n), all.length - span.n);
+}
+
+/**
+ * One player's totals over a set of gameweeks.
+ *
+ * The per-gameweek record carries points, minutes, goals, assists, xGI, BPS,
+ * bonus, saves and the defensive contribution — which is what decides whether a
+ * metric can be windowed at all. Clean sheets, ICT, price and ownership have no
+ * per-match record, so they stay season-long and say so.
+ *
+ * An appearance is a gameweek with minutes on it. A gameweek he was not in the
+ * squad for is absent from the table entirely, and counting it as a nil would
+ * drag every rate down for the wrong reason.
+ */
+function compareSpanTotals(playerId, gws, elementType) {
+    const id = Number(playerId);
+    const t = {
+        apps: 0, minutes: 0, points: 0, goals: 0, assists: 0,
+        xgi: 0, bps: 0, bonus: 0, saves: 0, defcon: 0, defconHits: 0, defconApps: 0
+    };
+    const threshold = DEFCON_THRESHOLD[elementType];
+
+    for (const { stats } of gws || []) {
+        const s = stats.get(id);
+        if (!s) continue;
+        const mins = gwNum(s.minutes);
+        if (mins <= 0) continue;
+        t.apps++;
+        t.minutes += mins;
+        t.points += gwNum(s.total_points);
+        t.goals += gwNum(s.goals_scored);
+        t.assists += gwNum(s.assists);
+        t.xgi += gwNum(s.expected_goals) + gwNum(s.expected_assists);
+        t.bps += gwNum(s.bps);
+        t.bonus += gwNum(s.bonus);
+        t.saves += gwNum(s.saves);
+        const dc = gwDefensiveContribution(s, elementType);
+        t.defcon += dc;
+        // Goalkeepers have no DEFCON threshold at all, so they have no rate.
+        if (threshold) { t.defconApps++; if (dc >= threshold) t.defconHits++; }
+    }
+    t.per90 = t.minutes / 90;
+    return t;
+}
+
+/** A per-90 rate that refuses to divide by nothing. */
+function spanRate(total, per90) {
+    return per90 > 0 ? total / per90 : null;
 }
 
 /**
@@ -5184,7 +5289,7 @@ function compareTrendConfig(players, metricKey, cumulative, spanId) {
     // trendBenchmark measures the site-wide window, so the line is only honest
     // over that span. Drawing it beside a whole-season series would compare a
     // season to five gameweeks.
-    if (!cumulative && spanId === 'window' && positions.length === 1) {
+    if (!cumulative && spanId === 'g5' && positions.length === 1) {
         const bench = trendBenchmark(metricKey, positions[0]);
         if (bench !== null) {
             datasets.push({
@@ -5251,23 +5356,25 @@ function playerPhotoFallback(name, color) {
 
 
 /**
- * The window trend beside a value.
+ * The change against the preceding span of equal length.
  *
- * The arrow is a different measurement from the number it sits next to — the
- * recent window against the one before it, in the trend metric's own unit and
- * aggregation — so the hover spells out which metric and which span. It is only
- * attached to rows whose unit the trend metric actually shares; a per-90 rate
- * with a window-total delta beside it looks like one number and is two.
+ * Like for like, in the row's own unit: the last three gameweeks against the
+ * three before them. The old arrows were a window *total* sitting next to a
+ * per-90 rate — one number that looked like two readings of the same thing and
+ * was not. Nothing is shown over a whole season, because there is no earlier
+ * season in the data to compare it against.
  */
-function compareDeltaHtml(player, metricKey) {
-    const def = TREND_METRICS[metricKey];
-    const d = trendDelta(player, metricKey);
-    if (!def || d === null || Math.abs(d) < 0.05) return '';
-    const span = state.trendWindow || 5;
-    const agg = def.agg === 'sum' ? 'סך' : 'ממוצע';
-    const title = `${def.label}: ${agg} ב-${span} המחזורים האחרונים מול ${span} שלפניהם`;
-    return `<span class="cmp-delta ${d > 0 ? 'is-up' : 'is-down'}" title="${escapeHtml(title)}"
-        >${d > 0 ? '▲' : '▼'}${Math.abs(d).toFixed(1)}</span>`;
+function compareDeltaHtml(row, index) {
+    const d = row.deltas && row.deltas[index];
+    if (!Number.isFinite(d)) return '';
+    // Below this the arrow is rounding noise dressed up as a trend.
+    const shown = Math.abs(d);
+    if (shown < 0.05) return '';
+    // On a row where low wins, falling is improving.
+    const good = row.asc ? d < 0 : d > 0;
+    const title = `שינוי מול הטווח הקודם באותו אורך, ב${row.label}`;
+    return `<span class="cmp-delta ${good ? 'is-up' : 'is-down'}" title="${escapeHtml(title)}"
+        >${d > 0 ? '▲' : '▼'}${shown < 10 ? shown.toFixed(1) : shown.toFixed(0)}</span>`;
 }
 
 /** Rank of one value inside a row, as "2/4", so a cell states its own standing. */
@@ -5427,10 +5534,6 @@ function compareChartsHtml(players) {
             onclick="setCompareTrend('${key}')">${TREND_METRICS[key].label}</button>`;
     }).join('');
 
-    const spanChips = COMPARE_SPANS.map(span => `<button type="button"
-        class="cmp-chip cmp-chip--span" aria-pressed="${cs.span === span.id}"
-        title="${escapeHtml(span.title)}"
-        onclick="setCompareSpan('${span.id}')">${span.label}</button>`).join('');
 
     return `<div class="cmp-charts">
         ${radarCard}
@@ -5441,7 +5544,6 @@ function compareChartsHtml(players) {
                     <p id="cmpTrendNote" title="איקס במקום עיגול = מחזור שבו לא שיחק">${compareSpanNote(cs.span)}</p>
                 </div>
                 <div class="cmp-chart-controls">
-                    <div class="cmp-chips cmp-chips--span">${spanChips}</div>
                     <div class="cmp-chips">${chips}</div>
                     <button type="button" class="cmp-chip cmp-chip--toggle" aria-pressed="${cs.cumulative}"
                         onclick="toggleCompareCumulative()" title="סכימה מצטברת לאורך הטווח, במקום ערך לכל מחזור">מצטבר</button>
@@ -5555,7 +5657,7 @@ function compareLeaderboard(players, sections) {
 
 /* ------------------------------- the markup ------------------------------ */
 
-function compareRowHtml(players, row) {
+function compareRowHtml(players, row, tagSeason = true) {
     const real = row.values.filter(v => v !== null);
     const best = row.asc ? Math.min(...real) : Math.max(...real);
     const worst = row.asc ? Math.max(...real) : Math.min(...real);
@@ -5570,7 +5672,7 @@ function compareRowHtml(players, row) {
         const isBest = competitive && value === best;
         const isWorst = competitive && value === worst;
         const t = row.neutral ? null : rowStanding(value, row.values, row.asc);
-        const delta = row.trend ? compareDeltaHtml(p, row.trend) : '';
+        const delta = compareDeltaHtml(row, i);
 
         // The cell stays RTL so the figure, its trend and the trophy read
         // right-to-left in that order; only the digits are isolated left-to-right,
@@ -5584,44 +5686,87 @@ function compareRowHtml(players, row) {
 
     // The row says in the DOM that it has no winner, so nothing downstream has to
     // re-derive it from the absence of a trophy.
-    return `<div class="cmp-row${row.neutral ? ' is-neutral' : ''}">
+    // Tagged per row only where a group is mixed. When every metric in a group is
+    // season-long the group says it once, because five identical tags down a
+    // narrow label column push every label onto two lines.
+    const season = row.seasonOnly && tagSeason
+        ? '<span class="cmp-season" title="למדד הזה אין רישום לכל מחזור, כך שהוא נשאר על פני כל העונה גם כשנבחר טווח קצר">עונה</span>'
+        : '';
+    return `<div class="cmp-row${row.neutral ? ' is-neutral' : ''}${row.seasonOnly ? ' is-season' : ''}">
         <div class="cmp-row-label" title="${escapeHtml(row.title)}">${row.label}${
-        row.asc ? '<span class="cmp-asc" title="נמוך = טוב יותר">↓</span>' : ''}</div>
+        row.asc ? '<span class="cmp-asc" title="נמוך = טוב יותר">↓</span>' : ''}${season}</div>
         ${cells}
     </div>`;
 }
 
 /**
- * The headline over the table: who wins the most of it.
+ * The headline over the table: who owns which area.
  *
- * Thirty rows is more than anyone reads before deciding, so the count comes
- * first and the rows are there to be checked against it. The per-group line is
- * where it gets interesting — a forward sweeping the attacking groups and losing
- * every defensive one is the shape of most real comparisons.
+ * It used to count metric wins — "leads 13 of 25" — and that number is close to
+ * meaningless: the groups have different row counts, xGI/90 and xG/90 are nearly
+ * the same finding counted twice, and a tally weights whichever family happens to
+ * have more rows. It also repeated the verdict at the top of the page.
+ *
+ * What is worth saying instead is the shape of the comparison: which areas each
+ * player owns. A forward taking every attacking group and losing every defensive
+ * one is the whole argument, and it reads in one line. A player who owns nothing
+ * is named too — that is the most useful thing the block can tell you about him.
  */
 function compareLeadHtml(players, sections) {
     const board = compareLeaderboard(players, sections);
     if (!board.total) return '';
 
-    const names = board.leaders.map(w => escapeHtml(w.player.web_name)).join(' ו-');
-    const wins = board.leaders.length ? board.leaders[0].wins : 0;
-    const headline = board.leaders.length > 1
-        ? `${names} מובילים ב-${wins} מדדים כל אחד, מתוך ${board.total}`
-        : `${names} מוביל ב-${wins} מתוך ${board.total} מדדים`;
+    const areas = players.map(() => []);
+    for (const s of board.bySection) {
+        s.leaders.forEach(name => {
+            const i = players.findIndex(p => p.web_name === name);
+            if (i >= 0) areas[i].push({ title: s.title, wins: s.wins, total: s.total, shared: s.leaders.length > 1 });
+        });
+    }
 
-    const groups = board.bySection.map(s => {
-        const who = s.leaders.map(n => escapeHtml(n)).join(' / ');
-        return `<span class="cmp-lead-chip"><b>${escapeHtml(s.title)}</b> ${who} ${s.wins}/${s.total}</span>`;
+    const lines = players.map((p, i) => {
+        const mine = areas[i];
+        const cells = mine.length
+            ? mine.map(a => `<span class="cmp-area${a.shared ? ' is-shared' : ''}"
+                    title="${a.wins} מתוך ${a.total} המדדים בקבוצה${a.shared ? ' — בשוויון' : ''}"
+                    >${escapeHtml(a.title)} <b>${a.wins}/${a.total}</b></span>`).join('')
+            : '<span class="cmp-area is-none">לא מוביל באף קבוצה</span>';
+        return `<div class="cmp-lead-row" style="--cmp-hue: ${compareColor(i)}">
+            <span class="cmp-lead-who"><i aria-hidden="true"></i>${escapeHtml(p.web_name)}</span>
+            <span class="cmp-lead-areas">${cells}</span>
+        </div>`;
     }).join('');
 
     return `<div class="cmp-lead">
-        <p class="cmp-lead-line">🏆 ${headline}</p>
-        <div class="cmp-lead-groups">${groups}</div>
+        <p class="cmp-lead-title">מי מוביל בכל קבוצת מדדים
+            <em title="נספרים רק מדדים שבהם יש הפרש. מדד ניטרלי — מחיר, בעלות, העברות — ותיקו אינם נספרים לאף אחד">${board.total} מדדים נמדדו</em>
+        </p>
+        ${lines}
+    </div>`;
+}
+
+/**
+ * One control for how far back the whole comparison looks.
+ *
+ * Shared by the table and the trend chart, because two separate spans on one
+ * screen is a question about which one a given figure obeys. Whole season is the
+ * default, so nothing is mixed until the reader asks for a window.
+ */
+function compareSpanBarHtml() {
+    const cs = compareState();
+    const chips = COMPARE_SPANS.map(span => `<button type="button" class="cmp-chip"
+        aria-pressed="${cs.span === span.id}" title="${escapeHtml(span.title)}"
+        onclick="setCompareSpan('${span.id}')">${span.label}</button>`).join('');
+    return `<div class="cmp-spanbar">
+        <span class="cmp-spanbar-label">טווח הנתונים</span>
+        <div class="cmp-chips cmp-chips--span">${chips}</div>
+        <span class="cmp-spanbar-note" id="cmpSpanNote">${compareSpanNote(cs.span)}</span>
     </div>`;
 }
 
 function compareMetricsHtml(players) {
-    const sections = comparisonRowsFor(players);
+    const spanId = compareState().span;
+    const sections = comparisonRowsFor(players, spanId);
     if (!sections.length) return '';
 
     const heads = players.map((p, i) =>
@@ -5635,14 +5780,17 @@ function compareMetricsHtml(players) {
         const tight = [];
         for (const row of section.rows) (isTightRow(row) ? tight : wide).push(row);
 
-        const shown = wide.map(row => compareRowHtml(players, row)).join('');
+        // A group where nothing can be windowed says so once, at the top.
+        const allSeason = section.rows.length > 0 && section.rows.every(r => r.seasonOnly);
+        const perRow = !allSeason;
+        const shown = wide.map(row => compareRowHtml(players, row, perRow)).join('');
         const near = `הפער קטן מ-${Math.round(COMPARE_TIGHT_SPREAD * 100)}%`;
         const count = tight.length === 1 ? 'מדד אחד שבו' : `${tight.length} מדדים שבהם`;
         const folded = tight.length
             ? `<details class="cmp-fold">
                    <summary>${count} ${near}
                        <span>${tight.map(r => escapeHtml(r.label)).join(' · ')}</span></summary>
-                   ${tight.map(row => compareRowHtml(players, row)).join('')}
+                   ${tight.map(row => compareRowHtml(players, row, perRow)).join('')}
                </details>`
             : '';
 
@@ -5651,16 +5799,20 @@ function compareMetricsHtml(players) {
             ? `<em>${escapeHtml(board.bySection[0].leaders.join(' / '))} ${board.bySection[0].wins}/${board.bySection[0].total}</em>`
             : '';
 
+        const groupSeason = allSeason
+            ? '<span class="cmp-season" title="לאף מדד בקבוצה הזאת אין רישום לכל מחזור, כך שכולה נשארת על פני העונה גם כשנבחר טווח קצר">כל העונה</span>'
+            : '';
         return `<div class="cmp-section">
             <div class="cmp-section-head">
-                <h4>${section.title}</h4><span>${section.note}</span>${tag}
+                <h4>${section.title}</h4><span>${section.note}</span>${groupSeason}${tag}
             </div>
             ${shown}${folded}
         </div>`;
     }).join('');
 
+    const windowed = spanId !== 'season';
     return `${compareLeadHtml(players, sections)}
-    <div class="cmp-table" style="--cmp-cols: ${players.length}">
+    <div class="cmp-table${windowed ? ' is-windowed' : ''}" style="--cmp-cols: ${players.length}">
         <div class="cmp-row cmp-row--head">
             <div class="cmp-row-label">
                 <span class="cmp-key" title="הרקע של כל תא נצבע לפי מקומו בשורה — ירוק = הגבוה, אדום = הנמוך, ללא צבע = באמצע">מדד</span>
@@ -5707,8 +5859,9 @@ function generateComparisonTableHTML(players) {
         ${compareStripHtml(players, verdict)}
         ${compareVerdictHtml(verdict, players)}
         ${comparePlayerCardsHtml(players, verdict)}
+        ${compareSpanBarHtml()}
         ${compareChartsHtml(players)}
-        ${compareMetricsHtml(players)}
+        <div id="cmpMetrics">${compareMetricsHtml(players)}</div>
         ${compareFixturesHtml(players)}
     </div>`;
 }
@@ -5786,10 +5939,6 @@ function renderCompareTrend(players) {
         const key = (btn.getAttribute('onclick') || '').match(/'([a-z0-9_]+)'/);
         if (key) btn.setAttribute('aria-pressed', String(key[1] === cs.metric));
     });
-    document.querySelectorAll('.cmp-chips--span .cmp-chip').forEach(btn => {
-        const key = (btn.getAttribute('onclick') || '').match(/'([a-z0-9_]+)'/);
-        if (key) btn.setAttribute('aria-pressed', String(key[1] === cs.span));
-    });
     const note = document.getElementById('cmpTrendNote');
     if (note) note.textContent = compareSpanNote(cs.span);
 }
@@ -5798,9 +5947,7 @@ function renderCompareTrend(players) {
 function compareSpanNote(spanId) {
     const gws = compareSpanGws(spanId);
     if (!gws.length) return 'אין נתוני מחזורים';
-    const span = COMPARE_SPANS.find(s => s.id === spanId) || COMPARE_SPANS[0];
-    return `${gws.length} מחזורים · ${span.id === 'window' ? 'חלון המומנטום' : span.label}`
-        + ` (GW${gws[0].gw}–GW${gws[gws.length - 1].gw})`;
+    return `${gws.length} מחזורים · GW${gws[0].gw}–GW${gws[gws.length - 1].gw}`;
 }
 
 window.setCompareTrend = function (metricKey) {
@@ -5812,7 +5959,20 @@ window.setCompareTrend = function (metricKey) {
 window.setCompareSpan = function (spanId) {
     if (!COMPARE_SPANS.some(s => s.id === spanId)) return;
     compareState().span = spanId;
-    renderCompareTrend();
+
+    // The span governs the table as well as the chart — that is the whole point
+    // of one control — so the metric block is rebuilt from the same state.
+    const host = document.getElementById('cmpMetrics');
+    const players = comparePlayersFromState();
+    if (host && players.length) host.innerHTML = compareMetricsHtml(players);
+
+    document.querySelectorAll('.cmp-spanbar .cmp-chip').forEach(btn => {
+        const key = (btn.getAttribute('onclick') || '').match(/'([a-z0-9_]+)'/);
+        if (key) btn.setAttribute('aria-pressed', String(key[1] === spanId));
+    });
+    const note = document.getElementById('cmpSpanNote');
+    if (note) note.textContent = compareSpanNote(spanId);
+    renderCompareTrend(players.length ? players : undefined);
 };
 
 window.toggleCompareCumulative = function () {

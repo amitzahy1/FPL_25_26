@@ -829,10 +829,14 @@
     .cmp-cell { padding: 4px 7px; gap: 3px; }
     .cmp-num { font-size: 11.5px; }
     .cmp-lead { padding: 8px 10px; }
-    .cmp-lead-line { font-size: 12px; }
-    /* The group chips wrap into a wall on a phone; the headline carries it. */
-    .cmp-lead-groups { gap: 3px 4px; }
-    .cmp-lead-chip { font-size: 9.5px; padding: 1px 6px; }
+    .cmp-lead-title { font-size: 11.5px; }
+    /* One area per line would be a wall; the name sits above its areas. */
+    .cmp-lead-row { flex-direction: column; gap: 3px; padding: 4px 0; }
+    .cmp-lead-who { min-width: 0; font-size: 11.5px; }
+    .cmp-area { font-size: 9.5px; padding: 1px 6px; }
+    .cmp-spanbar { border-radius: 12px; padding: 7px 10px; gap: 5px 8px; }
+    .cmp-spanbar-label { font-size: 10.5px; }
+    .cmp-spanbar-note { margin-inline-start: 0; }
     .cmp-fold > summary span { display: none; }
     .cmp-section-head { padding: 7px 10px; }
     .cmp-section-head span { display: none; }

@@ -490,14 +490,22 @@ try {
             })(),
             matrix: {
                 bars: document.querySelectorAll('.cmp-axis-row, .cmp-bar').length,
-                lead: (document.querySelector('.cmp-lead-line') || {}).textContent?.replace(/\s+/g, ' ').trim(),
-                groups: document.querySelectorAll('.cmp-lead-chip').length,
+                lead: (document.querySelector('.cmp-lead-title') || {}).textContent?.replace(/\s+/g, ' ').trim(),
+                who: [...document.querySelectorAll('.cmp-lead-row')].map(r => ({
+                    name: r.querySelector('.cmp-lead-who').textContent.trim(),
+                    areas: [...r.querySelectorAll('.cmp-area')].map(a => a.textContent.replace(/\s+/g, ' ').trim())
+                })),
                 folds: document.querySelectorAll('.cmp-fold').length,
                 foldedRows: [...document.querySelectorAll('.cmp-fold')]
                     .reduce((n, f) => n + f.querySelectorAll('.cmp-row').length, 0)
             },
-            spans: [...document.querySelectorAll('.cmp-chips--span .cmp-chip')]
+            spans: [...document.querySelectorAll('.cmp-spanbar .cmp-chip')]
                 .map(b => b.textContent.trim()),
+            spanOn: [...document.querySelectorAll('.cmp-spanbar .cmp-chip')]
+                .filter(b => b.getAttribute('aria-pressed') === 'true')
+                .map(b => b.textContent.trim()),
+            spanNote: (document.getElementById('cmpSpanNote') || {}).textContent,
+            seasonTags: document.querySelectorAll('.cmp-season').length,
             // One bar per cell, each measured off its own cell's edge, meant
             // comparing lengths across two gaps. Every bar in a row now shares one
             // track, one origin and one scale, so longer is higher.
@@ -560,7 +568,10 @@ try {
     check(cmp.legend === true, 'the radar names its colours');
     check(cmp.spokes2.includes('xG/90') && cmp.spokes2.includes('DEFCON/90'),
         `the spokes are metric names (${cmp.spokes2.join(', ')})`);
-    check(cmp.spans.length === 3, `the trend offers three spans (${cmp.spans.join(' | ')})`);
+    check(cmp.spans.length === 4 && cmp.spanOn.length === 1 && cmp.spanOn[0] === 'כל העונה',
+        `one span control, four choices, whole season by default (${cmp.spans.join(' | ')} -> ${cmp.spanOn})`);
+    check(cmp.seasonTags === 0,
+        `and nothing is marked season-only while the span IS the season (${cmp.seasonTags})`);
     check(cmp.width && cmp.width.cols === '2' && cmp.width.table < cmp.width.body * 0.75,
         `two players do not stretch across the page (${JSON.stringify(cmp.width)})`);
     // Ninety bar lengths was not a comparison. The table is a tinted matrix now:
@@ -568,25 +579,51 @@ try {
     check(cmp.matrix.bars === 0, `no bars left in the table (${cmp.matrix.bars})`);
     check(cmp.tones.untinted === 0 && cmp.tones.wrongGreen === 0,
         `every contested row is tinted, greenest on its leader (${JSON.stringify(cmp.tones)})`);
-    check(/מוביל|מובילים/.test(cmp.matrix.lead || '') && cmp.matrix.groups >= 4,
-        `the table states who leads how many ("${cmp.matrix.lead}", ${cmp.matrix.groups} groups)`);
+    // A tally of metric wins was the wrong summary — the groups have different row
+    // counts and half the metrics are near-duplicates. It names areas now.
+    check(/מוביל בכל קבוצת מדדים/.test(cmp.matrix.lead || '')
+        && cmp.matrix.who.length === 2
+        && cmp.matrix.who.every(w => w.areas.length > 0),
+        `the table names who owns which area (${JSON.stringify(cmp.matrix.who)})`);
     check(cmp.matrix.folds > 0 && cmp.matrix.foldedRows > 0,
         `near-identical rows are folded away (${cmp.matrix.folds} folds, ${cmp.matrix.foldedRows} rows)`);
 
-    // Widening the span must actually widen the chart.
+    // The one control has to move the chart AND the table, and the table has to
+    // re-measure what it can rather than relabel the same figures.
     const span = await page.evaluate(async () => {
         const points = () => Chart.getChart(document.getElementById('cmpTrend')).data.labels.length;
-        const before = points();
+        const ppg = () => {
+            const label = [...document.querySelectorAll('.cmp-row-label')]
+                .find(l => l.textContent.trim().startsWith('נק׳/מש׳'));
+            const row = label && label.parentElement;
+            return row ? [...row.querySelectorAll('.cmp-num')].map(n => n.textContent) : [];
+        };
+        const seasonPts = points();
+        const seasonPpg = ppg();
+
+        setCompareSpan('g3');
+        await new Promise(r => setTimeout(r, 500));
+        const shortPts = points();
+        const shortPpg = ppg();
+        const tags = document.querySelectorAll('.cmp-season').length;
+        const note = (document.getElementById('cmpSpanNote') || {}).textContent;
+
         setCompareSpan('season');
         await new Promise(r => setTimeout(r, 400));
-        const after = points();
-        const note = document.getElementById('cmpTrendNote').textContent;
-        setCompareSpan('window');
-        await new Promise(r => setTimeout(r, 300));
-        return { before, after, note, back: points() };
+        return {
+            seasonPts, shortPts, seasonPpg, shortPpg, tags, note,
+            backPts: points(), backPpg: ppg()
+        };
     });
-    check(span.after > span.before && span.back === span.before,
-        `the season span widens the chart and the window narrows it again (${JSON.stringify(span)})`);
+    check(span.shortPts === 3 && span.seasonPts > span.shortPts && span.backPts === span.seasonPts,
+        `the span moves the chart (${span.seasonPts} -> ${span.shortPts} -> ${span.backPts})`);
+    check(span.shortPpg.length > 0 && span.shortPpg.join() !== span.seasonPpg.join()
+        && span.backPpg.join() === span.seasonPpg.join(),
+        `and re-measures the table, reversibly (${span.seasonPpg} -> ${span.shortPpg})`);
+    check(span.tags > 0,
+        `metrics with no per-match record say they stayed season-long (${span.tags} marked)`);
+    check(/^3 מחזורים/.test((span.note || '').trim()),
+        `and the control states the span it actually drew ("${span.note}")`);
 
     // Re-opening must not leak the previous instances onto replaced canvases.
     const reopen = await page.evaluate(async () => {

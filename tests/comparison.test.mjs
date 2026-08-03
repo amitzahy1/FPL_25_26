@@ -19,7 +19,8 @@ const FUNCTIONS = [
     'compareChartPlayers', 'compareColor', 'fadeHex', 'poolPercentile',
     'isAvailableToDraft',
     // trend
-    'compareTrendConfig', 'compareSeries', 'compareSpanGws', 'compareAllGameweeks',
+    'compareTrendConfig', 'compareSeries', 'compareSpanGws', 'comparePrevSpanGws',
+    'compareAllGameweeks', 'compareSpanTotals', 'spanRate',
     'compareSpanNote', 'getTrendSeries', 'trendPlayerIndex',
     'gwDefensiveContribution', 'trendBenchmark', 'chartAxis', 'ltrTick',
     // table + verdict
@@ -34,7 +35,8 @@ const DEPS = [
     'BENCH_TOP_N', 'BENCH_MIN_MINUTES', '_partBenchCache', '_axisBenchCache',
     '_compositeCache', '_trendBenchCache', '_windowStatsCache', '_trendPlayerIndex',
     '_dropOff', '_compareSections', 'COMPOSITE_PARTS', 'COMPOSITE_CAP', 'RADAR_MAX_AXES',
-    'COMPARE_CHART_LIMIT', 'COMPARE_SPANS', 'TREND_METRICS', 'DEFCON_THRESHOLD',
+    'COMPARE_CHART_LIMIT', 'COMPARE_SPANS', 'COMPARE_DEFAULT_SPAN',
+    'TREND_METRICS', 'DEFCON_THRESHOLD',
     'CHART_TOOLTIP', 'CHART_LINE_PALETTE', '_compareGwCache', 'COMPARE_TIGHT_SPREAD',
     'gwNum', 'num1'
 ];
@@ -412,7 +414,7 @@ describe('the trend chart', () => {
     test('one line per player, over the gameweeks in the window', () => {
         const pool = squad(8);
         const cmp = load(pool);
-        const config = cmp.compareTrendConfig([pool[0], pool[1]], 'pts', false, 'window');
+        const config = cmp.compareTrendConfig([pool[0], pool[1]], 'pts', false, 'g5');
         assert.equal(config.type, 'line');
         const players = config.data.datasets.filter(d => d.label !== 'רמת העילית');
         assert.equal(players.length, 2);
@@ -422,7 +424,7 @@ describe('the trend chart', () => {
     test('cumulative mode never goes down', () => {
         const pool = squad(8);
         const cmp = load(pool);
-        const config = cmp.compareTrendConfig([pool[0]], 'pts', true, 'window');
+        const config = cmp.compareTrendConfig([pool[0]], 'pts', true, 'g5');
         const data = config.data.datasets[0].data;
         for (let i = 1; i < data.length; i++) {
             assert.ok(data[i] >= data[i - 1], `dropped at ${i}: ${data}`);
@@ -436,11 +438,11 @@ describe('the trend chart', () => {
             .map((p, i) => ({ ...p, id: 300 + i }));
         const cmp = load([...mids, ...keepers]);
 
-        const same = cmp.compareTrendConfig([mids[0], mids[1]], 'pts', false, 'window');
+        const same = cmp.compareTrendConfig([mids[0], mids[1]], 'pts', false, 'g5');
         assert.ok(same.data.datasets.some(d => d.label === 'רמת העילית'),
             'one position has one bar');
 
-        const mixed = cmp.compareTrendConfig([mids[0], keepers[0]], 'pts', false, 'window');
+        const mixed = cmp.compareTrendConfig([mids[0], keepers[0]], 'pts', false, 'g5');
         assert.ok(!mixed.data.datasets.some(d => d.label === 'רמת העילית'),
             'two positions have two bars, and one line would be wrong for one of them');
     });
@@ -450,28 +452,29 @@ describe('the trend chart', () => {
         const cmp = load(pool);
         // The momentum window is five gameweeks; ten reaches back into the
         // previous window; the season takes everything loaded.
-        assert.deepEqual(cmp.compareSpanGws('window').map(t => t.gw), [34, 35, 36, 37, 38]);
-        assert.deepEqual(cmp.compareSpanGws('ten').map(t => t.gw),
+        assert.deepEqual(cmp.compareSpanGws('g5').map(t => t.gw), [34, 35, 36, 37, 38]);
+        assert.deepEqual(cmp.compareSpanGws('g10').map(t => t.gw),
             [29, 30, 31, 32, 33, 34, 35, 36, 37, 38]);
         assert.equal(cmp.compareSpanGws('season').length, 10);
-        // An unknown span falls back to the window rather than drawing nothing.
-        assert.deepEqual(cmp.compareSpanGws('nonsense').map(t => t.gw), [34, 35, 36, 37, 38]);
+        // An unknown span falls back to the default — the whole season — rather
+        // than drawing nothing.
+        assert.equal(cmp.compareSpanGws('nonsense').length, 10);
     });
 
     test('the caption counts the gameweeks it actually drew', () => {
         const cmp = load(squad(8));
         // Not "all season" — the number of gameweeks that turned out to exist,
         // which on a live season is only what has been fetched so far.
-        assert.match(cmp.compareSpanNote('ten'), /^10 מחזורים/);
-        assert.match(cmp.compareSpanNote('ten'), /GW29–GW38/);
-        assert.match(cmp.compareSpanNote('window'), /^5 מחזורים/);
+        assert.match(cmp.compareSpanNote('g10'), /^10 מחזורים/);
+        assert.match(cmp.compareSpanNote('g10'), /GW29–GW38/);
+        assert.match(cmp.compareSpanNote('g5'), /^5 מחזורים · GW34–GW38/);
     });
 
     test('a wider span draws more points per player', () => {
         const pool = squad(8);
         const cmp = load(pool);
-        const win = cmp.compareTrendConfig([pool[0]], 'pts', false, 'window');
-        const ten = cmp.compareTrendConfig([pool[0]], 'pts', false, 'ten');
+        const win = cmp.compareTrendConfig([pool[0]], 'pts', false, 'g5');
+        const ten = cmp.compareTrendConfig([pool[0]], 'pts', false, 'g10');
         assert.equal(win.data.labels.length, 5);
         assert.equal(ten.data.labels.length, 10);
     });
@@ -481,16 +484,24 @@ describe('the trend chart', () => {
         // series it would be comparing two different spans.
         const pool = squad(8);
         const cmp = load(pool);
-        const win = cmp.compareTrendConfig([pool[0], pool[1]], 'pts', false, 'window');
-        const ten = cmp.compareTrendConfig([pool[0], pool[1]], 'pts', false, 'ten');
+        const win = cmp.compareTrendConfig([pool[0], pool[1]], 'pts', false, 'g5');
+        const ten = cmp.compareTrendConfig([pool[0], pool[1]], 'pts', false, 'g10');
         assert.ok(win.data.datasets.some(d => d.label === 'רמת העילית'));
         assert.ok(!ten.data.datasets.some(d => d.label === 'רמת העילית'));
     });
 
-    test('no window, no chart', () => {
-        const cmp = load(squad(8), { trendGws: [] });
-        assert.equal(cmp.compareTrendConfig([player()], 'pts', false, 'window'), null);
-        assert.equal(cmp.compareTrendConfig([player()], 'nonsense', false, 'window'), null);
+    test('no gameweek record at all, no chart', () => {
+        // The chart no longer depends on the site-wide momentum window — it reads
+        // whatever gameweeks exist — so emptying that window alone is not enough
+        // to leave it with nothing.
+        const cmp = load(squad(8), { trendGws: [], trendPrevGws: [] });
+        assert.equal(cmp.compareTrendConfig([player()], 'pts', false, 'g5'), null);
+        assert.equal(cmp.compareSpanNote('g5'), 'אין נתוני מחזורים');
+    });
+
+    test('an unknown metric draws nothing rather than an empty chart', () => {
+        const cmp = load(squad(8));
+        assert.equal(cmp.compareTrendConfig([player()], 'nonsense', false, 'g5'), null);
     });
 });
 
@@ -501,7 +512,7 @@ describe('the colour identity', () => {
         const config = cmp.compareRadarConfig([pool[0], pool[1]]);
         assert.equal(config.data.datasets[0].borderColor, cmp.compareColor(0));
         assert.equal(config.data.datasets[1].borderColor, cmp.compareColor(1));
-        const trend = cmp.compareTrendConfig([pool[0], pool[1]], 'pts', false, 'window');
+        const trend = cmp.compareTrendConfig([pool[0], pool[1]], 'pts', false, 'g5');
         assert.equal(trend.data.datasets[0].borderColor, cmp.compareColor(0));
         assert.equal(trend.data.datasets[1].borderColor, cmp.compareColor(1));
     });
@@ -616,5 +627,114 @@ describe('the comparison matrix', () => {
         ]);
         assert.deepEqual(board.bySection.map(s => s.title), ['real']);
         assert.equal(board.total, 1);
+    });
+});
+
+describe('the data span', () => {
+    test('a short span re-measures what the per-match record can answer', () => {
+        const pool = squad(8);
+        const cmp = load(pool);
+        const season = cmp.comparisonRowsFor([pool[0], pool[1]], 'season');
+        const short = cmp.comparisonRowsFor([pool[0], pool[1]], 'g3');
+
+        const find = (secs, key) => {
+            for (const sec of secs) { const r = sec.rows.find(x => x.key === key); if (r) return r; }
+            return null;
+        };
+        // Points per appearance over three gameweeks of five points each is 5,
+        // not the season figure the fixture carries.
+        const shortPpg = find(short, 'ppg');
+        assert.equal(shortPpg.values[0], 5);
+        assert.equal(shortPpg.seasonOnly, false);
+        assert.notEqual(find(season, 'ppg').values[0], 5);
+
+        // Appearances follow the span: three gameweeks, three appearances.
+        assert.equal(find(short, 'apps').values[0], 3);
+        assert.equal(find(short, 'minutes_total').values[0], 270);
+    });
+
+    test('a metric with no per-match record stays season-long and says so', () => {
+        const pool = squad(8);
+        const cmp = load(pool);
+        const short = cmp.comparisonRowsFor([pool[0], pool[1]], 'g3');
+        const find = key => {
+            for (const sec of short) { const r = sec.rows.find(x => x.key === key); if (r) return r; }
+            return null;
+        };
+        // Clean sheets, ICT and the price have no per-gameweek record at all.
+        for (const key of ['cs90', 'ict90', 'cost']) {
+            const row = find(key);
+            if (row) assert.equal(row.seasonOnly, true, `${key} cannot be windowed`);
+        }
+        // xG and xA are stored only as their sum, split in half, so windowing them
+        // would be inventing a split that does not exist. xGI can be windowed.
+        assert.equal(find('xg90').seasonOnly, true);
+        assert.equal(find('xa90').seasonOnly, true);
+        assert.equal(find('xgi90').seasonOnly, false);
+    });
+
+    test('nothing is marked season-only when the span IS the season', () => {
+        const pool = squad(8);
+        const cmp = load(pool);
+        const season = cmp.comparisonRowsFor([pool[0], pool[1]], 'season');
+        assert.ok(season.every(sec => sec.rows.every(r => r.seasonOnly === false)),
+            'the default view has no mixture to explain');
+    });
+
+    test('the delta compares a span with the span before it', () => {
+        const pool = squad(8);
+        const cmp = load(pool);
+        // The fixture scores five a gameweek recently and three before that, so
+        // points per appearance is 5 now against 3 then.
+        const short = cmp.comparisonRowsFor([pool[0], pool[1]], 'g5');
+        const ppg = short.flatMap(s => s.rows).find(r => r.key === 'ppg');
+        assert.equal(ppg.deltas[0], 2);
+        // Over a whole season there is no earlier season to compare against.
+        const season = cmp.comparisonRowsFor([pool[0], pool[1]], 'season');
+        const ppgAll = season.flatMap(s => s.rows).find(r => r.key === 'ppg');
+        assert.equal(ppgAll.deltas[0], null);
+    });
+
+    test('the totals count appearances, not gameweeks in the span', () => {
+        const cmp = load(squad(8));
+        const gws = [
+            { gw: 1, stats: new Map([[1, { minutes: 90, total_points: 6, goals_scored: 1 }]]) },
+            { gw: 2, stats: new Map() },                                    // not in the squad
+            { gw: 3, stats: new Map([[1, { minutes: 0, total_points: 0 }]]) }, // unused sub
+            { gw: 4, stats: new Map([[1, { minutes: 45, total_points: 2 }]]) }
+        ];
+        const t = cmp.compareSpanTotals(1, gws, 3);
+        assert.equal(t.apps, 2, 'a gameweek he did not play is not an appearance');
+        assert.equal(t.minutes, 135);
+        assert.equal(t.points, 8);
+        assert.equal(t.per90, 1.5);
+    });
+
+    test('a rate over no minutes is absent, not zero', () => {
+        const cmp = load(squad(8));
+        assert.equal(cmp.spanRate(10, 0), null);
+        assert.equal(cmp.spanRate(9, 3), 3);
+    });
+
+    test('a keeper has no DEFCON rate, an outfielder does', () => {
+        const cmp = load(squad(8));
+        const gws = [
+            { gw: 1, stats: new Map([[1, { minutes: 90, clearances_blocks_interceptions: 10, tackles: 3, recoveries: 4 }]]) },
+            { gw: 2, stats: new Map([[1, { minutes: 90, clearances_blocks_interceptions: 1, tackles: 0, recoveries: 0 }]]) }
+        ];
+        const out = cmp.compareSpanTotals(1, gws, 2);
+        assert.equal(out.defconApps, 2);
+        assert.equal(out.defconHits, 1, 'one of the two cleared the threshold');
+
+        const gk = cmp.compareSpanTotals(1, gws, 1);
+        assert.equal(gk.defconApps, 0, 'a keeper is not scored on it at all');
+        assert.equal(gk.defconHits, 0);
+    });
+
+    test('the previous span sits immediately before the current one', () => {
+        const cmp = load(squad(8));
+        assert.deepEqual(cmp.compareSpanGws('g3').map(t => t.gw), [36, 37, 38]);
+        assert.deepEqual(cmp.comparePrevSpanGws('g3').map(t => t.gw), [33, 34, 35]);
+        assert.deepEqual(cmp.comparePrevSpanGws('season'), [], 'a season has no season before it');
     });
 });
