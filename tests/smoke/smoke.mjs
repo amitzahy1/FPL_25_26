@@ -456,23 +456,46 @@ try {
             // every competitive row has exactly one leader and one laggard.
             tones: (() => {
                 const rows = [...document.querySelectorAll('.cmp-section .cmp-row')];
-                let contested = 0, unmarked = 0;
+                let contested = 0, unmarked = 0, untinted = 0, wrongGreen = 0;
                 for (const r of rows) {
                     const cells = [...r.querySelectorAll('.cmp-cell')];
                     // A neutral metric has no winner, and neither does a tie —
                     // marking one of two identical figures as the leader would be
                     // an invention. Only rows with a real spread are checked.
-                    if (cells.some(c => c.classList.contains('is-flat')
-                        || c.classList.contains('is-empty'))) continue;
+                    if (r.classList.contains('is-neutral')) continue;
+                    if (cells.some(c => c.classList.contains('is-empty'))) continue;
                     const nums = cells.map(c => (c.querySelector('.cmp-num') || {}).textContent);
                     if (new Set(nums).size < 2) continue;
                     contested++;
                     const best = cells.filter(c => c.classList.contains('is-best')).length;
                     const worst = cells.filter(c => c.classList.contains('is-worst')).length;
                     if (best < 1 || worst < 1) unmarked++;
+
+                    // The tint is the whole encoding now, so it has to be there and
+                    // it has to be greenest on the leader.
+                    const alpha = c => {
+                        const m = /rgba?\(([^)]+)\)/.exec(getComputedStyle(c).backgroundColor);
+                        if (!m) return 0;
+                        const parts = m[1].split(',').map(Number);
+                        // Green channel dominant means a green tint; red means red.
+                        const a = parts.length > 3 ? parts[3] : 1;
+                        return parts[1] > parts[0] ? a : -a;
+                    };
+                    const tints = cells.map(alpha);
+                    if (tints.every(t => t === 0)) { untinted++; continue; }
+                    const leader = cells.findIndex(c => c.classList.contains('is-best'));
+                    if (leader >= 0 && tints[leader] !== Math.max(...tints)) wrongGreen++;
                 }
-                return { rows: rows.length, contested, unmarked };
+                return { rows: rows.length, contested, unmarked, untinted, wrongGreen };
             })(),
+            matrix: {
+                bars: document.querySelectorAll('.cmp-axis-row, .cmp-bar').length,
+                lead: (document.querySelector('.cmp-lead-line') || {}).textContent?.replace(/\s+/g, ' ').trim(),
+                groups: document.querySelectorAll('.cmp-lead-chip').length,
+                folds: document.querySelectorAll('.cmp-fold').length,
+                foldedRows: [...document.querySelectorAll('.cmp-fold')]
+                    .reduce((n, f) => n + f.querySelectorAll('.cmp-row').length, 0)
+            },
             spans: [...document.querySelectorAll('.cmp-chips--span .cmp-chip')]
                 .map(b => b.textContent.trim()),
             // One bar per cell, each measured off its own cell's edge, meant
@@ -540,10 +563,15 @@ try {
     check(cmp.spans.length === 3, `the trend offers three spans (${cmp.spans.join(' | ')})`);
     check(cmp.width && cmp.width.cols === '2' && cmp.width.table < cmp.width.body * 0.75,
         `two players do not stretch across the page (${JSON.stringify(cmp.width)})`);
-    check(cmp.axis.checked > 10 && cmp.axis.offOrigin === 0 && cmp.axis.offScale === 0,
-        `every row's bars share one axis (${JSON.stringify(cmp.axis)})`);
-    check(cmp.axis.wrongOrder === 0,
-        `and the longest bar is the biggest figure (${cmp.axis.wrongOrder} rows disagree)`);
+    // Ninety bar lengths was not a comparison. The table is a tinted matrix now:
+    // no bars at all, and the colour is the encoding.
+    check(cmp.matrix.bars === 0, `no bars left in the table (${cmp.matrix.bars})`);
+    check(cmp.tones.untinted === 0 && cmp.tones.wrongGreen === 0,
+        `every contested row is tinted, greenest on its leader (${JSON.stringify(cmp.tones)})`);
+    check(/מוביל|מובילים/.test(cmp.matrix.lead || '') && cmp.matrix.groups >= 4,
+        `the table states who leads how many ("${cmp.matrix.lead}", ${cmp.matrix.groups} groups)`);
+    check(cmp.matrix.folds > 0 && cmp.matrix.foldedRows > 0,
+        `near-identical rows are folded away (${cmp.matrix.folds} folds, ${cmp.matrix.foldedRows} rows)`);
 
     // Widening the span must actually widen the chart.
     const span = await page.evaluate(async () => {

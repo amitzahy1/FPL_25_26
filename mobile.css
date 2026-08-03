@@ -824,10 +824,16 @@
     .cmp-chips { flex-wrap: nowrap; overflow-x: auto; padding-bottom: 2px; }
     .cmp-chips::-webkit-scrollbar { height: 0; }
     .cmp-chip { flex: none; }
-    .cmp-row-label { padding: 5px 6px; font-size: 10px; }
+    .cmp-row-label { padding: 4px 6px; font-size: 10px; }
     .cmp-col-head { padding: 5px 6px; font-size: 10.5px; }
-    .cmp-cell { padding: 4px 6px; }
+    .cmp-cell { padding: 4px 7px; gap: 3px; }
     .cmp-num { font-size: 11.5px; }
+    .cmp-lead { padding: 8px 10px; }
+    .cmp-lead-line { font-size: 12px; }
+    /* The group chips wrap into a wall on a phone; the headline carries it. */
+    .cmp-lead-groups { gap: 3px 4px; }
+    .cmp-lead-chip { font-size: 9.5px; padding: 1px 6px; }
+    .cmp-fold > summary span { display: none; }
     .cmp-section-head { padding: 7px 10px; }
     .cmp-section-head span { display: none; }
 }

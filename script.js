@@ -5249,42 +5249,6 @@ function playerPhotoFallback(name, color) {
         + ` fill=%22%23fff%22 font-size=%2252%22 font-weight=%22bold%22%3E${initial}%3C/text%3E%3C/svg%3E`;
 }
 
-/**
- * One row's figures as bars on a single axis.
- *
- * They used to be one bar per cell, each measured against its own cell's edge.
- * Same scale, three different origins — so telling which was longer meant
- * eyeballing across two gaps, and the answer was in the numbers anyway. Here all
- * the bars share one track, one origin and one scale, stacked in column order and
- * carrying each player's own colour, so "who is higher" is the shape of it.
- *
- * The scale runs from min(0, lowest) to max(0, highest), so a bar is the figure
- * itself rather than a share of the leader. On a row where low wins the longest
- * bar is the loser, which is what the ↓ on the label and the trophy in the cell
- * are for: the bar answers "how big", the trophy answers "who wins".
- */
-function compareAxisHtml(players, row) {
-    const real = row.values.filter(v => v !== null);
-    if (real.length < 2) return '<div class="cmp-axis"></div>';
-
-    const lo = Math.min(0, ...real);
-    const hi = Math.max(0, ...real);
-    const span = hi - lo;
-
-    const bars = players.map((p, i) => {
-        const value = row.values[i];
-        if (value === null) return '<span class="cmp-axis-row"></span>';
-        // Everything equal is everything full, rather than a row of slivers from
-        // dividing by nothing.
-        const pct = span > 0 ? ((value - lo) / span) * 100 : 100;
-        const label = `${p.web_name}: ${row.fmt(value)}`;
-        return `<span class="cmp-axis-row" title="${escapeHtml(label)}">
-            <i style="width: ${Math.max(pct, 1.5).toFixed(1)}%; --cmp-hue: ${compareColor(i)}"></i>
-        </span>`;
-    }).join('');
-
-    return `<div class="cmp-axis">${bars}</div>`;
-}
 
 /**
  * The window trend beside a value.
@@ -5488,6 +5452,174 @@ function compareChartsHtml(players) {
     </div>`;
 }
 
+/**
+ * Rows where nobody is meaningfully ahead. Below this the figures are the same
+ * answer written three ways, and thirty such rows bury the handful that decide
+ * anything.
+ */
+const COMPARE_TIGHT_SPREAD = 0.05;
+
+/**
+ * Where one figure stands in its row, 1 for the best and 0 for the worst.
+ *
+ * Spaced by value, not by rank: three players on 93, 74 and 72 should not look
+ * evenly spread, because they are not. Returns null when there is nothing to
+ * stand against — one figure, or every figure identical.
+ */
+function rowStanding(value, values, asc) {
+    const real = (values || []).filter(v => v !== null && Number.isFinite(v));
+    if (!Number.isFinite(value) || real.length < 2) return null;
+    const hi = Math.max(...real);
+    const lo = Math.min(...real);
+    if (hi === lo) return null;
+    const t = (value - lo) / (hi - lo);
+    return asc ? 1 - t : t;
+}
+
+/**
+ * The tint for one standing.
+ *
+ * The middle of a row gets no colour at all, so the eye is drawn only to the
+ * ends — which is the whole point of tinting instead of drawing thirty bars. The
+ * alpha ceilings are where the text stops being comfortable to read on top.
+ */
+function compareToneColor(t) {
+    if (t === null || !Number.isFinite(t)) return 'transparent';
+    // Green carries further than red on purpose: the job is finding the leader,
+    // not shaming everyone behind him, and with three players the runner-up sits
+    // close enough to the bottom that a heavy red read as a verdict on him.
+    if (t >= 0.5) return `rgba(14, 122, 69, ${((t - 0.5) * 2 * 0.22).toFixed(3)})`;
+    return `rgba(185, 50, 41, ${((0.5 - t) * 2 * 0.12).toFixed(3)})`;
+}
+
+/** How far apart a row's figures are, relative to their own size. */
+function rowSpread(values) {
+    const real = (values || []).filter(v => v !== null && Number.isFinite(v));
+    if (real.length < 2) return 0;
+    const hi = Math.max(...real);
+    const lo = Math.min(...real);
+    // Relative to the larger magnitude, so 0.10 against 0.78 counts as a wide
+    // gap and 220 against 214 counts as a narrow one.
+    const scale = Math.max(Math.abs(hi), Math.abs(lo));
+    return scale ? (hi - lo) / scale : 0;
+}
+
+/** A row that does not separate these particular players. */
+function isTightRow(row) {
+    return rowSpread(row.values) < COMPARE_TIGHT_SPREAD;
+}
+
+/**
+ * Who leads how many metrics, overall and per group.
+ *
+ * Neutral metrics have no winner and ties credit everyone who tied, so the
+ * per-player counts can add up to more than the total — the total is "metrics
+ * that separated anybody", which is the honest denominator.
+ */
+function compareLeaderboard(players, sections) {
+    const wins = players.map(p => ({ player: p, wins: 0 }));
+    const bySection = [];
+    let total = 0;
+
+    for (const section of sections) {
+        const sectionWins = players.map(() => 0);
+        let sectionTotal = 0;
+
+        for (const row of section.rows) {
+            const real = row.values.filter(v => v !== null);
+            if (row.neutral || real.length < 2) continue;
+            const best = row.asc ? Math.min(...real) : Math.max(...real);
+            const worst = row.asc ? Math.max(...real) : Math.min(...real);
+            if (best === worst) continue;
+            sectionTotal++;
+            row.values.forEach((v, i) => {
+                if (v === best) { wins[i].wins++; sectionWins[i]++; }
+            });
+        }
+
+        if (!sectionTotal) continue;
+        total += sectionTotal;
+        const top = Math.max(...sectionWins);
+        bySection.push({
+            title: section.title,
+            total: sectionTotal,
+            wins: top,
+            leaders: players.filter((p, i) => sectionWins[i] === top).map(p => p.web_name),
+            counts: sectionWins
+        });
+    }
+
+    const top = Math.max(0, ...wins.map(w => w.wins));
+    return { total, wins, bySection, leaders: total ? wins.filter(w => w.wins === top) : [] };
+}
+
+/* ------------------------------- the markup ------------------------------ */
+
+function compareRowHtml(players, row) {
+    const real = row.values.filter(v => v !== null);
+    const best = row.asc ? Math.min(...real) : Math.max(...real);
+    const worst = row.asc ? Math.max(...real) : Math.min(...real);
+    // A tie has no winner, and a neutral metric has no better or worse at all.
+    const competitive = !row.neutral && real.length > 1 && best !== worst;
+
+    const cells = players.map((p, i) => {
+        const value = row.values[i];
+        if (value === null) {
+            return '<div class="cmp-cell is-empty"><span class="cmp-num">–</span></div>';
+        }
+        const isBest = competitive && value === best;
+        const isWorst = competitive && value === worst;
+        const t = row.neutral ? null : rowStanding(value, row.values, row.asc);
+        const delta = row.trend ? compareDeltaHtml(p, row.trend) : '';
+
+        // The cell stays RTL so the figure, its trend and the trophy read
+        // right-to-left in that order; only the digits are isolated left-to-right,
+        // which is what keeps a leading + or - on the correct side.
+        return `<div class="cmp-cell${isBest ? ' is-best' : ''}${isWorst ? ' is-worst' : ''}"
+            style="background: ${compareToneColor(t)}">
+            <span class="cmp-num">${row.fmt(value)}</span>${delta}
+            ${isBest ? '<span class="cmp-crown" aria-hidden="true">🏆</span>' : ''}
+        </div>`;
+    }).join('');
+
+    // The row says in the DOM that it has no winner, so nothing downstream has to
+    // re-derive it from the absence of a trophy.
+    return `<div class="cmp-row${row.neutral ? ' is-neutral' : ''}">
+        <div class="cmp-row-label" title="${escapeHtml(row.title)}">${row.label}${
+        row.asc ? '<span class="cmp-asc" title="נמוך = טוב יותר">↓</span>' : ''}</div>
+        ${cells}
+    </div>`;
+}
+
+/**
+ * The headline over the table: who wins the most of it.
+ *
+ * Thirty rows is more than anyone reads before deciding, so the count comes
+ * first and the rows are there to be checked against it. The per-group line is
+ * where it gets interesting — a forward sweeping the attacking groups and losing
+ * every defensive one is the shape of most real comparisons.
+ */
+function compareLeadHtml(players, sections) {
+    const board = compareLeaderboard(players, sections);
+    if (!board.total) return '';
+
+    const names = board.leaders.map(w => escapeHtml(w.player.web_name)).join(' ו-');
+    const wins = board.leaders.length ? board.leaders[0].wins : 0;
+    const headline = board.leaders.length > 1
+        ? `${names} מובילים ב-${wins} מדדים כל אחד, מתוך ${board.total}`
+        : `${names} מוביל ב-${wins} מתוך ${board.total} מדדים`;
+
+    const groups = board.bySection.map(s => {
+        const who = s.leaders.map(n => escapeHtml(n)).join(' / ');
+        return `<span class="cmp-lead-chip"><b>${escapeHtml(s.title)}</b> ${who} ${s.wins}/${s.total}</span>`;
+    }).join('');
+
+    return `<div class="cmp-lead">
+        <p class="cmp-lead-line">🏆 ${headline}</p>
+        <div class="cmp-lead-groups">${groups}</div>
+    </div>`;
+}
+
 function compareMetricsHtml(players) {
     const sections = comparisonRowsFor(players);
     if (!sections.length) return '';
@@ -5496,58 +5628,45 @@ function compareMetricsHtml(players) {
         `<span class="cmp-col-head" style="--cmp-hue: ${compareColor(i)}">${escapeHtml(p.web_name)}</span>`).join('');
 
     const body = sections.map(section => {
-        const rows = section.rows.map(row => {
-            const real = row.values.filter(v => v !== null);
-            const best = row.asc ? Math.min(...real) : Math.max(...real);
-            const worst = row.asc ? Math.max(...real) : Math.min(...real);
-            // A tie has no winner, and a neutral row has no better or worse.
-            const competitive = !row.neutral && real.length > 1 && best !== worst;
+        // Rows that separate these players, and rows that do not. The second kind
+        // is folded away rather than deleted: "these seven are the same" is a
+        // finding, and hiding it outright would be a different claim.
+        const wide = [];
+        const tight = [];
+        for (const row of section.rows) (isTightRow(row) ? tight : wide).push(row);
 
-            const cells = players.map((p, i) => {
-                const value = row.values[i];
-                if (value === null) return `<div class="cmp-cell is-empty"><span class="cmp-val">–</span></div>`;
+        const shown = wide.map(row => compareRowHtml(players, row)).join('');
+        const near = `הפער קטן מ-${Math.round(COMPARE_TIGHT_SPREAD * 100)}%`;
+        const count = tight.length === 1 ? 'מדד אחד שבו' : `${tight.length} מדדים שבהם`;
+        const folded = tight.length
+            ? `<details class="cmp-fold">
+                   <summary>${count} ${near}
+                       <span>${tight.map(r => escapeHtml(r.label)).join(' · ')}</span></summary>
+                   ${tight.map(row => compareRowHtml(players, row)).join('')}
+               </details>`
+            : '';
 
-                const isBest = competitive && value === best;
-                const isWorst = competitive && value === worst;
-
-                // Merit, not identity. The player's own colour lives on his card,
-                // his polygon, his line and his column header — inside the table a
-                // colour has to answer "who is winning this row", which is the
-                // only question the table is being asked.
-                const tone = row.neutral ? ' is-flat'
-                    : isBest ? ' is-best'
-                        : isWorst ? ' is-worst' : ' is-mid';
-
-                // The value, the trend and the trophy are all inline and the cell
-                // stays RTL, so they read right-to-left in that order. Only the
-                // digits get an LTR isolate — a cell-wide direction flip put the
-                // number at the far edge and dropped the trophy on top of it.
-                const delta = row.trend ? compareDeltaHtml(p, row.trend) : '';
-                return `<div class="cmp-cell${tone}">
-                    <span class="cmp-val">
-                        <span class="cmp-num">${row.fmt(value)}</span>${delta}
-                        ${isBest ? '<span class="cmp-crown" aria-hidden="true">🏆</span>' : ''}
-                    </span>
-                </div>`;
-            }).join('');
-
-            return `<div class="cmp-row">
-                <div class="cmp-row-label" title="${escapeHtml(row.title)}">${row.label}${row.asc ? '<span class="cmp-asc" title="נמוך = טוב יותר">↓</span>' : ''}</div>
-                ${cells}
-                ${compareAxisHtml(players, row)}
-            </div>`;
-        }).join('');
+        const board = compareLeaderboard(players, [section]);
+        const tag = board.bySection.length
+            ? `<em>${escapeHtml(board.bySection[0].leaders.join(' / '))} ${board.bySection[0].wins}/${board.bySection[0].total}</em>`
+            : '';
 
         return `<div class="cmp-section">
             <div class="cmp-section-head">
-                <h4>${section.title}</h4><span>${section.note}</span>
+                <h4>${section.title}</h4><span>${section.note}</span>${tag}
             </div>
-            ${rows}
+            ${shown}${folded}
         </div>`;
     }).join('');
 
-    return `<div class="cmp-table" style="--cmp-cols: ${players.length}">
-        <div class="cmp-row cmp-row--head"><div class="cmp-row-label"></div>${heads}</div>
+    return `${compareLeadHtml(players, sections)}
+    <div class="cmp-table" style="--cmp-cols: ${players.length}">
+        <div class="cmp-row cmp-row--head">
+            <div class="cmp-row-label">
+                <span class="cmp-key" title="הרקע של כל תא נצבע לפי מקומו בשורה — ירוק = הגבוה, אדום = הנמוך, ללא צבע = באמצע">מדד</span>
+            </div>
+            ${heads}
+        </div>
         ${body}
     </div>`;
 }

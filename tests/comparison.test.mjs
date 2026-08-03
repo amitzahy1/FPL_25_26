@@ -24,6 +24,7 @@ const FUNCTIONS = [
     'gwDefensiveContribution', 'trendBenchmark', 'chartAxis', 'ltrTick',
     // table + verdict
     'comparisonRowsFor', 'compareVerdict', 'compareRankLabel', 'compareSections',
+    'rowStanding', 'compareToneColor', 'rowSpread', 'isTightRow', 'compareLeaderboard',
     'seasonPointsPerApp', 'appearancesOf', 'compositeOf', 'compositeScore',
     'partBenchmark', 'partBenchmarkInfo', 'defconRateFor', 'windowStats',
     'dropOffFor', 'compareState'
@@ -34,7 +35,8 @@ const DEPS = [
     '_compositeCache', '_trendBenchCache', '_windowStatsCache', '_trendPlayerIndex',
     '_dropOff', '_compareSections', 'COMPOSITE_PARTS', 'COMPOSITE_CAP', 'RADAR_MAX_AXES',
     'COMPARE_CHART_LIMIT', 'COMPARE_SPANS', 'TREND_METRICS', 'DEFCON_THRESHOLD',
-    'CHART_TOOLTIP', 'CHART_LINE_PALETTE', '_compareGwCache', 'gwNum', 'num1'
+    'CHART_TOOLTIP', 'CHART_LINE_PALETTE', '_compareGwCache', 'COMPARE_TIGHT_SPREAD',
+    'gwNum', 'num1'
 ];
 
 /**
@@ -508,5 +510,111 @@ describe('the colour identity', () => {
         const cmp = load(squad(8));
         assert.equal(cmp.compareColor(0), cmp.compareColor(8));
         assert.ok(cmp.compareColor(3).startsWith('#'));
+    });
+});
+
+describe('the comparison matrix', () => {
+    test('a cell knows where it stands in its row, spaced by value', () => {
+        const cmp = load(squad(8));
+        const row = [93, 74, 72];
+        assert.equal(cmp.rowStanding(93, row, false), 1, 'the best is 1');
+        assert.equal(cmp.rowStanding(72, row, false), 0, 'the worst is 0');
+        // Spaced by value, not by rank: 74 of [93, 74, 72] is nearly the bottom,
+        // and a rank-based scale would have drawn it in the middle.
+        assert.ok(cmp.rowStanding(74, row, false) < 0.1);
+        // Evenly spread values land where you would expect.
+        assert.equal(cmp.rowStanding(5, [0, 5, 10], false), 0.5);
+    });
+
+    test('a row where low wins is inverted, not re-sorted', () => {
+        const cmp = load(squad(8));
+        // Goals conceded: 0.9 is the best of the three.
+        assert.equal(cmp.rowStanding(0.9, [0.9, 1.4, 1.9], true), 1);
+        assert.equal(cmp.rowStanding(1.9, [0.9, 1.4, 1.9], true), 0);
+    });
+
+    test('nothing to stand against has no standing', () => {
+        const cmp = load(squad(8));
+        assert.equal(cmp.rowStanding(5, [5], false), null, 'one figure');
+        assert.equal(cmp.rowStanding(5, [5, 5, 5], false), null, 'every figure identical');
+        assert.equal(cmp.rowStanding(null, [1, 2], false), null);
+        assert.equal(cmp.rowStanding(5, [5, null], false), null, 'nulls do not count as rivals');
+    });
+
+    test('the tint is green at the top, red at the bottom, nothing in the middle', () => {
+        const cmp = load(squad(8));
+        assert.match(cmp.compareToneColor(1), /^rgba\(14, 122, 69, 0\.22/);
+        assert.match(cmp.compareToneColor(0), /^rgba\(185, 50, 41, 0\.12/);
+        // The middle of a row is deliberately uncoloured, so the eye only goes to
+        // the ends — that is the point of tinting instead of drawing bars.
+        assert.match(cmp.compareToneColor(0.5), /rgba\(14, 122, 69, 0\.000\)/);
+        assert.equal(cmp.compareToneColor(null), 'transparent');
+        // Green reaches further than red: finding the leader is the job.
+        const green = parseFloat(/,\s([\d.]+)\)$/.exec(cmp.compareToneColor(1))[1]);
+        const red = parseFloat(/,\s([\d.]+)\)$/.exec(cmp.compareToneColor(0))[1]);
+        assert.ok(green > red, `${green} should carry further than ${red}`);
+    });
+
+    test('spread is relative to the size of the figures', () => {
+        const cmp = load(squad(8));
+        // 220 against 214 is a narrow gap; 0.78 against 0.10 is a wide one, even
+        // though the absolute difference is the other way round.
+        assert.ok(cmp.rowSpread([220, 214]) < 0.05);
+        assert.ok(cmp.rowSpread([0.78, 0.10]) > 0.8);
+        assert.equal(cmp.rowSpread([5, 5, 5]), 0);
+        assert.equal(cmp.rowSpread([7]), 0, 'one figure has no spread');
+        assert.equal(cmp.rowSpread([0, 0]), 0, 'and neither does nothing at all');
+        assert.equal(cmp.rowSpread([3, null]), 0, 'a lone real figure is not a spread');
+    });
+
+    test('a row that does not separate anybody is folded away', () => {
+        const cmp = load(squad(8));
+        assert.equal(cmp.isTightRow({ values: [100, 100] }), true);
+        assert.equal(cmp.isTightRow({ values: [220, 214] }), true);
+        assert.equal(cmp.isTightRow({ values: [93, 74] }), false);
+    });
+
+    test('the leaderboard counts who wins what, and what it left out', () => {
+        const cmp = load(squad(8));
+        const a = player({ id: 1, web_name: 'A' });
+        const b = player({ id: 2, web_name: 'B' });
+        const sections = [{
+            title: 'group', rows: [
+                { values: [9, 4] },                     // A
+                { values: [1, 8] },                     // B
+                { values: [3, 7] },                     // B
+                { values: [2, 6], neutral: true },      // nobody: no winner exists
+                { values: [5, 5] },                     // nobody: a tie
+                { values: [1, 9], asc: true }           // A, because low wins
+            ]
+        }];
+        const board = cmp.compareLeaderboard([a, b], sections);
+        assert.equal(board.total, 4, 'neutral rows and ties are not metrics anyone won');
+        assert.equal(board.wins[0].wins, 2);
+        assert.equal(board.wins[1].wins, 2);
+        assert.deepEqual(board.leaders.map(w => w.player.web_name), ['A', 'B'],
+            'a dead heat names both');
+        assert.equal(board.bySection[0].total, 4);
+    });
+
+    test('a joint-best row credits everyone who tied for it', () => {
+        const cmp = load(squad(8));
+        const trio = ['A', 'B', 'C'].map((n, i) => player({ id: i + 1, web_name: n }));
+        const board = cmp.compareLeaderboard(trio, [{
+            title: 'g', rows: [{ values: [9, 9, 2] }]
+        }]);
+        assert.equal(board.total, 1);
+        assert.deepEqual(board.wins.map(w => w.wins), [1, 1, 0]);
+    });
+
+    test('a group nobody could win is left out of the summary entirely', () => {
+        const cmp = load(squad(8));
+        const two = ['A', 'B'].map((n, i) => player({ id: i + 1, web_name: n }));
+        const board = cmp.compareLeaderboard(two, [
+            { title: 'real', rows: [{ values: [4, 2] }] },
+            { title: 'all neutral', rows: [{ values: [4, 2], neutral: true }] }
+        ]);
+        assert.deepEqual(board.bySection.map(s => s.title), ['real']);
+        assert.equal(board.total, 1);
     });
 });
