@@ -423,8 +423,10 @@ try {
         `the position filter narrows it to keepers (${JSON.stringify(browse.gkpPositions)})`);
     check(browse.gkpRows > 5 && browse.gkpRows < browse.allRows,
         `and to fewer of them (${browse.gkpRows} of ${browse.allRows})`);
-    check(/דירוג דראפט/.test(browse.gkpHead) && /שוערים/.test(browse.gkpHead),
-        `the list says what it is showing ("${browse.gkpHead}")`);
+    // The order it names has to be the order it used: between seasons the draft
+    // game is closed, nobody has a rank, and the sort falls through to points.
+    check(/(דירוג דראפט|נקודות העונה)/.test(browse.gkpHead) && /שוערים/.test(browse.gkpHead),
+        `the list says what it is showing and how it is sorted ("${browse.gkpHead}")`);
 
     // The comparison itself, opened from the two ticks that are already in place.
     const cmp = await page.evaluate(async () => {

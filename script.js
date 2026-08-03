@@ -5846,9 +5846,15 @@ function renderPlayerSearchMenu() {
     // Browsing states the scope and the ranking, because a list of 60 out of 183
     // that does not say so looks like the whole thing.
     const scope = playerSearchScope();
+    // Name the order that is actually in force. FPL Draft's ranking is the sort
+    // key, but the draft game closes between seasons and then no player has a
+    // rank at all — at which point playerSearchBrowse falls through to points,
+    // and a header still promising דירוג דראפט would be describing a sort that
+    // did not happen. This corrects itself the day the ranks land.
+    const ordered = matches.some(p => p.draft_rank) ? 'לפי דירוג דראפט' : 'לפי נקודות העונה';
     const head = browsing
         ? `<p class="ps-head">${scope.length ? `${escapeHtml(scope.join(' · '))} · ` : ''}${matches.length}${
-            matches.length < pool.length ? ` מתוך ${pool.length}` : ''} · לפי דירוג דראפט</p>`
+            matches.length < pool.length ? ` מתוך ${pool.length}` : ''} · ${ordered}</p>`
         : '';
     const more = browsing && matches.length < pool.length
         ? '<p class="ps-more">הקלידו שם כדי לצמצם</p>' : '';
