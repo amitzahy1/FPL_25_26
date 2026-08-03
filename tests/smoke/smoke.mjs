@@ -601,10 +601,18 @@ try {
         const seasonPts = points();
         const seasonPpg = ppg();
 
+        const radar = () => {
+            const c = Chart.getChart(document.getElementById('cmpRadar'));
+            return c ? { labels: c.data.labels.slice(), data: c.data.datasets[0].data.slice() } : null;
+        };
+        const seasonRadar = radar();
+
         setCompareSpan('g3');
         await new Promise(r => setTimeout(r, 500));
         const shortPts = points();
         const shortPpg = ppg();
+        const shortRadar = radar();
+        const radarNote = (document.getElementById('cmpRadarNote') || {}).textContent;
         const tags = document.querySelectorAll('.cmp-season').length;
         const note = (document.getElementById('cmpSpanNote') || {}).textContent;
 
@@ -612,6 +620,7 @@ try {
         await new Promise(r => setTimeout(r, 400));
         return {
             seasonPts, shortPts, seasonPpg, shortPpg, tags, note,
+            seasonRadar, shortRadar, radarNote, backRadar: radar(),
             backPts: points(), backPpg: ppg()
         };
     });
@@ -624,6 +633,18 @@ try {
         `metrics with no per-match record say they stayed season-long (${span.tags} marked)`);
     check(/^3 מחזורים/.test((span.note || '').trim()),
         `and the control states the span it actually drew ("${span.note}")`);
+
+    // The radar is measured over the span too — it used to sit on season figures
+    // whatever the control said, which made one screen carry two different answers.
+    check(span.shortRadar && span.seasonRadar
+        && span.shortRadar.data.join() !== span.seasonRadar.data.join()
+        && span.backRadar.data.join() === span.seasonRadar.data.join(),
+        `the radar re-measures over the span, reversibly (${span.seasonRadar?.data} -> ${span.shortRadar?.data})`);
+    check(span.seasonRadar.labels.includes('xG/90') && !span.shortRadar.labels.includes('xG/90')
+        && span.shortRadar.labels.includes('xGI/90'),
+        `and drops the spokes it cannot re-measure (${span.shortRadar.labels.join(', ')})`);
+    check(/3 המחזורים האחרונים/.test(span.radarNote || '') && /על פני העונה/.test(span.radarNote || ''),
+        `its caption names both spans it carries ("${span.radarNote}")`);
 
     // Re-opening must not leak the previous instances onto replaced canvases.
     const reopen = await page.evaluate(async () => {

@@ -21,7 +21,7 @@ const FUNCTIONS = [
     // trend
     'compareTrendConfig', 'compareSeries', 'compareSpanGws', 'comparePrevSpanGws',
     'compareAllGameweeks', 'compareSpanTotals', 'spanRate',
-    'compareSpanNote', 'getTrendSeries', 'trendPlayerIndex',
+    'compareSpanNote', 'compareRadarNote', 'getTrendSeries', 'trendPlayerIndex',
     'gwDefensiveContribution', 'trendBenchmark', 'chartAxis', 'ltrTick',
     // table + verdict
     'comparisonRowsFor', 'compareVerdict', 'compareRankLabel', 'compareSections',
@@ -736,5 +736,67 @@ describe('the data span', () => {
         assert.deepEqual(cmp.compareSpanGws('g3').map(t => t.gw), [36, 37, 38]);
         assert.deepEqual(cmp.comparePrevSpanGws('g3').map(t => t.gw), [33, 34, 35]);
         assert.deepEqual(cmp.comparePrevSpanGws('season'), [], 'a season has no season before it');
+    });
+});
+
+describe('the radar follows the span', () => {
+    test('a window drops the spokes it cannot honestly re-measure', () => {
+        const cmp = load(squad(10));
+        const season = cmp.radarAxesFor([player()], 'season').map(a => a.key);
+        const short = cmp.radarAxesFor([player()], 'g3').map(a => a.key);
+
+        // xG and xA are stored only as their sum, halved, so a windowed spoke off
+        // them would be publishing a split that does not exist. ICT and clean
+        // sheets have no per-match record at all.
+        assert.ok(season.includes('shooting') && season.includes('creation'));
+        assert.ok(!short.includes('shooting') && !short.includes('creation'));
+        assert.ok(!short.includes('impact'), 'ICT has no per-match record');
+
+        // xGI takes both their places, and only over a window — across a season
+        // the split says more than the sum.
+        assert.ok(short.includes('xgi'));
+        assert.ok(!season.includes('xgi'));
+
+        // What survives is what the per-match record can answer.
+        for (const key of ['output', 'minutes', 'involve', 'defence', 'bonus']) {
+            assert.ok(short.includes(key), `${key} should survive a window`);
+        }
+    });
+
+    test('a spoke re-measures over the span while the elite bar does not', () => {
+        const pool = squad(10);
+        const cmp = load(pool);
+        const axis = cmp.RADAR_AXES.find(a => a.key === 'output');
+        const bench = cmp.axisBenchmark(axis, 'MID').value;
+
+        const seasonSpoke = cmp.radarValue(pool[0], axis, null);
+        const totals = cmp.compareSpanTotals(pool[0].id, cmp.compareSpanGws('g3'), 3);
+        const shortSpoke = cmp.radarValue(pool[0], axis, totals);
+
+        // Five points a gameweek over three gameweeks, against the same bar.
+        assert.equal(totals.points / totals.apps, 5);
+        assert.equal(Math.round(shortSpoke), Math.round(Math.min(5 / bench, 1.5) * 100));
+        assert.notEqual(Math.round(seasonSpoke), Math.round(shortSpoke));
+    });
+
+    test('the config redraws with a different spoke set per span', () => {
+        const pool = squad(10);
+        const cmp = load(pool);
+        const season = cmp.compareRadarConfig([pool[0], pool[1]], 'season');
+        const short = cmp.compareRadarConfig([pool[0], pool[1]], 'g3');
+        assert.ok(season.data.labels.includes('xG/90'));
+        assert.ok(!short.data.labels.includes('xG/90'));
+        assert.ok(short.data.labels.includes('xGI/90'));
+        assert.notDeepEqual(season.data.datasets[0].data, short.data.datasets[0].data,
+            'the shape has to actually change, not just the labels');
+    });
+
+    test('the caption names both spans, because the chart carries two', () => {
+        const cmp = load(squad(10));
+        // The spokes follow the choice; the ring at 100 never does, and a reader
+        // has to be told which is which.
+        assert.equal(cmp.compareRadarNote('season'), '100 = חציון 20 הטובים בעמדה, על פני העונה');
+        assert.match(cmp.compareRadarNote('g3'), /^הצירים לפי 3 המחזורים האחרונים/);
+        assert.match(cmp.compareRadarNote('g3'), /על פני העונה$/);
     });
 });

@@ -4580,11 +4580,13 @@ const RADAR_MAX_AXES = 8;
 const RADAR_AXES = [
     {
         key: 'output', label: 'נק׳/מש׳', title: 'נקודות לכל הופעה',
-        value: p => seasonPointsPerApp(p)
+        value: p => seasonPointsPerApp(p),
+        gw: t => (t.apps ? t.points / t.apps : null)
     },
     {
         key: 'minutes', label: 'דק׳/מש׳', title: 'דקות לכל הופעה — הרמה שווה כלום אם הוא לא על הדשא',
-        value: p => { const a = appearancesOf(p); return a ? (p.minutes || 0) / a : null; }
+        value: p => { const a = appearancesOf(p); return a ? (p.minutes || 0) / a : null; },
+        gw: t => (t.apps ? t.minutes / t.apps : null)
     },
     {
         key: 'involve', label: 'G+A/90', title: 'שערים ובישולים ל-90 דקות, בפועל',
@@ -4592,39 +4594,56 @@ const RADAR_AXES = [
         value: p => {
             const mins90 = (p.minutes || 0) / 90;
             return mins90 > 0 ? ((p.goals_scored || 0) + (p.assists || 0)) / mins90 : null;
-        }
+        },
+        gw: t => spanRate(t.goals + t.assists, t.per90)
+    },
+    {
+        // Only ever drawn over a window, where it stands in for the xG and xA
+        // spokes that cannot be re-measured. Over a season those two say more.
+        key: 'xgi', label: 'xGI/90', title: 'שערים ובישולים צפויים ל-90 דקות',
+        positions: ['DEF', 'MID', 'FWD'], windowOnly: true,
+        value: p => num1(p.xGI_per90),
+        gw: t => spanRate(t.xgi, t.per90)
     },
     {
         key: 'shooting', label: 'xG/90', title: 'שערים צפויים ל-90 דקות — איכות ההזדמנויות שהוא מגיע אליהן',
         positions: ['DEF', 'MID', 'FWD'],
+        // The per-match record stores xG and xA only as their sum, halved. Drawing
+        // a windowed spoke off that would be publishing a split that does not
+        // exist, so over a window xGI/90 takes both their places.
+        seasonOnly: true,
         value: p => num1(p.expected_goals_per_90)
     },
     {
         key: 'creation', label: 'xA/90', title: 'בישולים צפויים ל-90 דקות — איכות ההזדמנויות שהוא מייצר לאחרים',
-        positions: ['DEF', 'MID', 'FWD'],
+        positions: ['DEF', 'MID', 'FWD'], seasonOnly: true,
         value: p => num1(p.expected_assists_per_90)
     },
     {
         key: 'defence', label: 'DEFCON/90', title: 'תרומה הגנתית (חטיפות, חסימות, יירוטים, החזרות) ל-90 דקות',
         positions: ['DEF', 'MID', 'FWD'],
-        value: p => num1(p.def_contrib_per90)
+        value: p => num1(p.def_contrib_per90),
+        gw: t => spanRate(t.defcon, t.per90)
     },
     {
         key: 'saves', label: 'הצלות/90', title: 'הצלות ל-90 דקות',
         positions: ['GKP'],
-        value: p => num1(p.saves_per_90)
+        value: p => num1(p.saves_per_90),
+        gw: t => spanRate(t.saves, t.per90)
     },
     {
         key: 'clean', label: 'CS/90', title: 'שערים נקיים (clean sheets) ל-90 דקות',
-        positions: ['GKP', 'DEF'],
+        positions: ['GKP', 'DEF'], seasonOnly: true,
         value: p => num1(p.clean_sheets_per90)
     },
     {
         key: 'bonus', label: 'בונוס/90', title: 'נקודות בונוס ל-90 דקות — מה שהוא באמת אסף, לא BPS',
-        value: p => num1(p.bonus_per90)
+        value: p => num1(p.bonus_per90),
+        gw: t => spanRate(t.bonus, t.per90)
     },
     {
         key: 'impact', label: 'ICT/90', title: 'מדד ההשפעה, היצירתיות והאיום של FPL (ICT) ל-90 דקות',
+        seasonOnly: true,
         value: p => num1(p.ict_index_per90)
     }
 ];
@@ -4851,12 +4870,22 @@ function axisBenchmark(axis, position) {
     return out;
 }
 
-/** One spoke, 0-150, where 100 is the elite bar at his own position. */
-function radarValue(p, axis) {
+/**
+ * One spoke, 0-150, where 100 is the elite bar at his own position.
+ *
+ * When a span is chosen the player's own figure is re-measured over it, but the
+ * elite bar stays season-long on purpose. A three-gameweek bar would be built out
+ * of other people's hot streaks and would move under the reader's feet; against a
+ * stable bar, "he has been playing at 130% of elite level lately" is a sentence
+ * that means something.
+ */
+function radarValue(p, axis, totals) {
     const bench = axisBenchmark(axis, p.position_name);
     if (!bench || !(bench.value > 0)) return null;
     let mine = null;
-    try { mine = axis.value(p); } catch (e) { mine = null; }
+    try {
+        mine = totals && typeof axis.gw === 'function' ? axis.gw(totals, p) : axis.value(p);
+    } catch (e) { mine = null; }
     if (!Number.isFinite(mine)) return null;
     return Math.min(mine / bench.value, COMPOSITE_CAP) * 100;
 }
@@ -4869,10 +4898,16 @@ function radarValue(p, axis) {
  * measure he is not scored on, which is the same lie the composite avoids by
  * dropping a component rather than scoring a keeper zero on DEFCON.
  */
-function radarAxesFor(players) {
+function radarAxesFor(players, spanId = 'season') {
     const positions = [...new Set(players.map(p => p.position_name).filter(Boolean))];
     if (!positions.length) return [];
+    const windowed = spanId !== 'season';
     return RADAR_AXES.filter(axis => {
+        // A window drops the spokes a per-match record cannot answer rather than
+        // leaving them at their season figure: a radar is read as one shape, and a
+        // shape half re-measured and half not is the one thing it must not be.
+        if (windowed && (axis.seasonOnly || typeof axis.gw !== 'function')) return false;
+        if (!windowed && axis.windowOnly) return false;
         if (axis.positions && !positions.every(pos => axis.positions.includes(pos))) return false;
         return positions.every(pos => {
             const bench = axisBenchmark(axis, pos);
@@ -5028,14 +5063,18 @@ function compareChartPlayers(players) {
     return players.slice(0, COMPARE_CHART_LIMIT);
 }
 
-function compareRadarConfig(players) {
-    const axes = radarAxesFor(players);
+function compareRadarConfig(players, spanId = 'season') {
+    const axes = radarAxesFor(players, spanId);
     // Two spokes is a line, not a shape. Below three the card is hidden and the
     // note says why, rather than drawing something that cannot be read.
     if (axes.length < 3) return null;
 
     const drawn = compareChartPlayers(players);
     const filled = drawn.length <= 3;
+    const windowed = spanId !== 'season';
+    const gws = windowed ? compareSpanGws(spanId) : [];
+    const totals = windowed
+        ? drawn.map(p => compareSpanTotals(p.id, gws, p.element_type)) : null;
 
     return {
         type: 'radar',
@@ -5046,7 +5085,7 @@ function compareRadarConfig(players) {
                 return {
                     label: p.web_name,
                     data: axes.map(axis => {
-                        const v = radarValue(p, axis);
+                        const v = radarValue(p, axis, totals ? totals[i] : null);
                         return v === null ? 0 : Math.round(v);
                     }),
                     borderColor: color,
@@ -5111,15 +5150,22 @@ function compareRadarConfig(players) {
                             const axis = axes[item.dataIndex];
                             if (!p || !axis) return '';
                             let mine = null;
-                            try { mine = axis.value(p); } catch (e) { mine = null; }
+                            try {
+                                mine = totals ? axis.gw(totals[item.datasetIndex], p) : axis.value(p);
+                            } catch (e) { mine = null; }
                             const bench = axisBenchmark(axis, p.position_name);
                             if (!Number.isFinite(mine)) return `${p.web_name}: אין נתון`;
                             const parts = [`⁦${mine.toFixed(2)}⁩`];
                             if (bench && bench.value > 0) {
                                 parts.push(`עילית ⁦${bench.value.toFixed(2)}⁩ = ⁦${Math.round(item.raw)}%⁩`);
                             }
-                            const pct = poolPercentile(p, axis.value);
-                            if (pct !== null) parts.push(`אחוזון ⁦${pct}⁩ מבין הפנויים`);
+                            // The percentile is measured across the league over the
+                            // season; quoting it beside a three-gameweek figure
+                            // would be two spans in one sentence.
+                            if (!windowed) {
+                                const pct = poolPercentile(p, axis.value);
+                                if (pct !== null) parts.push(`אחוזון ⁦${pct}⁩ מבין הפנויים`);
+                            }
                             return `${p.web_name}: ${parts.join(' · ')}`;
                         }
                     }
@@ -5504,8 +5550,8 @@ function compareStripHtml(players, verdict) {
 
 function compareChartsHtml(players) {
     const cs = compareState();
-    const radar = compareRadarConfig(players);
-    const axes = radarAxesFor(players);
+    const radar = compareRadarConfig(players, cs.span);
+    const axes = radarAxesFor(players, cs.span);
     const benchFrom = axes.length
         ? axes.map(a => axisBenchmark(a, players[0].position_name)).find(b => b && b.from)
         : null;
@@ -5518,7 +5564,7 @@ function compareChartsHtml(players) {
                <header class="cmp-chart-head">
                    <div>
                        <h4>פרופיל מול רמת העילית</h4>
-                       <p title="כל ציר הוא אחוז מחציון 20 הטובים בעמדה של אותו שחקן. 100 = בדיוק ברמת העילית, 150 = פי 1.5 ממנה">100 = חציון 20 הטובים בעמדה${seasonNote}</p>
+                       <p id="cmpRadarNote" title="כל ציר הוא אחוז מחציון 20 הטובים בעמדה של אותו שחקן. 100 = בדיוק ברמת העילית, 150 = פי 1.5 ממנה. רמת העילית תמיד נמדדת על פני העונה — סף שנבנה מעשרה משחקים היה זז בכל בחירה">${compareRadarNote(cs.span)}${seasonNote}</p>
                    </div>
                </header>
                <div class="cmp-canvas cmp-canvas--radar"><canvas id="cmpRadar"></canvas></div>
@@ -5919,7 +5965,7 @@ function syncCompareStickyOffset() {
 }
 
 function mountComparisonCharts(players) {
-    mountCompareChart('radar', 'cmpRadar', compareRadarConfig(players));
+    mountCompareChart('radar', 'cmpRadar', compareRadarConfig(players, compareState().span));
     renderCompareTrend(players);
     syncCompareStickyOffset();
 }
@@ -5944,6 +5990,19 @@ function renderCompareTrend(players) {
 }
 
 /** What the chosen span actually covers — counted, not assumed. */
+/**
+ * What the radar is measuring, and against what.
+ *
+ * Two spans live on this chart at once and the reader has to be told: the spokes
+ * follow the chosen range, the ring at 100 never does.
+ */
+function compareRadarNote(spanId) {
+    const base = '100 = חציון 20 הטובים בעמדה, על פני העונה';
+    if (spanId === 'season') return base;
+    const gws = compareSpanGws(spanId);
+    return `הצירים לפי ${gws.length} המחזורים האחרונים · ${base}`;
+}
+
 function compareSpanNote(spanId) {
     const gws = compareSpanGws(spanId);
     if (!gws.length) return 'אין נתוני מחזורים';
@@ -5972,7 +6031,14 @@ window.setCompareSpan = function (spanId) {
     });
     const note = document.getElementById('cmpSpanNote');
     if (note) note.textContent = compareSpanNote(spanId);
-    renderCompareTrend(players.length ? players : undefined);
+
+    // The radar is measured over the span too, and its spoke set changes with it,
+    // so it is rebuilt rather than relabelled.
+    const list = players.length ? players : comparePlayersFromState();
+    mountCompareChart('radar', 'cmpRadar', compareRadarConfig(list, spanId));
+    const radarNote = document.getElementById('cmpRadarNote');
+    if (radarNote) radarNote.textContent = compareRadarNote(spanId);
+    renderCompareTrend(list);
 };
 
 window.toggleCompareCumulative = function () {
