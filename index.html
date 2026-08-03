@@ -361,10 +361,16 @@
                          35-column table and hitting the right checkbox in each row. -->
                     <div class="filter-group player-search">
                         <label for="searchName" title="חיפוש לפי שם שחקן. סמנו שחקנים מהרשימה כדי להשוות ביניהם">🔍 שחקן</label>
-                        <input type="text" id="searchName" autocomplete="off" role="combobox"
-                            aria-expanded="false" aria-controls="playerSearchMenu"
-                            placeholder="שם שחקן — סמנו כדי להשוות">
-                        <div class="ps-menu" id="playerSearchMenu" role="listbox" aria-multiselectable="true" hidden></div>
+                        <!-- The menu hangs off this wrapper, not off the whole
+                             group: the chips below grow the group by ~100px, and
+                             a menu anchored to the group jumped down by that much
+                             on the first tick, which reads as "it closed". -->
+                        <div class="ps-field">
+                            <input type="text" id="searchName" autocomplete="off" role="combobox"
+                                aria-expanded="false" aria-controls="playerSearchMenu"
+                                placeholder="שם שחקן — סמנו כדי להשוות">
+                            <div class="ps-menu" id="playerSearchMenu" role="listbox" aria-multiselectable="true" hidden></div>
+                        </div>
                         <div class="ps-chips" id="playerSearchChips" hidden></div>
                     </div>
 

@@ -2449,10 +2449,12 @@ span.tone-down { background: none !important; color: #1d4ed8; font-weight: 700; 
     display: grid;
     grid-template-columns: repeat(var(--cmp-cols, 2), minmax(0, 1fr));
     gap: 9px;
+    --cmp-label-w: 0px;
 }
 
 @media (max-width: 1200px) {
-    .cmp-cards { grid-template-columns: repeat(auto-fit, minmax(178px, 1fr)); }
+    .cmp-cards { grid-template-columns: repeat(auto-fit, minmax(178px, 1fr)); max-width: none; }
+    .cmp-table { max-width: none; }
 }
 
 .cmp-card {
@@ -2626,6 +2628,15 @@ span.tone-down { background: none !important; color: #1d4ed8; font-weight: 700; 
 .cmp-canvas canvas { position: absolute; inset: 0; }
 
 /* --- the metric table: one grid, label column plus one column per player --- */
+/* Two players stretched across 1780px gave every bar a metre of runway and put
+   the two figures being compared half a screen apart. The table takes the width
+   its columns need and no more, anchored at the RTL start; past five players the
+   cap stops binding and it fills the page again. */
+.cmp-table,
+.cmp-cards {
+    max-width: calc(var(--cmp-label-w, 112px) + var(--cmp-cols, 2) * 320px);
+}
+
 .cmp-table {
     display: flex;
     flex-direction: column;
@@ -5079,7 +5090,12 @@ canvas {
 /* ---------------------- player search & compare picker --------------------
    The search box doubles as the way to pick players for a comparison, so it
    needs a menu under it and a visible record of what is ticked. */
-.player-search { position: relative; }
+/* The group holds the label, the field and the chips; only the field is the
+   menu's anchor, so ticking a player cannot move the list the user is reading.
+   The group is also wider than the other filters, because a column of chips
+   100px wide turns one selection into three stacked rows. */
+.player-search { flex: 1 1 250px; min-width: 210px; }
+.ps-field { position: relative; }
 
 .ps-menu {
     position: absolute;

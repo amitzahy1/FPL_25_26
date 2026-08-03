@@ -304,6 +304,7 @@ try {
         const input = document.getElementById('searchName');
         const fold = input.closest('details');
         if (fold && !fold.open) fold.open = true;
+        const menuEl = document.getElementById('playerSearchMenu');
         const typeIn = async text => {
             input.value = text;
             input.dispatchEvent(new Event('input', { bubbles: true }));
@@ -329,18 +330,25 @@ try {
         const nameWidth = nameCell ? nameCell.getBoundingClientRect().width : 0;
         const nameText = nameCell ? nameCell.textContent.trim() : '';
 
+        // Where the list sits before the first tick. The chips appear inside the
+        // filter group when a player is ticked, and while the menu hung off the
+        // group it dropped by the height of those chips — around 110px, enough
+        // that the list is simply no longer where it was being read.
+        const menuTopBefore = Math.round(menuEl.getBoundingClientRect().top);
         second[0].click();
+        await new Promise(r => setTimeout(r, 60));
+        const menuTopAfter = Math.round(menuEl.getBoundingClientRect().top);
         // Ticking must not shut the menu. It used to: the tick re-rendered the
         // list, which detached the clicked row, and the document-level
         // outside-click handler then found no .player-search ancestor on it and
         // closed the menu on every single selection.
-        const menu = document.getElementById('playerSearchMenu');
-        const stayedOpen = !menu.hidden && !!document.querySelector('.ps-row');
+        const stayedOpen = !menuEl.hidden && !!document.querySelector('.ps-row');
         const tickedInPlace = !!document.querySelector('.ps-row.is-on .ps-check');
         const chips = [...document.querySelectorAll('.ps-chip')].length;
         const go = document.querySelector('.ps-go');
         const enabled = go && !go.disabled;
-        return { afterOne, chips, enabled, nameWidth, nameText, stayedOpen, tickedInPlace };
+        return { afterOne, chips, enabled, nameWidth, nameText, stayedOpen, tickedInPlace,
+            menuTopBefore, menuTopAfter };
     });
     check(!picker.error && picker.afterOne === 1 && picker.chips === 2 && picker.enabled,
         `the search box picks players for a comparison (${JSON.stringify(picker)})`);
@@ -348,6 +356,8 @@ try {
         `a match row shows the player's name (${picker.nameWidth}px, "${picker.nameText}")`);
     check(picker.stayedOpen && picker.tickedInPlace,
         `ticking a player leaves the menu open (${JSON.stringify({ open: picker.stayedOpen, tick: picker.tickedInPlace })})`);
+    check(Math.abs(picker.menuTopAfter - picker.menuTopBefore) <= 4,
+        `and leaves it where it was (${picker.menuTopBefore}px -> ${picker.menuTopAfter}px)`);
 
     // The comparison itself, opened from the two ticks that are already in place.
     const cmp = await page.evaluate(async () => {
@@ -396,6 +406,18 @@ try {
             })(),
             spans: [...document.querySelectorAll('.cmp-chips--span .cmp-chip')]
                 .map(b => b.textContent.trim()),
+            // Two players stretched over the full modal put the two figures being
+            // compared half a screen apart, with a metre of bar between them.
+            width: (() => {
+                const t = document.querySelector('.cmp-table');
+                const body = document.querySelector('#compareModal .modal-content');
+                if (!t || !body) return null;
+                return {
+                    table: Math.round(t.getBoundingClientRect().width),
+                    body: Math.round(body.clientWidth),
+                    cols: t.style.getPropertyValue('--cmp-cols').trim()
+                };
+            })(),
             legend: (() => {
                 const c = Chart.getChart(document.getElementById('cmpRadar'));
                 return c ? c.options.plugins.legend.display : null;
@@ -420,6 +442,8 @@ try {
     check(cmp.spokes2.includes('xG/90') && cmp.spokes2.includes('DEFCON/90'),
         `the spokes are metric names (${cmp.spokes2.join(', ')})`);
     check(cmp.spans.length === 3, `the trend offers three spans (${cmp.spans.join(' | ')})`);
+    check(cmp.width && cmp.width.cols === '2' && cmp.width.table < cmp.width.body * 0.75,
+        `two players do not stretch across the page (${JSON.stringify(cmp.width)})`);
 
     // Widening the span must actually widen the chart.
     const span = await page.evaluate(async () => {
