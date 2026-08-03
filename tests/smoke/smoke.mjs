@@ -298,6 +298,38 @@ try {
         renderDraftBoard();
     });
 
+    // Picking two players to compare, entirely from the search box: the flow that
+    // replaced hunting for two checkboxes in a 35-column table.
+    const picker = await page.evaluate(async () => {
+        const input = document.getElementById('searchName');
+        const fold = input.closest('details');
+        if (fold && !fold.open) fold.open = true;
+        const typeIn = async text => {
+            input.value = text;
+            input.dispatchEvent(new Event('input', { bubbles: true }));
+            await new Promise(r => setTimeout(r, 60));
+            return [...document.querySelectorAll('.ps-row')];
+        };
+        const first = await typeIn('a');
+        if (!first.length) return { error: 'no matches for "a"' };
+        first[0].click();
+        const afterOne = document.querySelectorAll('.ps-chip').length;
+        // A second search must not clear the first tick.
+        const second = await typeIn('haa');
+        if (!second.length) return { error: 'no matches for "haa"' };
+        second[0].click();
+        const chips = [...document.querySelectorAll('.ps-chip')].length;
+        const go = document.querySelector('.ps-go');
+        const enabled = go && !go.disabled;
+        document.querySelector('.ps-clear')?.click();
+        input.value = '';
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+        return { afterOne, chips, enabled, cleared: document.querySelectorAll('.ps-chip').length };
+    });
+    check(!picker.error && picker.afterOne === 1 && picker.chips === 2 && picker.enabled,
+        `the search box picks players for a comparison (${JSON.stringify(picker)})`);
+    check(picker.cleared === 0, 'clearing the selection empties it');
+
     // Hover explanations. The app had two kinds — [data-tooltip] with a styled
     // box, and plain `title` drawn by the browser after a second and never on a
     // touch screen — and the second kind is what most explanations used.

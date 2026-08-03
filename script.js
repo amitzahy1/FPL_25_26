@@ -1204,6 +1204,7 @@ async function init() {
         showTab(lastTab || 'players');
     }
     initializeTooltips();
+    initPlayerSearch();
 }
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -3707,6 +3708,8 @@ function renderTable() {
             } else {
                 state.selectedForComparison.delete(playerId);
             }
+            // The chips are the only place an off-screen selection is visible.
+            renderCompareChips();
         });
     });
 
@@ -4638,6 +4641,161 @@ function generateComparisonTableHTML(players) {
  * button reported "select at least two players" with two boxes visibly ticked.
  * Reconcile from the DOM first; off-screen selections stay in the Set.
  */
+/* ------------------- player search & comparison picker -------------------- */
+
+/**
+ * Picking two players to compare used to mean finding both rows in a 35-column
+ * table and hitting the checkbox in each — and a row you have filtered away
+ * cannot be ticked at all. The search box does it instead: type a fragment, get
+ * the matches, tick the ones you want. A tick survives the next search, so two
+ * players who share no letters can still end up in the same comparison.
+ */
+const PLAYER_SEARCH_LIMIT = 20;
+
+/** Lowercase and strip accents, so "Ekitike" finds "Ekitiké". */
+function normalizeSearch(value) {
+    return String(value == null ? '' : value)
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '');
+}
+
+/**
+ * Matches on the display name and on the full name, with the players whose name
+ * *starts* with the query first: typing "br" wants Bruno before Debruyne.
+ */
+function playerSearchMatches(query, players, limit = PLAYER_SEARCH_LIMIT) {
+    const q = normalizeSearch(query).trim();
+    if (!q) return [];
+    const starts = [];
+    const contains = [];
+    for (const p of players || []) {
+        const web = normalizeSearch(p.web_name);
+        const full = normalizeSearch(`${p.first_name || ''} ${p.second_name || ''}`).trim();
+        if (web.startsWith(q) || full.startsWith(q) || full.split(' ').some(w => w.startsWith(q))) {
+            starts.push(p);
+        } else if (web.includes(q) || full.includes(q)) {
+            contains.push(p);
+        }
+    }
+    const byPoints = (a, b) => (b.total_points || 0) - (a.total_points || 0);
+    starts.sort(byPoints);
+    contains.sort(byPoints);
+    return [...starts, ...contains].slice(0, limit);
+}
+
+function playerSearchPool() {
+    const src = state.allPlayersData[state.currentDataSource];
+    return (src && src.processed) || [];
+}
+
+function renderPlayerSearchMenu() {
+    const input = document.getElementById('searchName');
+    const menu = document.getElementById('playerSearchMenu');
+    if (!input || !menu) return;
+
+    const matches = playerSearchMatches(input.value, playerSearchPool());
+    if (!matches.length) {
+        menu.hidden = true;
+        input.setAttribute('aria-expanded', 'false');
+        return;
+    }
+
+    menu.innerHTML = matches.map(p => {
+        const on = state.selectedForComparison.has(p.id);
+        return `<button type="button" class="ps-row${on ? ' is-on' : ''}" role="option"
+            aria-selected="${on}" onclick="togglePlayerCompare(${p.id})">
+            <span class="ps-check" aria-hidden="true">${on ? '✓' : ''}</span>
+            <span class="ps-name">${escapeHtml(p.web_name)}</span>
+            <span class="ps-meta">${p.position_name} · ${escapeHtml(teamShort(p))}</span>
+            <span class="ps-pts">${p.total_points || 0} נק׳</span>
+        </button>`;
+    }).join('');
+    menu.hidden = false;
+    input.setAttribute('aria-expanded', 'true');
+}
+
+function hidePlayerSearchMenu() {
+    const menu = document.getElementById('playerSearchMenu');
+    const input = document.getElementById('searchName');
+    if (menu) menu.hidden = true;
+    if (input) input.setAttribute('aria-expanded', 'false');
+}
+
+/** Tick or untick one player, from the menu or from a chip. */
+function togglePlayerCompare(playerId) {
+    const id = Number(playerId);
+    if (state.selectedForComparison.has(id)) state.selectedForComparison.delete(id);
+    else state.selectedForComparison.add(id);
+
+    // The row checkbox is the same selection seen from the table.
+    const box = document.querySelector(`.player-select[data-player-id="${id}"]`);
+    if (box) box.checked = state.selectedForComparison.has(id);
+
+    renderPlayerSearchMenu();
+    renderCompareChips();
+}
+
+function clearCompareSelection() {
+    state.selectedForComparison.clear();
+    document.querySelectorAll('.player-select:checked').forEach(cb => { cb.checked = false; });
+    renderPlayerSearchMenu();
+    renderCompareChips();
+}
+
+/**
+ * The selection, always visible. Without it a tick made in a search you have
+ * since cleared is invisible, and "compare" looks broken when it fires on
+ * players you cannot see.
+ */
+function renderCompareChips() {
+    const host = document.getElementById('playerSearchChips');
+    if (!host) return;
+    const ids = [...state.selectedForComparison];
+    if (!ids.length) {
+        host.hidden = true;
+        host.innerHTML = '';
+        return;
+    }
+    const byId = new Map(playerSearchPool().map(p => [p.id, p]));
+    const chips = ids.map(id => {
+        const p = byId.get(id);
+        const label = p ? p.web_name : `#${id}`;
+        return `<span class="ps-chip">${escapeHtml(label)}
+            <button type="button" onclick="togglePlayerCompare(${id})"
+                title="הסרה מההשוואה" aria-label="הסרה מההשוואה">×</button></span>`;
+    }).join('');
+    host.innerHTML = `${chips}
+        <button type="button" class="ps-go" onclick="compareSelectedPlayers()"
+            ${ids.length < 2 ? 'disabled title="צריך לפחות שניים"' : 'title="פתיחת ההשוואה"'}
+            >⚖️ השוואה (${ids.length})</button>
+        <button type="button" class="ps-clear" onclick="clearCompareSelection()"
+            title="ניקוי הבחירה">נקה</button>`;
+    host.hidden = false;
+}
+
+function initPlayerSearch() {
+    const input = document.getElementById('searchName');
+    if (!input || input.dataset.wired === '1') return;
+    input.dataset.wired = '1';
+
+    input.addEventListener('input', () => { processChange(); renderPlayerSearchMenu(); });
+    input.addEventListener('focus', renderPlayerSearchMenu);
+    input.addEventListener('keydown', e => {
+        if (e.key === 'Escape') { hidePlayerSearchMenu(); return; }
+        // Enter ticks the first match, which is the whole interaction for a
+        // player whose name you already know.
+        if (e.key === 'Enter') {
+            const first = playerSearchMatches(input.value, playerSearchPool())[0];
+            if (first) { e.preventDefault(); togglePlayerCompare(first.id); }
+        }
+    });
+    document.addEventListener('click', e => {
+        if (!e.target.closest || !e.target.closest('.player-search')) hidePlayerSearchMenu();
+    });
+    renderCompareChips();
+}
+
 function syncComparisonSelection() {
     document.querySelectorAll('.player-select:checked').forEach(cb => {
         const id = parseInt(cb.dataset.playerId, 10);
