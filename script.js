@@ -133,17 +133,10 @@ const config = {
         'xGI_per90', 'minutes', 'xDiff', 'ict_index_per90', 'bonus_per90', 'clean_sheets_per90',
         'set_piece_priority.penalty', 'set_piece_priority.corner', 'set_piece_priority.free_kick', 'fixtures'
     ],
-    comparisonMetrics: {
-        'ציון דראפט': { key: 'draft_score', format: v => v.toFixed(1), reversed: false },
-        'xPts (4GW)': { key: 'predicted_points_4_gw', format: v => (v || 0).toFixed(1), reversed: false },
-        'נקודות למשחק (90)': { key: 'points_per_game_90', format: v => v.toFixed(1), reversed: false },
-        'xGI (90)': { key: 'xGI_per90', format: v => v.toFixed(2), reversed: false },
-        'DC/90 (הגנה)': { key: 'def_contrib_per90', format: v => v.toFixed(1), reversed: false },
-        'xDiff': { key: 'xDiff', format: v => v.toFixed(2), reversed: true },
-        'מחיר': { key: 'now_cost', format: v => `£${v.toFixed(1)}m`, reversed: true },
-        'אחוז בחירה': { key: 'selected_by_percent', format: v => `${v}%`, reversed: true },
-        'דקות': { key: 'minutes', format: v => v.toLocaleString(), reversed: false },
-    },
+    // comparisonMetrics used to live here and nothing ever read it — the
+    // comparison's metric list is compareSections(), which is also the only place
+    // that decides what a missing figure looks like. Two lists were one list too
+    // many.
     visualizationSpecs: {
         midfielders: { title: 'מטריצת קשרים', pos: ['MID'], x: 'def_contrib_per90', y: 'xGI_per90', xLabel: 'תרומה הגנתית/90', yLabel: 'איום התקפי (xGI/90)', quadLabels: { topRight: 'קשר All-Round', topLeft: 'קשר התקפי', bottomRight: 'קשר הגנתי', bottomLeft: 'פחות תורם' } },
         forwards: { title: 'מטריצת חלוצים', pos: ['FWD'], x: 'points_per_game_90', y: 'xGI_per90', xLabel: 'נקודות/90', yLabel: 'איום התקפי (xGI/90)', quadLabels: { topRight: 'חלוץ עלית', topLeft: 'מאיים, לא יעיל', bottomRight: 'יעיל, איום נמוך', bottomLeft: 'להימנע' } },
@@ -2945,6 +2938,64 @@ function benchmarkMedian(values) {
 }
 
 /**
+ * The minutes floor, scaled to how much football has actually been played.
+ *
+ * 270 is the right bar for a finished season and an impossible one in August:
+ * at gameweek five nobody who has been rotated even once clears it, and a
+ * position with fewer than five qualifying players produces no benchmark at
+ * all — at which point compositeScore quietly drops that component and
+ * redistributes its weight, so the score changes and nothing on screen says so.
+ * Two thirds of the minutes available so far, never below one full match.
+ */
+function benchMinMinutes() {
+    const gws = typeof getCompletedGWCount === 'function' ? getCompletedGWCount() : 0;
+    if (!gws) return BENCH_MIN_MINUTES;
+    return Math.min(BENCH_MIN_MINUTES, Math.max(90, gws * 60));
+}
+
+/** The elite median for one measure at one position, out of one player pool. */
+function benchmarkFrom(players, valueFn, position, minMinutes, positiveOnly) {
+    const values = [];
+    for (const p of players) {
+        if (p.position_name !== position || (p.minutes || 0) < minMinutes) continue;
+        let v = null;
+        try { v = valueFn(p); } catch { v = null; }
+        if (typeof v !== 'number' || !isFinite(v)) continue;
+        if (positiveOnly && !(v > 0)) continue;
+        values.push(v);
+    }
+    return benchmarkMedian(values);
+}
+
+/**
+ * The elite bar, and which season it came from.
+ *
+ * Tries the season on screen first. When that season is too young to produce a
+ * bar, last season's completed snapshot is still in memory — it is loaded first
+ * and never unloaded, even after the live season takes over — so there is
+ * always a real reference rather than a blank. Callers that print the bar say
+ * which season it belongs to; a five-gameweek bar and a full-season bar are not
+ * the same claim, and the reader has to be able to tell them apart.
+ */
+function resolveBenchmark(valueFn, position, opts) {
+    if (!position) return { value: null, from: null };
+    const positiveOnly = !!(opts && opts.positiveOnly);
+    const current = (state.allPlayersData[state.currentDataSource] || {}).processed || [];
+
+    const value = benchmarkFrom(current, valueFn, position, benchMinMinutes(), positiveOnly);
+    if (value !== null) return { value, from: 'season' };
+
+    const last = (state.allPlayersData.historical || {}).processed || [];
+    // Same pool at a higher floor can only be smaller, so there is nothing to
+    // retry when the snapshot is already what is on screen.
+    if (last.length && last !== current) {
+        const older = benchmarkFrom(last, valueFn, position, BENCH_MIN_MINUTES, positiveOnly);
+        if (older !== null) return { value: older, from: 'lastSeason' };
+    }
+    return { value: null, from: null };
+}
+
+/**
  * The benchmark for a trend metric, in the unit the bars are drawn in: each
  * player's mean per-gameweek value across the window, then the median of the
  * best twenty. Same unit as a bar height is the whole point — it is what lets
@@ -4426,213 +4477,1005 @@ function enterCurrentSeasonView(filterName) {
 // exportToCsv: the earlier English-header definition was silently shadowed by
 // the later one (last declaration wins for a classic script), so it was dead
 // code. Removed; the live implementation is below.
-function generateComparisonTableHTML(players) {
-    // 🎨 ULTIMATE PLAYER COMPARISON - COMPLETE MAKEOVER
+/* ==========================================================================
+   PLAYER COMPARISON
 
-    const photoUrl = (p) => `https://resources.premierleague.com/premierleague/photos/players/110x140/p${p.code}.png`;
-    const fallbackSVG = (name) => `data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%22110%22 height=%22140%22%3E%3Crect fill=%22%2394a3b8%22 width=%22110%22 height=%22140%22/%3E%3Ctext x=%2250%25%22 y=%2250%25%22 text-anchor=%22middle%22 dy=%22.3em%22 fill=%22%23fff%22 font-size=%2248%22 font-weight=%22bold%22%3E${name.charAt(0)}%3C/text%3E%3C/svg%3E`;
+   Two or more players, side by side, using the same numbers the rest of the app
+   decides with: the weighted composite, the value index, the elite benchmarks,
+   the DEFCON rates, FPL Draft's own ranking and the verdict signals. The page it
+   replaced predated all of them — it showed nineteen flat rows, no charts, and
+   two headline figures (form, net transfers) that do not exist in the committed
+   snapshot at all, so on draft day they read as zero.
 
-    let html = `
-        <div class="ultimate-comparison-container">
-            <!-- 🏆 HEADER -->
-            <div class="comparison-hero-header">
-                <div class="hero-title-wrapper">
-                    <span class="hero-icon">⚔️</span>
-                    <h2 class="hero-title">השוואת שחקנים</h2>
-                    <span class="hero-badge">${players.length} שחקנים</span>
-                </div>
-                <p class="hero-subtitle">ניתוח מקיף לקבלת החלטה מושכלת</p>
-            </div>
-            
-            <!-- 👥 PLAYER CARDS GRID -->
-            <div class="ultimate-players-grid">
-    `;
+   One rule holds the design together: a player gets a colour on entry and keeps
+   it everywhere — his card border, his radar polygon, his trend line, every bar
+   in his column. Nothing else has to be cross-referenced.
+   ========================================================================== */
 
-    // Player Cards with enhanced stats
-    players.forEach((p, idx) => {
-        // Same four hues the table's position badges use, so a colour means the
-        // same thing everywhere in the app.
-        const positionColors = {
-            'GKP': '#7a3cb8',
-            'DEF': '#1c6eb6',
-            'MID': '#0d8a5e',
-            'FWD': '#c0511a'
-        };
-        const posColor = positionColors[p.position_name] || '#6366f1';
+/** Six polygons is already a lot to read; past that the charts stop informing. */
+const COMPARE_CHART_LIMIT = 6;
+/** Eight spokes fit a readable radar. The registry is ordered by importance. */
+const RADAR_MAX_AXES = 8;
 
-        html += `
-            <div class="ultimate-player-card" style="animation-delay: ${idx * 0.1}s; border-top: 4px solid ${posColor}">
-                <div class="player-card-photo-wrapper">
-                    <img src="${photoUrl(p)}" alt="${p.web_name}" class="player-card-photo-ultimate" onerror="this.src='${fallbackSVG(p.web_name)}'">
-                    <div class="player-position-badge" style="background: ${posColor}">${p.position_name}</div>
-                </div>
-                <div class="player-card-info">
-                    <h3 class="player-name-ultimate">${p.web_name}</h3>
-                    <p class="player-team-ultimate">${p.team_name}</p>
-                    <div class="cmp-tags">
-                        ${(() => { const o = getDraftTeamForPlayer(p.id);
-                            return `<span class="detail-tag ${o ? 'is-owned' : 'is-free'}">${o || '🆓 חופשי'}</span>`; })()}
-                        ${(() => { const sig = signalFor(p);
-                            return `<span class="signal-badge signal-${sig.tone}"
-                                title="${escapeHtml(signalTitle(sig))}">${sig.label}</span>`; })()}
-                    </div>
-                    
-                    <!-- Quick Stats Grid -->
-                    <div class="quick-stats-grid">
-                        <div class="quick-stat">
-                            <span class="quick-stat-icon">💎</span>
-                            <div class="quick-stat-content">
-                                <span class="quick-stat-label">VORP</span>
-                                <span class="quick-stat-value">${formatVorp(p.vorp)}</span>
-                            </div>
-                        </div>
-                        <div class="quick-stat">
-                            <span class="quick-stat-icon">⭐</span>
-                            <div class="quick-stat-content">
-                                <span class="quick-stat-label">ציון דראפט</span>
-                                <span class="quick-stat-value">${p.draft_score.toFixed(1)}</span>
-                            </div>
-                        </div>
-                        <div class="quick-stat">
-                            <span class="quick-stat-icon">🎯</span>
-                            <div class="quick-stat-content">
-                                <span class="quick-stat-label">נק' כולל</span>
-                                <span class="quick-stat-value">${p.total_points}</span>
-                            </div>
-                        </div>
-                        <div class="quick-stat">
-                            <span class="quick-stat-icon">🔥</span>
-                            <div class="quick-stat-content">
-                                <span class="quick-stat-label">כושר</span>
-                                <span class="quick-stat-value">${parseFloat(p.form || 0).toFixed(1)}</span>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        `;
-    });
+/**
+ * The radar's spokes, in priority order.
+ *
+ * Every spoke is drawn as a percentage of the elite bar at the player's own
+ * position — 100 means "exactly the median of the top twenty at this position",
+ * the same sentence the composite card and the תפוקה%/הגנה% columns already
+ * make. That is what lets a defender and a midfielder share a chart at all.
+ *
+ * `positions` gates a spoke to the positions it means anything for: a spoke is
+ * drawn only when *every* compared player can be measured on it, so comparing
+ * two keepers swaps in saves and clean sheets, and comparing a keeper with a
+ * midfielder falls back to the handful of measures both share.
+ */
+const RADAR_AXES = [
+    {
+        key: 'output', label: 'תפוקה', title: 'נקודות לכל הופעה',
+        value: p => seasonPointsPerApp(p)
+    },
+    {
+        key: 'minutes', label: 'דקות', title: 'דקות לכל הופעה — הרמה שווה כלום אם הוא לא על הדשא',
+        value: p => { const a = appearancesOf(p); return a ? (p.minutes || 0) / a : null; }
+    },
+    {
+        key: 'involve', label: 'מעורבות', title: 'שערים ובישולים ל-90 דקות, בפועל',
+        positions: ['DEF', 'MID', 'FWD'],
+        value: p => {
+            const mins90 = (p.minutes || 0) / 90;
+            return mins90 > 0 ? ((p.goals_scored || 0) + (p.assists || 0)) / mins90 : null;
+        }
+    },
+    {
+        key: 'shooting', label: 'סיום', title: 'xG ל-90 דקות — איכות ההזדמנויות שהוא מגיע אליהן',
+        positions: ['DEF', 'MID', 'FWD'],
+        value: p => num1(p.expected_goals_per_90)
+    },
+    {
+        key: 'creation', label: 'יצירה', title: 'xA ל-90 דקות — איכות ההזדמנויות שהוא מייצר לאחרים',
+        positions: ['DEF', 'MID', 'FWD'],
+        value: p => num1(p.expected_assists_per_90)
+    },
+    {
+        key: 'defence', label: 'הגנה', title: 'תרומה הגנתית ל-90 דקות',
+        positions: ['DEF', 'MID', 'FWD'],
+        value: p => num1(p.def_contrib_per90)
+    },
+    {
+        key: 'saves', label: 'הצלות', title: 'הצלות ל-90 דקות',
+        positions: ['GKP'],
+        value: p => num1(p.saves_per_90)
+    },
+    {
+        key: 'clean', label: 'שער נקי', title: 'שערים נקיים ל-90 דקות',
+        positions: ['GKP', 'DEF'],
+        value: p => num1(p.clean_sheets_per90)
+    },
+    {
+        key: 'bonus', label: 'בונוס', title: 'נקודות בונוס ל-90 דקות — מה שהוא באמת אסף, לא BPS',
+        value: p => num1(p.bonus_per90)
+    },
+    {
+        key: 'impact', label: 'השפעה', title: 'מדד ICT ל-90 דקות',
+        value: p => num1(p.ict_index_per90)
+    }
+];
 
-    html += `
-            </div>
-            
-            <!-- 📊 COMPREHENSIVE METRICS COMPARISON -->
-            <div class="ultimate-metrics-section">
-                <h3 class="metrics-section-title">
-                    <span class="metrics-icon">📊</span>
-                    השוואה מפורטת
-                </h3>
-                
-                <div class="metrics-comparison-table">
-    `;
-
-    // Define comprehensive metrics (ordered by importance)
-    const comprehensiveMetrics = [
-        { name: 'ציון דראפט', key: 'draft_score', format: v => v.toFixed(1), icon: '⭐', reversed: false },
-        { name: 'העברות נטו', key: 'net_transfers_event', format: v => (v >= 0 ? '+' : '') + v, icon: '🔄', reversed: false , neutral: true },
-        { name: 'חיזוי למחזור הבא', key: 'predicted_points_1_gw', format: v => v.toFixed(1), icon: '🔮', reversed: false },
-        { name: 'כושר', key: 'form', format: v => parseFloat(v || 0).toFixed(1), icon: '🔥', reversed: false },
-        { name: 'נקודות/90', key: 'points_per_game_90', format: v => v.toFixed(1), icon: '📈', reversed: false },
-        { name: 'נקודות כולל', key: 'total_points', format: v => v, icon: '🎯', reversed: false },
-        { name: 'יציבות', key: 'stability_index', format: v => v.toFixed(0), icon: '📊', reversed: false },
-        { name: 'הרכב', key: 'rotation_risk', format: v => Math.round(v * 100) + '%', icon: '🔒', reversed: false },
-        { name: 'xGI/90', key: 'xGI_per90', format: v => v.toFixed(2), icon: '⚽', reversed: false },
-        { name: 'G+A', key: 'goals_scored_assists', format: v => v, icon: '🎯', reversed: false },
-        { name: '% בעלות', key: 'selected_by_percent', format: v => v + '%', icon: '👥', reversed: false , neutral: true },
-        { name: 'דקות', key: 'minutes', format: v => v.toLocaleString(), icon: '⏱️', reversed: false },
-        { name: 'בונוס/90', key: 'bonus_per90', format: v => v.toFixed(2), icon: '⭐', reversed: false },
-        { name: 'דרימטים', key: 'dreamteam_count', format: v => v, icon: '🏆', reversed: false },
-        { name: 'ICT/90', key: 'ict_index_per90', format: v => v.toFixed(1), icon: '🧬', reversed: false },
-        { name: 'DC/90', key: 'def_contrib_per90', format: v => v.toFixed(1), icon: '🛡️', reversed: false },
-        { name: 'xDiff', key: 'xDiff', format: v => (v >= 0 ? '+' : '') + v.toFixed(2), icon: '📉', reversed: false , neutral: true },
-        { name: 'CS/90', key: 'clean_sheets_per90', format: v => v.toFixed(2), icon: '🧤', reversed: false },
-        { name: 'ספיגות/90', key: 'goals_conceded_per90', format: v => v.toFixed(2), icon: '🥅', reversed: true },
-    ];
-
-    comprehensiveMetrics.forEach((metric, idx) => {
-        const values = players.map(p => {
-            let val = getNestedValue(p, metric.key);
-            if (metric.key === 'goals_scored_assists') {
-                val = (p.goals_scored || 0) + (p.assists || 0);
+/**
+ * The metric table, grouped by the question each group answers.
+ *
+ * `read` returns a number or null, never a string: the framework decides what a
+ * missing figure looks like, and a row where nobody has a figure is dropped
+ * rather than printed as a row of zeroes — which is how form and net transfers
+ * disappear on the snapshot source instead of pretending to be measured.
+ *
+ * `title` is lifted from BOARD_COLS wherever the column already exists, so a
+ * definition can never fork between the board and this page. `asc` marks
+ * low-is-good, `neutral` marks a figure with no winner, `trend` names the
+ * TREND_METRICS key whose window delta belongs beside the value.
+ *
+ * Built on first use rather than at parse time: BOARD_COLS is declared further
+ * down the file, and reading it from a top-level const initialiser up here is a
+ * temporal-dead-zone error that takes the whole script down with it.
+ */
+let _compareSections = null;
+function compareSections() {
+    if (_compareSections) return _compareSections;
+    _compareSections = [
+    {
+        key: 'decide', title: 'הכרעה', note: 'המספרים שקובעים את הבחירה',
+        rows: [
+            {
+                key: 'composite', label: 'ציון משוקלל',
+                title: 'שקלול של תפוקה, דקות, התקפה והגנה — כל מרכיב כאחוז מחציון 20 הטובים בעמדה. 100 = פי 1.5 מרמת העילית',
+                read: p => compositeOf(p), fmt: v => v.toFixed(0)
+            },
+            {
+                key: 'next5', label: 'צפי 5 מחזורים',
+                title: 'נקודות צפויות בחמשת המחזורים הבאים — רמה חזויה, כפול משחקים צפויים, מתואם ללו״ז',
+                read: p => projectedPointsOf(p, 'now'), fmt: v => v.toFixed(1)
+            },
+            {
+                key: 'season', label: 'צפי עד סוף העונה',
+                title: 'אותו חישוב על כל המשחקים שנשארו בעונה',
+                read: p => projectedPointsOf(p, 'season'), fmt: v => v.toFixed(0)
+            },
+            {
+                key: 'vorp', label: 'יתרון', title: BOARD_COLS.vorp.title,
+                read: p => num1(p.vorp), fmt: v => (v > 0 ? '+' : '') + v.toFixed(2)
+            },
+            {
+                key: 'dropoff', label: 'פער לבא בתור',
+                title: 'כמה נקודות למשחק מפרידות בינו לבין השחקן הפנוי הבא באותה עמדה — גודל המדרגה, לא רק המקום בה',
+                read: p => dropOffFor(p), fmt: v => v.toFixed(2)
+            },
+            {
+                key: 'draft_rank', label: 'דירוג דראפט', title: BOARD_COLS.fpl.title,
+                read: p => num1(p.draft_rank), fmt: v => `#${v.toFixed(0)}`, asc: true
             }
-            return typeof val === 'number' ? val : parseFloat(val) || 0;
-        });
-
-        const maxVal = Math.max(...values);
-        const minVal = Math.min(...values);
-        // A tie has no winner. Marking both sides best put two trophies on most
-        // rows of a two-player comparison, which reads as noise.
-        const tied = maxVal === minVal;
-        const competitive = !metric.neutral && !tied;
-
-        html += `
-            <div class="metric-comparison-row" style="animation-delay: ${idx * 0.03}s">
-                <div class="metric-row-label">
-                    <span class="metric-row-icon">${metric.icon}</span>
-                    <span class="metric-row-name">${metric.name}</span>
-                </div>
-                <div class="metric-row-values">
-        `;
-
-        players.forEach((p, pIdx) => {
-            const value = values[pIdx];
-            const isBest = competitive && (metric.reversed ? value === minVal : value === maxVal);
-            const isWorst = competitive && (metric.reversed ? value === maxVal : value === minVal);
-            // Share of the leader, so the bar shows how big the gap actually is.
-            // Normalising to (v-min)/(max-min) made every loser 0% and every
-            // winner 100%, which said nothing that the trophy did not already.
-            const ref = metric.reversed ? minVal : maxVal;
-            const pct = metric.reversed
-                ? (value !== 0 ? Math.abs(ref / value) * 100 : 100)
-                : (ref !== 0 ? Math.abs(value / ref) * 100 : 100);
-            const percentage = Math.max(Math.min(pct, 100), 4);
-
-            html += `
-                <div class="metric-value-box ${isBest ? 'best-value' : ''} ${isWorst ? 'worst-value' : ''}">
-                    <div class="metric-value-number">${metric.format(value)}</div>
-                    <div class="metric-value-bar-container">
-                        <div class="metric-value-bar" style="width: ${percentage}%"></div>
-                    </div>
-                    ${isBest ? '<span class="best-badge">🏆</span>' : ''}
-                </div>
-            `;
-        });
-
-        html += `
-                </div>
-            </div>
-        `;
-    });
-
-    // Fixtures Row
-    html += `
-            <div class="metric-comparison-row fixtures-comparison-row">
-                <div class="metric-row-label">
-                    <span class="metric-row-icon">📅</span>
-                    <span class="metric-row-name">משחקים קרובים</span>
-                </div>
-                <div class="metric-row-values">
-    `;
-
-    players.forEach(p => {
-        const fixturesHTML = generateFixturesHTML(p);
-        html += `
-            <div class="metric-value-box fixtures-box">
-                ${fixturesHTML || '<span class="no-fixtures">אין נתונים</span>'}
-            </div>
-        `;
-    });
-
-    html += `
-                </div>
-            </div>
-        </div>
-    </div>
-</div>
-    `;
-
-    return html;
+        ]
+    },
+    {
+        key: 'output', title: 'תפוקה', note: 'מה שהוא הפיק בפועל',
+        rows: [
+            {
+                key: 'ppg', label: 'נק׳/מש׳', title: BOARD_COLS.ppg.title,
+                read: p => seasonPointsPerApp(p), fmt: v => v.toFixed(2)
+            },
+            {
+                key: 'total_points', label: 'נקודות עונה', title: 'סך הנקודות שאסף בעונה',
+                read: p => num1(p.total_points), fmt: v => v.toFixed(0)
+            },
+            {
+                key: 'ga', label: 'שערים + בישולים', title: 'שערים ובישולים, בפועל',
+                read: p => (p.goals_scored || 0) + (p.assists || 0), fmt: v => v.toFixed(0), trend: 'ga'
+            },
+            {
+                key: 'bonus90', label: 'בונוס/90', title: 'נקודות בונוס ל-90 דקות — מה שהוא אסף, לא BPS',
+                read: p => num1(p.bonus_per90), fmt: v => v.toFixed(2)
+            },
+            {
+                key: 'bps90', label: 'BPS/90', title: 'נקודות מערכת הבונוס ל-90 דקות — הקרבה לשלישייה, גם כשלא נכנס אליה',
+                read: p => { const m = (p.minutes || 0) / 90; return m > 0 ? (p.bps || 0) / m : null; },
+                fmt: v => v.toFixed(1)
+            },
+            {
+                key: 'dreamteam', label: 'הרכב החלומות', title: 'מספר הפעמים שנבחר להרכב המחזור',
+                read: p => num1(p.dreamteam_count), fmt: v => v.toFixed(0)
+            }
+        ]
+    },
+    {
+        key: 'underlying', title: 'תשתית', note: 'איכות ההזדמנויות מאחורי הנקודות',
+        rows: [
+            {
+                key: 'xg90', label: 'xG/90', title: 'שערים צפויים ל-90 דקות',
+                read: p => num1(p.expected_goals_per_90), fmt: v => v.toFixed(2)
+            },
+            {
+                key: 'xa90', label: 'xA/90', title: 'בישולים צפויים ל-90 דקות',
+                read: p => num1(p.expected_assists_per_90), fmt: v => v.toFixed(2)
+            },
+            {
+                key: 'xgi90', label: 'xGI/90', title: 'שערים ובישולים צפויים ל-90 דקות',
+                read: p => num1(p.xGI_per90), fmt: v => v.toFixed(2)
+            },
+            {
+                key: 'xdiff', label: 'פער מימוש', title: BOARD_COLS.xdiff.title,
+                read: p => num1(p.xDiff), fmt: v => (v > 0 ? '+' : '') + v.toFixed(1), neutral: true
+            },
+            {
+                key: 'ict90', label: 'ICT/90', title: 'מדד ההשפעה, היצירתיות והאיום של FPL, ל-90 דקות',
+                read: p => num1(p.ict_index_per90), fmt: v => v.toFixed(1)
+            }
+        ]
+    },
+    {
+        key: 'minutes', title: 'דקות וזמינות', note: 'הרמה שווה כלום אם הוא לא על הדשא',
+        rows: [
+            {
+                key: 'mins_app', label: 'דקות/הופעה', title: BOARD_COLS.mins.title,
+                read: p => { const a = appearancesOf(p); return a ? (p.minutes || 0) / a : null; },
+                fmt: v => v.toFixed(0), trend: 'mins'
+            },
+            {
+                key: 'apps', label: 'הופעות', title: BOARD_COLS.apps.title,
+                read: p => appearancesOf(p) || null, fmt: v => v.toFixed(0)
+            },
+            {
+                key: 'minutes_total', label: 'סך דקות', title: 'סך הדקות שצבר בעונה',
+                read: p => num1(p.minutes), fmt: v => v.toLocaleString('en-US')
+            },
+            {
+                key: 'starts', label: 'אחוז פתיחות', title: 'אחוז ההופעות שבהן פתח בהרכב — מתחת ל-60% זה סיכון סיבוב',
+                read: p => Number.isFinite(p.rotation_risk) ? p.rotation_risk * 100 : null,
+                fmt: v => `${v.toFixed(0)}%`
+            },
+            {
+                key: 'availability', label: 'סיכוי לשחק', title: 'הסיכוי להשתתף במחזור הקרוב, לפי הדיווח הרשמי',
+                read: p => Number.isFinite(p.availability_factor) ? p.availability_factor * 100 : null,
+                fmt: v => `${v.toFixed(0)}%`
+            }
+        ]
+    },
+    {
+        key: 'defence', title: 'הגנה', note: 'הנקודות שאף אחד לא סופר',
+        rows: [
+            {
+                key: 'dc90', label: 'DC/90', title: BOARD_COLS.dc90.title,
+                read: p => num1(p.def_contrib_per90), fmt: v => v.toFixed(1), trend: 'dc'
+            },
+            {
+                key: 'defcon_rate', label: 'אחוז DEFCON',
+                title: 'אחוז המשחקים שבהם עבר את סף התרומה ההגנתית וזכה בנקודות — שוער לא נמדד בזה',
+                read: p => defconRateFor(p), fmt: v => `${v.toFixed(0)}%`
+            },
+            {
+                key: 'cs90', label: 'שער נקי/90', title: 'שערים נקיים ל-90 דקות',
+                read: p => num1(p.clean_sheets_per90), fmt: v => v.toFixed(2)
+            },
+            {
+                key: 'gc90', label: 'ספיגות/90', title: 'שערים שספגה הקבוצה ל-90 דקות שהוא שיחק',
+                read: p => num1(p.goals_conceded_per90), fmt: v => v.toFixed(2), asc: true
+            },
+            {
+                key: 'saves90', label: 'הצלות/90', title: 'הצלות ל-90 דקות',
+                read: p => num1(p.saves_per_90), fmt: v => v.toFixed(2), trend: 'saves'
+            }
+        ]
+    },
+    {
+        key: 'market', title: 'שוק ולו״ז', note: 'המחיר, הבעלות והמשחקים שמחכים',
+        rows: [
+            {
+                key: 'fdr3', label: 'קושי 3 הבאים', title: 'דרגת הקושי הממוצעת של שלושת המשחקים הבאים (1 = הקל ביותר)',
+                read: p => num1(p.next_3_fdr) || null, fmt: v => v.toFixed(2), asc: true
+            },
+            {
+                key: 'fdr5', label: 'קושי 5 הבאים', title: 'דרגת הקושי הממוצעת של חמשת המשחקים הבאים',
+                read: p => num1(p.next_5_fdr) || null, fmt: v => v.toFixed(2), asc: true
+            },
+            {
+                key: 'cost', label: 'מחיר', title: 'המחיר בעונה הנוכחית',
+                read: p => num1(p.now_cost), fmt: v => `${v.toFixed(1)}£`, neutral: true
+            },
+            {
+                key: 'owned', label: 'אחוז בעלות', title: 'אחוז הקבוצות ב-FPL שמחזיקות אותו',
+                read: p => num1(p.selected_by_percent), fmt: v => `${v.toFixed(1)}%`, neutral: true
+            },
+            {
+                key: 'transfers', label: 'העברות נטו', title: 'נכנסים פחות יוצאים במחזור הנוכחי — קיים רק בעונה חיה',
+                read: p => num1(p.net_transfers_event), fmt: v => (v > 0 ? '+' : '') + v.toLocaleString('en-US'),
+                neutral: true
+            }
+        ]
+    }
+    ];
+    return _compareSections;
 }
+
+/** The elite bar for one radar spoke at one position. */
+let _axisBenchCache = { key: null, values: new Map() };
+function axisBenchmark(axis, position) {
+    if (!position) return null;
+    const key = `${state.currentDataSource}:${state.trendKey}:${state.trendWindow}`;
+    if (_axisBenchCache.key !== key) _axisBenchCache = { key, values: new Map() };
+    const cacheKey = `${axis.key}:${position}`;
+    if (_axisBenchCache.values.has(cacheKey)) return _axisBenchCache.values.get(cacheKey);
+
+    const out = resolveBenchmark(axis.value, position, { positiveOnly: true });
+    _axisBenchCache.values.set(cacheKey, out);
+    return out;
+}
+
+/** One spoke, 0-150, where 100 is the elite bar at his own position. */
+function radarValue(p, axis) {
+    const bench = axisBenchmark(axis, p.position_name);
+    if (!bench || !(bench.value > 0)) return null;
+    let mine = null;
+    try { mine = axis.value(p); } catch (e) { mine = null; }
+    if (!Number.isFinite(mine)) return null;
+    return Math.min(mine / bench.value, COMPOSITE_CAP) * 100;
+}
+
+/**
+ * The spokes this particular set of players can share.
+ *
+ * A spoke survives only if every compared position is allowed on it and has an
+ * elite bar to divide by — otherwise it would draw somebody at zero for a
+ * measure he is not scored on, which is the same lie the composite avoids by
+ * dropping a component rather than scoring a keeper zero on DEFCON.
+ */
+function radarAxesFor(players) {
+    const positions = [...new Set(players.map(p => p.position_name).filter(Boolean))];
+    if (!positions.length) return [];
+    return RADAR_AXES.filter(axis => {
+        if (axis.positions && !positions.every(pos => axis.positions.includes(pos))) return false;
+        return positions.every(pos => {
+            const bench = axisBenchmark(axis, pos);
+            return !!bench && bench.value > 0;
+        });
+    }).slice(0, RADAR_MAX_AXES);
+}
+
+/**
+ * Where he ranks on one measure among the players you could actually sign.
+ *
+ * The radar's percentage says how close he is to elite; this says how rare that
+ * is in the pool you are drafting from. He is counted in his own pool even when
+ * somebody already owns him, so the number does not change meaning depending on
+ * who is being looked at.
+ */
+function poolPercentile(p, valueFn) {
+    let mine = null;
+    try { mine = valueFn(p); } catch (e) { mine = null; }
+    if (!Number.isFinite(mine)) return null;
+
+    const pool = (state.allPlayersData[state.currentDataSource] || {}).processed || [];
+    const floor = benchMinMinutes();
+    let counted = 0, below = 0;
+    for (const other of pool) {
+        if (other.position_name !== p.position_name) continue;
+        if ((other.minutes || 0) < floor) continue;
+        if (other.id !== p.id && !isAvailableToDraft(other)) continue;
+        let v = null;
+        try { v = valueFn(other); } catch (e) { v = null; }
+        if (!Number.isFinite(v)) continue;
+        counted++;
+        if (v < mine) below++;
+    }
+    if (counted < 5) return null;
+    return Math.round((below / counted) * 100);
+}
+
+/** A player's colour, held across every card, polygon, line and bar. */
+function compareColor(index) {
+    return CHART_LINE_PALETTE[index % CHART_LINE_PALETTE.length];
+}
+
+/**
+ * The bottom line, as data.
+ *
+ * Two horizons can disagree, and when they do that is the most useful sentence
+ * on the page: the strongest player over a season is not always the one to hold
+ * for the next five gameweeks. Anyone flagged unavailable or rotation-risk is
+ * named separately, because a leading score built on minutes he may not get is
+ * the one number here that can be actively misleading.
+ */
+function compareVerdict(players) {
+    const ranked = players
+        .map(p => ({ player: p, score: compositeOf(p) }))
+        .filter(x => Number.isFinite(x.score))
+        .sort((a, b) => b.score - a.score);
+
+    const byNext5 = players
+        .map(p => ({ player: p, points: projectedPointsOf(p, 'now') }))
+        .filter(x => Number.isFinite(x.points))
+        .sort((a, b) => b.points - a.points);
+
+    const warnings = [];
+    for (const p of players) {
+        const sig = signalFor(p);
+        if (sig.key === 'out' || sig.key === 'rotation') {
+            warnings.push({ player: p, label: sig.label, blurb: sig.blurb });
+        }
+    }
+
+    const lead = ranked[0] || null;
+    const runnerUp = ranked[1] || null;
+    const shortLead = byNext5[0] || null;
+    return {
+        lead, runnerUp,
+        gap: lead && runnerUp ? lead.score - runnerUp.score : null,
+        shortLead,
+        // Only interesting when the horizons actually disagree.
+        shortDiffers: !!(lead && shortLead && shortLead.player.id !== lead.player.id),
+        shortRunnerUp: byNext5[1] || null,
+        warnings
+    };
+}
+
+/**
+ * The sections, with rows that say nothing removed.
+ *
+ * Two kinds say nothing. A row nobody has a figure for is obvious. The other is
+ * a row where every figure is zero — saves for three midfielders, net transfers
+ * on a source that has no transfer data — because preprocessing turns a missing
+ * field into 0, so a null check alone still prints a row of zeroes and implies
+ * it was measured. A row where one player is genuinely at zero survives: that is
+ * a comparison, not an absence.
+ */
+function comparisonRowsFor(players) {
+    return compareSections().map(section => {
+        const rows = section.rows.map(row => {
+            const values = players.map(p => {
+                let v = null;
+                try { v = row.read(p); } catch (e) { v = null; }
+                return Number.isFinite(v) ? v : null;
+            });
+            const real = values.filter(v => v !== null);
+            return { ...row, values, any: real.length > 0 && real.some(v => v !== 0) };
+        }).filter(row => row.any);
+        return { ...section, rows };
+    }).filter(section => section.rows.length);
+}
+
+/* ----------------------------- the two charts ---------------------------- */
+
+/** Lazily-held view state for the trend chart's own controls. */
+function compareState() {
+    if (!state.compare) state.compare = { metric: 'pts', cumulative: false, ids: [] };
+    return state.compare;
+}
+
+/** The players the charts draw — the first few, in the order given. */
+function compareChartPlayers(players) {
+    return players.slice(0, COMPARE_CHART_LIMIT);
+}
+
+function compareRadarConfig(players) {
+    const axes = radarAxesFor(players);
+    // Two spokes is a line, not a shape. Below three the card is hidden and the
+    // note says why, rather than drawing something that cannot be read.
+    if (axes.length < 3) return null;
+
+    const drawn = compareChartPlayers(players);
+    const filled = drawn.length <= 3;
+
+    return {
+        type: 'radar',
+        data: {
+            labels: axes.map(a => a.label),
+            datasets: drawn.map((p, i) => {
+                const color = compareColor(i);
+                return {
+                    label: p.web_name,
+                    data: axes.map(axis => {
+                        const v = radarValue(p, axis);
+                        return v === null ? 0 : Math.round(v);
+                    }),
+                    borderColor: color,
+                    backgroundColor: filled ? fadeHex(color, 0.16) : 'transparent',
+                    pointBackgroundColor: color,
+                    pointBorderColor: '#fff',
+                    pointBorderWidth: 1.5,
+                    pointRadius: 3.5,
+                    borderWidth: 2,
+                    fill: filled
+                };
+            })
+        },
+        options: {
+            responsive: true, maintainAspectRatio: false,
+            scales: {
+                r: {
+                    min: 0, suggestedMax: 150, beginAtZero: true,
+                    ticks: {
+                        stepSize: 50, showLabelBackdrop: false,
+                        color: '#94a3b8', font: { size: 9 },
+                        callback: v => (v === 100 ? 'עילית' : v)
+                    },
+                    // The 100 ring is the whole reference, so it is drawn as a
+                    // real line and the others as background.
+                    grid: {
+                        color: ctx => (ctx && ctx.tick && ctx.tick.value === 100
+                            ? 'rgba(15, 23, 42, 0.45)' : 'rgba(15, 23, 42, 0.08)'),
+                        lineWidth: ctx => (ctx && ctx.tick && ctx.tick.value === 100 ? 1.5 : 1)
+                    },
+                    angleLines: { color: 'rgba(15, 23, 42, 0.10)' },
+                    pointLabels: { color: '#334155', font: { size: 11, weight: '700' } }
+                }
+            },
+            plugins: {
+                datalabels: { display: false },
+                legend: { display: false },
+                tooltip: {
+                    ...CHART_TOOLTIP,
+                    callbacks: {
+                        title: items => {
+                            const axis = axes[items[0].dataIndex];
+                            return axis ? axis.label : '';
+                        },
+                        label: item => {
+                            const p = drawn[item.datasetIndex];
+                            const axis = axes[item.dataIndex];
+                            if (!p || !axis) return '';
+                            let mine = null;
+                            try { mine = axis.value(p); } catch (e) { mine = null; }
+                            const bench = axisBenchmark(axis, p.position_name);
+                            if (!Number.isFinite(mine)) return `${p.web_name}: אין נתון`;
+                            const parts = [`⁦${mine.toFixed(2)}⁩`];
+                            if (bench && bench.value > 0) {
+                                parts.push(`עילית ⁦${bench.value.toFixed(2)}⁩ = ⁦${Math.round(item.raw)}%⁩`);
+                            }
+                            const pct = poolPercentile(p, axis.value);
+                            if (pct !== null) parts.push(`אחוזון ⁦${pct}⁩ מבין הפנויים`);
+                            return `${p.web_name}: ${parts.join(' · ')}`;
+                        }
+                    }
+                }
+            }
+        }
+    };
+}
+
+function compareTrendConfig(players, metricKey, cumulative) {
+    const def = TREND_METRICS[metricKey];
+    if (!def || !state.trendGws.length) return null;
+
+    const drawn = compareChartPlayers(players);
+    const series = drawn.map(p => getTrendSeries(p.id, metricKey, 'recent'));
+    if (!series.length || !series[0].length) return null;
+
+    const labels = series[0].map(pt => `GW${pt.gw}`);
+    const datasets = drawn.map((p, i) => {
+        const color = compareColor(i);
+        let running = 0;
+        return {
+            label: p.web_name,
+            data: series[i].map(pt => {
+                running += pt.value;
+                return cumulative ? running : pt.value;
+            }),
+            borderColor: color,
+            backgroundColor: fadeHex(color, 0.12),
+            pointBackgroundColor: color,
+            pointRadius: 3,
+            borderWidth: 2.5,
+            tension: 0.3,
+            fill: false,
+            // A gameweek he did not play is a gap, not a zero.
+            pointStyle: series[i].map(pt => (pt.played ? 'circle' : 'crossRot'))
+        };
+    });
+
+    // One dashed line for the elite bar, but only when everyone shares a
+    // position — two positions have two different bars and one line would be
+    // wrong for at least one of them.
+    const positions = [...new Set(drawn.map(p => p.position_name))];
+    if (!cumulative && positions.length === 1) {
+        const bench = trendBenchmark(metricKey, positions[0]);
+        if (bench !== null) {
+            datasets.push({
+                label: 'רמת העילית', data: labels.map(() => bench),
+                borderColor: 'rgba(100, 116, 139, 0.8)', borderDash: [6, 4],
+                borderWidth: 1.5, pointRadius: 0, fill: false, tension: 0
+            });
+        }
+    }
+
+    return {
+        type: 'line',
+        data: { labels, datasets },
+        options: {
+            responsive: true, maintainAspectRatio: false,
+            interaction: { mode: 'index', intersect: false },
+            scales: {
+                x: { grid: { display: false }, ticks: { color: '#94a3b8', font: { size: 10 } } },
+                y: chartAxis(cumulative ? `${def.label} — מצטבר` : def.label)
+            },
+            plugins: {
+                datalabels: { display: false },
+                legend: {
+                    display: true, position: 'bottom',
+                    labels: { boxWidth: 10, boxHeight: 10, usePointStyle: true, font: { size: 11 }, color: '#475569' }
+                },
+                tooltip: { ...CHART_TOOLTIP }
+            }
+        }
+    };
+}
+
+/* ------------------------------- the markup ------------------------------ */
+
+function playerPhotoUrl(p) {
+    return `https://resources.premierleague.com/premierleague/photos/players/110x140/p${p.code}.png`;
+}
+
+/**
+ * A monogram stands in when the Premier League has no photo for him.
+ *
+ * Every quote in the SVG is %22, not '. The URI is interpolated into a
+ * single-quoted JS string inside a double-quoted onerror attribute, so a literal
+ * apostrophe closes the string and the browser reports a syntax error on
+ * whatever follows — which is exactly how this broke.
+ */
+function playerPhotoFallback(name, color) {
+    const initial = encodeURIComponent((name || '?').charAt(0));
+    const fill = encodeURIComponent(color || '#94a3b8');
+    return 'data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22'
+        + ' width=%22110%22 height=%22140%22%3E'
+        + `%3Crect fill=%22${fill}%22 width=%22110%22 height=%22140%22/%3E`
+        + '%3Ctext x=%2250%25%22 y=%2250%25%22 text-anchor=%22middle%22 dy=%22.35em%22'
+        + ` fill=%22%23fff%22 font-size=%2252%22 font-weight=%22bold%22%3E${initial}%3C/text%3E%3C/svg%3E`;
+}
+
+/**
+ * The window trend beside a value.
+ *
+ * The arrow is a different measurement from the number it sits next to — the
+ * recent window against the one before it, in the trend metric's own unit and
+ * aggregation — so the hover spells out which metric and which span. It is only
+ * attached to rows whose unit the trend metric actually shares; a per-90 rate
+ * with a window-total delta beside it looks like one number and is two.
+ */
+function compareDeltaHtml(player, metricKey) {
+    const def = TREND_METRICS[metricKey];
+    const d = trendDelta(player, metricKey);
+    if (!def || d === null || Math.abs(d) < 0.05) return '';
+    const span = state.trendWindow || 5;
+    const agg = def.agg === 'sum' ? 'סך' : 'ממוצע';
+    const title = `${def.label}: ${agg} ב-${span} המחזורים האחרונים מול ${span} שלפניהם`;
+    return `<span class="cmp-delta ${d > 0 ? 'is-up' : 'is-down'}" title="${escapeHtml(title)}"
+        >${d > 0 ? '▲' : '▼'}${Math.abs(d).toFixed(1)}</span>`;
+}
+
+/** Rank of one value inside a row, as "2/4", so a cell states its own standing. */
+function compareRankLabel(values, value, asc) {
+    const real = values.filter(v => v !== null);
+    if (value === null || real.length < 2) return '';
+    const better = real.filter(v => (asc ? v < value : v > value)).length;
+    return `${better + 1}/${real.length}`;
+}
+
+function compareVerdictHtml(verdict, players) {
+    if (!verdict.lead) {
+        return `<div class="cmp-verdict cmp-verdict--thin">אין מספיק נתונים כדי לדרג את השחקנים האלה זה מול זה.</div>`;
+    }
+    const lead = verdict.lead;
+    const lines = [];
+
+    const gapText = verdict.gap !== null && verdict.runnerUp
+        ? ` — <b>${lead.score.toFixed(0)}</b> מול ${verdict.runnerUp.score.toFixed(0)} של ${escapeHtml(verdict.runnerUp.player.web_name)}`
+        : ` — <b>${lead.score.toFixed(0)}</b>`;
+    lines.push(`<p class="cmp-verdict-line"><span class="cmp-verdict-tag">בשקלול הכולל</span>
+        <b>${escapeHtml(lead.player.web_name)}</b> מוביל${gapText}</p>`);
+
+    if (verdict.shortDiffers && verdict.shortLead) {
+        const short = verdict.shortLead;
+        const rival = verdict.shortRunnerUp;
+        const vs = rival ? ` מול ${rival.points.toFixed(1)} של ${escapeHtml(rival.player.web_name)}` : '';
+        lines.push(`<p class="cmp-verdict-line"><span class="cmp-verdict-tag cmp-verdict-tag--alt">ל-5 המחזורים הבאים</span>
+            דווקא <b>${escapeHtml(short.player.web_name)}</b> — ${short.points.toFixed(1)} נק׳ צפויות${vs}</p>`);
+    } else if (verdict.shortLead) {
+        lines.push(`<p class="cmp-verdict-line"><span class="cmp-verdict-tag cmp-verdict-tag--alt">ל-5 המחזורים הבאים</span>
+            אותה תשובה — ${verdict.shortLead.points.toFixed(1)} נק׳ צפויות</p>`);
+    }
+
+    for (const w of verdict.warnings) {
+        lines.push(`<p class="cmp-verdict-line cmp-verdict-line--warn">
+            <span class="cmp-verdict-tag cmp-verdict-tag--warn">${escapeHtml(w.label)}</span>
+            ${escapeHtml(w.player.web_name)} — ${escapeHtml(w.blurb)}</p>`);
+    }
+
+    const scope = players.length > COMPARE_CHART_LIMIT
+        ? `<p class="cmp-verdict-note">הטבלה מציגה את כל ${players.length} השחקנים; הגרפים מציגים את ${COMPARE_CHART_LIMIT} הראשונים.</p>`
+        : '';
+    return `<div class="cmp-verdict">${lines.join('')}${scope}</div>`;
+}
+
+function comparePlayerCardsHtml(players, verdict) {
+    const leadId = verdict.lead ? verdict.lead.player.id : null;
+    const headline = [
+        {
+            label: 'ציון משוקלל', title: 'שקלול תפוקה, דקות, התקפה והגנה מול חציון 20 הטובים בעמדה',
+            read: p => compositeOf(p), fmt: v => v.toFixed(0)
+        },
+        {
+            label: 'צפי 5 מחזורים', title: 'נקודות צפויות בחמשת המחזורים הבאים',
+            read: p => projectedPointsOf(p, 'now'), fmt: v => v.toFixed(1)
+        },
+        {
+            label: 'נק׳/מש׳', title: 'נקודות לכל הופעה, על פני העונה',
+            read: p => seasonPointsPerApp(p), fmt: v => v.toFixed(2)
+        },
+        {
+            label: 'הופעות', title: 'סה״כ הופעות — המכנה של כל אחוז בעמוד הזה',
+            read: p => appearancesOf(p) || null, fmt: v => v.toFixed(0)
+        }
+    ];
+    const columns = headline.map(h => players.map(p => {
+        let v = null;
+        try { v = h.read(p); } catch (e) { v = null; }
+        return Number.isFinite(v) ? v : null;
+    }));
+
+    const cards = players.map((p, i) => {
+        const color = compareColor(i);
+        const sig = signalFor(p);
+        const owner = getDraftTeamForPlayer(p.id);
+        const rank = p.draft_rank ? `<span class="cmp-rank" title="${escapeHtml(BOARD_COLS.fpl.title)}">#${p.draft_rank}</span>` : '';
+        const figures = headline.map((h, hi) => {
+            const value = columns[hi][i];
+            const standing = compareRankLabel(columns[hi], value, false);
+            // The standing sits at the end of the label's own line. Absolutely
+            // positioned it landed on top of the label text.
+            return `<div class="cmp-fig">
+                <span class="cmp-fig-label" title="${escapeHtml(h.title)}">${h.label}
+                    ${standing ? `<b class="cmp-fig-rank" title="המקום שלו בהשוואה הזאת">${standing}</b>` : ''}
+                </span>
+                <span class="cmp-fig-value">${value === null ? '–' : h.fmt(value)}</span>
+            </div>`;
+        }).join('');
+
+        return `<article class="cmp-card${p.id === leadId ? ' is-lead' : ''}" style="--cmp-hue: ${color}">
+            <div class="cmp-card-top">
+                <img class="cmp-photo" src="${playerPhotoUrl(p)}" alt="${escapeHtml(p.web_name)}"
+                     loading="lazy" onerror="this.src='${playerPhotoFallback(p.web_name, color)}'">
+                <div class="cmp-id">
+                    <h4 class="cmp-name">${p.id === leadId ? '<span aria-hidden="true">👑</span> ' : ''}${escapeHtml(p.web_name)}</h4>
+                    <p class="cmp-meta">${escapeHtml(teamShort(p))} · ${p.position_name}${rank}</p>
+                    <div class="cmp-tags">
+                        <span class="detail-tag ${owner ? 'is-owned' : 'is-free'}">${owner ? escapeHtml(owner) : '🆓 חופשי'}</span>
+                        <span class="signal-badge signal-${sig.tone}" title="${escapeHtml(signalTitle(sig))}">${sig.label}</span>
+                    </div>
+                </div>
+            </div>
+            <div class="cmp-figs">${figures}</div>
+        </article>`;
+    }).join('');
+
+    return `<div class="cmp-cards" style="--cmp-cols: ${players.length}">${cards}</div>`;
+}
+
+function compareStripHtml(players, verdict) {
+    const leadId = verdict.lead ? verdict.lead.player.id : null;
+    const pills = players.map((p, i) => `<span class="cmp-pill" style="--cmp-hue: ${compareColor(i)}">
+        <i aria-hidden="true"></i>${escapeHtml(p.web_name)}
+        <em>${escapeHtml(teamShort(p))} · ${p.position_name}</em>
+        ${p.id === leadId ? '<b aria-hidden="true">👑</b>' : ''}
+    </span>`).join('');
+    // The modal's own × scrolls away with the content, and this page is several
+    // screens tall, so the strip carries the way out.
+    return `<div class="cmp-strip">
+        <span class="cmp-strip-title">⚔️ השוואת שחקנים</span>
+        <div class="cmp-pills">${pills}</div>
+        <button type="button" class="cmp-close" onclick="closeModal()"
+            title="סגירה" aria-label="סגירת ההשוואה">×</button>
+    </div>`;
+}
+
+function compareChartsHtml(players) {
+    const cs = compareState();
+    const radar = compareRadarConfig(players);
+    const axes = radarAxesFor(players);
+    const benchFrom = axes.length
+        ? axes.map(a => axisBenchmark(a, players[0].position_name)).find(b => b && b.from)
+        : null;
+    const seasonNote = benchFrom && benchFrom.from === 'lastSeason'
+        ? ' · רמת העילית מחושבת מהעונה שעברה'
+        : '';
+
+    const radarCard = radar
+        ? `<section class="cmp-chart-card">
+               <header class="cmp-chart-head">
+                   <div>
+                       <h4>פרופיל מול רמת העילית</h4>
+                       <p title="כל ציר הוא אחוז מחציון 20 הטובים בעמדה של אותו שחקן. 100 = בדיוק ברמת העילית, 150 = פי 1.5 ממנה">100 = חציון 20 הטובים בעמדה${seasonNote}</p>
+                   </div>
+               </header>
+               <div class="cmp-canvas cmp-canvas--radar"><canvas id="cmpRadar"></canvas></div>
+           </section>`
+        : `<section class="cmp-chart-card cmp-chart-card--empty">
+               <h4>פרופיל מול רמת העילית</h4>
+               <p>השחקנים שנבחרו לא חולקים מספיק מדדים משותפים כדי לצייר פרופיל — שוער ושחקן שדה נמדדים על דברים שונים.</p>
+           </section>`;
+
+    const chips = Object.keys(TREND_METRICS).map(key => {
+        const on = cs.metric === key;
+        return `<button type="button" class="cmp-chip" aria-pressed="${on}"
+            onclick="setCompareTrend('${key}')">${TREND_METRICS[key].label}</button>`;
+    }).join('');
+
+    return `<div class="cmp-charts">
+        ${radarCard}
+        <section class="cmp-chart-card">
+            <header class="cmp-chart-head">
+                <div>
+                    <h4>מגמה לפי מחזור</h4>
+                    <p title="חלון המחזורים האחרונים. איקס במקום עיגול = מחזור שבו לא שיחק">${state.trendWindow || 5} המחזורים האחרונים</p>
+                </div>
+                <div class="cmp-chart-controls">
+                    <div class="cmp-chips">${chips}</div>
+                    <button type="button" class="cmp-chip cmp-chip--toggle" aria-pressed="${cs.cumulative}"
+                        onclick="toggleCompareCumulative()" title="סכימה מצטברת לאורך החלון, במקום ערך לכל מחזור">מצטבר</button>
+                </div>
+            </header>
+            <div class="cmp-canvas"><canvas id="cmpTrend"></canvas></div>
+        </section>
+    </div>`;
+}
+
+function compareMetricsHtml(players) {
+    const sections = comparisonRowsFor(players);
+    if (!sections.length) return '';
+
+    const heads = players.map((p, i) =>
+        `<span class="cmp-col-head" style="--cmp-hue: ${compareColor(i)}">${escapeHtml(p.web_name)}</span>`).join('');
+
+    const body = sections.map(section => {
+        const rows = section.rows.map(row => {
+            const real = row.values.filter(v => v !== null);
+            const best = row.asc ? Math.min(...real) : Math.max(...real);
+            const worst = row.asc ? Math.max(...real) : Math.min(...real);
+            // A tie has no winner, and a neutral row has no better or worse.
+            const competitive = !row.neutral && real.length > 1 && best !== worst;
+
+            const cells = players.map((p, i) => {
+                const value = row.values[i];
+                if (value === null) return `<div class="cmp-cell is-empty"><span class="cmp-val">–</span></div>`;
+
+                const isBest = competitive && value === best;
+                // Share of the leader, so the bar shows the size of the gap
+                // rather than just its direction.
+                const share = row.asc
+                    ? (value !== 0 ? Math.abs(best / value) : 1)
+                    : (best !== 0 ? Math.abs(value / best) : 1);
+                const width = Math.max(Math.min(share * 100, 100), 4);
+
+                // The value, the trend and the trophy are all inline and the cell
+                // stays RTL, so they read right-to-left in that order. Only the
+                // digits get an LTR isolate — a cell-wide direction flip put the
+                // number at the far edge and dropped the trophy on top of it.
+                const delta = row.trend ? compareDeltaHtml(p, row.trend) : '';
+                return `<div class="cmp-cell${isBest ? ' is-best' : ''}" style="--cmp-hue: ${compareColor(i)}">
+                    <span class="cmp-val">
+                        <span class="cmp-num">${row.fmt(value)}</span>${delta}
+                        ${isBest ? '<span class="cmp-crown" aria-hidden="true">🏆</span>' : ''}
+                    </span>
+                    <span class="cmp-bar${row.neutral ? ' is-neutral' : ''}"><i style="width: ${width.toFixed(1)}%"></i></span>
+                </div>`;
+            }).join('');
+
+            return `<div class="cmp-row">
+                <div class="cmp-row-label" title="${escapeHtml(row.title)}">${row.label}${row.asc ? '<span class="cmp-asc" title="נמוך = טוב יותר">↓</span>' : ''}</div>
+                ${cells}
+            </div>`;
+        }).join('');
+
+        return `<div class="cmp-section">
+            <div class="cmp-section-head">
+                <h4>${section.title}</h4><span>${section.note}</span>
+            </div>
+            ${rows}
+        </div>`;
+    }).join('');
+
+    return `<div class="cmp-table" style="--cmp-cols: ${players.length}">
+        <div class="cmp-row cmp-row--head"><div class="cmp-row-label"></div>${heads}</div>
+        ${body}
+    </div>`;
+}
+
+function compareFixturesHtml(players) {
+    const drawn = players.map(p => generateFixturesHTML(p) || '');
+    // A finished season has no fixtures ahead, and generateFixturesHTML says so
+    // with "N/A". A section headed "the games ahead" holding three N/As is worse
+    // than no section.
+    if (!drawn.some(html => html && !/^\s*N\/A\s*$/.test(html))) return '';
+
+    const cells = drawn.map((html, i) => `<div class="cmp-cell cmp-cell--fixtures" style="--cmp-hue: ${compareColor(i)}">
+        ${html || '<span class="cmp-none">אין נתונים</span>'}
+    </div>`).join('');
+    return `<div class="cmp-table" style="--cmp-cols: ${players.length}">
+        <div class="cmp-section">
+            <div class="cmp-section-head"><h4>המשחקים הבאים</h4><span>הלו״ז שמחכה לכל אחד מהם</span></div>
+            <div class="cmp-row"><div class="cmp-row-label">לו״ז</div>${cells}</div>
+        </div>
+    </div>`;
+}
+
+/**
+ * The whole comparison, as markup. Kept under its old name: three call sites and
+ * the smoke test reach it, and renaming it would buy nothing.
+ */
+function generateComparisonTableHTML(players) {
+    // The projection and the drop-off ladder are both derived state; the board
+    // refreshes them before it draws, and the comparison has to as well or it
+    // reads whatever the last render left behind.
+    try { applyValueIndex(); } catch (e) { console.warn('value index unavailable:', e.message); }
+    try { draftBoardPool(); } catch (e) { /* the ladder stays empty; those rows drop */ }
+
+    const verdict = compareVerdict(players);
+    compareState().ids = players.map(p => p.id);
+
+    return `<div class="cmp">
+        ${compareStripHtml(players, verdict)}
+        ${compareVerdictHtml(verdict, players)}
+        ${comparePlayerCardsHtml(players, verdict)}
+        ${compareChartsHtml(players)}
+        ${compareMetricsHtml(players)}
+        ${compareFixturesHtml(players)}
+    </div>`;
+}
+
+/* --------------------------- chart lifecycle ----------------------------- */
+
+/**
+ * Both canvases live inside markup that is replaced wholesale on every open, so
+ * an instance that is not destroyed first leaks and keeps drawing to a canvas
+ * nobody can see. closeModal() destroys these too.
+ */
+const compareCharts = { radar: null, trend: null };
+
+function destroyCompareCharts() {
+    for (const key of Object.keys(compareCharts)) {
+        if (compareCharts[key]) {
+            compareCharts[key].destroy();
+            compareCharts[key] = null;
+        }
+    }
+}
+
+function comparePlayersFromState() {
+    const source = state.allPlayersData[state.currentDataSource];
+    const pool = (source && source.processed) || [];
+    const ids = compareState().ids;
+    const byId = new Map(pool.map(p => [p.id, p]));
+    return ids.map(id => byId.get(id)).filter(Boolean);
+}
+
+function mountCompareChart(key, canvasId, config) {
+    if (compareCharts[key]) { compareCharts[key].destroy(); compareCharts[key] = null; }
+    const canvas = document.getElementById(canvasId);
+    if (!canvas || !config || typeof Chart === 'undefined') return;
+    try {
+        compareCharts[key] = new Chart(canvas.getContext('2d'), config);
+    } catch (e) {
+        console.warn(`comparison chart ${key} failed:`, e.message);
+    }
+}
+
+/**
+ * Pin the column header directly under the player strip.
+ *
+ * The strip wraps to two lines on a phone and one on a desktop, so its height is
+ * not a number that can be written into a stylesheet — a hard-coded offset put
+ * the header behind the strip on exactly the screen where losing the names hurts
+ * most. Measured once per open, and again on resize.
+ */
+function syncCompareStickyOffset() {
+    const root = document.querySelector('#compareContent .cmp');
+    const strip = root && root.querySelector('.cmp-strip');
+    if (!root || !strip) return;
+    root.style.setProperty('--cmp-strip-h', `${Math.round(strip.getBoundingClientRect().height)}px`);
+}
+
+function mountComparisonCharts(players) {
+    mountCompareChart('radar', 'cmpRadar', compareRadarConfig(players));
+    renderCompareTrend(players);
+    syncCompareStickyOffset();
+}
+
+window.addEventListener('resize', () => {
+    if (compareCharts.radar || compareCharts.trend) syncCompareStickyOffset();
+});
+
+function renderCompareTrend(players) {
+    const list = players || comparePlayersFromState();
+    if (!list.length) return;
+    const cs = compareState();
+    mountCompareChart('trend', 'cmpTrend', compareTrendConfig(list, cs.metric, cs.cumulative));
+    document.querySelectorAll('.cmp-chips .cmp-chip').forEach(btn => {
+        const key = (btn.getAttribute('onclick') || '').match(/'([a-z0-9_]+)'/);
+        if (key) btn.setAttribute('aria-pressed', String(key[1] === cs.metric));
+    });
+}
+
+window.setCompareTrend = function (metricKey) {
+    if (!TREND_METRICS[metricKey]) return;
+    compareState().metric = metricKey;
+    renderCompareTrend();
+};
+
+window.toggleCompareCumulative = function () {
+    const cs = compareState();
+    cs.cumulative = !cs.cumulative;
+    const btn = document.querySelector('.cmp-chip--toggle');
+    if (btn) btn.setAttribute('aria-pressed', String(cs.cumulative));
+    renderCompareTrend();
+};
 
 /**
  * The ticked checkboxes are the only selection the user can see, but the state
@@ -4701,14 +5544,17 @@ function renderPlayerSearchMenu() {
         return;
     }
 
+    // Name first, so in RTL it sits at the right edge where the eye lands, then
+    // the club and the position. The points used to have a column of their own,
+    // and between them the two auto-width columns squeezed the name — the only
+    // thing anyone reads — down to nothing inside a ~200px filter group.
     menu.innerHTML = matches.map(p => {
         const on = state.selectedForComparison.has(p.id);
         return `<button type="button" class="ps-row${on ? ' is-on' : ''}" role="option"
             aria-selected="${on}" onclick="togglePlayerCompare(${p.id})">
-            <span class="ps-check" aria-hidden="true">${on ? '✓' : ''}</span>
             <span class="ps-name">${escapeHtml(p.web_name)}</span>
-            <span class="ps-meta">${p.position_name} · ${escapeHtml(teamShort(p))}</span>
-            <span class="ps-pts">${p.total_points || 0} נק׳</span>
+            <span class="ps-meta">${escapeHtml(teamShort(p))} · ${p.position_name}</span>
+            <span class="ps-check" aria-hidden="true">${on ? '✓' : ''}</span>
         </button>`;
     }).join('');
     menu.hidden = false;
@@ -4835,22 +5681,16 @@ function compareSelectedPlayers() {
         return;
     }
 
+    // The markup replaces both canvases, so anything still bound to the old ones
+    // has to go first or it keeps drawing to elements that no longer exist.
+    destroyCompareCharts();
     contentDiv.innerHTML = generateComparisonTableHTML(players);
     modal.style.display = 'block';
     document.body.style.overflow = 'hidden'; // Prevent background scrolling
+    // Chart.js measures the canvas, so it can only run once the markup is in the
+    // document and the modal is displayed.
+    mountComparisonCharts(players);
 }
-
-function getMetricValueClass(value, values, reversed) {
-    const numericValues = values.filter(v => typeof v === 'number');
-    if (numericValues.length < 2) return '';
-    const max = Math.max(...numericValues);
-    const min = Math.min(...numericValues);
-    if (value === (reversed ? min : max)) return 'metric-value-best';
-    if (value === (reversed ? max : min)) return 'metric-value-worst';
-    return 'metric-value-mid';
-}
-
-// Radar chart removed - not needed for the new comparison design
 
 window.closeModal = function () {
     // Closes by class, not by a list of ids: the previous version named two of
@@ -4864,6 +5704,7 @@ window.closeModal = function () {
         charts.visualization.destroy();
         charts.visualization = null;
     }
+    destroyCompareCharts();
 
     console.log('✅ Modal closed');
 };
@@ -5527,26 +6368,22 @@ const COMPOSITE_PARTS = [
 
 const COMPOSITE_CAP = 1.5;
 
-/** Elite median for one composite component at one position. */
+/** Elite median for one composite component at one position, and its season. */
 let _partBenchCache = { key: null, values: new Map() };
-function partBenchmark(part, position) {
-    if (!position) return null;
+function partBenchmarkInfo(part, position) {
+    if (!position) return { value: null, from: null };
     const key = `${state.currentDataSource}:${state.trendKey}:${state.trendWindow}`;
     if (_partBenchCache.key !== key) _partBenchCache = { key, values: new Map() };
     const cacheKey = `${part.key}:${position}`;
     if (_partBenchCache.values.has(cacheKey)) return _partBenchCache.values.get(cacheKey);
 
-    const players = (state.allPlayersData[state.currentDataSource] || {}).processed || [];
-    const values = [];
-    for (const p of players) {
-        if (p.position_name !== position || (p.minutes || 0) < BENCH_MIN_MINUTES) continue;
-        let v = null;
-        try { v = part.value(p); } catch { v = null; }
-        if (typeof v === 'number' && isFinite(v) && v > 0) values.push(v);
-    }
-    const out = benchmarkMedian(values);
+    const out = resolveBenchmark(part.value, position, { positiveOnly: true });
     _partBenchCache.values.set(cacheKey, out);
     return out;
+}
+
+function partBenchmark(part, position) {
+    return partBenchmarkInfo(part, position).value;
 }
 
 /**
@@ -5864,15 +6701,7 @@ function panelBenchmark(panel, position) {
     const cacheKey = `${panel.id}:${position}`;
     if (_panelBenchCache.values.has(cacheKey)) return _panelBenchCache.values.get(cacheKey);
 
-    const players = (state.allPlayersData[state.currentDataSource] || {}).processed || [];
-    const values = [];
-    for (const p of players) {
-        if (p.position_name !== position || (p.minutes || 0) < BENCH_MIN_MINUTES) continue;
-        let v = null;
-        try { v = panel.metric(p); } catch { v = null; }
-        if (typeof v === 'number' && isFinite(v)) values.push(v);
-    }
-    const out = benchmarkMedian(values);
+    const out = resolveBenchmark(panel.metric, position).value;
     _panelBenchCache.values.set(cacheKey, out);
     return out;
 }

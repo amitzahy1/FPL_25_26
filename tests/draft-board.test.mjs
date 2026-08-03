@@ -38,7 +38,8 @@ const FUNCTIONS = [
     'panelPicks', 'getTrendSeries', 'summariseTrend',
     'trendPlayerIndex', 'gwDefensiveContribution',
     'playerScore', 'buildDropOffLadder', 'dropOffFor',
-    'benchmarkMedian', 'panelBenchmark',
+    'benchmarkMedian', 'panelBenchmark', 'benchMinMinutes', 'benchmarkFrom',
+    'resolveBenchmark',
     'seasonMatchesLeft', 'seasonPointsPerApp', 'projectedLevel', 'expectedMatches',
     'fixtureTilt', 'draftValue', 'draftValueOf', 'getCompletedGWCount'
 ];

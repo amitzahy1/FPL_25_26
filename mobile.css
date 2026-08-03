@@ -763,3 +763,61 @@
 
     .table-bar { gap: 6px; }
 }
+
+
+/* ==========================================================================
+   PLAYER COMPARISON, phone-sized
+
+   The comparison is a wide layout by nature — one column per player. On a phone
+   the cards go to two per row and the metric grid keeps its columns rather than
+   stacking: stacking turns a side-by-side comparison into a list, which is the
+   one thing it must not be. The label column shrinks instead, and the charts
+   get the height they need to stay readable.
+   ========================================================================== */
+@media (max-width: 768px) {
+    .cmp { gap: 12px; }
+
+    /* mobile.css forces .modal-content padding to 15px, so the strip's bleed
+       has to match or it leaves a white ledge on one side. */
+    #compareModal .modal-content { --cmp-gutter: 15px; }
+
+    .cmp-strip { gap: 6px 10px; padding: 7px 15px 8px; }
+
+    .cmp-strip-title { font-size: 12px; }
+    .cmp-pill { font-size: 11px; padding: 2px 8px; }
+    .cmp-pill em { display: none; }
+
+    .cmp-verdict { padding: 11px 12px; }
+    .cmp-verdict-line { font-size: 12.5px; gap: 6px; }
+    .cmp-verdict-tag { font-size: 9.5px; padding: 2px 7px; }
+
+    .cmp-cards { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; }
+    .cmp-card { padding: 9px; gap: 8px; }
+    .cmp-photo { width: 42px; height: 54px; }
+    .cmp-name { font-size: 13px; }
+    .cmp-fig { padding: 5px 6px; }
+    .cmp-fig-value { font-size: 15px; }
+
+    /* Taller than the desktop card, not shorter: a radar squeezed into 200px of
+       a phone screen cannot be read at all. */
+    .cmp-canvas { height: 300px; min-height: 300px; }
+    .cmp-canvas--radar { height: 330px; min-height: 330px; }
+    .cmp-chart-card { padding: 10px 10px 12px; }
+    .cmp-chart-head { margin-bottom: 6px; }
+
+    .cmp-row,
+    .cmp-row--head { grid-template-columns: 84px repeat(var(--cmp-cols, 2), minmax(0, 1fr)); }
+
+    /* One line of chips that scrolls, rather than three lines that shove the
+       chart off the screen. */
+    .cmp-chart-controls { width: 100%; }
+    .cmp-chips { flex-wrap: nowrap; overflow-x: auto; padding-bottom: 2px; }
+    .cmp-chips::-webkit-scrollbar { height: 0; }
+    .cmp-chip { flex: none; }
+    .cmp-row-label { padding: 6px 7px; font-size: 10.5px; }
+    .cmp-col-head { padding: 6px 7px; font-size: 11px; }
+    .cmp-cell { padding: 6px 7px; }
+    .cmp-val { font-size: 12.5px; }
+    .cmp-section-head { padding: 7px 10px; }
+    .cmp-section-head span { display: none; }
+}

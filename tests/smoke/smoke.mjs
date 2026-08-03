@@ -317,18 +317,89 @@ try {
         // A second search must not clear the first tick.
         const second = await typeIn('haa');
         if (!second.length) return { error: 'no matches for "haa"' };
+        // Measured before the click, because ticking re-renders the menu and
+        // leaves this row detached — and a detached element measures zero, which
+        // would pass or fail for the wrong reason.
+        //
+        // The name is the only thing anyone reads in a match row, and it was
+        // invisible for a while: the grid let the club and the points columns
+        // squeeze its track to nothing. A blank row is indistinguishable from a
+        // missing player, and no other assertion here would notice.
+        const nameCell = second[0].querySelector('.ps-name');
+        const nameWidth = nameCell ? nameCell.getBoundingClientRect().width : 0;
+        const nameText = nameCell ? nameCell.textContent.trim() : '';
+
         second[0].click();
         const chips = [...document.querySelectorAll('.ps-chip')].length;
         const go = document.querySelector('.ps-go');
         const enabled = go && !go.disabled;
-        document.querySelector('.ps-clear')?.click();
-        input.value = '';
-        input.dispatchEvent(new Event('input', { bubbles: true }));
-        return { afterOne, chips, enabled, cleared: document.querySelectorAll('.ps-chip').length };
+        return { afterOne, chips, enabled, nameWidth, nameText };
     });
     check(!picker.error && picker.afterOne === 1 && picker.chips === 2 && picker.enabled,
         `the search box picks players for a comparison (${JSON.stringify(picker)})`);
-    check(picker.cleared === 0, 'clearing the selection empties it');
+    check(picker.nameWidth > 40 && picker.nameText.length > 1,
+        `a match row shows the player's name (${picker.nameWidth}px, "${picker.nameText}")`);
+
+    // The comparison itself, opened from the two ticks that are already in place.
+    const cmp = await page.evaluate(async () => {
+        document.querySelector('.ps-go')?.click();
+        await new Promise(r => setTimeout(r, 300));
+        const modal = document.getElementById('compareModal');
+        const live = id => {
+            const c = document.getElementById(id);
+            return !!(c && typeof Chart !== 'undefined' && Chart.getChart(c));
+        };
+        const radarChart = Chart.getChart(document.getElementById('cmpRadar'));
+        return {
+            open: !!modal && modal.style.display === 'block',
+            cards: document.querySelectorAll('.cmp-card').length,
+            verdict: (document.querySelector('.cmp-verdict-line')?.textContent || '').trim().length,
+            radar: live('cmpRadar'),
+            trend: live('cmpTrend'),
+            radarSeries: radarChart ? radarChart.data.datasets.length : 0,
+            radarSpokes: radarChart ? radarChart.data.labels.length : 0,
+            rows: document.querySelectorAll('.cmp-row').length,
+            sections: document.querySelectorAll('.cmp-section').length,
+            // Every bar must belong to a player by colour, or the table needs a
+            // legend it does not have.
+            hues: new Set([...document.querySelectorAll('.cmp-col-head')]
+                .map(el => getComputedStyle(el).borderBottomColor)).size
+        };
+    });
+    check(cmp.open && cmp.cards === 2, `the comparison opens with both players (${JSON.stringify(cmp)})`);
+    check(cmp.verdict > 10, 'and states a bottom line in words');
+    check(cmp.radar && cmp.radarSeries === 2 && cmp.radarSpokes >= 3,
+        `the radar draws one polygon per player (${cmp.radarSeries} × ${cmp.radarSpokes})`);
+    check(cmp.trend, 'the trend chart is live');
+    check(cmp.rows >= 20 && cmp.sections >= 4,
+        `the metric table is grouped and full (${cmp.rows} rows, ${cmp.sections} sections)`);
+    check(cmp.hues === 2, `each player column carries its own colour (${cmp.hues})`);
+
+    // Re-opening must not leak the previous instances onto replaced canvases.
+    const reopen = await page.evaluate(async () => {
+        closeModal();
+        const afterClose = Chart.getChart(document.getElementById('cmpRadar'));
+        compareSelectedPlayers();
+        await new Promise(r => setTimeout(r, 300));
+        return {
+            destroyed: !afterClose,
+            total: Object.keys(Chart.instances || {}).length,
+            radarAgain: !!Chart.getChart(document.getElementById('cmpRadar'))
+        };
+    });
+    check(reopen.destroyed, 'closing the comparison destroys its charts');
+    check(reopen.radarAgain, 'and re-opening builds them again');
+
+    const cleared = await page.evaluate(async () => {
+        closeModal();
+        const input = document.getElementById('searchName');
+        document.querySelector('.ps-clear')?.click();
+        input.value = '';
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+        await new Promise(r => setTimeout(r, 60));
+        return document.querySelectorAll('.ps-chip').length;
+    });
+    check(cleared === 0, 'clearing the selection empties it');
 
     // Hover explanations. The app had two kinds — [data-tooltip] with a styled
     // box, and plain `title` drawn by the browser after a second and never on a
@@ -1084,7 +1155,8 @@ try {
         `xGC has no per-gameweek record, so that axis stays season-long`
         + ` while its partner follows the window (${spans.gkX})`);
 
-    check(pageErrors.length === 0, 'still no page errors after interaction');
+    check(pageErrors.length === 0,
+        `still no page errors after interaction${pageErrors.length ? `: ${pageErrors[0]}` : ''}`);
 } catch (e) {
     failures.push(`smoke run threw: ${e.message}`);
 } finally {
