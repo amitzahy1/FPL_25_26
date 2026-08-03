@@ -5142,7 +5142,15 @@ function compareTrendConfig(players, metricKey, cumulative, spanId) {
                 datalabels: { display: false },
                 legend: {
                     display: true, position: 'bottom',
-                    labels: { boxWidth: 10, boxHeight: 10, usePointStyle: true, font: { size: 11 }, color: '#475569' }
+                    labels: {
+                        boxWidth: 9, boxHeight: 9, usePointStyle: true,
+                        // Forced, because the points themselves carry an array of
+                        // styles — a cross marks a gameweek he did not play — and
+                        // the legend would otherwise borrow the first one, so the
+                        // same player got a different symbol here and on the radar.
+                        pointStyle: 'circle',
+                        padding: 10, font: { size: 11, weight: '700' }, color: '#334155'
+                    }
                 },
                 tooltip: { ...CHART_TOOLTIP }
             }
