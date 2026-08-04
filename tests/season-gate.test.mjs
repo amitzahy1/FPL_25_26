@@ -15,7 +15,8 @@ import { extractFunction, extractDeclaration } from './helpers/load-script.mjs';
 const FUNCTIONS = [
     'currentSeasonIsTooEarly', 'seasonSampleIsThin', 'finishedGameweekCount',
     'getCompletedGWCount', 'benchMinMinutes', 'stripUnplayedSeasonStats',
-    'applyDefaultSortForSeason'
+    'fillFromPreviousSeason', 'applyDefaultSortForSeason', 'defaultMinMinutes',
+    'gwWord'
 ];
 
 function load(events, over = {}) {
@@ -30,6 +31,8 @@ function load(events, over = {}) {
     const body = [
         extractDeclaration('SEASON_CONFIG'),
         extractDeclaration('UNPLAYED_STAT_FIELDS'),
+        extractDeclaration('ARCHIVE_STAT_FIELDS'),
+        extractDeclaration('DEFAULT_MIN_MINUTES'),
         extractDeclaration('BENCH_MIN_MINUTES'),
         ...FUNCTIONS.map(n => extractFunction(n))
     ].join('\n');
@@ -145,5 +148,84 @@ describe('the opening sort', () => {
         const gate = load(played(0), { currentDataSource: 'historical' });
         gate.applyDefaultSortForSeason();
         assert.equal(globalThis.state.sortKey, 'draft_score');
+    });
+});
+
+describe('the previous season fills the new squad', () => {
+    const live = () => ([
+        // A returning player: this season's price, last season's numbers to come.
+        { id: 1, code: 100, web_name: 'Haaland', now_cost: 155, selected_by_percent: '75.0',
+          status: 'a', team: 13, minutes: 0, total_points: 0, expected_goals: 0, points_per_game: '0.0' },
+        // A genuine newcomer — nothing in the archive at all.
+        { id: 2, code: 999, web_name: 'Newboy', now_cost: 65, selected_by_percent: '1.2',
+          status: 'a', team: 4, minutes: 0, total_points: 0, expected_goals: 0, points_per_game: '0.0' }
+    ]);
+    const archive = () => new Map([[100, {
+        code: 100, minutes: 2953, total_points: 239, goals_scored: 30, assists: 5,
+        expected_goals: 28.4, expected_goals_per_90: 0.86, bps: 900, appearances: 35,
+        defcon_hit_rate: 12, points_per_game: '6.8', now_cost: 147, selected_by_percent: '62.5'
+    }]]);
+
+    test('a returning player gets last season\'s numbers and this season\'s price', () => {
+        const gate = load(played(0));
+        const [returning] = gate.fillFromPreviousSeason(live(), archive());
+        assert.equal(returning.minutes, 2953);
+        assert.equal(returning.total_points, 239);
+        assert.equal(returning.expected_goals_per_90, 0.86);
+        assert.equal(returning.appearances, 35);
+        assert.equal(returning.defcon_hit_rate, 12);
+        // form has no meaning in a finished season; points per game stands in for
+        // it, the same substitution the previous-season tab makes.
+        assert.equal(returning.form, '6.8');
+        assert.equal(returning.no_history, false);
+        // The market must stay this season's — that is the whole point of the join.
+        assert.equal(returning.now_cost, 155, 'this season\'s price, not the archive\'s 147');
+        assert.equal(returning.selected_by_percent, '75.0');
+    });
+
+    test('a newcomer is left empty and flagged, never invented', () => {
+        const gate = load(played(0));
+        const [, newcomer] = gate.fillFromPreviousSeason(live(), archive());
+        assert.equal(newcomer.no_history, true);
+        assert.equal(newcomer.minutes, 0);
+        assert.equal(newcomer.total_points, 0);
+        // He still has the one thing that is genuinely his.
+        assert.equal(newcomer.now_cost, 65);
+    });
+
+    test('the live objects are not mutated', () => {
+        const gate = load(played(0));
+        const input = live();
+        gate.fillFromPreviousSeason(input, archive());
+        assert.equal(input[0].minutes, 0, 'the raw is what the market overlay reads');
+    });
+
+    test('an empty archive leaves everyone flagged rather than throwing', () => {
+        const gate = load(played(0));
+        const out = gate.fillFromPreviousSeason(live(), new Map());
+        assert.deepEqual(out.map(p => p.no_history), [true, true]);
+    });
+});
+
+describe('the minutes floor the season can reach', () => {
+    test('scales with a young season and sits at the default otherwise', () => {
+        // 120 is unreachable after one gameweek, which emptied the whole table.
+        assert.equal(load(played(1)).defaultMinMinutes(), '45');
+        assert.equal(load(played(2)).defaultMinMinutes(), '90');
+        assert.equal(load(played(3)).defaultMinMinutes(), '120');
+        assert.equal(load(played(20)).defaultMinMinutes(), '120');
+        // Pre-season the minutes shown are last season's, so the full floor is
+        // right — and it doubles as the newcomer filter.
+        assert.equal(load(played(0)).defaultMinMinutes(), '120');
+        assert.equal(load(played(0), { currentDataSource: 'historical' }).defaultMinMinutes(), '120');
+    });
+});
+
+describe('counting gameweeks in Hebrew', () => {
+    test('one gameweek is a word, not a digit', () => {
+        const gate = load(played(1));
+        assert.equal(gate.gwWord(1), 'מחזור אחד');
+        assert.equal(gate.gwWord(3), '3 מחזורים');
+        assert.equal(gate.gwWord(0), '0 מחזורים');
     });
 });

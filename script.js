@@ -1029,8 +1029,11 @@ function reportAppStatus() {
     if (state.currentDataSource === 'live') {
         const played = finishedGameweekCount();
         if (!played) {
-            setAppStatus('warn', 'העונה טרם התחילה',
-                `${bits.join(' · ')} · מחיר, בעלות ודירוג דראפט בלבד — אין דקות ונקודות`);
+            const newcomers = (src.processed || []).filter(p => p.no_history).length;
+            setAppStatus('warn', `נתוני ${SEASON_CONFIG.previousSeasonLabel}`,
+                `סגל ${SEASON_CONFIG.seasonLabel} · ${bits.join(' · ')}`
+                + ` · הביצועים הם של ${SEASON_CONFIG.previousSeasonLabel}`
+                + (newcomers ? ` · ${newcomers} חדשים בליגה ללא היסטוריה` : ''));
             return;
         }
         if (seasonSampleIsThin()) {
@@ -1711,8 +1714,12 @@ async function fetchAndProcessData() {
                 return acc;
             }, {});
             const setPieceTakers = config.setPieceTakers;
-            const elements = state.currentDataSource === 'live' && currentSeasonIsTooEarly()
-                ? stripUnplayedSeasonStats(data.elements)
+            // Before the season starts the bootstrap's own performance fields are
+            // last season's by accident and get cleared without warning, so they
+            // are replaced with the archive read deliberately and joined on code.
+            const preSeason = state.currentDataSource === 'live' && currentSeasonIsTooEarly();
+            const elements = preSeason
+                ? fillFromPreviousSeason(data.elements, await previousSeasonByCode())
                 : data.elements;
             let processedPlayers = preprocessPlayerData(elements.filter(p => p.status !== 'u'), setPieceTakers);
 
@@ -1841,6 +1848,25 @@ function switchDataSource(source) {
  * because the market overlay reads price, ownership, status and news out of it,
  * and those genuinely are the new season's.
  */
+/**
+ * Fields the archive can answer for. Everything a rate is derived from, plus the
+ * ready-made per-90s and the DEFCON tallies the snapshot builder computed.
+ */
+const ARCHIVE_STAT_FIELDS = [
+    'minutes', 'starts', 'total_points', 'points_per_game', 'bonus', 'bps',
+    'goals_scored', 'assists', 'clean_sheets', 'goals_conceded', 'own_goals',
+    'penalties_saved', 'penalties_missed', 'yellow_cards', 'red_cards', 'saves',
+    'influence', 'creativity', 'threat', 'ict_index', 'dreamteam_count',
+    'expected_goals', 'expected_assists', 'expected_goal_involvements',
+    'expected_goals_conceded', 'expected_goals_per_90', 'expected_assists_per_90',
+    'expected_goal_involvements_per_90', 'expected_goals_conceded_per_90',
+    'saves_per_90', 'starts_per_90', 'clean_sheets_per_90', 'goals_conceded_per_90',
+    'defensive_contribution', 'defensive_contribution_per_90',
+    'clearances_blocks_interceptions', 'recoveries', 'tackles',
+    'appearances', 'defcon_hits', 'defcon_eligible_apps', 'defcon_hit_rate',
+    'penalties_order', 'corners_and_indirect_freekicks_order', 'direct_freekicks_order'
+];
+
 const UNPLAYED_STAT_FIELDS = [
     'minutes', 'starts', 'total_points', 'event_points', 'bonus', 'bps',
     'goals_scored', 'assists', 'clean_sheets', 'goals_conceded', 'own_goals',
@@ -1874,7 +1900,10 @@ const UNPLAYED_STAT_FIELDS = [
 function defaultMinMinutes() {
     if (state.currentDataSource !== 'live') return DEFAULT_MIN_MINUTES;
     const played = finishedGameweekCount();
-    if (!played) return '0';
+    // Pre-season the minutes on screen are last season's, so the full-season floor
+    // is the right one — and it doubles as the newcomer filter, since a player with
+    // no history has none.
+    if (!played) return DEFAULT_MIN_MINUTES;
     return String(Math.min(parseInt(DEFAULT_MIN_MINUTES, 10), played * 45));
 }
 
@@ -1890,35 +1919,25 @@ function syncSeasonSampleUi() {
     const minutes = document.getElementById('minMinutes');
     if (minutes && !minutes.dataset.touched) {
         minutes.value = defaultMinMinutes();
-        minutes.disabled = preSeason;
+        minutes.disabled = false;
         minutes.title = preSeason
-            ? 'אין דקות לסנן לפניהן — העונה טרם התחילה'
+            ? `מסנן לפי דקות ${SEASON_CONFIG.previousSeasonLabel} — אפסו כדי לראות גם שחקנים חדשים בליגה`
             : 'מסנן שחקנים מתחת למספר הדקות הזה';
     }
 
     // The banner used to be written only at startup, so every season switch left
     // the previous season's sentence sitting over the new season's table.
     showSeasonBanner(finishedGameweekCount());
-    // The fold and the board are hidden as whole containers rather than child by
-    // child: renderCharts() and renderDraftBoard() set hidden on their own cards
-    // afterwards, so anything done one level down gets overwritten.
+    // The charts and the board used to be hidden here, back when the pre-season
+    // tab had nothing but zeroes. They measure last season's rates now, which is
+    // exactly what a draft is decided on, so they stay — and the banner carries
+    // which season those rates belong to.
     const charts = document.getElementById('chartsPanel');
     const board = document.getElementById('draftBoard');
-    if (charts) charts.hidden = preSeason;
-    if (board) board.hidden = preSeason;
-
-    let el = document.getElementById('seasonWait');
-    if (!preSeason) { if (el) el.remove(); return; }
-    if (!el) {
-        el = document.createElement('p');
-        el.id = 'seasonWait';
-        el.className = 'season-wait';
-        (charts || board || {}).insertAdjacentElement?.('beforebegin', el);
-    }
-    el.textContent = `אין מה לצייר עד המחזור הראשון — הגרפים ולוח ההמלצות מודדים קצבים,`
-        + ` ולעונת ${SEASON_CONFIG.seasonLabel} עוד אין דקות.`
-        + ` הטבלה למטה מציגה את כל ${(state.allPlayersData.live.processed || []).length} השחקנים`
-        + ` לפי דירוג הדראפט של FPL, עם מחיר ובעלות.`;
+    if (charts) charts.hidden = false;
+    if (board) board.hidden = false;
+    const stale = document.getElementById('seasonWait');
+    if (stale) stale.remove();
 }
 
 function stripUnplayedSeasonStats(elements) {
@@ -1929,6 +1948,66 @@ function stripUnplayedSeasonStats(elements) {
         }
         return clean;
     });
+}
+
+/**
+ * The new season's squad, carrying last season's performance.
+ *
+ * The single most useful view there is before a draft: this season's list of
+ * players — all 560, including the ones who did not exist in the league last year
+ * — this season's prices, this season's FPL Draft ranking, and for everyone who
+ * played in the Premier League last season, everything he actually did.
+ *
+ * The numbers come from the committed snapshot joined on `code`, not from the live
+ * bootstrap. The bootstrap does carry last season's totals between seasons, but it
+ * carries them by accident and clears them without warning at some point before
+ * the opening weekend; the archive is local, permanent, and the same source the
+ * previous-season tab reads.
+ *
+ * A player with no row in the archive is a genuine newcomer. He gets zeroes and
+ * `no_history`, so nothing invents a season he never played, and the table can
+ * say which players those are rather than leaving a reader to wonder why a
+ * £6.5m midfielder has no numbers.
+ */
+function fillFromPreviousSeason(elements, archiveByCode) {
+    let filled = 0, newcomers = 0;
+    const out = (elements || []).map(p => {
+        const past = p.code ? archiveByCode.get(p.code) : null;
+        const merged = { ...p };
+        if (!past) {
+            for (const field of UNPLAYED_STAT_FIELDS) {
+                if (field in merged) merged[field] = 0;
+            }
+            merged.no_history = true;
+            newcomers++;
+            return merged;
+        }
+        for (const field of ARCHIVE_STAT_FIELDS) {
+            if (past[field] !== undefined) merged[field] = past[field];
+        }
+        // points_per_game is the honest stand-in for form in a finished season,
+        // which is what the snapshot loader does for the previous-season tab too.
+        merged.form = past.points_per_game;
+        merged.no_history = false;
+        merged.history_season = SEASON_CONFIG.previousSeasonId;
+        filled++;
+        return merged;
+    });
+    console.log(`🗄️ ${SEASON_CONFIG.previousSeasonLabel} history for ${filled} of the`
+        + ` ${SEASON_CONFIG.seasonLabel} squad · ${newcomers} newcomers with no history`);
+    return out;
+}
+
+/** The archive keyed by the one id that survives a season change. */
+async function previousSeasonByCode() {
+    try {
+        const snap = await loadSeasonSnapshot();
+        const elements = (snap && snap.elements) || [];
+        return new Map(elements.filter(p => p.code).map(p => [p.code, p]));
+    } catch (e) {
+        console.warn('previous season unavailable:', e.message);
+        return new Map();
+    }
 }
 
 /**
@@ -2028,8 +2107,11 @@ function showSeasonBanner(playedGws) {
     // infers that every per-90 on the page is standing on 90 minutes.
     let liveMsg;
     if (playedGws === 0) {
-        liveMsg = `עונת ${SEASON_CONFIG.seasonLabel} טרם התחילה — מוצגים מחיר, בעלות ודירוג דראפט בלבד.`
-            + ` אין דקות, נקודות או קצבים. לניתוח מלא עברו ל-${SEASON_CONFIG.previousSeasonLabel}`;
+        const newcomers = (state.allPlayersData.live.processed || []).filter(p => p.no_history).length;
+        liveMsg = `סגל ${SEASON_CONFIG.seasonLabel} עם נתוני ${SEASON_CONFIG.previousSeasonLabel}`
+            + ` — המחיר, אחוז הבחירה ודירוג הדראפט הם של ${SEASON_CONFIG.seasonLabel};`
+            + ` כל שאר המספרים בעמוד הם מה שהשחקן עשה ב-${SEASON_CONFIG.previousSeasonLabel}.`
+            + (newcomers ? ` ${newcomers} שחקנים חדשים בליגה — להם אין היסטוריה בכלל.` : '');
     } else if (seasonSampleIsThin()) {
         // No claim about where the elite bar came from: resolveBenchmark decides
         // that per metric, and the composite card already reports its own answer.
@@ -3785,6 +3867,13 @@ function createPlayerRowHtml(player, index) {
     let nameBadges = icons.icons;
     if (player.is_defensive_workhorse) {
         nameBadges += '<span title="High Defensive Workrate (Bonus Points Magnet)">🛡️</span>';
+    }
+    // Pre-season every figure in the row is last season's, and a player who was
+    // not in the league last season therefore has none. Saying so on the row is
+    // the difference between "no data" and "bad player".
+    if (player.no_history) {
+        nameBadges += `<span class="badge-new" title="חדש בליגה — לא שיחק ב-${SEASON_CONFIG.previousSeasonLabel},`
+            + ` כך שאין לו היסטוריה. המחיר, אחוז הבחירה ודירוג הדראפט כן שלו">חדש</span>`;
     }
 
     // The fixture-run badge: a category (easy / medium / hard), so a badge, in

@@ -6372,6 +6372,21 @@ canvas {
 /* The two header switches sit between the season toggle and the GW pill. */
 .user-actions .scout-btn { flex: none; }
 
+/* A player who was not in the league last season has no history to show, which
+   on a table full of last season's numbers is otherwise indistinguishable from
+   being bad at football. */
+.badge-new {
+    padding: 0 5px;
+    border-radius: 5px;
+    background: #ede9fe;
+    border: 1px solid #ddd6fe;
+    font-size: 8.5px;
+    font-weight: 900;
+    color: #5b21b6;
+    cursor: help;
+    vertical-align: 1px;
+}
+
 /* Pre-season: the charts and the board measure rates, and before the first
    gameweek there are none. One sentence instead of 560 dots on the origin. */
 .season-wait {
