@@ -38,7 +38,9 @@ const SEASON_CONFIG = {
     seasonLabel: '2026/27',
     previousSeasonLabel: '2025/26',
     previousSeasonId: '2025-26',
-    defaultLeagueId: 689,
+    // "The 2nd last dance" — draft 2026-09-02 21:00 Israel time, head-to-head,
+    // starts at GW3. Only a fallback: a stored setting or ?league=<id> wins.
+    defaultLeagueId: 932,
     totalGameweeks: 38,
     cacheSchemaVersion: 5,
     settingsKey: 'fpl.settings'
