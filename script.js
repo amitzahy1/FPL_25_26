@@ -4838,12 +4838,20 @@ function compareSections() {
                 read: p => num1(p.next_5_fdr) || null, fmt: v => v.toFixed(2), asc: true
             },
             {
+                // displayCost, not now_cost: between seasons the row's own price is
+                // last season's and the market overlay carries the current one. The
+                // banner promises this season's price, so this has to be it.
                 key: 'cost', label: 'מחיר', title: 'המחיר בעונה הנוכחית',
-                read: p => num1(p.now_cost), fmt: v => `${v.toFixed(1)}£`, neutral: true
+                read: p => num1(displayCost(p)), fmt: v => `${v.toFixed(1)}£`, neutral: true
+            },
+            {
+                key: 'price_move', label: 'שינוי מחיר',
+                title: 'כמה עלה או ירד המחיר מהעונה שעברה לנוכחית — ההצבעה של מיליוני מנג׳רים, שנעה לפני הנקודות',
+                read: p => num1(p.price_delta), fmt: v => `${v > 0 ? '+' : ''}${v.toFixed(1)}£`
             },
             {
                 key: 'owned', label: 'אחוז בעלות', title: 'אחוז הקבוצות ב-FPL שמחזיקות אותו',
-                read: p => num1(p.selected_by_percent), fmt: v => `${v.toFixed(1)}%`, neutral: true
+                read: p => num1(displayOwnership(p)), fmt: v => `${v.toFixed(1)}%`, neutral: true
             },
             {
                 key: 'transfers', label: 'העברות נטו', title: 'נכנסים פחות יוצאים במחזור הנוכחי — קיים רק בעונה חיה',

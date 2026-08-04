@@ -28,7 +28,7 @@ const FUNCTIONS = [
     'rowStanding', 'compareToneColor', 'rowSpread', 'isTightRow', 'compareLeaderboard',
     'seasonPointsPerApp', 'appearancesOf', 'compositeOf', 'compositeScore',
     'partBenchmark', 'partBenchmarkInfo', 'defconRateFor', 'windowStats',
-    'dropOffFor', 'compareState'
+    'dropOffFor', 'compareState', 'displayCost', 'displayOwnership'
 ];
 
 const DEPS = [
@@ -798,5 +798,36 @@ describe('the radar follows the span', () => {
         assert.equal(cmp.compareRadarNote('season'), '100 = חציון 20 הטובים בעמדה, על פני העונה');
         assert.match(cmp.compareRadarNote('g3'), /^הצירים לפי 3 המחזורים האחרונים/);
         assert.match(cmp.compareRadarNote('g3'), /על פני העונה$/);
+    });
+});
+
+describe('the market rows follow the season on screen', () => {
+    test('price and ownership come from the overlay when there is one', () => {
+        // Between seasons the row's own price is last season's and the market
+        // overlay carries the current one. The banner promises the current one, so
+        // the comparison has to print that and not the archive underneath it.
+        const pool = squad(8).map(p => ({
+            ...p, now_cost: 14.7, selected_by_percent: 62.5,
+            market_cost: 15.5, market_ownership: 75, price_delta: 0.8
+        }));
+        const cmp = load(pool);
+        const market = cmp.comparisonRowsFor([pool[0], pool[1]], 'season').find(s => s.key === 'market');
+        const row = key => market.rows.find(r => r.key === key);
+        assert.equal(row('cost').values[0], 15.5, 'this season, not last');
+        assert.equal(row('owned').values[0], 75);
+        assert.equal(row('price_move').values[0], 0.8);
+    });
+
+    test('and from the row itself when there is no overlay', () => {
+        const pool = squad(8).map(p => ({
+            ...p, now_cost: 9.5, selected_by_percent: 12.3,
+            market_cost: null, market_ownership: null
+        }));
+        const cmp = load(pool);
+        const market = cmp.comparisonRowsFor([pool[0], pool[1]], 'season').find(s => s.key === 'market');
+        assert.equal(market.rows.find(r => r.key === 'cost').values[0], 9.5);
+        assert.equal(market.rows.find(r => r.key === 'owned').values[0], 12.3);
+        // No overlay means no price move to report, so the row drops out entirely.
+        assert.equal(market.rows.find(r => r.key === 'price_move'), undefined);
     });
 });
