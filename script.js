@@ -42,6 +42,9 @@ const SEASON_CONFIG = {
     // starts at GW3. Only a fallback: a stored setting or ?league=<id> wins.
     defaultLeagueId: 932,
     totalGameweeks: 38,
+    // Below this many played gameweeks the season's own rates are shown but
+    // flagged: one substitution still moves a per-90 by half.
+    thinSampleGws: 5,
     cacheSchemaVersion: 5,
     settingsKey: 'fpl.settings'
 };
@@ -269,6 +272,9 @@ const state = {
     // Set to a quick-filter name while that filter is deliberately viewing a
     // season with no gameweeks played yet; null the rest of the time.
     seasonOverrideFor: null,
+    // Set the first time the reader clicks a column header, after which the
+    // season switch stops choosing an order for them.
+    userSorted: false,
     sortKey: 'draft_score',
     sortDirection: 'desc',
     activeQuickFilterName: null,
@@ -1018,6 +1024,22 @@ function reportAppStatus() {
         ? SEASON_CONFIG.previousSeasonLabel : SEASON_CONFIG.seasonLabel;
     bits.push(`עונת ${season}`);
 
+    // A young season is shown, not withheld — but "הכל תקין" over one gameweek of
+    // per-90 rates would be the pill lying by omission.
+    if (state.currentDataSource === 'live') {
+        const played = finishedGameweekCount();
+        if (!played) {
+            setAppStatus('warn', 'העונה טרם התחילה',
+                `${bits.join(' · ')} · מחיר, בעלות ודירוג דראפט בלבד — אין דקות ונקודות`);
+            return;
+        }
+        if (seasonSampleIsThin()) {
+            setAppStatus('warn', `${gwWord(played)} בלבד`,
+                `${bits.join(' · ')} · מדגם קטן — כל קצב ל-90 עוד רועד`);
+            return;
+        }
+    }
+
     const draft = state.draft || {};
     const teams = (draft.rostersByEntryId && draft.rostersByEntryId.size) || 0;
     const owned = (draft.ownedElementIds && draft.ownedElementIds.size) || 0;
@@ -1345,12 +1367,31 @@ async function loadSeasonSnapshot(seasonId = SEASON_CONFIG.previousSeasonId) {
     return _seasonSnapshotPromise;
 }
 
-// True while the current season has too little played data to be worth showing.
-// Before that point the table must default to the completed season.
+/**
+ * True only while the current season has not been played at all.
+ *
+ * This used to demand five finished gameweeks before the app would look at the
+ * new season, which meant that on the morning after the opening weekend the page
+ * still opened on last season and there was no hint that anything had changed.
+ * The threshold is now the honest one — has a ball been kicked — and the thinness
+ * of a young sample is stated instead of being hidden behind a wait.
+ */
 function currentSeasonIsTooEarly() {
-    const live = state.allPlayersData.live.raw;
-    if (!live || !live.events) return true;
-    return live.events.filter(e => e.finished || e.finished_provisional).length < 5;
+    return finishedGameweekCount() < 1;
+}
+
+/**
+ * A season young enough that its own rates cannot be trusted on their own.
+ *
+ * Every per-90 in the app divides by minutes, and after one or two gameweeks that
+ * denominator is small enough for one substitution to move a player's rate by
+ * half. The data is shown — it is the freshest there is — but the banner and the
+ * status pill say how little of it there is, and the elite benchmarks fall back
+ * to last season until the current one can produce their own.
+ */
+function seasonSampleIsThin() {
+    const played = finishedGameweekCount();
+    return played > 0 && played < SEASON_CONFIG.thinSampleGws;
 }
 
 function finishedGameweekCount() {
@@ -1670,7 +1711,10 @@ async function fetchAndProcessData() {
                 return acc;
             }, {});
             const setPieceTakers = config.setPieceTakers;
-            let processedPlayers = preprocessPlayerData(data.elements.filter(p => p.status !== 'u'), setPieceTakers);
+            const elements = state.currentDataSource === 'live' && currentSeasonIsTooEarly()
+                ? stripUnplayedSeasonStats(data.elements)
+                : data.elements;
+            let processedPlayers = preprocessPlayerData(elements.filter(p => p.status !== 'u'), setPieceTakers);
 
             // Calculate FDR if fixtures are available
             if (state.allPlayersData.live.fixtures) {
@@ -1692,6 +1736,7 @@ async function fetchAndProcessData() {
         // feeds the status pill's hover, which is the only place it is read.
         state.lastUpdatedAt = new Date().toLocaleString('he-IL');
         document.getElementById('lastUpdated').textContent = `עדכון אחרון: ${state.lastUpdatedAt}`;
+        syncSeasonSampleUi();
         populateTeamFilter();
         populateSignalFilter();
         assertQuickFiltersReachable();
@@ -1761,21 +1806,155 @@ function switchDataSource(source) {
     state.currentDataSource = source;
     syncDataSourceButtons();
 
-    // Selecting a season that has not been played yet must show nothing and
-    // say why. Leaving the previous season's charts on screen under the new
-    // season's label is worse than an empty view.
-    // The newcomer chips are the one legitimate reason to look at a season that
-    // has not started: a player promoted or newly signed has no previous season
-    // to fall back to, so an empty view is not a kinder answer than his price.
-    if (source === 'live' && currentSeasonIsTooEarly() && !state.seasonOverrideFor) {
-        showEmptySeasonState();
-        return;
-    }
+    // The per-gameweek window belongs to the season that built it. Left in place
+    // across a switch, every windowed metric — the momentum column, the position
+    // matrix, the trend chart — went on reading the old season's matches under the
+    // new season's label.
+    state.trendGws = [];
+    state.trendPrevGws = [];
+    state.trendKey = null;
+    invalidateSignals();
 
+    // A season that has not been played yet used to blank the whole tab. That was
+    // the wrong trade: it hid the 163 players who exist only in the new season —
+    // exactly the ones you cannot research anywhere else before a draft — to avoid
+    // showing a column of zeroes. The rows are shown now, ordered by FPL Draft's
+    // own ranking rather than by points nobody has scored, and the banner says
+    // outright that the performance columns are empty because no football has
+    // been played.
+    applyDefaultSortForSeason();
     clearEmptySeasonState();
     fetchAndProcessData();
 }
 
+/**
+ * Copies of the new season's players with last season's numbers taken out.
+ *
+ * This is the trap in the FPL bootstrap between seasons: the squad list, prices
+ * and ownership flip to the new season, but every performance field still carries
+ * the *previous* season's totals. 399 of the 404 returning players had minutes
+ * identical to the archived snapshot. Feeding that through the pipeline produced a
+ * 2026/27 tab whose charts, per-90 rates and draft scores were quietly 2025/26 —
+ * under a banner promising the opposite, which is worse than showing nothing.
+ *
+ * So the carried-over fields are zeroed on a copy. The raw is left untouched
+ * because the market overlay reads price, ownership, status and news out of it,
+ * and those genuinely are the new season's.
+ */
+const UNPLAYED_STAT_FIELDS = [
+    'minutes', 'starts', 'total_points', 'event_points', 'bonus', 'bps',
+    'goals_scored', 'assists', 'clean_sheets', 'goals_conceded', 'own_goals',
+    'penalties_saved', 'penalties_missed', 'yellow_cards', 'red_cards', 'saves',
+    'influence', 'creativity', 'threat', 'ict_index', 'dreamteam_count',
+    'expected_goals', 'expected_assists', 'expected_goal_involvements',
+    'expected_goals_conceded', 'expected_goals_per_90', 'expected_assists_per_90',
+    'expected_goal_involvements_per_90', 'expected_goals_conceded_per_90',
+    'saves_per_90', 'starts_per_90', 'clean_sheets_per_90', 'goals_conceded_per_90',
+    'defensive_contribution', 'defensive_contribution_per_90',
+    'clearances_blocks_interceptions', 'recoveries', 'tackles',
+    'points_per_game', 'form'
+];
+
+/**
+ * Pre-season, the charts and the board have nothing to say.
+ *
+ * Every chart plots a rate and the board ranks by points, so with the carried-over
+ * stats stripped they would draw 560 dots on the origin and a board of zeroes.
+ * They are replaced by one line explaining what is missing, and restored the
+ * moment a gameweek exists.
+ */
+/**
+ * The minutes floor the season on screen can actually reach.
+ *
+ * 120 is right for a finished season and impossible in a young one: after one
+ * gameweek the maximum is 90, so the filter emptied the entire table the morning
+ * after the season started. Scaled to half the minutes available so far, capped at
+ * the full-season default.
+ */
+function defaultMinMinutes() {
+    if (state.currentDataSource !== 'live') return DEFAULT_MIN_MINUTES;
+    const played = finishedGameweekCount();
+    if (!played) return '0';
+    return String(Math.min(parseInt(DEFAULT_MIN_MINUTES, 10), played * 45));
+}
+
+/**
+ * Bring every part of the page into line with how much of the season exists.
+ *
+ * Called after each process, so switching seasons cannot leave a banner, a filter
+ * floor or a hidden chart behind describing the other one.
+ */
+function syncSeasonSampleUi() {
+    const preSeason = state.currentDataSource === 'live' && currentSeasonIsTooEarly();
+
+    const minutes = document.getElementById('minMinutes');
+    if (minutes && !minutes.dataset.touched) {
+        minutes.value = defaultMinMinutes();
+        minutes.disabled = preSeason;
+        minutes.title = preSeason
+            ? 'אין דקות לסנן לפניהן — העונה טרם התחילה'
+            : 'מסנן שחקנים מתחת למספר הדקות הזה';
+    }
+
+    // The banner used to be written only at startup, so every season switch left
+    // the previous season's sentence sitting over the new season's table.
+    showSeasonBanner(finishedGameweekCount());
+    // The fold and the board are hidden as whole containers rather than child by
+    // child: renderCharts() and renderDraftBoard() set hidden on their own cards
+    // afterwards, so anything done one level down gets overwritten.
+    const charts = document.getElementById('chartsPanel');
+    const board = document.getElementById('draftBoard');
+    if (charts) charts.hidden = preSeason;
+    if (board) board.hidden = preSeason;
+
+    let el = document.getElementById('seasonWait');
+    if (!preSeason) { if (el) el.remove(); return; }
+    if (!el) {
+        el = document.createElement('p');
+        el.id = 'seasonWait';
+        el.className = 'season-wait';
+        (charts || board || {}).insertAdjacentElement?.('beforebegin', el);
+    }
+    el.textContent = `אין מה לצייר עד המחזור הראשון — הגרפים ולוח ההמלצות מודדים קצבים,`
+        + ` ולעונת ${SEASON_CONFIG.seasonLabel} עוד אין דקות.`
+        + ` הטבלה למטה מציגה את כל ${(state.allPlayersData.live.processed || []).length} השחקנים`
+        + ` לפי דירוג הדראפט של FPL, עם מחיר ובעלות.`;
+}
+
+function stripUnplayedSeasonStats(elements) {
+    return (elements || []).map(p => {
+        const clean = { ...p };
+        for (const field of UNPLAYED_STAT_FIELDS) {
+            if (field in clean) clean[field] = 0;
+        }
+        return clean;
+    });
+}
+
+/**
+ * The opening order for the season now on screen.
+ *
+ * draft_score is built out of points and minutes, so before a ball is kicked it
+ * is zero for all 567 players and the table opens in whatever order the API
+ * returned. FPL Draft's own ranking is the one quality signal that exists at that
+ * point, so that is what the table opens on — ascending, best first, with the
+ * unranked newcomers falling to the bottom on the generic null rule.
+ *
+ * Only ever changes the opening order: once the reader has clicked a header,
+ * sortKey is theirs and switching seasons must not take it back.
+ */
+function applyDefaultSortForSeason() {
+    if (state.userSorted) return;
+    const preSeason = state.currentDataSource === 'live' && currentSeasonIsTooEarly();
+    state.sortKey = preSeason ? 'draft_rank' : 'draft_score';
+    state.sortDirection = preSeason ? 'asc' : 'desc';
+}
+
+/**
+ * Reserved for a season with no player list at all — the API unreachable, or a
+ * season the game has not published yet. A season that simply has not kicked off
+ * is a different case and renders normally: see switchDataSource.
+ */
 function showEmptySeasonState() {
     const played = finishedGameweekCount();
     state.displayedData = [];
@@ -1829,6 +2008,11 @@ function syncDataSourceButtons() {
 // Before the new season has meaningful data, every metric derived from minutes
 // or points is zero. Fall back to the completed season and say so, rather than
 // presenting an empty table as though it were the truth.
+/** "מחזור אחד" reads; "1 מחזורים" does not. */
+function gwWord(n) {
+    return n === 1 ? 'מחזור אחד' : `${n} מחזורים`;
+}
+
 function showSeasonBanner(playedGws) {
     const existing = document.getElementById('seasonBanner');
     if (existing) existing.remove();
@@ -1840,15 +2024,33 @@ function showSeasonBanner(playedGws) {
     const marketNote = showingPrevious && marketOverlayActive()
         ? ` · מחיר ואחוז בחירה הם של ${SEASON_CONFIG.seasonLabel} (חיים), שאר הנתונים של ${SEASON_CONFIG.previousSeasonLabel}`
         : '';
+    // On the current season the count is not enough: nobody reads "1 מחזור" and
+    // infers that every per-90 on the page is standing on 90 minutes.
+    let liveMsg;
+    if (playedGws === 0) {
+        liveMsg = `עונת ${SEASON_CONFIG.seasonLabel} טרם התחילה — מוצגים מחיר, בעלות ודירוג דראפט בלבד.`
+            + ` אין דקות, נקודות או קצבים. לניתוח מלא עברו ל-${SEASON_CONFIG.previousSeasonLabel}`;
+    } else if (seasonSampleIsThin()) {
+        // No claim about where the elite bar came from: resolveBenchmark decides
+        // that per metric, and the composite card already reports its own answer.
+        // A banner asserting "taken from last season" was measurably wrong the
+        // moment a young season could produce a bar of its own.
+        liveMsg = `עונת ${SEASON_CONFIG.seasonLabel} — ${gwWord(playedGws)} בלבד.`
+            + ' מדגם קטן: כל קצב ל-90 עוד רועד';
+    } else {
+        liveMsg = `עונת ${SEASON_CONFIG.seasonLabel} — ${gwWord(playedGws)} שוחקו`;
+    }
+
     const msg = showingPrevious
         ? (playedGws === 0
             ? `מוצגים נתוני ${SEASON_CONFIG.previousSeasonLabel} המלאים — עונת ${SEASON_CONFIG.seasonLabel} טרם התחילה${marketNote}`
-            : `מוצגים נתוני ${SEASON_CONFIG.previousSeasonLabel} המלאים — לעונת ${SEASON_CONFIG.seasonLabel} יש רק ${playedGws} מחזורים${marketNote}`)
-        : `עונת ${SEASON_CONFIG.seasonLabel} — ${playedGws} מחזורים שוחקו`;
+            : `מוצגים נתוני ${SEASON_CONFIG.previousSeasonLabel} המלאים — לעונת ${SEASON_CONFIG.seasonLabel} יש ${gwWord(playedGws)}${marketNote}`)
+        : liveMsg;
 
     const banner = document.createElement('div');
     banner.id = 'seasonBanner';
-    banner.style.cssText = showingPrevious
+    const caution = showingPrevious || playedGws === 0 || seasonSampleIsThin();
+    banner.style.cssText = caution
         ? 'margin: 10px 0; padding: 10px 14px; border-radius: 8px; background: #fef3c7; border: 1px solid #fcd34d; color: #92400e; font-size: 13px; font-weight: 700;'
         : 'margin: 10px 0; padding: 10px 14px; border-radius: 8px; background: #eff6ff; border: 1px solid #bfdbfe; color: #1e40af; font-size: 13px; font-weight: 700;';
     banner.textContent = `📅 ${msg}`;
@@ -2056,6 +2258,12 @@ function calculateRealFDR(players, fixtures) {
 
 function setupEventListeners() {
     ['searchName', 'priceRange', 'minPoints', 'minMinutes'].forEach(id => document.getElementById(id).addEventListener('keyup', processChange));
+    // Once the reader sets a floor themselves, the season-aware default stops
+    // overwriting it — same rule the opening sort follows.
+    const minutesInput = document.getElementById('minMinutes');
+    if (minutesInput) {
+        minutesInput.addEventListener('input', () => { minutesInput.dataset.touched = '1'; });
+    }
     ['positionFilter', 'teamFilter', 'xDiffFilter', 'showEntries'].forEach(id => document.getElementById(id).addEventListener('change', processChange));
     setupTableSorting();
 }
@@ -4396,6 +4604,8 @@ function updateSortIndicators(key) {
 }
 
 function sortTable(key) {
+    // From here on the order is the reader's, not the season switch's.
+    state.userSorted = true;
     if (state.sortKey === key) {
         state.sortDirection = state.sortDirection === 'asc' ? 'desc' : 'asc';
     } else {
@@ -4531,14 +4741,12 @@ function toggleQuickFilter(button, filterName) {
 function enterCurrentSeasonView(filterName) {
     const label = filterName === 'promoted_teams' ? 'קבוצות שעלו ליגה' : 'שחקנים חדשים בליגה';
     if (currentSeasonIsTooEarly()) {
-        showToast(label, `עונת ${SEASON_CONFIG.seasonLabel} עוד לא התחילה — לשחקנים האלה יש מחיר ובעלות, אין דקות ונקודות`, 'info', 6000);
+        showToast(label, `עונת ${SEASON_CONFIG.seasonLabel} עוד לא התחילה — לשחקנים האלה יש מחיר, בעלות ודירוג דראפט, אין דקות ונקודות`, 'info', 6000);
     }
     if (state.currentDataSource !== 'live') {
         switchDataSource('live');
         return;
     }
-    // Already on the current season, but the empty-season state may have left it
-    // unprocessed.
     clearEmptySeasonState();
     if (!state.allPlayersData.live.processed) fetchAndProcessData();
 }
