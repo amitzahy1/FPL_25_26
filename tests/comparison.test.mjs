@@ -21,6 +21,7 @@ const FUNCTIONS = [
     // trend
     'compareTrendConfig', 'compareSeries', 'compareSpanGws', 'comparePrevSpanGws',
     'compareAllGameweeks', 'compareSpanTotals', 'spanRate',
+    'activeSnapshot',
     'compareSpanNote', 'compareRadarNote', 'getTrendSeries', 'trendPlayerIndex',
     'gwDefensiveContribution', 'trendBenchmark', 'chartAxis', 'ltrTick',
     // table + verdict

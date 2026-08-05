@@ -1990,12 +1990,36 @@ function fillFromPreviousSeason(elements, archiveByCode) {
         merged.form = past.points_per_game;
         merged.no_history = false;
         merged.history_season = SEASON_CONFIG.previousSeasonId;
+        // The id his per-match logs are filed under last season, which is not the
+        // id he has this season.
+        merged.history_id = past.id;
+        // Team ids are reassigned every season as the promoted clubs shift the
+        // alphabetical order, so only the code can be compared. A player who moved
+        // earned every number on his row somewhere else, which changes what they
+        // predict — a defender's clean sheets belong to his old back four.
+        merged.moved_club = !!(past.team_code && merged.team_code
+            && past.team_code !== merged.team_code);
+        merged.history_team_code = past.team_code;
         filled++;
         return merged;
     });
     console.log(`🗄️ ${SEASON_CONFIG.previousSeasonLabel} history for ${filled} of the`
         + ` ${SEASON_CONFIG.seasonLabel} squad · ${newcomers} newcomers with no history`);
     return out;
+}
+
+/**
+ * Last season's clubs by code, so a player who moved can be told which back four
+ * his clean sheets actually belong to. Keyed by code because team ids move.
+ */
+let _archiveTeams = null;
+function archiveClubName(teamCode) {
+    if (!teamCode) return '';
+    if (!_archiveTeams) {
+        const snap = state.allPlayersData.historical?.raw?.__snapshot;
+        _archiveTeams = new Map((snap?.teams || []).map(t => [t.code, t.short_name || t.name]));
+    }
+    return _archiveTeams.get(teamCode) || '';
 }
 
 /** The archive keyed by the one id that survives a season change. */
@@ -2994,10 +3018,34 @@ function fourthTrendMetric(player) {
  * shorter layout keep decoding — a field the file never had reads as 0 instead
  * of silently picking up the next appearance's numbers.
  */
+/**
+ * The snapshot whose per-match logs describe the numbers currently on screen.
+ *
+ * Normally that is the source being viewed. The exception is the new season
+ * before it starts: every total on the page is last season's, filled in by
+ * fillFromPreviousSeason, so the per-gameweek breakdown behind those totals has
+ * to be last season's too. Without this the trend chart, the momentum column and
+ * every windowed metric sat blank on a page full of last season's figures.
+ */
+function activeSnapshot() {
+    const own = state.allPlayersData[state.currentDataSource]?.raw?.__snapshot;
+    if (own) return own;
+    // Guarded by typeof, like the chart builders, so the many suites that pull one
+    // function out of this file do not each have to drag the season gate in behind
+    // it. Without the gate the answer is simply "no fallback".
+    const preSeason = state.currentDataSource === 'live'
+        && typeof currentSeasonIsTooEarly === 'function' && currentSeasonIsTooEarly();
+    return preSeason ? (state.allPlayersData.historical?.raw?.__snapshot || null) : null;
+}
+
 function getMatchLog(player) {
-    const snap = state.allPlayersData[state.currentDataSource]?.raw?.__snapshot;
+    const snap = activeSnapshot();
     if (!snap || !snap.gwLogs) return [];
-    const flat = snap.gwLogs[player.id] || snap.gwLogs[String(player.id)];
+    // Player ids are reassigned every season, so a player filled in from the
+    // archive carries the id his logs are filed under. Only `code` survives a
+    // season change, which is what the fill joined on.
+    const logId = player.history_id || player.id;
+    const flat = snap.gwLogs[logId] || snap.gwLogs[String(logId)];
     if (!flat || !flat.length) return [];
 
     const fields = snap.logFields || ['gw', 'points', 'minutes', 'xgi_x100', 'defcon_hit'];
@@ -3070,7 +3118,7 @@ async function ensureTrendWindow(n = state.trendWindow) {
     const source = state.currentDataSource;
 
     // --- completed-season snapshot -------------------------------------
-    if (state.allPlayersData[source]?.raw?.__snapshot) {
+    if (activeSnapshot()) {
         const all = snapshotGameweekStats();
         if (!all.length) return state.trendGws;
         const recent = all.slice(-n);
@@ -3874,6 +3922,11 @@ function createPlayerRowHtml(player, index) {
     if (player.no_history) {
         nameBadges += `<span class="badge-new" title="חדש בליגה — לא שיחק ב-${SEASON_CONFIG.previousSeasonLabel},`
             + ` כך שאין לו היסטוריה. המחיר, אחוז הבחירה ודירוג הדראפט כן שלו">חדש</span>`;
+    } else if (player.moved_club) {
+        const from = archiveClubName(player.history_team_code);
+        nameBadges += `<span class="badge-moved" title="עבר קבוצה — כל המספרים בשורה נצברו ב${
+            from ? escapeHtml(from) : 'קבוצתו הקודמת'} ב-${SEASON_CONFIG.previousSeasonLabel},`
+            + ' לא בקבוצה שבה ישחק העונה">עבר</span>';
     }
 
     // The fixture-run badge: a category (easy / medium / hard), so a badge, in
@@ -5513,7 +5566,7 @@ const COMPARE_DEFAULT_SPAN = 'season';
 let _compareGwCache = { key: null, gws: null };
 function compareAllGameweeks() {
     const source = state.currentDataSource;
-    if (state.allPlayersData[source]?.raw?.__snapshot) {
+    if (activeSnapshot()) {
         if (_compareGwCache.key !== source) {
             _compareGwCache = { key: source, gws: snapshotGameweekStats() };
         }

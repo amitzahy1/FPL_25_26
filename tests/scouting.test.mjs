@@ -385,7 +385,8 @@ function loadSnapshot(snapshot, processed) {
     };
     globalThis.state = state;
     const fns = loadFunctions(
-        ['getMatchLog', 'snapshotGameweekStats', 'getTrendSeries', 'summariseTrend',
+        ['getMatchLog',
+    'activeSnapshot', 'snapshotGameweekStats', 'getTrendSeries', 'summariseTrend',
             'trendDelta', 'trendPlayerIndex', 'computeTrendScales'],
         {},
         ['gwNum', 'TREND_METRICS', '_trendPlayerIndex', '_trendDeltaCache']

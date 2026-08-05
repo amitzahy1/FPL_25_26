@@ -16,7 +16,7 @@ const FUNCTIONS = [
     'currentSeasonIsTooEarly', 'seasonSampleIsThin', 'finishedGameweekCount',
     'getCompletedGWCount', 'benchMinMinutes', 'stripUnplayedSeasonStats',
     'fillFromPreviousSeason', 'applyDefaultSortForSeason', 'defaultMinMinutes',
-    'gwWord'
+    'gwWord', 'activeSnapshot'
 ];
 
 function load(events, over = {}) {
@@ -161,7 +161,8 @@ describe('the previous season fills the new squad', () => {
           status: 'a', team: 4, minutes: 0, total_points: 0, expected_goals: 0, points_per_game: '0.0' }
     ]);
     const archive = () => new Map([[100, {
-        code: 100, minutes: 2953, total_points: 239, goals_scored: 30, assists: 5,
+        id: 430, code: 100, team_code: 43,
+        minutes: 2953, total_points: 239, goals_scored: 30, assists: 5,
         expected_goals: 28.4, expected_goals_per_90: 0.86, bps: 900, appearances: 35,
         defcon_hit_rate: 12, points_per_game: '6.8', now_cost: 147, selected_by_percent: '62.5'
     }]]);
@@ -227,5 +228,83 @@ describe('counting gameweeks in Hebrew', () => {
         assert.equal(gate.gwWord(1), 'מחזור אחד');
         assert.equal(gate.gwWord(3), '3 מחזורים');
         assert.equal(gate.gwWord(0), '0 מחזורים');
+    });
+});
+
+describe('the archive join carries its own keys', () => {
+    const liveOne = over => ([{
+        id: 411, code: 100, web_name: 'Haaland', now_cost: 155,
+        selected_by_percent: '75.0', status: 'a', team: 13, team_code: 43,
+        minutes: 0, total_points: 0, ...over
+    }]);
+    const archive = new Map([[100, {
+        id: 430, code: 100, team_code: 43, minutes: 2953, total_points: 239,
+        points_per_game: '6.8'
+    }]]);
+
+    test('the per-match logs are keyed by last season\'s id, not this season\'s', () => {
+        // Player ids are reassigned every season: this one is 411 now and was 430.
+        // getMatchLog reads history_id, so without it the trend chart would have
+        // drawn somebody else's matches under his name.
+        const gate = load(played(0));
+        const [p] = gate.fillFromPreviousSeason(liveOne(), archive);
+        assert.equal(p.id, 411, 'the row is still this season\'s player');
+        assert.equal(p.history_id, 430, 'his logs are filed under last season\'s id');
+    });
+
+    test('a player who changed clubs is flagged, with the club he left', () => {
+        // A defender's clean sheets belong to his old back four, so a number that
+        // moved with him predicts something different from one that did not.
+        const gate = load(played(0));
+        const [stayed] = gate.fillFromPreviousSeason(liveOne(), archive);
+        assert.equal(stayed.moved_club, false, 'same club code, no flag');
+
+        const [moved] = gate.fillFromPreviousSeason(liveOne({ team_code: 8 }), archive);
+        assert.equal(moved.moved_club, true);
+        assert.equal(moved.history_team_code, 43, 'the club the numbers were earned at');
+    });
+
+    test('a missing club code on either side is not a transfer', () => {
+        const gate = load(played(0));
+        const [noCode] = gate.fillFromPreviousSeason(liveOne({ team_code: null }), archive);
+        assert.equal(noCode.moved_club, false, 'unknown is not the same as moved');
+    });
+});
+
+describe('which season\'s match logs are in force', () => {
+    const snap = { gwLogs: {}, logFields: ['gw'], logStride: 1 };
+
+    test('the source being viewed, when it has its own', () => {
+        const gate = load(played(0), {
+            currentDataSource: 'historical',
+            allPlayersData: { live: { raw: null }, historical: { raw: { __snapshot: snap } } }
+        });
+        assert.equal(gate.activeSnapshot(), snap);
+    });
+
+    test('pre-season on the new tab falls back to the archive', () => {
+        // Every total on that page is last season's, so the per-gameweek breakdown
+        // behind those totals has to be last season's too. Without this the trend
+        // chart and every windowed metric sat blank on a page full of figures.
+        const gate = load(played(0), {
+            currentDataSource: 'live',
+            allPlayersData: {
+                live: { raw: { events: played(0) } },
+                historical: { raw: { __snapshot: snap } }
+            }
+        });
+        assert.equal(gate.activeSnapshot(), snap);
+    });
+
+    test('but not once the season has started', () => {
+        // From GW1 the live season keeps its own record and must not borrow.
+        const gate = load(played(1), {
+            currentDataSource: 'live',
+            allPlayersData: {
+                live: { raw: { events: played(1) } },
+                historical: { raw: { __snapshot: snap } }
+            }
+        });
+        assert.equal(gate.activeSnapshot(), null);
     });
 });
