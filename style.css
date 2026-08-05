@@ -1191,11 +1191,23 @@ span.tone-down { background: none !important; color: #1d4ed8; font-weight: 700; 
 .db-td-key { font-size: 13px; font-weight: 800; color: var(--accent); }
 .db-td-soft { color: #94a3b8; font-weight: 700; }
 
+/* The elite bar. Deliberately quieter than the figure it sits beside — it is the
+   same number for every row at a position, so it is a reference, not a result.
+   The dotted leading edge reads as "measured against", which is the whole
+   relationship the column expresses. */
+.db-th-bench { width: 15%; color: #64748b; }
+.db-td-bench {
+    color: #64748b;
+    font-weight: 700;
+    border-inline-start: 1px dotted #dbe4ee;
+}
+
 /* --- the same table, twenty deep, in the modal --- */
 .db-tbl.is-modal { table-layout: auto; }
 .db-tbl.is-modal th { font-size: 11px; padding: 6px 8px; }
 .db-tbl.is-modal th.db-th-name { width: auto; }
 .db-tbl.is-modal th.db-th-key { width: auto; }
+.db-tbl.is-modal th.db-th-bench { width: auto; }
 .db-tbl.is-modal td { font-size: 13px; padding: 7px 8px; }
 .db-tbl.is-modal .db-nm b { font-size: 13.5px; }
 .db-tbl.is-modal .db-nm em { font-size: 11px; }

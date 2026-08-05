@@ -375,20 +375,21 @@ const charts = {
 };
 
 /**
- * Fetch with cache, retry logic, and rate limiting
- * 
- * Features:
- * - Cache with configurable duration
- * - Retry on failure with exponential backoff
- * - Rate limiting detection (429 status)
- * - Network error handling
- * 
+ * Fetch through the cache, then through the proxy tiers.
+ *
+ * Resilience here is tier rotation, not retry: a failing route is very rarely a
+ * route that will work on the second attempt, so the next tier is tried instead
+ * of the same one again — local proxy, then the user's own worker, then the
+ * public list, then the committed snapshot. Retrying a dead proxy three times
+ * with backoff only delays reaching the one that answers.
+ *
+ * This block used to document `maxRetries` and `retryDelay` with exponential
+ * backoff. Neither existed: both were destructured and never read, so a caller
+ * that passed them got no retries and no warning.
+ *
  * @param {string} url - URL to fetch
  * @param {string} cacheKey - Cache key for localStorage
  * @param {number} cacheDurationMinutes - Cache validity duration
- * @param {Object} options - Fetch options
- * @param {number} options.maxRetries - Maximum retry attempts (default: 3)
- * @param {number} options.retryDelay - Initial retry delay in ms (default: 1000)
  * @returns {Promise<Object>} - Fetched data
  */
 // ============================================
@@ -463,11 +464,11 @@ function migrateCacheSchema() {
 // every load); without this each one opens its own proxy walk.
 const _inflightRequests = new Map();
 
-function fetchWithCache(url, cacheKey, cacheDurationMinutes = 120, options = {}) {
+function fetchWithCache(url, cacheKey, cacheDurationMinutes = 120) {
     const pending = _inflightRequests.get(cacheKey);
     if (pending) return pending;
 
-    const promise = _fetchWithCacheUncoalesced(url, cacheKey, cacheDurationMinutes, options)
+    const promise = _fetchWithCacheUncoalesced(url, cacheKey, cacheDurationMinutes)
         .finally(() => _inflightRequests.delete(cacheKey));
     _inflightRequests.set(cacheKey, promise);
     return promise;
@@ -495,9 +496,7 @@ async function mapWithConcurrency(items, limit, worker) {
     return results;
 }
 
-async function _fetchWithCacheUncoalesced(url, cacheKey, cacheDurationMinutes = 120, options = {}) {
-    const { maxRetries = 3, retryDelay = 1000 } = options;
-
+async function _fetchWithCacheUncoalesced(url, cacheKey, cacheDurationMinutes = 120) {
     // 1. Try Cache
     const cachedItem = localStorage.getItem(cacheKey);
     if (cachedItem) {
@@ -7713,6 +7712,10 @@ const DRAFT_PANELS = [
         // available player at the same position: take him, or your fallback is
         // this much worse.
         metric: p => dropOffFor(p),
+        // No elite bar: the figure is already a comparison — the gap to the next
+        // available player at his position. A bar on top of it would be the
+        // typical gap of an elite gap, which is not a sentence anyone needs.
+        noBenchmark: true,
         fmt: v => `+${v.toFixed(2)}`,
         display(p) { return this.fmt(this.metric(p)); },
         why: p => `${playerScore(p).toFixed(2)} נק׳/משחק · הבא בתור: ${(playerScore(p) - dropOffFor(p)).toFixed(2)}`,
@@ -7779,17 +7782,38 @@ const DRAFT_PANELS = [
  * else's roster fills up.
  */
 let _panelBenchCache = { key: null, values: new Map() };
-function panelBenchmark(panel, position) {
-    if (!position) return null;
+function panelBenchmarkInfo(panel, position) {
+    if (!position) return { value: null, from: null };
     // trendWindow is in the key because two panels measure inside the window.
     const key = `${state.currentDataSource}:${state.trendKey}:${state.trendWindow}`;
     if (_panelBenchCache.key !== key) _panelBenchCache = { key, values: new Map() };
     const cacheKey = `${panel.id}:${position}`;
     if (_panelBenchCache.values.has(cacheKey)) return _panelBenchCache.values.get(cacheKey);
 
-    const out = resolveBenchmark(panel.metric, position).value;
+    const out = resolveBenchmark(panel.metric, position);
     _panelBenchCache.values.set(cacheKey, out);
     return out;
+}
+
+function panelBenchmark(panel, position) {
+    return panelBenchmarkInfo(panel, position).value;
+}
+
+/**
+ * The bar as the card prints it: the panel's own formatter, so the two figures
+ * in the row are in the same unit and can simply be read against each other.
+ *
+ * The alternative was his value as a percentage of the bar, which is what the
+ * legend used to promise. A ratio hides both magnitudes and asks the reader to
+ * trust arithmetic they cannot see — "127%" of an unnamed baseline. "38% מעל
+ * הסף, עילית 30%" needs no trust at all. The composite card learned the same
+ * lesson when its four component percentages came off it.
+ */
+function panelBenchCellHtml(panel, p) {
+    if (panel.noBenchmark) return '';
+    const bench = panelBenchmark(panel, p.position_name);
+    const text = Number.isFinite(bench) && bench > 0 ? panel.fmt(bench) : '–';
+    return `<td class="db-td-bench">${escapeHtml(text)}</td>`;
 }
 
 /**
@@ -7989,9 +8013,17 @@ function panelTableHtml(panel, picks, { modal = false, sortKey = null, sortDir =
             + ` title="${escapeHtml(hint)}לחצו כדי למיין לפי העמודה הזו">${escapeHtml(label)}${arrow}</th>`;
     };
 
+    // The elite bar sits immediately beside the figure it is the bar for, in the
+    // same unit, because a comparison two columns apart is not one. Not sortable:
+    // it is one value per position, so ordering by it only groups the positions.
+    const benchHead = panel.noBenchmark ? '' : `<th class="db-th-bench"
+        title="חציון 20 השחקנים הטובים באותה עמדה — הרף שאליו משווים את המספר שלידו.
+ חציון ולא ממוצע, כדי ששחקן קיצוני אחד לא יזיז אותו">עילית</th>`;
+
     const head = `<tr>
         ${th('name', 'שחקן', { cls: 'db-th-name' })}
         ${th('key', panel.unit, { cls: 'db-th-key', title: panel.subtitle })}
+        ${benchHead}
         ${cols.map((c, i) => th(`col:${keys[i]}`, c.label, { title: c.title })).join('')}
         ${modal ? `${th('spark', '5 מחזורים', { cls: 'db-th-spark' })}
             <th class="db-th-why">למה</th>
@@ -8009,6 +8041,7 @@ function panelTableHtml(panel, picks, { modal = false, sortKey = null, sortDir =
                 </span>
             </td>
             <td class="db-td-key">${escapeHtml(panel.display(p))}</td>
+            ${panelBenchCellHtml(panel, p)}
             ${cols.map(c => `<td class="${c.soft ? 'db-td-soft' : ''}">${escapeHtml(String(c.get(p)))}</td>`).join('')}
             ${modal ? `<td class="db-td-spark">${miniSparkHtml(p.id, 'pts')}</td>
                 <td class="db-td-why">${escapeHtml(panel.why(p))}</td>
@@ -8077,12 +8110,28 @@ function renderDraftBoard() {
         state.trendGws.length ? `חלון ${state.trendWindow} מחזורים` : null
     ].filter(Boolean).join(' · ');
 
+    // The legend describes the עילית column, so it has to know whether that
+    // column is on screen at all — four of the six cards carry an abstract score
+    // that no bar belongs beside. It used to promise "the grey number is the ratio
+    // to it" on every card, and no card had ever shown a ratio.
+    const benched = DRAFT_PANELS.filter(pl => !pl.noBenchmark);
+    const fellBack = benched.some(pl => ['GKP', 'DEF', 'MID', 'FWD']
+        .some(pos => panelBenchmarkInfo(pl, pos).from === 'lastSeason'));
+    const legendText = benched.length
+        ? `עילית = חציון 20 הטובים בעמדה${fellBack ? ' (עונה שעברה)' : ''}`
+        : '';
+    const legendTitle = 'בעמודת "עילית": חציון 20 השחקנים הטובים באותה עמדה, באותה יחידה'
+        + ' כמו המספר שלידו — כך שאפשר פשוט לקרוא את השניים אחד מול השני.'
+        + ' חציון ולא ממוצע, כדי ששחקן קיצוני אחד לא יזיז את הרף.'
+        + (fellBack ? ` הרף חושב מעונת ${SEASON_CONFIG.previousSeasonLabel} — בעונה הנוכחית עוד אין מספיק דקות.` : '')
+        + ' הכרטיסים שמציגים ציון מורכב לא מציגים רף, כי הציון עצמו כבר נמדד מולו.';
+
     host.innerHTML = `
         <div class="db-bar">
             <h2 class="db-heading"><span class="db-heading-icon">🎯</span>את מי לקחת עכשיו</h2>
             <span class="db-scope">${scope}</span>
-            <span class="db-legend" title="לכל מדד נמצא חציון 20 השחקנים הטובים באותה עמדה, והמספר האפור הוא היחס אליו. חציון ולא ממוצע, כדי ששחקן קיצוני אחד לא יזיז את הרף">
-                עילית = חציון 20 הטובים בעמדה
+            <span class="db-legend" title="${escapeHtml(legendTitle)}">
+                ${escapeHtml(legendText)}
             </span>
         </div>
         <div class="db-grid">${cards}</div>`;

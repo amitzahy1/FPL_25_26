@@ -186,6 +186,40 @@ try {
     check(board.headless === 0, 'every card table has one header per column');
     check(board.heading.includes('את מי לקחת'), 'board names the question it answers');
 
+    // The elite bar. The legend has always defined it; until now no card printed
+    // it, so the legend described a column that did not exist. Both halves are
+    // checked together, because either one alone can be true while the pair lies.
+    const bar = await page.evaluate(() => {
+        const cards = [...document.querySelectorAll('#draftBoard .db-card')];
+        const withBar = cards.filter(c => c.querySelector('.db-td-bench'));
+        const values = [...document.querySelectorAll('#draftBoard .db-td-bench')]
+            .map(td => td.textContent.trim());
+        const legend = document.querySelector('#draftBoard .db-legend');
+        return {
+            cards: cards.length,
+            withBar: withBar.length,
+            titles: withBar.map(c => (c.querySelector('.db-title') || {}).textContent.trim()),
+            values,
+            dashes: values.filter(v => v === '–').length,
+            // Header and cell must both be present or both absent, per card.
+            mismatched: cards.filter(c => !!c.querySelector('.db-th-bench') !== !!c.querySelector('.db-td-bench')).length,
+            legend: legend ? legend.textContent.trim() : '',
+            legendTitle: legend ? legend.getAttribute('title') || '' : ''
+        };
+    });
+    check(bar.withBar > 0 && bar.withBar < bar.cards,
+        `the elite bar is on the ${bar.withBar} cards whose figure is a rate (${bar.titles.join(', ')})`);
+    check(bar.mismatched === 0, 'no card has a bar header without bar cells, or the reverse');
+    check(bar.values.length > 0 && bar.dashes < bar.values.length,
+        `and it resolves to a real bar rather than a dash (${bar.values.slice(0, 4).join(' / ')})`);
+    // The legend is the only place the reader learns what the column means, so it
+    // has to be present exactly when the column is, and describe the column that
+    // is actually there rather than a ratio nothing computes.
+    check(/עילית/.test(bar.legend) && /חציון/.test(bar.legendTitle),
+        `the legend defines the bar it shows ("${bar.legend}")`);
+    check(!/היחס אליו/.test(bar.legendTitle),
+        'and no longer promises a ratio no card prints');
+
     // THE POST-DRAFT PATH.
     //
     // This test blocks the network, so the draft rosters never load and

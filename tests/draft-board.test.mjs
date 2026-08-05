@@ -38,8 +38,8 @@ const FUNCTIONS = [
     'panelPicks', 'getTrendSeries', 'summariseTrend',
     'trendPlayerIndex', 'gwDefensiveContribution',
     'playerScore', 'buildDropOffLadder', 'dropOffFor',
-    'benchmarkMedian', 'panelBenchmark', 'benchMinMinutes', 'benchmarkFrom',
-    'resolveBenchmark',
+    'benchmarkMedian', 'panelBenchmark', 'panelBenchmarkInfo', 'panelBenchCellHtml',
+    'benchMinMinutes', 'benchmarkFrom', 'resolveBenchmark', 'escapeHtml',
     'seasonMatchesLeft', 'seasonPointsPerApp', 'projectedLevel', 'expectedMatches',
     'fixtureTilt', 'draftValue', 'draftValueOf', 'getCompletedGWCount'
 ];
@@ -388,6 +388,63 @@ describe('panel rules', () => {
         assert.equal(board.panelBenchmark(defcon, 'MID'), 60);
         assert.equal(board.panelBenchmark(defcon, 'DEF'), 20,
             'the 90-minute outlier is below the minutes floor and cannot set the bar');
+    });
+
+    describe('the bar the board actually prints', () => {
+        // panelBenchmark was computed, cached and unit-tested, and no card had
+        // ever rendered it — while the board's legend told the reader that the
+        // grey number beside each figure was the ratio to it. Two claims, neither
+        // of them true. These tests are about what reaches the page.
+        const tenMidsOn = rate => {
+            const players = [];
+            for (let i = 0; i < 10; i++) {
+                players.push(makePlayer({ id: 100 + i, element_type: 3, position_name: 'MID',
+                    minutes: 2000, defcon_hit_rate: rate }));
+            }
+            return players;
+        };
+
+        test('a benchmarked card prints the bar in its own unit', () => {
+            const board = loadBoard(tenMidsOn(60));
+            const cell = board.panelBenchCellHtml(panel(board, 'defcon'), makePlayer());
+            // The panel's own fmt, so the two figures in the row are comparable
+            // by eye — "38%" against "60%", not "38%" against "0.63".
+            assert.match(cell, /db-td-bench/);
+            assert.match(cell, />60%</, 'same unit as the figure it is the bar for');
+        });
+
+        test('a card carrying an abstract score prints no bar at all', () => {
+            const board = loadBoard(tenMidsOn(60));
+            for (const id of ['composite', 'bestpick', 'next5', 'value']) {
+                assert.equal(board.panelBenchCellHtml(panel(board, id), makePlayer()), '',
+                    `${id} measures against the bar already, or is itself a gap — a second bar says nothing`);
+            }
+        });
+
+        test('no bar at his position prints a dash, not a zero', () => {
+            // A keeper has no DEFCON at all. 0% would read as "elite keepers never
+            // clear the threshold", which is a statement about the metric, not him.
+            const board = loadBoard(tenMidsOn(60));
+            const gk = makePlayer({ element_type: 1, position_name: 'GKP' });
+            assert.match(board.panelBenchCellHtml(panel(board, 'defcon'), gk), />–</);
+        });
+
+        test('every benchmarked panel can format a bar without throwing', () => {
+            // fmt is the panel's, the bar is resolveBenchmark's; nothing guarantees
+            // the pairing except this.
+            const board = loadBoard(tenMidsOn(60));
+            for (const p of board.DRAFT_PANELS.filter(pl => !pl.noBenchmark)) {
+                assert.doesNotThrow(() => board.panelBenchCellHtml(p, makePlayer()),
+                    `${p.id} must render a bar cell for a midfielder`);
+            }
+        });
+
+        test('the info form reports which season the bar came from', () => {
+            const board = loadBoard(tenMidsOn(60));
+            const info = board.panelBenchmarkInfo(panel(board, 'defcon'), 'MID');
+            assert.equal(info.value, 60);
+            assert.equal(info.from, 'season', 'the legend appends a caveat when this is lastSeason');
+        });
     });
 
     test('every card carries a rule, a unit and a way to explain a pick', () => {

@@ -114,16 +114,52 @@ async function main() {
     const perPlayer = new Map();
     let maxGw = 0;
 
+    // One appearance per player per FIXTURE, not per gameweek.
+    //
+    // Both halves of that matter. merged_gw.csv ships a handful of rows twice —
+    // ten in 2025-26, nine of them one player — and summing them gave him six
+    // extra appearances and 27 points his own season row did not have, so every
+    // per-appearance rate on the site was computed against an inflated
+    // denominator. Deduping on the gameweek instead would have been worse: a
+    // double gameweek is two real fixtures in one round, and one player's two
+    // GW33 cameos were a minute each with byte-identical stats, so "identical
+    // rows in the same round" cannot tell the artefact from the real thing. The
+    // fixture id can, and it is in the file.
+    const seenFixtures = new Set();
+    let duplicateRows = 0;
+
     for (const r of mergedGw) {
         const el = num(r.element);
         const gw = num(r.GW);
         if (gw > maxGw) maxGw = gw;
+
+        const fixtureKey = `${el}:${num(r.fixture)}`;
+        if (seenFixtures.has(fixtureKey)) { duplicateRows++; continue; }
+        seenFixtures.add(fixtureKey);
+
         const minutes = num(r.minutes);
-        if (minutes <= 0) continue;
+        if (minutes <= 0) {
+            // Not an appearance, so it stays out of the log — every window and
+            // rate the app computes is per match played, and a row for a match he
+            // watched would drag all of them down. It can still carry points
+            // though: a card shown to an unused substitute is a real -1 in his
+            // season total. Kept here so the reconciliation below knows the log is
+            // *meant* to be short by that much, rather than reporting it as drift.
+            const benched = num(r.total_points);
+            if (benched) {
+                let acc = perPlayer.get(el);
+                if (!acc) {
+                    acc = { appearances: 0, defconHits: 0, defconEligible: 0, log: [], benchPoints: 0 };
+                    perPlayer.set(el, acc);
+                }
+                acc.benchPoints += benched;
+            }
+            continue;
+        }
 
         let acc = perPlayer.get(el);
         if (!acc) {
-            acc = { appearances: 0, defconHits: 0, defconEligible: 0, log: [] };
+            acc = { appearances: 0, defconHits: 0, defconEligible: 0, log: [], benchPoints: 0 };
             perPlayer.set(el, acc);
         }
         acc.appearances++;
@@ -217,6 +253,42 @@ async function main() {
         gwLogs
     };
 
+    // Does each player's own match log add up to his own season row?
+    //
+    // Nothing checked this, which is how a player shipped with 27 points in his
+    // log that his season total did not have. The two halves of this file come
+    // from two different upstream files, and they are read by different parts of
+    // the app — season totals by the table, the log by every window, rate and
+    // trend — so a disagreement between them shows up as two panels quietly
+    // contradicting each other with no error anywhere.
+    //
+    // The invariant is not "the log sums to the season total": the log holds
+    // appearances, and points can be earned without one (see benchPoints above).
+    // Getting that wrong reports a correct file as broken, which is its own way of
+    // hiding the real thing.
+    //
+    // Reported rather than thrown. If upstream ever does publish two files that
+    // disagree, refusing to build would leave the app with no snapshot at all —
+    // far worse than a named discrepancy. Naming it is what stops the next one
+    // being a mystery.
+    const pAt = snapshot.logFields.indexOf('points');
+    const mAt = snapshot.logFields.indexOf('minutes');
+    const drift = [];
+    for (const p of withMinutes) {
+        const flat = gwLogs[p.id] || [];
+        const benchPoints = (perPlayer.get(p.id) || {}).benchPoints || 0;
+        let pts = 0, mins = 0;
+        for (let i = 0; i < flat.length; i += snapshot.logStride) {
+            pts += flat[i + pAt];
+            mins += flat[i + mAt];
+        }
+        if (pts + benchPoints !== p.total_points || mins !== p.minutes) {
+            drift.push(`${p.web_name}: row ${p.total_points}pts/${p.minutes}min,`
+                + ` log ${pts}pts/${mins}min`
+                + (benchPoints ? ` (+${benchPoints} off the bench)` : ''));
+        }
+    }
+
     mkdirSync(dirname(OUT), { recursive: true });
     const json = JSON.stringify(snapshot);
     writeFileSync(OUT, json);
@@ -233,6 +305,14 @@ async function main() {
         .filter(p => p.defcon_eligible_apps >= 15 && p.defcon_hit_rate !== null)
         .sort((a, b) => b.defcon_hit_rate - a.defcon_hit_rate).slice(0, 5);
     console.log('  best DEFCON hit-rate:', defcon.map(p => `${p.web_name} ${p.defcon_hit_rate}%`).join(', '));
+
+    console.log(`  duplicate fixture rows skipped: ${duplicateRows}`);
+    if (drift.length) {
+        console.log(`  ⚠️ ${drift.length} of ${withMinutes.length} players: log does not sum to the season row`);
+        drift.forEach(d => console.log(`      ${d}`));
+    } else {
+        console.log(`  ✓ all ${withMinutes.length} match logs sum to their season rows`);
+    }
 }
 
 main().catch(err => { console.error('FAILED:', err.message); process.exit(1); });
