@@ -1494,10 +1494,14 @@ function applyMarketOverlay(players) {
     for (const p of players) {
         const live = p.code ? byCode.get(p.code) : null;
         clearMarketFields(p);
-        if (!live) {
-            // Absent from the new season's bootstrap means he is out of the
-            // Premier League. His row is history about a player nobody can
-            // draft — the board must not recommend him and the table must say so.
+        // Two ways out of the league, and only one of them removes the row.
+        // Absent from the new season's bootstrap is the obvious one. The other is
+        // a stub FPL leaves behind — status 'u', "has departed the club as a free
+        // agent" — which is a squad number nobody can draft, carrying a club and
+        // a price as if he could. The live tab drops status 'u' before it
+        // processes anything; without the same rule here he came out the far side
+        // as a transfer, complete with a new club he does not play for.
+        if (!live || live.status === 'u') {
             p.market_departed = true;
             continue;
         }

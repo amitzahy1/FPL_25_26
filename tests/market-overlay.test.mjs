@@ -84,6 +84,22 @@ describe('market overlay join', () => {
         assert.equal(rows[0].hype_gap, null);
     });
 
+    test('a stub left behind for a departed player counts as having left', () => {
+        // FPL does not always remove the row: it keeps status 'u' with news like
+        // "has departed the club as a free agent", still carrying a club and a
+        // price. Read literally that is a summer transfer to a team he will never
+        // play for — which is exactly how one turned up under the 🔁 chip.
+        const { applyMarketOverlay } = load({
+            live: [liveElement({ code: 100, team_code: 99, status: 'u', news: 'has departed the club as a free agent.' })]
+        });
+        const rows = [snapshotRow({ code: 100, team_code: 43 })];
+        applyMarketOverlay(rows);
+
+        assert.equal(rows[0].market_departed, true);
+        assert.equal(rows[0].market_moved_club, false, 'not a transfer — he is out of the league');
+        assert.equal(rows[0].market_cost, null);
+    });
+
     test('price delta is this season minus last, to one decimal', () => {
         const { applyMarketOverlay } = load();
         const rows = [snapshotRow({ now_cost: 7.5 })]; // live is 9.0
