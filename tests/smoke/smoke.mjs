@@ -428,6 +428,36 @@ try {
     check(/(דירוג דראפט|נקודות העונה)/.test(browse.gkpHead) && /שוערים/.test(browse.gkpHead),
         `the list says what it is showing and how it is sorted ("${browse.gkpHead}")`);
 
+    // The transfer chip. Smoke runs on the committed snapshot with no network, so
+    // this season's squads are absent and the chip genuinely cannot answer — which
+    // makes this the refusal path, and the refusal is the part that has broken
+    // before: a chip that highlights and empties the table reads as "nobody moved
+    // clubs". The positive path needs the live bootstrap and is checked against
+    // the published site.
+    const moved = await page.evaluate(async () => {
+        const chip = [...document.querySelectorAll('.quick-filter-btn')]
+            .find(b => (b.getAttribute('onclick') || '').includes('moved_club'));
+        if (!chip) return { chip: false };
+        const rowsNow = () => document.querySelectorAll('#playersTable tbody tr').length;
+        const before = rowsNow();
+        chip.click();
+        await new Promise(r => setTimeout(r, 300));
+        return {
+            chip: true,
+            label: chip.textContent.trim(),
+            before,
+            after: rowsNow(),
+            highlighted: chip.classList.contains('active'),
+            toast: [...document.querySelectorAll('.toast, #toastContainer > *')]
+                .map(t => t.textContent).join(' ')
+        };
+    });
+    check(moved.chip, 'the transfer chip is on the page');
+    check(moved.after === moved.before && !moved.highlighted,
+        `refusing leaves the table alone rather than emptying it (${moved.before} → ${moved.after})`);
+    check(/עבור לעונת|עוד לא נטענו/.test(moved.toast || ''),
+        'and says which tab can answer instead');
+
     // The comparison itself, opened from the two ticks that are already in place.
     const cmp = await page.evaluate(async () => {
         document.querySelector('.ps-go')?.click();

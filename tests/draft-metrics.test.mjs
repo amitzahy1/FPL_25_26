@@ -144,7 +144,7 @@ describe('smart filters', () => {
             const marketIndex = () => globalThis.__marketLoaded ? new Map() : null;
             ${SCRIPT_SRC.slice(start, end)}
             return { QUICK_FILTERS, newcomerSets, newcomerUnavailable, isAvailableToDraft,
-                marketUnavailable };`)();
+                marketUnavailable, movedClub, movedClubUnavailable };`)();
     };
     const { QUICK_FILTERS } = load();
 
@@ -174,7 +174,7 @@ describe('smart filters', () => {
         // classic-game signal and the chip earned its row the least.
         const required = ['set_pieces', 'attacking_defenders',
             'form_kings', 'underperformers',
-            'promoted_teams', 'new_to_league',
+            'promoted_teams', 'new_to_league', 'moved_club',
             'best_gkp_5', 'best_def_5', 'best_mid_5', 'best_fwd_5',
             'market_breakout', 'market_value', 'market_risers'];
         for (const name of required) {
@@ -246,6 +246,56 @@ describe('smart filters', () => {
                     `${name} must explain itself when the market is missing`);
                 assert.ok(QUICK_FILTERS[name].explain, `${name} sorts on a column that needs naming`);
             }
+        });
+    });
+
+    describe('the transfer chip', () => {
+        // The two tabs compute the same fact under different names, because each
+        // one holds only one of the two seasons. The chip must not care which.
+        test('matches a mover flagged by either season', () => {
+            const { movedClub } = load();
+            assert.ok(movedClub({ moved_club: true }), 'the pre-season archive fill');
+            assert.ok(movedClub({ market_moved_club: true }), 'the previous-season market overlay');
+            assert.ok(!movedClub({ moved_club: false, market_moved_club: false }));
+            assert.ok(!movedClub({}), 'a row from a season with no comparison available');
+        });
+
+        test('a newcomer is not a mover', () => {
+            const { movedClub } = load();
+            // no_history and moved_club are set on mutually exclusive branches of
+            // fillFromPreviousSeason; if that ever changed, the 🆕 and 🔁 chips
+            // would start returning the same players.
+            assert.ok(!movedClub({ no_history: true }));
+        });
+
+        test('it refuses on the live tab once the season is under way', () => {
+            globalThis.currentSeasonIsTooEarly = () => false;
+            const midSeason = load({ currentDataSource: 'live' });
+            assert.match(midSeason.movedClubUnavailable(), /2025\/26/,
+                'the numbers are his current club\'s now, so it must point at the tab that still knows');
+
+            globalThis.currentSeasonIsTooEarly = () => true;
+            const preSeason = load({ currentDataSource: 'live' });
+            assert.equal(preSeason.movedClubUnavailable(), null,
+                'pre-season the rows are the archive fill and the flag is set');
+            delete globalThis.currentSeasonIsTooEarly;
+        });
+
+        test('on the previous-season tab it waits for the new bootstrap', () => {
+            globalThis.__marketLoaded = false;
+            assert.ok(load({ currentDataSource: 'historical' }).movedClubUnavailable(),
+                'without this season\'s squads there is nothing to compare against');
+            globalThis.__marketLoaded = true;
+            assert.equal(load({ currentDataSource: 'historical' }).movedClubUnavailable(), null);
+            globalThis.__marketLoaded = false;
+        });
+
+        test('it opens on the movers whose numbers carry the most weight', () => {
+            const { QUICK_FILTERS } = load();
+            assert.equal(QUICK_FILTERS.moved_club.sortKey, 'total_points');
+            assert.equal(QUICK_FILTERS.moved_club.sortDirection, 'desc');
+            assert.match(QUICK_FILTERS.moved_club.explain, /קבוצה הקודמת/,
+                'the caveat is the whole reason the chip exists, so it must be stated');
         });
     });
 

@@ -4573,6 +4573,40 @@ function newcomerUnavailable() {
     return newcomerSets() ? null : 'נתוני העונה הנוכחית עוד לא נטענו';
 }
 
+/**
+ * A summer transfer, as either tab knows it.
+ *
+ * The same fact is computed twice from opposite directions, because each tab
+ * holds one of the two seasons: the pre-season fill compares the archive row's
+ * club against the new squad list (`moved_club`, badge "עבר"), and the market
+ * overlay on the previous-season tab compares the new bootstrap against the
+ * snapshot (`market_moved_club`, badge 🔁). One chip reads both, so the reader
+ * never has to know which season computed it.
+ */
+function movedClub(p) {
+    return !!(p.moved_club || p.market_moved_club);
+}
+
+/**
+ * Why the transfer chip cannot run. It needs both seasons at once, and only two
+ * of the three states have them.
+ */
+function movedClubUnavailable() {
+    if (state.currentDataSource === 'historical') {
+        return marketIndex() ? null : `נתוני השוק של ${SEASON_CONFIG.seasonLabel} עוד לא נטענו`;
+    }
+    // Once a gameweek has been played the live rows are this season's own
+    // numbers, earned at the club he is at now — which is the state where "these
+    // figures belong to another team" stops being true, so the flag is not set
+    // and the chip points at the tab that still answers the question.
+    const tooEarly = typeof currentSeasonIsTooEarly === 'function' && currentSeasonIsTooEarly();
+    if (!tooEarly) {
+        return `מ-${SEASON_CONFIG.seasonLabel} והלאה הנתונים נצברו בקבוצה הנוכחית`
+            + ` — עבור לעונת ${SEASON_CONFIG.previousSeasonLabel} כדי לראות מי עבר קבוצה`;
+    }
+    return null;
+}
+
 // Every chip rendered in the UI must appear here. Five of them previously fell
 // through the switch and did nothing at all: the chip highlighted, the table
 // did not change, and there was no error to notice.
@@ -4630,6 +4664,18 @@ const QUICK_FILTERS = {
         },
         unavailable: newcomerUnavailable,
         sortKey: 'now_cost', sortDirection: 'desc'
+    },
+    // The third newcomer case, and the one the table is most likely to mislead
+    // on: he was in the league, so he has a full row of numbers — earned in
+    // another team's shape. A defender's clean sheets belonged to a back four he
+    // has left. Sorted by what he returned, so the movers whose numbers carry the
+    // most weight are the ones read first.
+    moved_club: {
+        filter: movedClub,
+        unavailable: movedClubUnavailable,
+        sortKey: 'total_points', sortDirection: 'desc',
+        explain: `שחקנים שעברו קבוצה בין ${SEASON_CONFIG.previousSeasonLabel} ל-${SEASON_CONFIG.seasonLabel}.`
+            + ' כל המספרים בשורה נצברו בקבוצה הקודמת — מסודר לפי הנקודות שהניבו שם'
     },
 
     // The three pre-draft market chips. Nothing here is a performance metric:
