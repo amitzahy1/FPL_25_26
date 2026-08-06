@@ -93,7 +93,7 @@ function load(players, over = {}) {
         'CELL_TONE',
         'WATCHLIST_KEY', 'TREND_BAR_ROW_LIMIT', 'SIGNAL_RULES', 'SIGNAL_SORT_ORDER',
         'HOLD_SIGNAL', '_signalCache', '_trendPlayerIndex', '_trendDeltaCache',
-        'BENCH_TOP_N', 'BENCH_MIN_MINUTES', '_trendBenchCache', 'POSITION_LABELS',
+        'BENCH_TOP_N', 'BENCH_MIN_MINUTES', 'BENCH_THIN_MINUTES', '_trendBenchCache', 'POSITION_LABELS',
         'gwNum', 'TREND_METRICS', 'ROLE_TREND', 'SEASON_CONFIG', '_marketIndex',
         // arrow-function consts, so they load as declarations rather than names
         'num1', 'statLine', 'fmt', 'pct'

@@ -33,7 +33,7 @@ const FUNCTIONS = [
 ];
 
 const DEPS = [
-    'BENCH_TOP_N', 'BENCH_MIN_MINUTES', '_partBenchCache', '_axisBenchCache',
+    'BENCH_TOP_N', 'BENCH_MIN_MINUTES', 'BENCH_THIN_MINUTES', '_partBenchCache', '_axisBenchCache',
     '_compositeCache', '_trendBenchCache', '_windowStatsCache', '_trendPlayerIndex',
     '_dropOff', '_compareSections', 'COMPOSITE_PARTS', 'COMPOSITE_CAP', 'RADAR_MAX_AXES',
     'COMPARE_CHART_LIMIT', 'COMPARE_SPANS', 'COMPARE_DEFAULT_SPAN',

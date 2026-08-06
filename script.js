@@ -3361,6 +3361,12 @@ function windowAxisLabel(base, windowed) {
 const BENCH_TOP_N = 20;
 /** Three matches: below that a per-90 rate is noise, not a level. */
 const BENCH_MIN_MINUTES = 270;
+/**
+ * Half a match — the lowest floor at which the season on screen is still allowed
+ * to set its own bar, used only after the proper floor finds nobody. It exists
+ * so a young season is measured against itself rather than against the last one.
+ */
+const BENCH_THIN_MINUTES = 45;
 
 function benchmarkMedian(values) {
     const top = values
@@ -3420,6 +3426,25 @@ function resolveBenchmark(valueFn, position, opts) {
 
     const value = benchmarkFrom(current, valueFn, position, benchMinMinutes(), positiveOnly);
     if (value !== null) return { value, from: 'season' };
+
+    // Still this season, measured over whoever has played at all.
+    //
+    // The floor above wants roughly a full match per gameweek, and on the opening
+    // weekend that is a real constraint: forwards get substituted, so barely any
+    // of them reach 90 minutes and their bar came from last season while every
+    // other position's came from this one. Two seasons setting the scale inside
+    // one composite score is worse than one noisy season setting all of it — the
+    // components stop being comparable, which is the entire point of expressing
+    // them as percentages of a common bar.
+    //
+    // So exhaust the season on screen first. A bar off 45 minutes is thin, and the
+    // banner and the status pill both say the sample is thin; what they must not
+    // do is quietly describe a different season.
+    const floor = benchMinMinutes();
+    if (floor > BENCH_THIN_MINUTES) {
+        const thin = benchmarkFrom(current, valueFn, position, BENCH_THIN_MINUTES, positiveOnly);
+        if (thin !== null) return { value: thin, from: 'season' };
+    }
 
     const last = (state.allPlayersData.historical || {}).processed || [];
     // Same pool at a higher floor can only be smaller, so there is nothing to

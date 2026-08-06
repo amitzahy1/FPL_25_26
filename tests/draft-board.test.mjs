@@ -47,7 +47,7 @@ const FUNCTIONS = [
 const DEPS = [
     'DEFCON_THRESHOLD', 'TREND_METRICS', 'DRAFT_PANELS',
     '_windowStatsCache', '_trendPlayerIndex', '_dropOff', 'gwNum',
-    'BENCH_TOP_N', 'BENCH_MIN_MINUTES', '_panelBenchCache',
+    'BENCH_TOP_N', 'BENCH_MIN_MINUTES', 'BENCH_THIN_MINUTES', '_panelBenchCache',
     'VALUE_TUNING', 'VALUE_HORIZONS', '_valueCache',
     // fixtureTilt reads next_3_fdr through it; it is an arrow-function const.
     'num1'
@@ -611,5 +611,64 @@ describe('window minimums scale with the window', () => {
         const long = board.windowMinMatches();
         assert.ok(short < long, 'a fixed minimum either excludes everyone or nobody');
         assert.ok(short >= 2, 'one good game is not a trend');
+    });
+});
+
+/**
+ * Which season sets the scale.
+ *
+ * The bar is a reference, not a stat, and one composite score must not be built
+ * from two seasons' bars: the components are expressed as percentages of a common
+ * bar precisely so they can be compared with each other. On the opening weekend
+ * forwards are substituted, so almost none reach the 90-minute floor — their bar
+ * came from last season while every other position's came from this one.
+ */
+describe('the season that sets the elite bar', () => {
+    /** N players at one position, all on `mins` minutes and the same rate. */
+    const squad = (pos, type, n, mins, rate) => Array.from({ length: n }, (_, i) =>
+        makePlayer({ id: 1000 + i, element_type: type, position_name: pos, minutes: mins, xGI_per90: rate }));
+
+    const metric = p => parseFloat(p.xGI_per90) || 0;
+
+    test('the season on screen wins whenever it can produce a bar', () => {
+        const board = loadBoard(squad('MID', 3, 10, 2000, 0.5));
+        board.state.allPlayersData.historical.processed = squad('MID', 3, 10, 2000, 0.9);
+        const info = board.resolveBenchmark(metric, 'MID');
+        assert.equal(info.from, 'season');
+        assert.equal(info.value, 0.5, 'not the 0.9 sitting in last season');
+    });
+
+    test('a young season measures itself off half-matches before borrowing', () => {
+        // One gameweek in: nobody clears 90 minutes, which is exactly the forward
+        // case. The bar must still be this season's.
+        const board = loadBoard(squad('FWD', 4, 10, 60, 0.4), { trendGws: [] });
+        board.state.allPlayersData.historical.processed = squad('FWD', 4, 10, 2000, 0.9);
+        const info = board.resolveBenchmark(metric, 'FWD');
+        assert.equal(info.from, 'season', 'borrowing last season is the last resort, not the second');
+        assert.equal(info.value, 0.4);
+    });
+
+    test('below half a match it does borrow, and says which season', () => {
+        // 30 minutes is not a level by any reading, so a real bar beats no bar —
+        // and every caller that prints it reports the season it came from.
+        const board = loadBoard(squad('FWD', 4, 10, 30, 0.4), { trendGws: [] });
+        board.state.allPlayersData.historical.processed = squad('FWD', 4, 10, 2000, 0.9);
+        const info = board.resolveBenchmark(metric, 'FWD');
+        assert.equal(info.from, 'lastSeason');
+        assert.equal(info.value, 0.9);
+    });
+
+    test('with no last season either, there is no bar rather than a guess', () => {
+        const board = loadBoard(squad('FWD', 4, 2, 30, 0.4), { trendGws: [] });
+        const info = board.resolveBenchmark(metric, 'FWD');
+        assert.equal(info.value, null);
+        assert.equal(info.from, null);
+    });
+
+    test('a finished season never drops to the thin floor', () => {
+        // The retry is gated on the floor being above the thin one, so on a full
+        // season a 45-minute cameo can never set the bar.
+        const board = loadBoard(squad('MID', 3, 10, 2000, 0.5));
+        assert.equal(board.benchMinMinutes(), 270, 'the full floor is in force here');
     });
 });

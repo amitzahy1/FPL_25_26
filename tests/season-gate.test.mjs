@@ -34,6 +34,7 @@ function load(events, over = {}) {
         extractDeclaration('ARCHIVE_STAT_FIELDS'),
         extractDeclaration('DEFAULT_MIN_MINUTES'),
         extractDeclaration('BENCH_MIN_MINUTES'),
+        extractDeclaration('BENCH_THIN_MINUTES'),
         ...FUNCTIONS.map(n => extractFunction(n))
     ].join('\n');
     return new Function(`${body}\nreturn { ${FUNCTIONS.join(', ')}, SEASON_CONFIG };`)();
