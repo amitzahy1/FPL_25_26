@@ -16,7 +16,7 @@ const FUNCTIONS = [
     'currentSeasonIsTooEarly', 'seasonSampleIsThin', 'finishedGameweekCount',
     'getCompletedGWCount', 'benchMinMinutes', 'stripUnplayedSeasonStats',
     'fillFromPreviousSeason', 'applyDefaultSortForSeason', 'defaultMinMinutes',
-    'gwWord', 'activeSnapshot'
+    'gwWord', 'activeSnapshot', 'seasonMinMinutes'
 ];
 
 function load(events, over = {}) {
@@ -306,5 +306,36 @@ describe('which season\'s match logs are in force', () => {
             }
         });
         assert.equal(gate.activeSnapshot(), null);
+    });
+});
+
+/**
+ * The opening weekend, which is the one moment the whole gate exists for.
+ *
+ * On the Monday after GW1 every season-long threshold in the app is measured
+ * against a season that has had 90 minutes. Constants that are correct in April
+ * do not filter the weak picks here — they remove every pick, and the board
+ * renders nothing with no explanation of why.
+ */
+describe('the morning after gameweek one', () => {
+    test('the board\'s minutes floor comes down to something reachable', () => {
+        const gate = load(played(1));
+        // 450 is five full matches. Nobody has played more than 90.
+        assert.equal(gate.seasonMinMinutes(450), 45,
+            'an unreachable floor empties the board instead of filtering it');
+        assert.equal(gate.seasonMinMinutes(450) <= 90, true, 'and it must be reachable in one match');
+    });
+
+    test('it climbs back to the real floor as the season arrives', () => {
+        assert.equal(load(played(5)).seasonMinMinutes(450), 225);
+        assert.equal(load(played(10)).seasonMinMinutes(450), 450, 'ten gameweeks in, the real floor applies');
+        assert.equal(load(played(20)).seasonMinMinutes(450), 450, 'and never goes above it');
+    });
+
+    test('a finished season keeps its full floor', () => {
+        // Pre-season and the previous-season tab both show a complete season, so
+        // scaling the floor there would let one-match cameos onto the board.
+        assert.equal(load(played(0)).seasonMinMinutes(450), 450, 'pre-season the figures are last season\'s');
+        assert.equal(load(played(3), { currentDataSource: 'historical' }).seasonMinMinutes(450), 450);
     });
 });

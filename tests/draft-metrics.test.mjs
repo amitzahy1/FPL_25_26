@@ -142,6 +142,10 @@ describe('smart filters', () => {
             const setPieceOrder = (p) => Math.min(p.set_piece_priority.penalty,
                 p.set_piece_priority.corner, p.set_piece_priority.free_kick);
             const marketIndex = () => globalThis.__marketLoaded ? new Map() : null;
+            // Lives with the season gate, far from this slice. These tests are
+            // about the shortlist rule, not about how the floor scales in August,
+            // so it reports the full-season floor — see tests/season-gate.test.mjs.
+            const seasonMinMinutes = (target) => target;
             ${SCRIPT_SRC.slice(start, end)}
             return { QUICK_FILTERS, newcomerSets, newcomerUnavailable, isAvailableToDraft,
                 marketUnavailable, movedClub, movedClubUnavailable };`)();

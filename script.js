@@ -1223,28 +1223,34 @@ async function init() {
         // so the numbers are never presented without their context.
         showSeasonBanner(finishedGameweekCount());
 
-        // 2. Now see whether the new season has actually started.
+        // 2. Then hand over to the current season, whether or not it has kicked
+        //    off. The snapshot above is a fast first paint, not the destination.
+        //
+        //    This used to wait for a finished gameweek and stay on last season
+        //    until then, overlaying only the new prices. That made sense while the
+        //    current-season tab had nothing on it but a squad list. It now carries
+        //    the squad, the prices, the ownership, the draft ranks AND last
+        //    season's production joined on player code — the same numbers the
+        //    reader would have got from the other tab, against the clubs they will
+        //    actually play for, with newcomers and movers flagged. Opening on the
+        //    previous season means opening on rows for players who have left the
+        //    league, at clubs some of them no longer play for.
+        //
+        //    If the bootstrap never answers we simply stay on the snapshot, which
+        //    is the right degradation: real numbers about a finished season beats
+        //    an empty page about the coming one.
         ensureLiveBootstrap({ timeoutMs: 20000 })
             .then(async () => {
                 if (!state.allPlayersData.live.raw) return;
-                if (currentSeasonIsTooEarly()) {
-                    // Staying on last season's numbers, but the new season's
-                    // market has just arrived. It is the only live signal there
-                    // is before a ball is kicked, so paint it in rather than wait
-                    // for a gameweek that is weeks away.
-                    const priced = applyMarketOverlay(state.allPlayersData.historical.processed);
-                    if (priced) {
-                        console.log(`💰 Market overlay: ${SEASON_CONFIG.seasonLabel} price and ownership for ${priced} players`);
-                        invalidateSignals();
-                        renderTable();
-                        renderDraftBoard();
-                    }
-                    showSeasonBanner(finishedGameweekCount());
-                    return;
-                }
-                console.log('🔄 New season has data — switching to live');
+                const played = finishedGameweekCount();
+                console.log(played
+                    ? `🔄 ${SEASON_CONFIG.seasonLabel} has ${played} finished gameweeks — switching to live`
+                    : `🔄 ${SEASON_CONFIG.seasonLabel} squads are out — switching to live, production from ${SEASON_CONFIG.previousSeasonLabel}`);
                 state.currentDataSource = 'live';
                 syncDataSourceButtons();
+                // The same opening order the season switch applies, so arriving
+                // here by page load and by clicking the tab produce one table.
+                applyDefaultSortForSeason();
                 await fetchAndProcessData();
             })
             .catch(e => console.warn('Live season check failed:', e.message));
@@ -1908,6 +1914,26 @@ function defaultMinMinutes() {
     // no history has none.
     if (!played) return DEFAULT_MIN_MINUTES;
     return String(Math.min(parseInt(DEFAULT_MIN_MINUTES, 10), played * 45));
+}
+
+/**
+ * A season-long minutes floor, scaled to how much season there is.
+ *
+ * The draft board asks for 450 minutes — five full matches — before it will
+ * recommend anyone, which is right in April and unreachable in August: after one
+ * gameweek nobody has played more than 90. Left as a constant it does not filter
+ * the weak picks, it removes every pick, and renderDraftBoard prints nothing at
+ * all rather than saying why. Same 45-minutes-per-gameweek rate as the table's
+ * own floor above, so the two never disagree about who counts as a regular.
+ *
+ * Pre-season and on the previous-season tab the figures on screen are a full
+ * finished season, so the real floor applies.
+ */
+function seasonMinMinutes(target) {
+    if (state.currentDataSource !== 'live') return target;
+    const played = finishedGameweekCount();
+    if (!played) return target;
+    return Math.min(target, played * 45);
 }
 
 /**
@@ -4543,7 +4569,7 @@ function positionShortlistFilters() {
             // constant — and the projection is the one that still says something
             // when every startable player at the position is already owned.
             filter: p => p.position_name === pos && isAvailableToDraft(p)
-                && (p.minutes || 0) >= 450 && projectedPointsOf(p, 'now') > 0,
+                && (p.minutes || 0) >= seasonMinMinutes(450) && projectedPointsOf(p, 'now') > 0,
             sortKey: 'points_next_5', sortDirection: 'desc',
             // Sorting by a column nobody can see is indistinguishable from not
             // sorting at all: the order was invisible until "צפוי (5)" existed.
@@ -7152,7 +7178,13 @@ function windowStats(player) {
 
 /** Minimum appearances a player needs inside the window to be recommendable. */
 function windowMinMatches() {
-    return Math.max(2, Math.ceil((state.trendWindow || 5) * 0.6));
+    const want = Math.max(2, Math.ceil((state.trendWindow || 5) * 0.6));
+    // ...but never more matches than the season has had gameweeks. Three matches
+    // out of a five-gameweek window is a fair guard in October and an impossible
+    // one on the Monday after the opening weekend, where it silently emptied
+    // every window-aware panel on the board.
+    const available = (state.trendGws || []).length;
+    return available ? Math.min(want, Math.max(1, available)) : want;
 }
 
 /* --------------------------- the value index ------------------------------ */
@@ -7604,6 +7636,7 @@ const DRAFT_PANELS = [
     {
         // Far right, because it is the summary the other five decompose into.
         id: 'composite',
+        emptyNote: 'צריך מדגם: הציון נשקל מול חציון 20 הטובים בעמדה, ולזה דרושות כמה הופעות',
         title: 'הכי חזקים בסך הכל',
         subtitle: 'ציון משוקלל מול העילית בעמדה',
         unit: 'חוזק',
@@ -7642,12 +7675,13 @@ const DRAFT_PANELS = [
                 ? `כל המרכיבים מעל העילית · הנמוך ביותר ${worst.label} (${pct(worst)})`
                 : `חזק ב${best.label} (${pct(best)}) · חלש ב${worst.label} (${pct(worst)})`;
         },
-        eligible: p => compositeOf(p) !== null && (p.minutes || 0) >= 450,
+        eligible: p => compositeOf(p) !== null && (p.minutes || 0) >= seasonMinMinutes(450),
         rank: (a, b) => (compositeOf(b) || 0) - (compositeOf(a) || 0),
         windowAware: true
     },
     {
         id: 'bestpick',
+        emptyNote: 'צריך מדגם: התחזית לעונה נבנית מרמת השחקן עד כה',
         title: 'הכי שווים',
         subtitle: 'נקודות צפויות עד סוף העונה',
         unit: 'נק׳ לעונה',
@@ -7664,12 +7698,13 @@ const DRAFT_PANELS = [
             return `${v.levelAdj.toFixed(2)} נק׳/משחק × ${Math.round(v.matches)} משחקים צפויים`
                 + ` · ${v.value >= 0 ? '+' : ''}${Math.round(v.value)} מול שחקן מחליף בעמדה`;
         },
-        eligible: p => (projectedPointsOf(p, 'season') || 0) > 0 && (p.minutes || 0) >= 450,
+        eligible: p => (projectedPointsOf(p, 'season') || 0) > 0 && (p.minutes || 0) >= seasonMinMinutes(450),
         rank: (a, b) => (projectedPointsOf(b, 'season') || 0) - (projectedPointsOf(a, 'season') || 0),
         windowAware: true
     },
     {
         id: 'next5',
+        emptyNote: 'צריך מדגם: התחזית ל-5 המחזורים נבנית מרמת השחקן עד כה',
         title: 'ל-5 המחזורים הבאים',
         subtitle: 'רמה × משחקים × קושי הלו״ז',
         unit: 'צפוי (5)',
@@ -7687,12 +7722,13 @@ const DRAFT_PANELS = [
             return `${v.levelAdj.toFixed(2)} נק׳/משחק × ${v.matches.toFixed(1)} משחקים`
                 + (fdr ? ` · קושי ${fdr.toFixed(1)}` : '');
         },
-        eligible: p => (projectedPointsOf(p, 'now') || 0) > 0 && (p.minutes || 0) >= 450,
+        eligible: p => (projectedPointsOf(p, 'now') || 0) > 0 && (p.minutes || 0) >= seasonMinMinutes(450),
         rank: (a, b) => (projectedPointsOf(b, 'now') || 0) - (projectedPointsOf(a, 'now') || 0),
         windowAware: true
     },
     {
         id: 'value',
+        emptyNote: 'אין פער מדיד כרגע — כל השחקנים הפנויים בעמדה קרובים זה לזה',
         title: 'הפער מהחלופה',
         subtitle: 'כמה תפסיד אם תדלג עליו',
         unit: 'נק׳/משחק',
@@ -7724,6 +7760,7 @@ const DRAFT_PANELS = [
     },
     {
         id: 'defcon',
+        emptyNote: 'אחוז הצלחה צריך מכנה: פחות מ-10 הופעות זכאיות זה מטבע, לא קצב',
         title: 'מכונות DEFCON',
         subtitle: 'עוברים את הסף בפועל, לא בממוצע',
         unit: '% מעל הסף',
@@ -7758,6 +7795,7 @@ const DRAFT_PANELS = [
     },
     {
         id: 'underlying',
+        emptyNote: 'אין כרגע שחקן שמייצר יותר ממה שהמיר בפער משמעותי',
         title: 'איכות ההזדמנויות',
         subtitle: 'מייצרים יותר ממה שהמירו',
         unit: 'xGI / 90',
