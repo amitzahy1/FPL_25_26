@@ -84,6 +84,8 @@ function load(players, over = {}) {
         'trendBarsHtml', 'roleTrend', 'trendBenchmark', 'benchmarkMedian',
         // the three stat boxes in the expanded row
         'boxAttack', 'boxDefence', 'boxValue',
+        // The grey "and last season" figures beside each rate.
+        'priorFigure', 'priorStartShare', 'priorRate', 'priorAppearances',
         // the pre-season market cells; inert on the live tab, which is what the
         // rows here are, so they exercise the fallback path
         'priceCellHtml', 'ownershipCellHtml', 'ownershipCellTitle', 'marketBadgesHtml',
@@ -97,7 +99,7 @@ function load(players, over = {}) {
         'BENCH_TOP_N', 'BENCH_MIN_MINUTES', 'BENCH_THIN_MINUTES', '_trendBenchCache', 'POSITION_LABELS',
         'gwNum', 'TREND_METRICS', 'ROLE_TREND', 'SEASON_CONFIG', '_marketIndex',
         // arrow-function consts, so they load as declarations rather than names
-        'num1', 'statLine', 'fmt', 'pct'
+        'num1', 'statLine', 'fmt', 'pct', 'BLEND_PER90'
     ]);
     fns.invalidateSignals();
     return { fns, state };

@@ -20,7 +20,7 @@ const FNS = ['attachSeasonPrior', 'fillFromPreviousSeason', 'applySeasonBlend',
     'sampleMinutes', 'scaleMinutes', 'playedGameweeks', 'finishedGameweekCount',
     'appearancesOf'];
 
-const DEPS = ['BLEND_PER90', 'BLEND_ALIASES', '_median', '_positionPriors',
+const DEPS = ['BLEND_PER90', 'BLEND_ALIASES', 'BLEND_STASH_FIELDS', '_median', '_positionPriors',
     'ARCHIVE_STAT_FIELDS', 'UNPLAYED_STAT_FIELDS', 'SEASON_CONFIG'];
 
 // VALUE_TUNING is a global rather than a dep: the tests turn priorK up and down,
@@ -174,7 +174,16 @@ describe('blending the rates', () => {
     test('DEFCON blends as a hit rate, never as an average', () => {
         const { players: [p] } = blend();
         assert.ok(p.defcon_hit_rate > 0 && p.defcon_hit_rate <= 40);
-        assert.ok(p.defcon_eligible_apps >= 30, 'both seasons of eligible matches count toward the denominator');
+    });
+
+    test('but the DEFCON tallies are never added across seasons', () => {
+        const { players: [p] } = blend();
+        // "22 מתוך 38" would describe a season nobody played: two gameweeks of
+        // this one stacked on thirty-eight of last. The card prints this season.
+        assert.equal(p.defcon_hits, undefined, 'he has not cleared it this season');
+        assert.equal(p.defcon_prior_rate, 40, 'last season keeps its own figure');
+        assert.equal(p.defcon_sample_apps, 30,
+            'and the combined denominator is its own field, for the guards that ask');
     });
 
     test('with the blend off, every rate is exactly this season', () => {

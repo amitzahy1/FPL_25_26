@@ -1863,6 +1863,15 @@ async function fetchAndProcessData() {
             // Two signal rules read the gameweek window; drop verdicts decided
             // before it landed so they are recomputed with it.
             invalidateSignals();
+            if (refreshLiveDefcon()) {
+                // A full pass, not the two renders below. The board reads
+                // state.filteredData and the value index is cached per window, so
+                // re-rendering alone printed last season's hit-rate over this
+                // season's recomputed one — measured, Senesi at 70% next to a 73%
+                // stored on the very player the card was drawn from.
+                processChange();
+                return;
+            }
             renderTable();
             renderDraftBoard();
         });
@@ -2227,6 +2236,14 @@ const BLEND_ALIASES = {
     influence_per90: 'influence_per_90'
 };
 
+/**
+ * The non-per-90 fields the blend overwrites, kept so a second pass starts from
+ * this season's own figures rather than from the last pass's output.
+ */
+const BLEND_STASH_FIELDS = ['points_per_game', 'points_per_game_90', 'ga_per90',
+    'rotation_risk', 'defcon_hit_rate', 'defcon_hits', 'defcon_eligible_apps',
+    'defcon_prior_rate', 'defcon_prior_apps', 'defcon_sample_apps', 'xDiff'];
+
 /** One archive per-90, from its own field or derived from the season total. */
 function priorRate(prior, spec) {
     if (!prior) return null;
@@ -2366,6 +2383,68 @@ function positionPriorProfile(players, position) {
     return _positionPriors.byPosition.get(position) || null;
 }
 
+
+/**
+ * This season's DEFCON hit-rate, counted match by match.
+ *
+ * DEFCON is a per-match threshold — 10 CBIT for a defender, 12 CBIRT for a
+ * midfielder or forward — so what describes a player is the share of his
+ * appearances that cleared it, never an average per 90. An average of 9.8 can
+ * be a man who clears 10 every week or one who clears 20 half the time, and
+ * those are worth two points a week apart.
+ *
+ * The season snapshot computes this per match for the archive. The live season
+ * had nothing, so `defcon_hit_rate` on the current-season tab was purely last
+ * season's — a defender who has changed club and started pressing showed his old
+ * team's rate with no trace of the new one. Counted here from the per-gameweek
+ * logs the window has already fetched and cached, so it costs no request.
+ *
+ * Runs before applySeasonBlend's second pass, which then weighs it against the
+ * archive's rate under the usual weight.
+ */
+function applyLiveDefconRate(players) {
+    const gws = [...(state.trendPrevGws || []), ...(state.trendGws || [])];
+    if (!gws.length) return 0;
+
+    // A gameweek can appear in both lists after a window change; counting it
+    // twice would double a player's appearances and halve nothing.
+    const seen = new Set();
+    const windows = gws.filter(({ gw }) => !seen.has(gw) && seen.add(gw));
+
+    let counted = 0;
+    for (const p of players) {
+        const threshold = DEFCON_THRESHOLD[p.element_type];
+        // Goalkeepers are not DEFCON-eligible, so null rather than zero.
+        if (!threshold) continue;
+        let hits = 0, apps = 0;
+        for (const { stats } of windows) {
+            const s = stats.get(p.id);
+            // Absent means he did not feature. A zero row would make "did not
+            // play" indistinguishable from "played and did nothing", and drag
+            // every rate down.
+            if (!s || !gwNum(s.minutes)) continue;
+            apps++;
+            if (gwDefensiveContribution(s, p.element_type) >= threshold) hits++;
+        }
+        if (!apps) continue;
+        p.defcon_hits = hits;
+        p.defcon_eligible_apps = apps;
+        p.defcon_hit_rate = Math.round((hits / apps) * 100);
+        // The stash is what a re-blend restores from, so a figure computed after
+        // the first blend has to go in there too or the next pass overwrites it
+        // with the empty value it had at first paint.
+        if (p.__preblend) {
+            p.__preblend.defcon_hits = hits;
+            p.__preblend.defcon_eligible_apps = apps;
+            p.__preblend.defcon_hit_rate = p.defcon_hit_rate;
+        }
+        counted++;
+    }
+    if (counted) {
+        console.log(`🛡️ DEFCON hit-rate from ${windows.length} played gameweeks for ${counted} players`);
+    }
+    return counted;
+}
 /**
  * Overwrite the derived rates with their blended values, in place.
  *
@@ -2406,6 +2485,22 @@ function applySeasonBlend(players) {
         p.projected_apps_38 = SEASON_CONFIG.totalGameweeks * (rate === null ? 0 : rate);
 
         if (w >= 1 || !prior) continue;
+
+        // Blending overwrites the fields it reads, so running twice would weigh a
+        // blended figure against the prior a second time and drift toward last
+        // season on every pass. The per-gameweek DEFCON rate lands after the first
+        // paint and asks for exactly that second pass, so the raw values are kept
+        // and restored rather than the function being made un-rerunnable.
+        if (p.__preblend) {
+            Object.assign(p, p.__preblend);
+        } else {
+            const stash = {};
+            for (const f of BLEND_STASH_FIELDS) if (f in p) stash[f] = p[f];
+            for (const f of Object.keys(BLEND_PER90)) if (f in p) stash[f] = p[f];
+            for (const f of Object.values(BLEND_ALIASES)) if (f in p) stash[f] = p[f];
+            p.__preblend = stash;
+        }
+
         const mix = (cur, past) => (past === null || past === undefined || !Number.isFinite(past))
             ? cur
             : w * (Number.isFinite(cur) ? cur : 0) + (1 - w) * past;
@@ -2440,8 +2535,15 @@ function applySeasonBlend(players) {
             p.defcon_hit_rate = Number.isFinite(p.defcon_hit_rate)
                 ? mix(p.defcon_hit_rate, prior.defconHitRate)
                 : prior.defconHitRate;
-            p.defcon_hits = (p.defcon_hits || 0) + prior.defconHits;
-            p.defcon_eligible_apps = (p.defcon_eligible_apps || 0) + prior.defconApps;
+            // The rate blends; the tallies do NOT get added together. "22 מתוך 38"
+            // describes a season nobody played — it is two gameweeks of this one
+            // stacked on thirty-eight of last. defcon_hits and _eligible_apps stay
+            // this season's, which is what the card prints, and the combined
+            // denominator gets its own field for the guards that ask how much
+            // evidence is behind the rate.
+            p.defcon_prior_rate = prior.defconHitRate;
+            p.defcon_prior_apps = prior.defconApps;
+            p.defcon_sample_apps = (p.defcon_eligible_apps || 0) + prior.defconApps;
         }
 
         // Conversion luck, as a rate before it is a total. xDiff is G+A minus xGI
@@ -3303,9 +3405,20 @@ function updateScoutingUi() {
  * variance; the same total spread evenly is a level of performance.
  * Returns null when the gameweek window has not loaded yet.
  */
+/** Below this many played matches, "one gameweek carried him" is not a finding. */
+const CONCENTRATION_MIN_MATCHES = 3;
+
 function pointsConcentration(player) {
     if (!state.trendGws.length) return null;
-    const values = getTrendSeries(player.id, 'pts', 'recent').map(pt => pt.value);
+    const series = getTrendSeries(player.id, 'pts', 'recent');
+    // Over a one-gameweek window every player who scored at all comes out at
+    // 1.00 — "all his points came from a single gameweek", which is arithmetic
+    // about the window and not a fact about the player. Unguarded it flagged 73
+    // players as מימוש יתר in August and blocked יעיל for everyone, because that
+    // rule requires concentration below 0.5.
+    const played = series.filter(pt => pt.played).length;
+    if (played < CONCENTRATION_MIN_MATCHES) return null;
+    const values = series.map(pt => pt.value);
     const total = values.reduce((a, b) => a + b, 0);
     if (total <= 0) return null;
     return Math.max(...values) / total;
@@ -4143,10 +4256,36 @@ const num1 = v => {
     return Number.isFinite(n) ? n : null;
 };
 /** One stat line. `null` renders as an em dash rather than a misleading 0. */
-const statLine = (label, value, hint) =>
+const statLine = (label, value, hint, past) =>
     `<div class="box-row"${hint ? ` title="${escapeHtml(hint)}"` : ''}>
-        <dt>${label}</dt><dd>${value === null || value === undefined ? '—' : value}</dd>
+        <dt>${label}</dt><dd>${value === null || value === undefined ? '—' : value}${
+        past === null || past === undefined ? ''
+            : ` <span class="box-past" title="${escapeHtml(SEASON_CONFIG.previousSeasonLabel)}">${past}</span>`}</dd>
     </div>`;
+
+/**
+ * Last season's figure for one field, for the grey number beside this season's.
+ *
+ * The expanded row is where the blend is audited: every rate on it is weighed
+ * against the prior, and a reader who cannot see the prior has to take the
+ * weighting on trust. Only shown where there IS a prior — a newcomer has none,
+ * and a positional baseline is not his season and must not be printed as one.
+ */
+/** Last season's start share, which the archive keeps as two separate counts. */
+function priorStartShare(p) {
+    if (!p.prior || state.currentDataSource !== 'live') return null;
+    const apps = priorAppearances(p.prior);
+    if (!apps || !Number.isFinite(p.prior.starts)) return null;
+    return pct(Math.min(p.prior.starts / apps, 1) * 100);
+}
+
+function priorFigure(p, field, format = v => fmt(v)) {
+    if (!p.prior || state.currentDataSource !== 'live') return null;
+    const spec = BLEND_PER90[field];
+    const raw = spec ? priorRate(p.prior, spec) : num1(p.prior[field]);
+    if (raw === null || raw === undefined || !Number.isFinite(raw)) return null;
+    return format(raw);
+}
 
 const fmt = (v, d = 2) => (num1(v) === null ? null : num1(v).toFixed(d));
 const pct = v => (num1(v) === null ? null : `${Math.round(num1(v))}%`);
@@ -4162,15 +4301,18 @@ function boxAttack(p) {
         <dl>
             ${statLine('שערים / בישולים', `${p.goals_scored || 0} / ${p.assists || 0}`)}
             ${statLine('מעורבות', ga)}
-            ${statLine('xG / 90', fmt(p.expected_goals_per_90), 'שערים צפויים לכל 90 דקות')}
-            ${statLine('xA / 90', fmt(p.expected_assists_per_90), 'בישולים צפויים לכל 90 דקות')}
-            ${statLine('xGI / 90', fmt(p.xGI_per90), 'מעורבות צפויה בשערים לכל 90 דקות')}
+            ${statLine('xG / 90', fmt(p.expected_goals_per_90), 'שערים צפויים לכל 90 דקות',
+                priorFigure(p, 'expected_goals_per_90'))}
+            ${statLine('xA / 90', fmt(p.expected_assists_per_90), 'בישולים צפויים לכל 90 דקות',
+                priorFigure(p, 'expected_assists_per_90'))}
+            ${statLine('xGI / 90', fmt(p.xGI_per90), 'מעורבות צפויה בשערים לכל 90 דקות',
+                priorFigure(p, 'xGI_per90'))}
             ${statLine('xDiff', (num1(p.xDiff) === null ? null :
                 `<span class="${p.xDiff >= 0 ? 'tone-up' : 'tone-down'}">${
                     p.xDiff > 0 ? '+' : ''}${num1(p.xDiff).toFixed(2)}</span>`),
                 'ההפרש בין התפוקה בפועל לצפויה — חיובי = מימוש מעל הצפי, לא בהכרח טוב')}
             ${statLine('ICT / 90', fmt(p.ict_index_per90, 1))}
-            ${statLine('בונוס / 90', fmt(p.bonus_per90))}
+            ${statLine('בונוס / 90', fmt(p.bonus_per90), null, priorFigure(p, 'bonus_per90'))}
         </dl>
     </div>`;
 }
@@ -4184,21 +4326,26 @@ function boxDefence(p) {
     return `<div class="stat-box">
         <h5><span>${isGk ? '🧤' : '🛡️'}</span> ${isGk ? 'שוער והגנה' : 'הגנה ודקות'}</h5>
         <dl>
-            ${statLine('דקות', p.minutes)}
+            ${statLine('דקות', p.minutes, null,
+                p.prior && state.currentDataSource === 'live' ? p.prior.minutes : null)}
             ${statLine('הופעות', p.appearances ?? null)}
             ${statLine('אחוז הרכב', pct(num1(p.rotation_risk) === null ? null : p.rotation_risk * 100),
-                'אחוז המשחקים שבהם פתח בהרכב')}
+                'אחוז המשחקים שבהם פתח בהרכב', priorStartShare(p))}
             ${isGk
                 ? statLine('הצלות / 90', fmt(p.saves_per_90, 1))
                 : statLine('DEFCON', p.defcon_hit_rate === null || p.defcon_hit_rate === undefined
                     ? null : `${num1(p.defcon_hit_rate).toFixed(0)}%`,
-                    'אחוז המשחקים שבהם עבר את הסף לנקודות הגנה')}
+                    'אחוז המשחקים שבהם עבר את הסף לנקודות הגנה',
+                    priorFigure(p, 'defcon_hit_rate', v => `${Math.round(v)}%`))}
             ${isGk
                 ? statLine('פנדלים שעצר', p.penalties_saved ?? null)
-                : statLine('DC / 90', fmt(p.def_contrib_per90, 1), 'תרומה הגנתית לכל 90 דקות')}
-            ${statLine('שערים נקיים / 90', fmt(p.clean_sheets_per90))}
+                : statLine('DC / 90', fmt(p.def_contrib_per90, 1), 'תרומה הגנתית לכל 90 דקות',
+                    priorFigure(p, 'def_contrib_per90', v => fmt(v, 1)))}
+            ${statLine('שערים נקיים / 90', fmt(p.clean_sheets_per90), null,
+                priorFigure(p, 'clean_sheets_per90'))}
             ${statLine('xGC / 90', fmt(p.expected_goals_conceded_per_90),
-                'שערים צפויים נגד לכל 90 דקות — ככל שנמוך יותר, סיכוי גבוה יותר לשער נקי')}
+                'שערים צפויים נגד לכל 90 דקות — ככל שנמוך יותר, סיכוי גבוה יותר לשער נקי',
+                priorFigure(p, 'expected_goals_conceded_per_90'))}
             ${statLine('כרטיסים', `${p.yellow_cards || 0}🟨 ${p.red_cards || 0}🟥`)}
         </dl>
     </div>`;
@@ -4226,7 +4373,8 @@ function boxValue(p) {
             ${statLine('חיזוי FPL הרשמי', fmt(p.ep_next, 1),
                 'ep_next — החיזוי של FPL עצמה, כנקודת ייחוס לחיזוי שלנו')}
             ${statLine('קושי 3 קרובים', num1(p.next_3_fdr) ? num1(p.next_3_fdr).toFixed(1) : null)}
-            ${statLine('נק׳ למשחק', fmt(p.points_per_game_90, 1))}
+            ${statLine('נק׳ למשחק', fmt(p.points_per_game_90, 1), null,
+                priorFigure(p, 'points_per_game', v => fmt(v, 1)))}
             ${statLine('בעלות', owner ? escapeHtml(owner) : '🆓 חופשי')}
             ${statLine('מצבים נייחים', pieces.length ? pieces.join(' · ') : null)}
         </dl>
@@ -7964,6 +8112,29 @@ function fixtureTilt(p, horizon) {
 }
 
 /**
+ * Recount this season's DEFCON from the window, once per window.
+ *
+ * Guarded on trendKey because the window resolves more than once — a filter, a
+ * season switch and the initial load all await it — and this is the one step in
+ * the chain that reprocesses rather than re-renders.
+ *
+ * Returns whether anything changed, so the caller knows whether a re-render is
+ * enough or a full pass is needed.
+ */
+let _liveDefconKey = null;
+function refreshLiveDefcon() {
+    if (state.currentDataSource !== 'live' || currentSeasonIsTooEarly()) return false;
+    if (!state.trendKey || _liveDefconKey === state.trendKey) return false;
+    const processed = state.allPlayersData.live && state.allPlayersData.live.processed;
+    if (!processed || !processed.length) return false;
+    _liveDefconKey = state.trendKey;
+    if (!applyLiveDefconRate(processed)) return false;
+    applySeasonBlend(processed);
+    computeDraftMetrics(processed);
+    return true;
+}
+
+/**
  * The whole index for one player and one horizon. Returns null when there is
  * nothing honest to say — no appearances, or no replacement level for the
  * position yet.
@@ -8391,9 +8562,12 @@ const DRAFT_PANELS = [
         display(p) { return this.fmt(this.metric(p)); },
         why: p => {
             const w = windowStats(p);
+            const prior = Number.isFinite(p.defcon_prior_rate)
+                ? ` · ${Math.round(p.defcon_prior_rate)}% ב-${SEASON_CONFIG.previousSeasonLabel}` : '';
             if (p.defcon_hit_rate !== null && p.defcon_hit_rate !== undefined && p.defcon_eligible_apps) {
-                return `${p.defcon_hits}/${p.defcon_eligible_apps} משחקים מעל הסף בעונה`;
+                return `${p.defcon_hits}/${p.defcon_eligible_apps} משחקים מעל הסף העונה${prior}`;
             }
+            if (prior) return `עוד לא עבר את הסף העונה${prior}`;
             return `${w.dcHits}/${w.matches} משחקים מעל הסף בחלון`;
         },
         eligible: p => {
@@ -8402,7 +8576,8 @@ const DRAFT_PANELS = [
             // A hit-rate is only a rate if it has a denominator. Colwill topped
             // this card at 67% off two clearances in three eligible matches,
             // which is a coin toss wearing a percentage sign.
-            const apps = p.defcon_eligible_apps;
+            const apps = Number.isFinite(p.defcon_sample_apps)
+                ? p.defcon_sample_apps : p.defcon_eligible_apps;
             if (Number.isFinite(apps) && apps > 0 && apps < 10) return false;
             return windowStats(p).matches >= windowMinMatches();
         },

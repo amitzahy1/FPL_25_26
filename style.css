@@ -6627,3 +6627,16 @@ canvas {
     text-decoration: underline;
     cursor: pointer;
 }
+
+/* Last season's figure, beside this season's, in the expanded row. This is where
+   the blend is audited: every rate on the page is weighed against the prior, and
+   a reader who cannot see the prior has to take the weighting on trust. */
+.box-past {
+    margin-inline-start: 6px;
+    font-size: 11px;
+    font-weight: 700;
+    color: #94a3b8;
+    font-variant-numeric: tabular-nums;
+}
+
+.box-past::before { content: "· "; }

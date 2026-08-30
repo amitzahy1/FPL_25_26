@@ -67,6 +67,7 @@ function load(stateOver = {}) {
         // source so the tests cannot drift from it.
         'WATCHLIST_KEY', 'SIGNAL_RULES', 'SIGNAL_SORT_ORDER', 'HOLD_SIGNAL',
         '_signalCache', '_trendPlayerIndex', '_trendDeltaCache',
+        'CONCENTRATION_MIN_MATCHES',
         'gwNum', 'TREND_METRICS'
     ]);
     // Verdicts are cached by player id; every load() starts from a clean slate.
@@ -131,6 +132,23 @@ describe('signal verdicts', () => {
             trendPrevGws: [mk(3, 2), mk(4, 2), mk(5, 2)]
         });
         assert.equal(fns.signalFor(player).key, 'overperf');
+    });
+
+    test('but one gameweek of window is not evidence that one gameweek carried him', () => {
+        // Over a single-gameweek window every player who scored comes out at 1.00
+        // concentration — arithmetic about the window, not a fact about the player.
+        // Unguarded this flagged 73 players as מימוש יתר in August and blocked יעיל
+        // for the entire league, because that rule requires concentration under 0.5.
+        const player = makePlayer({ id: 9, xDiff: 2.5, xGI_per90: 0.55, minutes: 1200 });
+        const mk = (gw, pts) => ({ gw, stats: new Map([[9, gwStats({ total_points: pts })]]) });
+        const { fns } = load({
+            allPlayersData: { live: { processed: [player], raw: null, fixtures: null }, historical: {}, demo: {} },
+            trendGws: [mk(1, 12)],
+            trendPrevGws: []
+        });
+        assert.equal(fns.pointsConcentration(player), null, 'unknown, not 1.00');
+        assert.equal(fns.signalFor(player).key, 'clinical',
+            'and the finishing verdict is no longer blocked by an unknowable ratio');
     });
 
     test('a big negative xDiff on a regular starter is a buy-low', () => {
