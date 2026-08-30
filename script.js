@@ -3804,7 +3804,20 @@ const WINDOW_RATES = {
  * which is what the position matrix used — would empty the chart.
  */
 function windowMinMinutes() {
-    return Math.max(90, Math.round((state.trendWindow || 5) * 27));
+    const want = Math.max(90, Math.round((state.trendWindow || 5) * 27));
+    // ...but never more minutes than the window can physically contain.
+    //
+    // A five-gameweek window asks for 135 minutes, which is right. A window with
+    // one finished gameweek in it holds 90 at the absolute maximum, so the same
+    // ask cleared nobody and every windowed rate on the page came back null —
+    // the position matrix, the momentum column and the trend charts all drew
+    // nothing, and the cards hid themselves rather than saying why.
+    //
+    // 55% of the window is the same claim in either case: he played more than
+    // half the football the window had to offer.
+    const gws = (state.trendGws || []).length;
+    if (!gws) return want;
+    return Math.min(want, Math.round(gws * 90 * 0.55));
 }
 
 /** Whether this metric can be measured over the window from the current source. */
@@ -3858,7 +3871,13 @@ function metricReader(key) {
 
 /** Axis text that states the span it was measured over. */
 function windowAxisLabel(base, windowed) {
-    return windowed ? `${base} · ${state.trendWindow} מחזורים` : `${base} · כל העונה`;
+    if (!windowed) return `${base} · כל העונה`;
+    // The gameweeks the window actually holds, not the number that was asked
+    // for. In August the request is five and the answer is one, and an axis
+    // labelled "5 מחזורים" over a single match is the page overstating its own
+    // evidence — the one thing it must never do.
+    const have = (state.trendGws || []).length || state.trendWindow;
+    return `${base} · ${have === 1 ? "מחזור אחד" : `${have} מחזורים`}`;
 }
 
 /* ------------------------- top-20 position benchmark ---------------------- */
@@ -13065,8 +13084,10 @@ function buildPositionMatrix(data) {
     // The season guard cannot survive a window: five gameweeks hold 450 minutes
     // at most, and this asked for more than that. windowRate applies its own
     // scaled minimum and returns null below it.
+    // The season guard scales with the season. 450 raw minutes is unreachable in
+    // August — the whole matrix came back empty, and the card simply hid itself.
     const players = data.filter(p => p.position_name === pos
-        && (xr.windowed && yr.windowed ? true : p.minutes > spec.minMinutes));
+        && (xr.windowed && yr.windowed ? true : sampleMinutes(p) > scaleMinutes(spec.minMinutes)));
     if (players.length < 3) return null;
 
     const raw = players.map(p => {
@@ -14242,7 +14263,147 @@ function renderCharts() {
  * change while it is open (a filter, a position switch) and the chart is thrown
  * away and rebuilt on every render.
  */
-const _chartFull = { specId: null, chart: null };
+const _chartFull = { specId: null, chart: null, rows: [], sort: null, allNames: false, activeRow: null };
+
+/* ---------------------- the reading pane's data model --------------------- */
+
+/**
+ * Every plotted point, pulled out of the built Chart.js config.
+ *
+ * Generic on purpose. Each builder already puts `{x, y, name, team, pos}` on its
+ * points (see getMatrixChartConfig) and its axis titles on the scales, so one
+ * reader covers all twelve charts and a thirteenth needs no work here. Reading
+ * the rows back out of the config rather than re-deriving them from the players
+ * also guarantees the table lists exactly what the chart drew — same filter,
+ * same facet, same window — which a parallel computation would not.
+ *
+ * Bar charts label their rows on the category axis instead of carrying a name,
+ * so the tick label is the fallback.
+ */
+function chartFullRows(config) {
+    const data = config && config.data;
+    if (!data || !Array.isArray(data.datasets)) return [];
+    const labels = Array.isArray(data.labels) ? data.labels : null;
+    const rows = [];
+    data.datasets.forEach(ds => {
+        (ds.data || []).forEach((pt, i) => {
+            if (pt === null || pt === undefined) return;
+            const scalar = typeof pt === 'number';
+            const name = (!scalar && pt.name) || (labels && labels[i]) || '';
+            if (!name) return;
+            rows.push({
+                name: String(name),
+                team: (!scalar && (pt.team || pt.team_name)) || '',
+                pos: (!scalar && pt.pos) || '',
+                x: scalar ? i : num1(pt.x),
+                y: scalar ? pt : num1(pt.y),
+                datasetIndex: data.datasets.indexOf(ds),
+                index: i
+            });
+        });
+    });
+    return rows;
+}
+
+/** An axis's printed title, so the table's headers are the chart's own words. */
+function chartFullAxisLabel(config, axis) {
+    const scale = config && config.options && config.options.scales
+        && config.options.scales[axis];
+    const title = scale && scale.title;
+    return (title && title.display !== false && title.text) || axis.toUpperCase();
+}
+
+/** A figure in the table: short, and never 1.8000000000000003. */
+function chartFullNum(v) {
+    if (!Number.isFinite(v)) return '–';
+    if (Number.isInteger(v)) return String(v);
+    return Math.abs(v) >= 100 ? v.toFixed(0) : Math.abs(v) >= 10 ? v.toFixed(1) : v.toFixed(2);
+}
+
+/** Sort the pane by one of its columns, or flip the direction if it is already sorted by it. */
+function sortChartFull(key) {
+    const cur = _chartFull.sort;
+    _chartFull.sort = (cur && cur.key === key)
+        ? { key, dir: cur.dir === 'desc' ? 'asc' : 'desc' }
+        // Numbers open on the biggest, names on the first letter, which is what
+        // each of the two is actually being asked for.
+        : { key, dir: (key === 'x' || key === 'y') ? 'desc' : 'asc' };
+    renderChartFullTable();
+}
+
+/**
+ * Point at one row's dot.
+ *
+ * setActiveElements is Chart.js's own hover state, so the point grows and its
+ * tooltip opens exactly as it would under the cursor — no second highlight
+ * mechanism that could disagree with the first about which point is which.
+ */
+function focusChartFullRow(idx) {
+    const row = _chartFull.rows[idx];
+    const chart = _chartFull.chart;
+    if (!row || !chart) return;
+    _chartFull.activeRow = idx;
+    const element = [{ datasetIndex: row.datasetIndex, index: row.index }];
+    try {
+        chart.setActiveElements(element);
+        if (chart.tooltip) chart.tooltip.setActiveElements(element, { x: 0, y: 0 });
+        chart.update();
+    } catch (e) {
+        // A bar chart's element addressing differs; the row highlight still works.
+    }
+    renderChartFullTable();
+}
+
+function toggleChartFullNames() {
+    _chartFull.allNames = !_chartFull.allNames;
+    const btn = document.getElementById('chartFullNames');
+    if (btn) btn.setAttribute('aria-pressed', String(_chartFull.allNames));
+    drawChartFull();
+}
+
+function renderChartFullTable() {
+    const table = document.getElementById('chartFullTable');
+    const count = document.getElementById('chartFullCount');
+    if (!table) return;
+
+    const rows = [..._chartFull.rows];
+    const sort = _chartFull.sort;
+    if (sort) {
+        const dir = sort.dir === 'asc' ? 1 : -1;
+        rows.sort((a, b) => {
+            const av = a[sort.key], bv = b[sort.key];
+            if (typeof av === 'number' && typeof bv === 'number') return (av - bv) * dir;
+            return String(av).localeCompare(String(bv), 'he') * dir;
+        });
+    }
+
+    if (count) count.textContent = `${_chartFull.rows.length} שחקנים`;
+
+    const head = (key, label) => {
+        const on = sort && sort.key === key;
+        const arrow = on ? (sort.dir === 'asc' ? ' ▲' : ' ▼') : '';
+        return `<th${on ? ` aria-sort="${sort.dir}ending"` : ''}
+            onclick="sortChartFull('${key}')">${escapeHtml(label)}${arrow}</th>`;
+    };
+
+    table.innerHTML = `
+        <thead><tr>
+            ${head('name', 'שחקן')}
+            ${head('team', 'קבוצה')}
+            ${head('x', _chartFull.xLabel || 'X')}
+            ${head('y', _chartFull.yLabel || 'Y')}
+        </tr></thead>
+        <tbody>${rows.map(r => {
+        const idx = _chartFull.rows.indexOf(r);
+        return `<tr class="${idx === _chartFull.activeRow ? 'is-active' : ''}"
+                onclick="focusChartFullRow(${idx})">
+                <td>${escapeHtml(r.name)}</td>
+                <td class="cf-dim">${escapeHtml(r.team)}</td>
+                <td class="cf-num">${chartFullNum(r.x)}</td>
+                <td class="cf-num">${chartFullNum(r.y)}</td>
+            </tr>`;
+    }).join('')}</tbody>`;
+}
 
 /** The rows the charts are drawn from — one definition, shared with renderCharts. */
 function currentChartData() {
@@ -14277,6 +14438,24 @@ function drawChartFull() {
     // inside a 700px overlay.
     delete config.cardHeight;
 
+    // Every name, when asked for. labelTop() has already decided WHICH points
+    // carry a label; what 'auto' does on top of that is drop whichever of them
+    // would collide. Turning it off shows the lot, overlap included — which is
+    // the trade the reader just made explicitly.
+    if (_chartFull.allNames && config.options && config.options.plugins
+        && config.options.plugins.datalabels
+        && config.options.plugins.datalabels.display === 'auto') {
+        config.options.plugins.datalabels.display = true;
+    }
+
+    // The pane reads the same config the canvas does, before Chart.js is handed
+    // it — so the table can never list a player the chart did not draw.
+    _chartFull.rows = chartFullRows(config);
+    _chartFull.xLabel = chartFullAxisLabel(config, 'x');
+    _chartFull.yLabel = chartFullAxisLabel(config, 'y');
+    _chartFull.activeRow = null;
+    renderChartFullTable();
+
     _chartFull.chart = new Chart(canvas.getContext('2d'), config);
 }
 
@@ -14286,6 +14465,10 @@ function openChartFull(specId) {
     if (!spec || !overlay) return;
 
     _chartFull.specId = specId;
+    // Per-chart state, not per-session: a sort on 'xGI' means nothing on the
+    // next chart, and a highlighted row would point at a different player.
+    _chartFull.sort = { key: 'y', dir: 'desc' };
+    _chartFull.activeRow = null;
     const title = document.getElementById('chartFullTitle');
     if (title) title.textContent = spec.title;
 
@@ -14306,6 +14489,8 @@ function closeChartFull() {
         _chartFull.chart = null;
     }
     _chartFull.specId = null;
+    _chartFull.rows = [];
+    _chartFull.activeRow = null;
     if (overlay) overlay.hidden = true;
     document.body.style.overflow = '';
 }
