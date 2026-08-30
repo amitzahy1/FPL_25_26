@@ -2617,9 +2617,19 @@ function seasonBlendActive() {
 
 const BLEND_OFF_KEY = 'seasonBlendOff';
 
-/** Restore the reader's choice, before the first process. */
+/**
+ * Restore the reader's choice, before the first process.
+ *
+ * With nothing chosen the blend starts OFF: the page opens on what has actually
+ * happened this season, and weighing last season in is something you ask for.
+ * A blended figure that nobody opted into is the harder one to reason about —
+ * a reader comparing the page against the official game sees numbers that match
+ * no season they can look up. The switch is still there, and still says what it
+ * will do; only the side it starts on changed.
+ */
 function loadSeasonBlendPreference() {
-    const off = readSettings()[BLEND_OFF_KEY] === true;
+    const saved = readSettings()[BLEND_OFF_KEY];
+    const off = saved === undefined ? true : saved === true;
     VALUE_TUNING.priorK = off ? 0 : DEFAULT_PRIOR_K;
     return off;
 }
@@ -10992,13 +11002,13 @@ function renderDraftNotice(_container, { icon, title, body }) {
 
     notice.innerHTML = `
         <div style="max-width: 640px; margin: 40px auto; padding: 28px; text-align: center;
-                    background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px;">
+                    background: #f5f8fc; border: 1px solid #e4e9f1; border-radius: 12px;">
             <div style="font-size: 42px; margin-bottom: 12px;">${icon}</div>
             <h3 style="margin: 0 0 12px;">${title}</h3>
             ${body}
             <button onclick="showTab('players')"
                 style="margin-top: 18px; padding: 11px 22px; border: none; border-radius: 10px;
-                       background: #3b82f6; color: #fff; font-weight: 800; font-size: 15px; cursor: pointer;">
+                       background: #0f56d9; color: #fff; font-weight: 800; font-size: 15px; cursor: pointer;">
                 ← לנתוני ${SEASON_CONFIG.previousSeasonLabel} ולהכנה לדראפט
             </button>
         </div>`;
@@ -12233,7 +12243,7 @@ function renderDraftAnalytics(teamAggregates) {
                             drawBorder: false
                         },
                         ticks: {
-                            color: '#64748b',
+                            color: '#5d6b82',
                             font: { size: 14, weight: '600' },
                             padding: 8
                         }
@@ -12241,7 +12251,7 @@ function renderDraftAnalytics(teamAggregates) {
                     x: {
                         grid: { display: false },
                         ticks: {
-                            color: '#475569',
+                            color: '#5d6b82',
                             font: { size: 11, weight: '600' },
                             padding: 6,
                             maxRotation: 45,
@@ -12254,9 +12264,9 @@ function renderDraftAnalytics(teamAggregates) {
                     tooltip: {
                         enabled: true,
                         backgroundColor: 'rgba(255, 255, 255, 0.98)',
-                        titleColor: '#1e293b',
-                        bodyColor: '#334155',
-                        footerColor: '#64748b',
+                        titleColor: '#101828',
+                        bodyColor: '#2b3648',
+                        footerColor: '#5d6b82',
                         borderColor: 'rgba(2, 132, 199, 0.8)',
                         borderWidth: 2,
                         padding: 11,
@@ -12399,7 +12409,7 @@ function renderDraftAnalytics(teamAggregates) {
                         offset: 6,
                         color: function (context) {
                             const isHighlighted = highlightTeam && labels[context.dataIndex] === highlightTeam;
-                            return isHighlighted ? '#ffffff' : '#475569';
+                            return isHighlighted ? '#ffffff' : '#5d6b82';
                         },
                         backgroundColor: function (context) {
                             const isHighlighted = highlightTeam && labels[context.dataIndex] === highlightTeam;
@@ -12503,18 +12513,18 @@ function renderDraftComparison(aggregates) {
 
     let tableHTML = `
         <div style="margin-bottom: 20px;">
-            <h2 style="text-align: center; color: #0f172a; font-size: 20px; margin-bottom: 15px; font-weight: 800;">📊 השוואת קבוצות</h2>
+            <h2 style="text-align: center; color: #101828; font-size: 20px; margin-bottom: 15px; font-weight: 800;">📊 השוואת קבוצות</h2>
             <div style="overflow-x: auto; overflow-y: auto; max-height: 600px;">
                 <table class="styled-table draft-comparison-table" style="width: 100%; border-collapse: collapse; background: white; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.08); font-size: 11px;">
                     <thead style="position: sticky; top: 0; z-index: 10;">
-                        <tr style="background: linear-gradient(135deg, #e0e7ff 0%, #ddd6fe 100%);">
-                            <th style="padding: 10px 8px; text-align: right; color: #4338ca; font-weight: 800; font-size: 11px; border-bottom: 2px solid #e2e8f0; position: sticky; right: 0; background: linear-gradient(135deg, #e0e7ff 0%, #ddd6fe 100%); z-index: 11;">מדד</th>`;
+                        <tr style="background: linear-gradient(135deg, #e7efff 0%, #c9daf8 100%);">
+                            <th style="padding: 10px 8px; text-align: right; color: #4338ca; font-weight: 800; font-size: 11px; border-bottom: 2px solid #e4e9f1; position: sticky; right: 0; background: linear-gradient(135deg, #e7efff 0%, #c9daf8 100%); z-index: 11;">מדד</th>`;
 
     aggregates.forEach((agg, idx) => {
         const teamLogo = getTeamLogo(agg.team);
         // Shorten team names
         const shortName = agg.team.replace('Amit United🏆🏆', 'Amit U.').replace('Francis Bodega FC', 'Bodega').replace('Torpedo Eshel', 'Torpedo').replace('Los chicos 🌟', 'Los chicos');
-        tableHTML += `<th style="padding: 8px 4px; text-align: center; color: #4338ca; font-weight: 700; font-size: 12px; border-bottom: 2px solid #e2e8f0; min-width: 70px;">
+        tableHTML += `<th style="padding: 8px 4px; text-align: center; color: #4338ca; font-weight: 700; font-size: 12px; border-bottom: 2px solid #e4e9f1; min-width: 70px;">
             <div style="font-size: 16px; margin-bottom: 2px;">${teamLogo}</div>
             <div style="font-size: 10px; line-height: 1.2; font-weight: 700;">${shortName}</div>
         </th>`;
@@ -12522,7 +12532,7 @@ function renderDraftComparison(aggregates) {
     tableHTML += '</tr></thead><tbody>';
 
     enhancedMetrics.forEach((metric, metricIdx) => {
-        const bgColor = metricIdx % 2 === 0 ? '#ffffff' : '#f8fafc';
+        const bgColor = metricIdx % 2 === 0 ? '#ffffff' : '#f5f8fc';
 
         let values;
         if (metric.source === 'standings') {
@@ -12546,19 +12556,19 @@ function renderDraftComparison(aggregates) {
         const maxVal = Math.max(...values);
         const minVal = Math.min(...values);
 
-        tableHTML += `<tr style="background: ${bgColor}; transition: background 0.2s;" onmouseover="this.style.background='#f1f5f9'" onmouseout="this.style.background='${bgColor}'">
-            <td style="padding: 8px 8px; font-weight: 600; color: #475569; font-size: 10px; border-bottom: 1px solid #e2e8f0; position: sticky; right: 0; background: ${bgColor}; z-index: 5;">${metric.label}</td>`;
+        tableHTML += `<tr style="background: ${bgColor}; transition: background 0.2s;" onmouseover="this.style.background='#eef2f7'" onmouseout="this.style.background='${bgColor}'">
+            <td style="padding: 8px 8px; font-weight: 600; color: #5d6b82; font-size: 10px; border-bottom: 1px solid #e4e9f1; position: sticky; right: 0; background: ${bgColor}; z-index: 5;">${metric.label}</td>`;
 
         aggregates.forEach((agg, idx) => {
             const val = values[idx];
-            let cellStyle = 'padding: 8px 4px; text-align: center; font-weight: 700; font-size: 11px; border-bottom: 1px solid #e2e8f0;';
+            let cellStyle = 'padding: 8px 4px; text-align: center; font-weight: 700; font-size: 11px; border-bottom: 1px solid #e4e9f1;';
 
             if (val === maxVal && maxVal !== minVal) {
-                cellStyle += ' background: linear-gradient(135deg, #d1fae5 0%, #a7f3d0 100%); color: #065f46;';
+                cellStyle += ' background: linear-gradient(135deg, #e5f8ee 0%, #b6ecd0 100%); color: #065f46;';
             } else if (val === minVal && maxVal !== minVal) {
-                cellStyle += ' background: linear-gradient(135deg, #fee2e2 0%, #fecaca 100%); color: #991b1b;';
+                cellStyle += ' background: linear-gradient(135deg, #ffe9f0 0%, #ffd5e2 100%); color: #991b1b;';
             } else {
-                cellStyle += ' color: #334155;';
+                cellStyle += ' color: #2b3648;';
             }
 
             tableHTML += `<td style="${cellStyle}">${metric.format(val)}</td>`;
@@ -15107,10 +15117,10 @@ function renderNextRoundFixtures() {
     const processedById = getProcessedByElementId();
 
     let html = `
-        <div class="next-fixtures-card" style="background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%); padding: 20px; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.04); margin-bottom: 16px; border: 1px solid #e2e8f0;">
+        <div class="next-fixtures-card" style="background: linear-gradient(135deg, #ffffff 0%, #f5f8fc 100%); padding: 20px; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.04); margin-bottom: 16px; border: 1px solid #e4e9f1;">
             <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 16px;">
                 <span style="font-size: 24px;">⚔️</span>
-                <h3 style="margin: 0; font-size: 18px; color: #0f172a; font-weight: 800;">משחקי מחזור ${nextGW}</h3>
+                <h3 style="margin: 0; font-size: 18px; color: #101828; font-weight: 800;">משחקי מחזור ${nextGW}</h3>
             </div>
             <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 14px;">
     `;
@@ -15153,35 +15163,35 @@ function renderNextRoundFixtures() {
         }
 
         html += `
-            <div style="background: white; padding: 14px; border-radius: 10px; border: 1px solid #e2e8f0; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
+            <div style="background: white; padding: 14px; border-radius: 10px; border: 1px solid #e4e9f1; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
                     <div style="flex: 1; text-align: center;">
                         <div style="font-size: 36px; margin-bottom: 6px;">${logo1}</div>
-                        <div style="font-weight: 700; font-size: 13px; color: #0f172a; margin-bottom: 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.3;">${team1}</div>
-                        <div style="background: #dbeafe; color: #1e40af; padding: 4px 10px; border-radius: 8px; font-size: 12px; font-weight: 700; display: inline-block;">
+                        <div style="font-weight: 700; font-size: 13px; color: #101828; margin-bottom: 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.3;">${team1}</div>
+                        <div style="background: #e7efff; color: #0a44b0; padding: 4px 10px; border-radius: 8px; font-size: 12px; font-weight: 700; display: inline-block;">
                             ${xPts1.toFixed(1)}
                         </div>
                     </div>
                     
                     <div style="text-align: center; padding: 0 10px;">
-                        <div style="font-weight: 900; font-size: 18px; color: #64748b;">VS</div>
+                        <div style="font-weight: 900; font-size: 18px; color: #5d6b82;">VS</div>
                     </div>
                     
                     <div style="flex: 1; text-align: center;">
                         <div style="font-size: 36px; margin-bottom: 6px;">${logo2}</div>
-                        <div style="font-weight: 700; font-size: 13px; color: #0f172a; margin-bottom: 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.3;">${team2}</div>
-                        <div style="background: #fef3c7; color: #92400e; padding: 4px 10px; border-radius: 8px; font-size: 12px; font-weight: 700; display: inline-block;">
+                        <div style="font-weight: 700; font-size: 13px; color: #101828; margin-bottom: 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.3;">${team2}</div>
+                        <div style="background: #fdf1e0; color: #8a5209; padding: 4px 10px; border-radius: 8px; font-size: 12px; font-weight: 700; display: inline-block;">
                             ${xPts2.toFixed(1)}
                         </div>
                     </div>
                 </div>
                 
                 <div style="margin-top: 8px;">
-                    <div style="display: flex; height: 28px; background: #f1f5f9; border-radius: 14px; overflow: hidden; box-shadow: inset 0 1px 2px rgba(0,0,0,0.08);">
-                        <div style="width: ${winProb1}%; background: linear-gradient(90deg, #3b82f6 0%, #60a5fa 100%); display: flex; align-items: center; justify-content: center; color: white; font-weight: 800; font-size: 12px; transition: width 0.5s ease;">
+                    <div style="display: flex; height: 28px; background: #eef2f7; border-radius: 14px; overflow: hidden; box-shadow: inset 0 1px 2px rgba(0,0,0,0.08);">
+                        <div style="width: ${winProb1}%; background: linear-gradient(90deg, #0f56d9 0%, #5b8def 100%); display: flex; align-items: center; justify-content: center; color: white; font-weight: 800; font-size: 12px; transition: width 0.5s ease;">
                             ${winProb1.toFixed(0)}%
                         </div>
-                        <div style="width: ${winProb2}%; background: linear-gradient(90deg, #f59e0b 0%, #fbbf24 100%); display: flex; align-items: center; justify-content: center; color: white; font-weight: 800; font-size: 12px; transition: width 0.5s ease;">
+                        <div style="width: ${winProb2}%; background: linear-gradient(90deg, #d97706 0%, #e0a032 100%); display: flex; align-items: center; justify-content: center; color: white; font-weight: 800; font-size: 12px; transition: width 0.5s ease;">
                             ${winProb2.toFixed(0)}%
                         </div>
                     </div>
@@ -15918,22 +15928,22 @@ function renderH2HHistory() {
 
     // Create team selectors
     let html = `
-        <div style="background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%); padding: 24px; border-radius: 16px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); margin-bottom: 24px; border: 2px solid #e2e8f0;">
+        <div style="background: linear-gradient(135deg, #ffffff 0%, #f5f8fc 100%); padding: 24px; border-radius: 16px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); margin-bottom: 24px; border: 2px solid #e4e9f1;">
             <div style="text-align: center; margin-bottom: 20px;">
-                <h2 style="margin: 0 0 8px 0; font-size: 24px; color: #0f172a; font-weight: 900;">📜 היסטוריית מפגשים</h2>
-                <p style="margin: 0; color: #64748b; font-size: 14px;">בחר שתי קבוצות כדי לראות את כל המשחקים ביניהן</p>
+                <h2 style="margin: 0 0 8px 0; font-size: 24px; color: #101828; font-weight: 900;">📜 היסטוריית מפגשים</h2>
+                <p style="margin: 0; color: #5d6b82; font-size: 14px;">בחר שתי קבוצות כדי לראות את כל המשחקים ביניהן</p>
             </div>
             <div style="display: flex; justify-content: center; align-items: center; gap: 15px; flex-wrap: wrap;">
                 <div style="display: flex; align-items: center; gap: 8px;">
-                    <label style="font-size: 14px; font-weight: 600; color: #3b82f6;">קבוצה 1:</label>
-                    <select id="h2hTeam1" onchange="renderH2HHistory()" style="padding: 10px 16px; border-radius: 8px; border: 2px solid #3b82f6; font-size: 14px; font-weight: 600; color: #334155; cursor: pointer; background: white;">
+                    <label style="font-size: 14px; font-weight: 600; color: #0f56d9;">קבוצה 1:</label>
+                    <select id="h2hTeam1" onchange="renderH2HHistory()" style="padding: 10px 16px; border-radius: 8px; border: 2px solid #0f56d9; font-size: 14px; font-weight: 600; color: #2b3648; cursor: pointer; background: white;">
                         ${entries.map(e => `<option value="${e.id}" ${e.id === myTeam.id ? 'selected' : ''}>${escapeHtml(e.entry_name)}</option>`).join('')}
                     </select>
                 </div>
-                <span style="font-size: 24px; color: #cbd5e1;">⚔️</span>
+                <span style="font-size: 24px; color: #d5dce6;">⚔️</span>
                 <div style="display: flex; align-items: center; gap: 8px;">
-                    <label style="font-size: 14px; font-weight: 600; color: #ef4444;">קבוצה 2:</label>
-                    <select id="h2hTeam2" onchange="renderH2HHistory()" style="padding: 10px 16px; border-radius: 8px; border: 2px solid #ef4444; font-size: 14px; font-weight: 600; color: #334155; cursor: pointer; background: white;">
+                    <label style="font-size: 14px; font-weight: 600; color: #d92d5a;">קבוצה 2:</label>
+                    <select id="h2hTeam2" onchange="renderH2HHistory()" style="padding: 10px 16px; border-radius: 8px; border: 2px solid #d92d5a; font-size: 14px; font-weight: 600; color: #2b3648; cursor: pointer; background: white;">
                         ${entries.filter(e => e.id !== myTeam.id).map(e => `<option value="${e.id}">${escapeHtml(e.entry_name)}</option>`).join('')}
                     </select>
                 </div>
@@ -15963,7 +15973,7 @@ function renderH2HHistory() {
     ).sort((a, b) => b.event - a.event); // Most recent first
 
     if (h2hMatches.length === 0) {
-        html += '<div style="text-align: center; padding: 60px; background: white; border-radius: 12px; border: 2px dashed #e2e8f0;"><div style="font-size: 48px; margin-bottom: 16px;">🤷</div><h3 style="margin: 0 0 8px 0; color: #475569;">אין משחקים קודמים</h3><p style="margin: 0; color: #94a3b8;">שתי הקבוצות עדיין לא התמודדו זו מול זו</p></div>';
+        html += '<div style="text-align: center; padding: 60px; background: white; border-radius: 12px; border: 2px dashed #e4e9f1;"><div style="font-size: 48px; margin-bottom: 16px;">🤷</div><h3 style="margin: 0 0 8px 0; color: #5d6b82;">אין משחקים קודמים</h3><p style="margin: 0; color: #98a4b8;">שתי הקבוצות עדיין לא התמודדו זו מול זו</p></div>';
         container.innerHTML = html;
         return;
     }
@@ -15987,15 +15997,15 @@ function renderH2HHistory() {
     // Summary stats
     html += `
         <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-bottom: 24px;">
-            <div style="background: linear-gradient(135deg, #3b82f6 0%, #60a5fa 100%); padding: 20px; border-radius: 12px; text-align: center; color: white;">
+            <div style="background: linear-gradient(135deg, #0f56d9 0%, #5b8def 100%); padding: 20px; border-radius: 12px; text-align: center; color: white;">
                 <div style="font-size: 14px; opacity: 0.9; margin-bottom: 4px;">נצחונות ${escapeHtml(team1.entry_name)}</div>
                 <div style="font-size: 36px; font-weight: 900;">${team1Wins}</div>
             </div>
-            <div style="background: linear-gradient(135deg, #64748b 0%, #94a3b8 100%); padding: 20px; border-radius: 12px; text-align: center; color: white;">
+            <div style="background: linear-gradient(135deg, #5d6b82 0%, #98a4b8 100%); padding: 20px; border-radius: 12px; text-align: center; color: white;">
                 <div style="font-size: 14px; opacity: 0.9; margin-bottom: 4px;">תיקו</div>
                 <div style="font-size: 36px; font-weight: 900;">${draws}</div>
             </div>
-            <div style="background: linear-gradient(135deg, #ef4444 0%, #f87171 100%); padding: 20px; border-radius: 12px; text-align: center; color: white;">
+            <div style="background: linear-gradient(135deg, #d92d5a 0%, #e56a8c 100%); padding: 20px; border-radius: 12px; text-align: center; color: white;">
                 <div style="font-size: 14px; opacity: 0.9; margin-bottom: 4px;">נצחונות ${escapeHtml(team2.entry_name)}</div>
                 <div style="font-size: 36px; font-weight: 900;">${team2Wins}</div>
             </div>
@@ -16004,19 +16014,19 @@ function renderH2HHistory() {
 
     // Matches table
     html += `
-        <div style="background: white; border-radius: 12px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.05); border: 1px solid #e2e8f0;">
-            <div style="background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%); padding: 16px; border-bottom: 2px solid #e2e8f0;">
-                <h3 style="margin: 0; font-size: 18px; color: #0f172a; font-weight: 800;">📋 כל המשחקים (${h2hMatches.length})</h3>
+        <div style="background: white; border-radius: 12px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.05); border: 1px solid #e4e9f1;">
+            <div style="background: linear-gradient(135deg, #f5f8fc 0%, #eef2f7 100%); padding: 16px; border-bottom: 2px solid #e4e9f1;">
+                <h3 style="margin: 0; font-size: 18px; color: #101828; font-weight: 800;">📋 כל המשחקים (${h2hMatches.length})</h3>
             </div>
             <div style="overflow-x: auto;">
                 <table style="width: 100%; border-collapse: collapse;">
                     <thead>
-                        <tr style="background: #f8fafc; border-bottom: 2px solid #e2e8f0;">
-                            <th style="padding: 12px; text-align: center; font-weight: 700; color: #475569; font-size: 13px;">מחזור</th>
-                            <th style="padding: 12px; text-align: right; font-weight: 700; color: #475569; font-size: 13px;">${escapeHtml(team1.entry_name)}</th>
-                            <th style="padding: 12px; text-align: center; font-weight: 700; color: #475569; font-size: 13px;">תוצאה</th>
-                            <th style="padding: 12px; text-align: left; font-weight: 700; color: #475569; font-size: 13px;">${escapeHtml(team2.entry_name)}</th>
-                            <th style="padding: 12px; text-align: center; font-weight: 700; color: #475569; font-size: 13px;">מנצח</th>
+                        <tr style="background: #f5f8fc; border-bottom: 2px solid #e4e9f1;">
+                            <th style="padding: 12px; text-align: center; font-weight: 700; color: #5d6b82; font-size: 13px;">מחזור</th>
+                            <th style="padding: 12px; text-align: right; font-weight: 700; color: #5d6b82; font-size: 13px;">${escapeHtml(team1.entry_name)}</th>
+                            <th style="padding: 12px; text-align: center; font-weight: 700; color: #5d6b82; font-size: 13px;">תוצאה</th>
+                            <th style="padding: 12px; text-align: left; font-weight: 700; color: #5d6b82; font-size: 13px;">${escapeHtml(team2.entry_name)}</th>
+                            <th style="padding: 12px; text-align: center; font-weight: 700; color: #5d6b82; font-size: 13px;">מנצח</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -16026,14 +16036,14 @@ function renderH2HHistory() {
         const score1 = m.league_entry_1 === team1Id ? m.league_entry_1_points : m.league_entry_2_points;
         const score2 = m.league_entry_1 === team1Id ? m.league_entry_2_points : m.league_entry_1_points;
         const winner = score1 > score2 ? team1.entry_name : score2 > score1 ? team2.entry_name : 'תיקו';
-        const winnerColor = score1 > score2 ? '#3b82f6' : score2 > score1 ? '#ef4444' : '#64748b';
+        const winnerColor = score1 > score2 ? '#0f56d9' : score2 > score1 ? '#d92d5a' : '#5d6b82';
 
         html += `
-            <tr style="border-bottom: 1px solid #f1f5f9; ${idx % 2 === 0 ? 'background: #fafafa;' : 'background: white;'}">
-                <td style="padding: 14px; text-align: center; font-weight: 700; color: #3b82f6; font-size: 15px;">GW${m.event}</td>
-                <td style="padding: 14px; text-align: right; font-weight: 600; color: #334155; font-size: 14px;">${getTeamLogo(team1.entry_name)} ${escapeHtml(team1.entry_name)}</td>
-                <td style="padding: 14px; text-align: center; font-weight: 900; color: #0f172a; font-size: 16px;">${score1} - ${score2}</td>
-                <td style="padding: 14px; text-align: left; font-weight: 600; color: #334155; font-size: 14px;">${escapeHtml(team2.entry_name)} ${getTeamLogo(team2.entry_name)}</td>
+            <tr style="border-bottom: 1px solid #eef2f7; ${idx % 2 === 0 ? 'background: #fafafa;' : 'background: white;'}">
+                <td style="padding: 14px; text-align: center; font-weight: 700; color: #0f56d9; font-size: 15px;">GW${m.event}</td>
+                <td style="padding: 14px; text-align: right; font-weight: 600; color: #2b3648; font-size: 14px;">${getTeamLogo(team1.entry_name)} ${escapeHtml(team1.entry_name)}</td>
+                <td style="padding: 14px; text-align: center; font-weight: 900; color: #101828; font-size: 16px;">${score1} - ${score2}</td>
+                <td style="padding: 14px; text-align: left; font-weight: 600; color: #2b3648; font-size: 14px;">${escapeHtml(team2.entry_name)} ${getTeamLogo(team2.entry_name)}</td>
                 <td style="padding: 14px; text-align: center;">
                     <span style="background: ${winnerColor}; color: white; padding: 4px 12px; border-radius: 12px; font-weight: 700; font-size: 12px; white-space: nowrap;">
                         ${winner === 'תיקו' ? '🤝 תיקו' : '🏆 ' + winner}
@@ -16076,9 +16086,9 @@ function renderLineupAnalysis() {
     const currentGW = state.draft.details?.league?.current_event || getCurrentEventId();
 
     let html = `
-        <div style="background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%); padding: 24px; border-radius: 16px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); margin-bottom: 24px; border: 2px solid #e2e8f0; text-align: center;">
-            <h2 style="margin: 0 0 8px 0; font-size: 24px; color: #0f172a; font-weight: 900;">🔍 ניתוח החלטות הרכב</h2>
-            <p style="margin: 0; color: #64748b; font-size: 14px;">כמה נקודות הפסדת בגלל שחקנים שהשארת על הספסל?</p>
+        <div style="background: linear-gradient(135deg, #ffffff 0%, #f5f8fc 100%); padding: 24px; border-radius: 16px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); margin-bottom: 24px; border: 2px solid #e4e9f1; text-align: center;">
+            <h2 style="margin: 0 0 8px 0; font-size: 24px; color: #101828; font-weight: 900;">🔍 ניתוח החלטות הרכב</h2>
+            <p style="margin: 0; color: #5d6b82; font-size: 14px;">כמה נקודות הפסדת בגלל שחקנים שהשארת על הספסל?</p>
         </div>
     `;
 
@@ -16115,17 +16125,17 @@ function renderLineupAnalysis() {
     // Summary
     html += `
         <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 16px; margin-bottom: 24px;">
-            <div style="background: linear-gradient(135deg, #ef4444 0%, #f87171 100%); padding: 24px; border-radius: 12px; text-align: center; color: white; box-shadow: 0 4px 12px rgba(239, 68, 68, 0.3);">
+            <div style="background: linear-gradient(135deg, #d92d5a 0%, #e56a8c 100%); padding: 24px; border-radius: 12px; text-align: center; color: white; box-shadow: 0 4px 12px rgba(239, 68, 68, 0.3);">
                 <div style="font-size: 14px; opacity: 0.9; margin-bottom: 8px;">סה"כ נקודות שהפסדת</div>
                 <div style="font-size: 48px; font-weight: 900; margin-bottom: 4px;">${totalPointsLost.toFixed(1)}</div>
                 <div style="font-size: 12px; opacity: 0.8;">בגלל החלטות הרכב לא אופטימליות</div>
             </div>
-            <div style="background: linear-gradient(135deg, #f59e0b 0%, #fbbf24 100%); padding: 24px; border-radius: 12px; text-align: center; color: white; box-shadow: 0 4px 12px rgba(245, 158, 11, 0.3);">
+            <div style="background: linear-gradient(135deg, #d97706 0%, #e0a032 100%); padding: 24px; border-radius: 12px; text-align: center; color: white; box-shadow: 0 4px 12px rgba(245, 158, 11, 0.3);">
                 <div style="font-size: 14px; opacity: 0.9; margin-bottom: 8px;">מחזורים עם טעויות</div>
                 <div style="font-size: 48px; font-weight: 900; margin-bottom: 4px;">${gwAnalysis.length}</div>
                 <div style="font-size: 12px; opacity: 0.8;">מתוך ${currentGW} מחזורים</div>
             </div>
-            <div style="background: linear-gradient(135deg, #3b82f6 0%, #60a5fa 100%); padding: 24px; border-radius: 12px; text-align: center; color: white; box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);">
+            <div style="background: linear-gradient(135deg, #0f56d9 0%, #5b8def 100%); padding: 24px; border-radius: 12px; text-align: center; color: white; box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);">
                 <div style="font-size: 14px; opacity: 0.9; margin-bottom: 8px;">ממוצע נקודות לאיבוד</div>
                 <div style="font-size: 48px; font-weight: 900; margin-bottom: 4px;">${gwAnalysis.length > 0 ? (totalPointsLost / gwAnalysis.length).toFixed(1) : '0'}</div>
                 <div style="font-size: 12px; opacity: 0.8;">למחזור עם טעות</div>
@@ -16134,16 +16144,16 @@ function renderLineupAnalysis() {
     `;
 
     if (gwAnalysis.length === 0) {
-        html += '<div style="text-align: center; padding: 60px; background: white; border-radius: 12px; border: 2px dashed #e2e8f0;"><div style="font-size: 48px; margin-bottom: 16px;">🎯</div><h3 style="margin: 0 0 8px 0; color: #475569;">מושלם!</h3><p style="margin: 0; color: #94a3b8;">לא הפסדת נקודות בגלל החלטות הרכב</p></div>';
+        html += '<div style="text-align: center; padding: 60px; background: white; border-radius: 12px; border: 2px dashed #e4e9f1;"><div style="font-size: 48px; margin-bottom: 16px;">🎯</div><h3 style="margin: 0 0 8px 0; color: #5d6b82;">מושלם!</h3><p style="margin: 0; color: #98a4b8;">לא הפסדת נקודות בגלל החלטות הרכב</p></div>';
         container.innerHTML = html;
         return;
     }
 
     // Detailed analysis
     html += `
-        <div style="background: white; border-radius: 12px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.05); border: 1px solid #e2e8f0;">
-            <div style="background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%); padding: 16px; border-bottom: 2px solid #e2e8f0;">
-                <h3 style="margin: 0; font-size: 18px; color: #0f172a; font-weight: 800;">📊 פירוט לפי מחזור</h3>
+        <div style="background: white; border-radius: 12px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.05); border: 1px solid #e4e9f1;">
+            <div style="background: linear-gradient(135deg, #f5f8fc 0%, #eef2f7 100%); padding: 16px; border-bottom: 2px solid #e4e9f1;">
+                <h3 style="margin: 0; font-size: 18px; color: #101828; font-weight: 800;">📊 פירוט לפי מחזור</h3>
             </div>
             <div style="padding: 16px;">
     `;
@@ -16172,31 +16182,31 @@ function renderLineupAnalysis() {
             .slice(0, benchedHighScorers.length);
 
         html += `
-            <div style="background: ${idx % 2 === 0 ? '#fafafa' : 'white'}; padding: 20px; border-radius: 12px; margin-bottom: 16px; border: 2px solid ${analysis.pointsLost > 5 ? '#fca5a5' : '#e2e8f0'};">
+            <div style="background: ${idx % 2 === 0 ? '#fafafa' : 'white'}; padding: 20px; border-radius: 12px; margin-bottom: 16px; border: 2px solid ${analysis.pointsLost > 5 ? '#e56a8c' : '#e4e9f1'};">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
                     <div>
-                        <span style="background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%); color: white; padding: 6px 16px; border-radius: 10px; font-weight: 800; font-size: 16px; box-shadow: 0 2px 8px rgba(59, 130, 246, 0.3);">מחזור ${analysis.gw}</span>
+                        <span style="background: linear-gradient(135deg, #0f56d9 0%, #0f56d9 100%); color: white; padding: 6px 16px; border-radius: 10px; font-weight: 800; font-size: 16px; box-shadow: 0 2px 8px rgba(59, 130, 246, 0.3);">מחזור ${analysis.gw}</span>
                     </div>
                     <div style="text-align: left;">
-                        <div style="font-size: 13px; color: #64748b; margin-bottom: 4px; font-weight: 600;">💔 נקודות שהפסדת</div>
-                        <div style="font-size: 32px; font-weight: 900; color: #ef4444; text-shadow: 0 2px 4px rgba(239, 68, 68, 0.2);">-${analysis.pointsLost.toFixed(1)}</div>
+                        <div style="font-size: 13px; color: #5d6b82; margin-bottom: 4px; font-weight: 600;">💔 נקודות שהפסדת</div>
+                        <div style="font-size: 32px; font-weight: 900; color: #d92d5a; text-shadow: 0 2px 4px rgba(239, 68, 68, 0.2);">-${analysis.pointsLost.toFixed(1)}</div>
                     </div>
                 </div>
                 
-                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px; padding: 12px; background: #f8fafc; border-radius: 8px;">
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px; padding: 12px; background: #f5f8fc; border-radius: 8px;">
                     <div style="text-align: center;">
-                        <div style="font-size: 12px; color: #64748b; margin-bottom: 4px; font-weight: 600;">ההרכב שבחרת</div>
-                        <div style="font-size: 24px; font-weight: 800; color: #475569;">${analysis.startersPoints.toFixed(1)} נק'</div>
+                        <div style="font-size: 12px; color: #5d6b82; margin-bottom: 4px; font-weight: 600;">ההרכב שבחרת</div>
+                        <div style="font-size: 24px; font-weight: 800; color: #5d6b82;">${analysis.startersPoints.toFixed(1)} נק'</div>
                     </div>
                     <div style="text-align: center;">
-                        <div style="font-size: 12px; color: #10b981; margin-bottom: 4px; font-weight: 600;">הרכב אופטימלי</div>
-                        <div style="font-size: 24px; font-weight: 800; color: #10b981;">${analysis.optimalPoints.toFixed(1)} נק'</div>
+                        <div style="font-size: 12px; color: #0e9f5d; margin-bottom: 4px; font-weight: 600;">הרכב אופטימלי</div>
+                        <div style="font-size: 24px; font-weight: 800; color: #0e9f5d;">${analysis.optimalPoints.toFixed(1)} נק'</div>
                     </div>
                 </div>
                 
                 ${benchedHighScorers.length > 0 ? `
-                    <div style="background: white; padding: 16px; border-radius: 10px; border: 1px solid #e2e8f0;">
-                        <h4 style="margin: 0 0 12px 0; font-size: 14px; color: #0f172a; font-weight: 700;">⚠️ טעויות הרכב:</h4>
+                    <div style="background: white; padding: 16px; border-radius: 10px; border: 1px solid #e4e9f1;">
+                        <h4 style="margin: 0 0 12px 0; font-size: 14px; color: #101828; font-weight: 700;">⚠️ טעויות הרכב:</h4>
                         ${benchedHighScorers.map((benchPlayer, i) => {
             const benchGwData = benchPlayer.history?.find(h => h.round === analysis.gw);
             const benchPoints = benchGwData?.total_points || 0;
@@ -16210,29 +16220,29 @@ function renderLineupAnalysis() {
             const pointsDiff = benchPoints - replacedPoints;
 
             return `
-                                <div style="display: flex; justify-content: space-between; align-items: center; padding: 10px; margin-bottom: 8px; background: #fef2f2; border-radius: 8px; border-left: 4px solid #ef4444;">
+                                <div style="display: flex; justify-content: space-between; align-items: center; padding: 10px; margin-bottom: 8px; background: #fff5f8; border-radius: 8px; border-left: 4px solid #d92d5a;">
                                     <div style="flex: 1;">
-                                        <div style="font-weight: 700; color: #0f172a; font-size: 13px; margin-bottom: 2px;">
-                                            ❌ השארת על הספסל: <span style="color: #ef4444;">${benchPlayer.web_name}</span>
+                                        <div style="font-weight: 700; color: #101828; font-size: 13px; margin-bottom: 2px;">
+                                            ❌ השארת על הספסל: <span style="color: #d92d5a;">${benchPlayer.web_name}</span>
                                         </div>
-                                        <div style="font-size: 11px; color: #64748b;">
+                                        <div style="font-size: 11px; color: #5d6b82;">
                                             ${benchPlayer.position_short} • ${benchPoints.toFixed(1)} נק' • ${benchMinutes} דקות
                                         </div>
                                     </div>
                                     <div style="text-align: center; padding: 0 12px;">
-                                        <div style="font-size: 18px; color: #94a3b8;">↔️</div>
+                                        <div style="font-size: 18px; color: #98a4b8;">↔️</div>
                                     </div>
                                     <div style="flex: 1; text-align: left;">
-                                        <div style="font-weight: 700; color: #0f172a; font-size: 13px; margin-bottom: 2px;">
-                                            ✅ במקום: <span style="color: #64748b;">${replacedPlayer?.web_name || 'N/A'}</span>
+                                        <div style="font-weight: 700; color: #101828; font-size: 13px; margin-bottom: 2px;">
+                                            ✅ במקום: <span style="color: #5d6b82;">${replacedPlayer?.web_name || 'N/A'}</span>
                                         </div>
-                                        <div style="font-size: 11px; color: #64748b;">
+                                        <div style="font-size: 11px; color: #5d6b82;">
                                             ${replacedPlayer?.position_short || 'N/A'} • ${replacedPoints.toFixed(1)} נק' • ${replacedMinutes} דקות
                                         </div>
                                     </div>
-                                    <div style="background: #fee2e2; padding: 8px 12px; border-radius: 8px; margin-right: 12px;">
+                                    <div style="background: #ffe9f0; padding: 8px 12px; border-radius: 8px; margin-right: 12px;">
                                         <div style="font-size: 11px; color: #991b1b; font-weight: 600;">עלות</div>
-                                        <div style="font-size: 18px; font-weight: 900; color: #dc2626;">-${pointsDiff.toFixed(1)}</div>
+                                        <div style="font-size: 18px; font-weight: 900; color: #c02350;">-${pointsDiff.toFixed(1)}</div>
                                     </div>
                                 </div>
                             `;
@@ -16327,13 +16337,13 @@ function renderLineupStats(stats, diffs = null) {
             const isPos = diffVal >= 0;
             const sign = isPos ? '+' : '';
             const displayVal = typeof diffVal === 'number' ? diffVal.toFixed(1) : diffVal;
-            diffHtml = `<div style="font-size: 10px; color: ${isPos ? '#10b981' : '#ef4444'}; font-weight: 700; margin-top: 2px;">
+            diffHtml = `<div style="font-size: 10px; color: ${isPos ? '#0e9f5d' : '#d92d5a'}; font-weight: 700; margin-top: 2px;">
                 ${sign}${displayVal}
             </div>`;
         }
         return `
-            <div style="text-align: center; padding: 10px; background: #fff; border-radius: 12px; border: 1px solid #f1f5f9; box-shadow: 0 2px 4px rgba(0,0,0,0.02); display: flex; flex-direction: column; align-items: center; justify-content: center;">
-                <div style="font-size: 11px; color: #64748b; font-weight: 700; margin-bottom: 4px;">${label}</div>
+            <div style="text-align: center; padding: 10px; background: #fff; border-radius: 12px; border: 1px solid #eef2f7; box-shadow: 0 2px 4px rgba(0,0,0,0.02); display: flex; flex-direction: column; align-items: center; justify-content: center;">
+                <div style="font-size: 11px; color: #5d6b82; font-weight: 700; margin-bottom: 4px;">${label}</div>
                 <div style="font-size: 20px; font-weight: 800; color: ${colorClass}; line-height: 1;">${typeof value === 'number' ? value.toFixed(1) : value}</div>
                 ${diffHtml}
             </div>
@@ -16341,14 +16351,14 @@ function renderLineupStats(stats, diffs = null) {
     };
 
     return `
-        <div class="lineup-stats-card" style="margin-bottom: 20px; background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%); border: 2px solid #e2e8f0; border-radius: 16px; padding: 20px; box-shadow: 0 4px 12px rgba(0,0,0,0.05);">
+        <div class="lineup-stats-card" style="margin-bottom: 20px; background: linear-gradient(135deg, #ffffff 0%, #f5f8fc 100%); border: 2px solid #e4e9f1; border-radius: 16px; padding: 20px; box-shadow: 0 4px 12px rgba(0,0,0,0.05);">
             <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 15px;">
-                ${renderBox('צפי (GW הבא)', stats.predicted, '#3b82f6', diffs?.predicted)}
-                ${renderBox('נקודות (GW אחרון)', stats.lastGw, '#10b981', diffs?.lastGw)}
-                ${renderBox('PPG/90', stats.ppg90, '#f59e0b', diffs?.ppg90)}
-                ${renderBox('כושר (Form)', stats.form, '#8b5cf6', diffs?.form)}
+                ${renderBox('צפי (GW הבא)', stats.predicted, '#0f56d9', diffs?.predicted)}
+                ${renderBox('נקודות (GW אחרון)', stats.lastGw, '#0e9f5d', diffs?.lastGw)}
+                ${renderBox('PPG/90', stats.ppg90, '#d97706', diffs?.ppg90)}
+                ${renderBox('כושר (Form)', stats.form, '#0f56d9', diffs?.form)}
             </div>
-            ${diffs ? '<div style="text-align: center; margin-top: 12px; font-size: 11px; color: #64748b; font-weight: 600;">📊 השוואה להרכב הנוכחי</div>' : ''}
+            ${diffs ? '<div style="text-align: center; margin-top: 12px; font-size: 11px; color: #5d6b82; font-weight: 600;">📊 השוואה להרכב הנוכחי</div>' : ''}
         </div>
     `;
 }
@@ -16399,7 +16409,7 @@ function renderMyLineup(teamId) {
         container.innerHTML = `
             <div style="text-align:center; padding: 20px;">
                 <p>לא נמצא סגל לקבוצה זו.</p>
-                <small style="color: #94a3b8;">ייתכן שהנתונים עדיין נטענים או שיש בעיית חיבור לשרת.</small>
+                <small style="color: #98a4b8;">ייתכן שהנתונים עדיין נטענים או שיש בעיית חיבור לשרת.</small>
             </div>`;
         return;
     }
@@ -16449,8 +16459,8 @@ function renderMyLineup(teamId) {
     controls.className = 'draft-lineup-controls';
     controls.style.cssText = 'display: flex; justify-content: center; gap: 10px; margin-bottom: 15px;';
     controls.innerHTML = `
-        <button id="btnShowMyLineup" class="lineup-toggle active" style="padding: 8px 16px; border-radius: 8px; border: none; background: #3b82f6; color: white; font-weight: 600; cursor: pointer;" onclick="renderMyLineup('${teamId}')">ההרכב שלי</button>
-        <button id="btnShowRecLineup" class="lineup-toggle" style="padding: 8px 16px; border-radius: 8px; border: 1px solid #cbd5e1; background: white; color: #64748b; font-weight: 600; cursor: pointer;" onclick="showRecommendedLineup()">הרכב אופטימלי</button>
+        <button id="btnShowMyLineup" class="lineup-toggle active" style="padding: 8px 16px; border-radius: 8px; border: none; background: #0f56d9; color: white; font-weight: 600; cursor: pointer;" onclick="renderMyLineup('${teamId}')">ההרכב שלי</button>
+        <button id="btnShowRecLineup" class="lineup-toggle" style="padding: 8px 16px; border-radius: 8px; border: 1px solid #d5dce6; background: white; color: #5d6b82; font-weight: 600; cursor: pointer;" onclick="showRecommendedLineup()">הרכב אופטימלי</button>
         `;
     container.appendChild(controls);
 
@@ -16555,8 +16565,8 @@ function showRecommendedLineup() {
         controls.className = 'draft-lineup-controls';
         controls.style.cssText = 'display: flex; justify-content: center; gap: 10px; margin-bottom: 15px;';
         controls.innerHTML = `
-            <button id="btnShowMyLineup" class="lineup-toggle" style="padding: 8px 16px; border-radius: 8px; border: 1px solid #cbd5e1; background: white; color: #64748b; font-weight: 600; cursor: pointer;" onclick="renderMyLineup('${myTeamId}')">ההרכב שלי</button>
-            <button id="btnShowRecLineup" class="lineup-toggle active" style="padding: 8px 16px; border-radius: 8px; border: none; background: #3b82f6; color: white; font-weight: 600; cursor: pointer;" onclick="showRecommendedLineup()">הרכב אופטימלי</button>
+            <button id="btnShowMyLineup" class="lineup-toggle" style="padding: 8px 16px; border-radius: 8px; border: 1px solid #d5dce6; background: white; color: #5d6b82; font-weight: 600; cursor: pointer;" onclick="renderMyLineup('${myTeamId}')">ההרכב שלי</button>
+            <button id="btnShowRecLineup" class="lineup-toggle active" style="padding: 8px 16px; border-radius: 8px; border: none; background: #0f56d9; color: white; font-weight: 600; cursor: pointer;" onclick="showRecommendedLineup()">הרכב אופטימלי</button>
         `;
         container.appendChild(controls);
 
@@ -16704,10 +16714,10 @@ function renderNextRivalAnalysis(selectedOpponentId = null) {
         }
         if (!opponentData) {
             container.innerHTML = `
-                <div class="alert alert-info" style="text-align:center; padding:30px; border: 2px dashed #cbd5e1; border-radius: 12px; background: #f8fafc;">
+                <div class="alert alert-info" style="text-align:center; padding:30px; border: 2px dashed #d5dce6; border-radius: 12px; background: #f5f8fc;">
                     <div style="font-size:40px; margin-bottom:10px;">🏖️</div>
-                    <h3 style="margin:0; color:#475569;">אין משחקים קרובים</h3>
-                    <p style="margin:5px 0 0; color:#64748b;">העונה הסתיימה או שאין משחקים מתוכננים בלוח השנה.</p>
+                    <h3 style="margin:0; color:#5d6b82;">אין משחקים קרובים</h3>
+                    <p style="margin:5px 0 0; color:#5d6b82;">העונה הסתיימה או שאין משחקים מתוכננים בלוח השנה.</p>
                 </div>`;
             return;
         }
@@ -16761,8 +16771,8 @@ function renderNextRivalAnalysis(selectedOpponentId = null) {
         const opponentSelector = `
             <div style="display: flex; justify-content: center; align-items: center; gap: 15px; margin-bottom: 15px; flex-wrap: wrap;">
                 <div style="display: flex; align-items: center; gap: 8px;">
-                    <label style="font-size: 13px; font-weight: 600; color: #3b82f6;">הקבוצה שלי:</label>
-                    <select id="rivalMyTeamSelect" onchange="updateMyTeamForRival(this.value)" style="padding: 8px 16px; border-radius: 8px; border: 2px solid #3b82f6; font-size: 13px; font-weight: 600; color: #334155; cursor: pointer; background: white;">
+                    <label style="font-size: 13px; font-weight: 600; color: #0f56d9;">הקבוצה שלי:</label>
+                    <select id="rivalMyTeamSelect" onchange="updateMyTeamForRival(this.value)" style="padding: 8px 16px; border-radius: 8px; border: 2px solid #0f56d9; font-size: 13px; font-weight: 600; color: #2b3648; cursor: pointer; background: white;">
                         ${entries.map(e => `
                             <option value="${e.id}" ${String(e.id) === String(myTeam.id) ? 'selected' : ''}>
                                 ${escapeHtml(e.entry_name)}
@@ -16770,10 +16780,10 @@ function renderNextRivalAnalysis(selectedOpponentId = null) {
                         `).join('')}
                     </select>
                 </div>
-                <span style="font-size: 20px; color: #cbd5e1;">⚔️</span>
+                <span style="font-size: 20px; color: #d5dce6;">⚔️</span>
                 <div style="display: flex; align-items: center; gap: 8px;">
-                    <label style="font-size: 13px; font-weight: 600; color: #ef4444;">היריב:</label>
-                    <select id="rivalOpponentSelect" onchange="renderNextRivalAnalysis(this.value)" style="padding: 8px 16px; border-radius: 8px; border: 2px solid #ef4444; font-size: 13px; font-weight: 600; color: #334155; cursor: pointer; background: white;">
+                    <label style="font-size: 13px; font-weight: 600; color: #d92d5a;">היריב:</label>
+                    <select id="rivalOpponentSelect" onchange="renderNextRivalAnalysis(this.value)" style="padding: 8px 16px; border-radius: 8px; border: 2px solid #d92d5a; font-size: 13px; font-weight: 600; color: #2b3648; cursor: pointer; background: white;">
                         ${entries.filter(e => e.id !== myTeam.id).map(e => `
                             <option value="${e.id}" ${String(e.id) === String(opponentData.opponentId) ? 'selected' : ''}>
                                 ${escapeHtml(e.entry_name)}
@@ -16786,13 +16796,13 @@ function renderNextRivalAnalysis(selectedOpponentId = null) {
 
         // Show different title if it's a past match
         const matchTitle = opponentData.isManual ?
-            `<div style="text-align: center; background: linear-gradient(135deg, #e0e7ff 0%, #c7d2fe 100%); padding: 12px; border-radius: 12px; margin-bottom: 20px; color: #3730a3; font-weight: 700; font-size: 14px; box-shadow: 0 2px 8px rgba(79, 70, 229, 0.2);">🎯 ניתוח מותאם אישית</div>` :
+            `<div style="text-align: center; background: linear-gradient(135deg, #e7efff 0%, #c9daf8 100%); padding: 12px; border-radius: 12px; margin-bottom: 20px; color: #3730a3; font-weight: 700; font-size: 14px; box-shadow: 0 2px 8px rgba(79, 70, 229, 0.2);">🎯 ניתוח מותאם אישית</div>` :
             opponentData.isLastMatch ?
-                `<div style="text-align: center; background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%); padding: 12px; border-radius: 12px; margin-bottom: 20px; color: #92400e; font-weight: 700; font-size: 14px; box-shadow: 0 2px 8px rgba(251, 191, 36, 0.2);">📊 המשחק הבא שלך</div>` :
-                `<div style="text-align: center; background: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%); padding: 12px; border-radius: 12px; margin-bottom: 20px; color: #1e40af; font-weight: 700; font-size: 14px; box-shadow: 0 2px 8px rgba(59, 130, 246, 0.2);">🔜 המשחק הבא שלך</div>`;
+                `<div style="text-align: center; background: linear-gradient(135deg, #fdf1e0 0%, #eec46a 100%); padding: 12px; border-radius: 12px; margin-bottom: 20px; color: #8a5209; font-weight: 700; font-size: 14px; box-shadow: 0 2px 8px rgba(251, 191, 36, 0.2);">📊 המשחק הבא שלך</div>` :
+                `<div style="text-align: center; background: linear-gradient(135deg, #e7efff 0%, #c9daf8 100%); padding: 12px; border-radius: 12px; margin-bottom: 20px; color: #0a44b0; font-weight: 700; font-size: 14px; box-shadow: 0 2px 8px rgba(59, 130, 246, 0.2);">🔜 המשחק הבא שלך</div>`;
 
         let html = opponentSelector + matchTitle + `
-            <div class="rival-header" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 20px; border-radius: 16px; box-shadow: 0 8px 16px rgba(102, 126, 234, 0.3); margin: 0 auto 20px; max-width: 800px; position: relative; overflow: hidden;">
+            <div class="rival-header" style="background: linear-gradient(135deg, #0f56d9 0%, #0a44b0 100%); padding: 20px; border-radius: 16px; box-shadow: 0 8px 16px rgba(102, 126, 234, 0.3); margin: 0 auto 20px; max-width: 800px; position: relative; overflow: hidden;">
                 <div style="position: relative; z-index: 1; text-align: center;">
                     <!-- Teams Row - All in one line -->
                     <div style="display: flex; justify-content: center; align-items: center; gap: 40px; margin-bottom: 20px;">
@@ -16828,10 +16838,10 @@ function renderNextRivalAnalysis(selectedOpponentId = null) {
                     <div>
                         <div style="text-align: center; font-size: 13px; color: white; font-weight: 800; margin-bottom: 10px; text-shadow: 1px 1px 2px rgba(0,0,0,0.3);">🎯 סיכוי לניצחון</div>
                         <div style="display: flex; height: 45px; background: rgba(0,0,0,0.25); border-radius: 22px; overflow: hidden; box-shadow: inset 0 2px 4px rgba(0,0,0,0.3); border: 2px solid rgba(255,255,255,0.25);">
-                            <div style="width: ${myWinProb}%; background: linear-gradient(90deg, #10b981 0%, #34d399 100%); display: flex; align-items: center; justify-content: center; color: white; font-weight: 900; font-size: 22px; transition: width 0.5s ease; text-shadow: 1px 1px 2px rgba(0,0,0,0.3);">
+                            <div style="width: ${myWinProb}%; background: linear-gradient(90deg, #0e9f5d 0%, #3fbc82 100%); display: flex; align-items: center; justify-content: center; color: white; font-weight: 900; font-size: 22px; transition: width 0.5s ease; text-shadow: 1px 1px 2px rgba(0,0,0,0.3);">
                                 ${myWinProb.toFixed(0)}%
                             </div>
-                            <div style="width: ${oppWinProb}%; background: linear-gradient(90deg, #f59e0b 0%, #fbbf24 100%); display: flex; align-items: center; justify-content: center; color: white; font-weight: 900; font-size: 22px; transition: width 0.5s ease; text-shadow: 1px 1px 2px rgba(0,0,0,0.3);">
+                            <div style="width: ${oppWinProb}%; background: linear-gradient(90deg, #d97706 0%, #e0a032 100%); display: flex; align-items: center; justify-content: center; color: white; font-weight: 900; font-size: 22px; transition: width 0.5s ease; text-shadow: 1px 1px 2px rgba(0,0,0,0.3);">
                                 ${oppWinProb.toFixed(0)}%
                             </div>
                         </div>
@@ -16869,41 +16879,41 @@ function renderNextRivalAnalysis(selectedOpponentId = null) {
                 const oppPlayers = oppData.players.map(name => oppSquad.find(p => p.web_name === name)).filter(Boolean);
 
                 overlapsHtml += `
-                    <div class="overlap-item" style="padding: 18px; background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%); border-radius: 12px; margin-bottom: 12px; border: 2px solid #e2e8f0; box-shadow: 0 2px 6px rgba(0,0,0,0.08);">
+                    <div class="overlap-item" style="padding: 18px; background: linear-gradient(135deg, #ffffff 0%, #f5f8fc 100%); border-radius: 12px; margin-bottom: 12px; border: 2px solid #e4e9f1; box-shadow: 0 2px 6px rgba(0,0,0,0.08);">
                         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
-                            <div class="overlap-label" style="font-weight: 800; font-size: 15px; color: #0f172a;">${key}</div>
+                            <div class="overlap-label" style="font-weight: 800; font-size: 15px; color: #101828;">${key}</div>
                             <div class="overlap-values" style="font-family: monospace; font-weight: 900; font-size: 18px;">
-                                <span style="color:#3b82f6">${myCount}</span>
-                                <span style="color:#94a3b8; font-size: 16px; margin: 0 10px;">⚔️</span>
-                                <span style="color:#ef4444">${oppCount}</span>
+                                <span style="color:#0f56d9">${myCount}</span>
+                                <span style="color:#98a4b8; font-size: 16px; margin: 0 10px;">⚔️</span>
+                                <span style="color:#d92d5a">${oppCount}</span>
                             </div>
                         </div>
                         <div style="display: grid; grid-template-columns: 1fr auto 1fr; gap: 15px; margin-bottom: 12px; align-items: center;">
                             <div style="display: flex; flex-direction: column; gap: 8px; align-items: flex-end;">
                                 ${myPlayers.map(p => `
                                     <div style="display: flex; align-items: center; gap: 8px; justify-content: flex-end;">
-                                        <span style="color: #3b82f6; font-weight: 700; font-size: 13px;">${p.web_name}</span>
+                                        <span style="color: #0f56d9; font-weight: 700; font-size: 13px;">${p.web_name}</span>
                                         <img src="${p.code ? getPlayerPhotoUrl(p.code) : ''}" 
                                              onerror="this.src='data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%2235%22 height=%2235%22 viewBox=%220 0 35 35%22%3E%3Ccircle cx=%2217.5%22 cy=%2217.5%22 r=%2217.5%22 fill=%22%23dbeafe%22/%3E%3Ctext x=%2250%25%22 y=%2250%25%22 text-anchor=%22middle%22 dy=%22.3em%22 font-size=%2214%22 fill=%22%233b82f6%22 font-weight=%22700%22%3E${p.web_name.charAt(0)}%3C/text%3E%3C/svg%3E'" 
-                                             style="width: 35px; height: 35px; border-radius: 50%; object-fit: cover; border: 2px solid #3b82f6; background: #f8fafc;">
+                                             style="width: 35px; height: 35px; border-radius: 50%; object-fit: cover; border: 2px solid #0f56d9; background: #f5f8fc;">
                                     </div>
                                 `).join('')}
                             </div>
-                            <div style="color: #cbd5e1; font-weight: 700; font-size: 14px;">VS</div>
+                            <div style="color: #d5dce6; font-weight: 700; font-size: 14px;">VS</div>
                             <div style="display: flex; flex-direction: column; gap: 8px; align-items: flex-start;">
                                 ${oppPlayers.map(p => `
                                     <div style="display: flex; align-items: center; gap: 8px;">
                                         <img src="${p.code ? getPlayerPhotoUrl(p.code) : ''}" 
                                              onerror="this.src='data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%2235%22 height=%2235%22 viewBox=%220 0 35 35%22%3E%3Ccircle cx=%2217.5%22 cy=%2217.5%22 r=%2217.5%22 fill=%22%23fee2e2%22/%3E%3Ctext x=%2250%25%22 y=%2250%25%22 text-anchor=%22middle%22 dy=%22.3em%22 font-size=%2214%22 fill=%22%23ef4444%22 font-weight=%22700%22%3E${p.web_name.charAt(0)}%3C/text%3E%3C/svg%3E'" 
-                                             style="width: 35px; height: 35px; border-radius: 50%; object-fit: cover; border: 2px solid #ef4444; background: #f8fafc;">
-                                        <span style="color: #ef4444; font-weight: 700; font-size: 13px;">${p.web_name}</span>
+                                             style="width: 35px; height: 35px; border-radius: 50%; object-fit: cover; border: 2px solid #d92d5a; background: #f5f8fc;">
+                                        <span style="color: #d92d5a; font-weight: 700; font-size: 13px;">${p.web_name}</span>
                                     </div>
                                 `).join('')}
                             </div>
                         </div>
-                        <div style="display: flex; height: 10px; background: #f1f5f9; border-radius: 5px; overflow: hidden; box-shadow: inset 0 2px 4px rgba(0,0,0,0.1);">
-                            <div style="width: ${myPercent}%; background: linear-gradient(90deg, #3b82f6 0%, #60a5fa 100%);"></div>
-                            <div style="width: ${oppPercent}%; background: linear-gradient(90deg, #fca5a5 0%, #ef4444 100%);"></div>
+                        <div style="display: flex; height: 10px; background: #eef2f7; border-radius: 5px; overflow: hidden; box-shadow: inset 0 2px 4px rgba(0,0,0,0.1);">
+                            <div style="width: ${myPercent}%; background: linear-gradient(90deg, #0f56d9 0%, #5b8def 100%);"></div>
+                            <div style="width: ${oppPercent}%; background: linear-gradient(90deg, #e56a8c 0%, #d92d5a 100%);"></div>
                         </div>
                     </div>
                 `;
@@ -16911,20 +16921,20 @@ function renderNextRivalAnalysis(selectedOpponentId = null) {
         });
         if (overlapsHtml) {
             html += `
-                <div class="overlap-section" style="background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%); padding: 20px; border-radius: 12px; border: 2px solid #e2e8f0; box-shadow: 0 4px 12px rgba(0,0,0,0.05);">
+                <div class="overlap-section" style="background: linear-gradient(135deg, #ffffff 0%, #f5f8fc 100%); padding: 20px; border-radius: 12px; border: 2px solid #e4e9f1; box-shadow: 0 4px 12px rgba(0,0,0,0.05);">
                     <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 15px;">
                         <span style="font-size: 24px;">🤝</span>
-                        <h3 style="margin: 0; font-size: 16px; color: #0f172a; font-weight: 800;">חפיפות ונטרולים</h3>
+                        <h3 style="margin: 0; font-size: 16px; color: #101828; font-weight: 800;">חפיפות ונטרולים</h3>
                     </div>
-                    <div class="overlap-grid" style="background: white; padding: 20px; border-radius: 8px; border: 1px solid #e2e8f0; max-width: 800px; margin: 0 auto;">${overlapsHtml}</div>
-                    <div style="margin-top: 12px; padding: 10px; background: #fef3c7; border-radius: 8px; font-size: 12px; color: #92400e; text-align: center; font-weight: 600;">
+                    <div class="overlap-grid" style="background: white; padding: 20px; border-radius: 8px; border: 1px solid #e4e9f1; max-width: 800px; margin: 0 auto;">${overlapsHtml}</div>
+                    <div style="margin-top: 12px; padding: 10px; background: #fdf1e0; border-radius: 8px; font-size: 12px; color: #8a5209; text-align: center; font-weight: 600;">
                         💡 שחקנים מאותה קבוצה ואותה עמדה מנטרלים זה את זה
                     </div>
                 </div>
             `;
         } else {
             html += `
-                <div class="overlap-section" style="background: linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%); padding: 20px; border-radius: 12px; border: 2px solid #86efac; text-align: center;">
+                <div class="overlap-section" style="background: linear-gradient(135deg, #f2fcf7 0%, #e5f8ee 100%); padding: 20px; border-radius: 12px; border: 2px solid #86efac; text-align: center;">
                     <div style="font-size: 48px; margin-bottom: 10px;">✨</div>
                     <h3 style="margin: 0 0 8px; font-size: 16px; color: #065f46; font-weight: 800;">אין חפיפות!</h3>
                     <p style="margin: 0; font-size: 13px; color: #047857;">שני הסגלים שונים לחלוטין - כל נקודה תספור!</p>
@@ -16937,43 +16947,43 @@ function renderNextRivalAnalysis(selectedOpponentId = null) {
         const oppTop3 = [...oppSquad].sort((a, b) => (parseFloat(b.predicted_points_1_gw) || 0) - (parseFloat(a.predicted_points_1_gw) || 0)).slice(0, 3);
 
         html += `
-            <div class="top-players-section" style="background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%); padding: 20px; border-radius: 12px; border: 2px solid #e2e8f0; box-shadow: 0 4px 12px rgba(0,0,0,0.05); margin-top: 20px;">
+            <div class="top-players-section" style="background: linear-gradient(135deg, #ffffff 0%, #f5f8fc 100%); padding: 20px; border-radius: 12px; border: 2px solid #e4e9f1; box-shadow: 0 4px 12px rgba(0,0,0,0.05); margin-top: 20px;">
                 <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 15px;">
                     <span style="font-size: 24px;">⭐</span>
-                    <h3 style="margin: 0; font-size: 16px; color: #0f172a; font-weight: 800;">שחקנים מובילים (צפי GW הבא)</h3>
+                    <h3 style="margin: 0; font-size: 16px; color: #101828; font-weight: 800;">שחקנים מובילים (צפי GW הבא)</h3>
                 </div>
                 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
                     <div>
-                        <div style="text-align: center; font-weight: 700; color: #3b82f6; margin-bottom: 10px; font-size: 14px;">הסגל שלך</div>
+                        <div style="text-align: center; font-weight: 700; color: #0f56d9; margin-bottom: 10px; font-size: 14px;">הסגל שלך</div>
                         ${myTop3.map((p, idx) => `
-                            <div style="display: flex; justify-content: space-between; align-items: center; padding: 10px; background: ${idx === 0 ? 'linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%)' : 'white'}; border-radius: 8px; margin-bottom: 8px; border: 1px solid ${idx === 0 ? '#3b82f6' : '#e2e8f0'};">
+                            <div style="display: flex; justify-content: space-between; align-items: center; padding: 10px; background: ${idx === 0 ? 'linear-gradient(135deg, #e7efff 0%, #c9daf8 100%)' : 'white'}; border-radius: 8px; margin-bottom: 8px; border: 1px solid ${idx === 0 ? '#0f56d9' : '#e4e9f1'};">
                                 <div style="display: flex; align-items: center; gap: 10px;">
                                     <img src="${getPlayerPhotoUrl(p.code)}" 
                                          onerror="this.style.display='none'" 
-                                         style="width: 40px; height: 40px; border-radius: 50%; object-fit: cover; border: 2px solid ${idx === 0 ? '#3b82f6' : '#e2e8f0'}; background: #f8fafc;">
+                                         style="width: 40px; height: 40px; border-radius: 50%; object-fit: cover; border: 2px solid ${idx === 0 ? '#0f56d9' : '#e4e9f1'}; background: #f5f8fc;">
                                     <div>
-                                        <div style="font-weight: 700; color: #0f172a; font-size: 13px;">${idx + 1}. ${p.web_name}</div>
-                                        <div style="font-size: 11px; color: #64748b;">${p.team_name} • ${p.position_name}</div>
+                                        <div style="font-weight: 700; color: #101828; font-size: 13px;">${idx + 1}. ${p.web_name}</div>
+                                        <div style="font-size: 11px; color: #5d6b82;">${p.team_name} • ${p.position_name}</div>
                                     </div>
                                 </div>
-                                <div style="font-weight: 800; color: #3b82f6; font-size: 16px;">${(parseFloat(p.predicted_points_1_gw) || 0).toFixed(1)}</div>
+                                <div style="font-weight: 800; color: #0f56d9; font-size: 16px;">${(parseFloat(p.predicted_points_1_gw) || 0).toFixed(1)}</div>
                             </div>
                         `).join('')}
                     </div>
                     <div>
-                        <div style="text-align: center; font-weight: 700; color: #ef4444; margin-bottom: 10px; font-size: 14px;">הסגל של היריב</div>
+                        <div style="text-align: center; font-weight: 700; color: #d92d5a; margin-bottom: 10px; font-size: 14px;">הסגל של היריב</div>
                         ${oppTop3.map((p, idx) => `
-                            <div style="display: flex; justify-content: space-between; align-items: center; padding: 10px; background: ${idx === 0 ? 'linear-gradient(135deg, #fee2e2 0%, #fecaca 100%)' : 'white'}; border-radius: 8px; margin-bottom: 8px; border: 1px solid ${idx === 0 ? '#ef4444' : '#e2e8f0'};">
+                            <div style="display: flex; justify-content: space-between; align-items: center; padding: 10px; background: ${idx === 0 ? 'linear-gradient(135deg, #ffe9f0 0%, #ffd5e2 100%)' : 'white'}; border-radius: 8px; margin-bottom: 8px; border: 1px solid ${idx === 0 ? '#d92d5a' : '#e4e9f1'};">
                                 <div style="display: flex; align-items: center; gap: 10px;">
                                     <img src="${getPlayerPhotoUrl(p.code)}" 
                                          onerror="this.style.display='none'" 
-                                         style="width: 40px; height: 40px; border-radius: 50%; object-fit: cover; border: 2px solid ${idx === 0 ? '#ef4444' : '#e2e8f0'}; background: #f8fafc;">
+                                         style="width: 40px; height: 40px; border-radius: 50%; object-fit: cover; border: 2px solid ${idx === 0 ? '#d92d5a' : '#e4e9f1'}; background: #f5f8fc;">
                                     <div>
-                                        <div style="font-weight: 700; color: #0f172a; font-size: 13px;">${idx + 1}. ${p.web_name}</div>
-                                        <div style="font-size: 11px; color: #64748b;">${p.team_name} • ${p.position_name}</div>
+                                        <div style="font-weight: 700; color: #101828; font-size: 13px;">${idx + 1}. ${p.web_name}</div>
+                                        <div style="font-size: 11px; color: #5d6b82;">${p.team_name} • ${p.position_name}</div>
                                     </div>
                                 </div>
-                                <div style="font-weight: 800; color: #ef4444; font-size: 16px;">${(parseFloat(p.predicted_points_1_gw) || 0).toFixed(1)}</div>
+                                <div style="font-weight: 800; color: #d92d5a; font-size: 16px;">${(parseFloat(p.predicted_points_1_gw) || 0).toFixed(1)}</div>
                             </div>
                         `).join('')}
                     </div>
@@ -17011,7 +17021,7 @@ function renderNextRivalAnalysis(selectedOpponentId = null) {
             const oppAvgForm = oppPlayers.length > 0 ? oppPlayers.reduce((sum, p) => sum + (parseFloat(p.form) || 0), 0) / oppPlayers.length : 0;
 
             const advantage = myAvgXPts > oppAvgXPts ? 'you' : oppAvgXPts > myAvgXPts ? 'opp' : 'equal';
-            const advantageColor = advantage === 'you' ? '#10b981' : advantage === 'opp' ? '#ef4444' : '#94a3b8';
+            const advantageColor = advantage === 'you' ? '#0e9f5d' : advantage === 'opp' ? '#d92d5a' : '#98a4b8';
             const advantageText = advantage === 'you' ? '✓ יתרון לך' : advantage === 'opp' ? '✗ יתרון ליריב' : '= שווה';
 
             positionAnalysisHtml += `
@@ -17019,7 +17029,7 @@ function renderNextRivalAnalysis(selectedOpponentId = null) {
                     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
                         <div style="display: flex; align-items: center; gap: 8px;">
                             <span style="font-size: 24px;">${positionIcons[pos]}</span>
-                            <h4 style="margin: 0; font-size: 15px; color: #0f172a; font-weight: 800;">${positionNames[pos]}</h4>
+                            <h4 style="margin: 0; font-size: 15px; color: #101828; font-weight: 800;">${positionNames[pos]}</h4>
                         </div>
                         <div style="font-size: 12px; font-weight: 700; color: ${advantageColor}; background: ${advantageColor}15; padding: 4px 10px; border-radius: 12px;">
                             ${advantageText}
@@ -17027,15 +17037,15 @@ function renderNextRivalAnalysis(selectedOpponentId = null) {
                     </div>
                     <div style="display: grid; grid-template-columns: 1fr auto 1fr; gap: 10px; align-items: center;">
                         <div style="text-align: center;">
-                            <div style="font-size: 20px; font-weight: 800; color: #3b82f6;">${myAvgXPts.toFixed(1)}</div>
-                            <div style="font-size: 11px; color: #64748b;">ממוצע צפי</div>
-                            <div style="font-size: 12px; font-weight: 600; color: #64748b; margin-top: 4px;">Form: ${myAvgForm.toFixed(1)}</div>
+                            <div style="font-size: 20px; font-weight: 800; color: #0f56d9;">${myAvgXPts.toFixed(1)}</div>
+                            <div style="font-size: 11px; color: #5d6b82;">ממוצע צפי</div>
+                            <div style="font-size: 12px; font-weight: 600; color: #5d6b82; margin-top: 4px;">Form: ${myAvgForm.toFixed(1)}</div>
                         </div>
                         <div style="font-size: 18px; color: #cbd5e0;">vs</div>
                         <div style="text-align: center;">
-                            <div style="font-size: 20px; font-weight: 800; color: #ef4444;">${oppAvgXPts.toFixed(1)}</div>
-                            <div style="font-size: 11px; color: #64748b;">ממוצע צפי</div>
-                            <div style="font-size: 12px; font-weight: 600; color: #64748b; margin-top: 4px;">Form: ${oppAvgForm.toFixed(1)}</div>
+                            <div style="font-size: 20px; font-weight: 800; color: #d92d5a;">${oppAvgXPts.toFixed(1)}</div>
+                            <div style="font-size: 11px; color: #5d6b82;">ממוצע צפי</div>
+                            <div style="font-size: 12px; font-weight: 600; color: #5d6b82; margin-top: 4px;">Form: ${oppAvgForm.toFixed(1)}</div>
                         </div>
                     </div>
                 </div>
@@ -17043,10 +17053,10 @@ function renderNextRivalAnalysis(selectedOpponentId = null) {
         });
 
         html += `
-            <div class="position-analysis-section" style="background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%); padding: 20px; border-radius: 12px; border: 2px solid #e2e8f0; box-shadow: 0 4px 12px rgba(0,0,0,0.05); margin-top: 20px;">
+            <div class="position-analysis-section" style="background: linear-gradient(135deg, #ffffff 0%, #f5f8fc 100%); padding: 20px; border-radius: 12px; border: 2px solid #e4e9f1; box-shadow: 0 4px 12px rgba(0,0,0,0.05); margin-top: 20px;">
                 <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 15px;">
                     <span style="font-size: 24px;">🎯</span>
-                    <h3 style="margin: 0; font-size: 16px; color: #0f172a; font-weight: 800;">ניתוח לפי עמדות - איפה היתרון?</h3>
+                    <h3 style="margin: 0; font-size: 16px; color: #101828; font-weight: 800;">ניתוח לפי עמדות - איפה היתרון?</h3>
                 </div>
                 <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 15px;">
                     ${positionAnalysisHtml}
@@ -17086,13 +17096,13 @@ function renderNextRivalAnalysis(selectedOpponentId = null) {
                 .slice(0, 5);
 
             recommendationsHtml = `
-                <div class="recommendations-section" style="background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%); padding: 20px; border-radius: 12px; border: 2px solid #fbbf24; box-shadow: 0 4px 12px rgba(251, 191, 36, 0.2); margin-top: 20px;">
+                <div class="recommendations-section" style="background: linear-gradient(135deg, #fdf1e0 0%, #eec46a 100%); padding: 20px; border-radius: 12px; border: 2px solid #e0a032; box-shadow: 0 4px 12px rgba(251, 191, 36, 0.2); margin-top: 20px;">
                     <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 15px;">
                         <span style="font-size: 24px;">💡</span>
-                        <h3 style="margin: 0; font-size: 16px; color: #92400e; font-weight: 800;">המלצות אסטרטגיות - חזק את ${weakestPos.posName}</h3>
+                        <h3 style="margin: 0; font-size: 16px; color: #8a5209; font-weight: 800;">המלצות אסטרטגיות - חזק את ${weakestPos.posName}</h3>
                     </div>
                     <div style="background: white; padding: 15px; border-radius: 10px; margin-bottom: 15px;">
-                        <div style="font-size: 13px; color: #92400e; font-weight: 600; margin-bottom: 10px;">
+                        <div style="font-size: 13px; color: #8a5209; font-weight: 600; margin-bottom: 10px;">
                             🎯 זיהינו פער של ${weakestPos.gap.toFixed(1)} נקודות ב${weakestPos.posName} - זה המקום החלש ביותר שלך!
                         </div>
                         <div style="font-size: 12px; color: #78350f;">
@@ -17105,31 +17115,31 @@ function renderNextRivalAnalysis(selectedOpponentId = null) {
                 const form = parseFloat(p.form) || 0;
                 const price = (p.now_cost || 0) / 10;
                 return `
-                                <div style="display: flex; justify-content: space-between; align-items: center; background: white; padding: 12px; border-radius: 10px; border: 2px solid ${idx === 0 ? '#fbbf24' : '#e2e8f0'}; box-shadow: ${idx === 0 ? '0 4px 12px rgba(251, 191, 36, 0.3)' : '0 2px 4px rgba(0,0,0,0.05)'};">
+                                <div style="display: flex; justify-content: space-between; align-items: center; background: white; padding: 12px; border-radius: 10px; border: 2px solid ${idx === 0 ? '#e0a032' : '#e4e9f1'}; box-shadow: ${idx === 0 ? '0 4px 12px rgba(251, 191, 36, 0.3)' : '0 2px 4px rgba(0,0,0,0.05)'};">
                                     <div style="flex: 1;">
                                         <div style="display: flex; align-items: center; gap: 10px;">
-                                            ${idx === 0 ? '<span style="font-size: 20px;">🌟</span>' : `<span style="font-size: 16px; color: #94a3b8; font-weight: 700;">${idx + 1}</span>`}
+                                            ${idx === 0 ? '<span style="font-size: 20px;">🌟</span>' : `<span style="font-size: 16px; color: #98a4b8; font-weight: 700;">${idx + 1}</span>`}
                                             <img src="${p.code ? getPlayerPhotoUrl(p.code) : ''}" 
                                                  onerror="this.src='data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%2245%22 height=%2245%22 viewBox=%220 0 45 45%22%3E%3Ccircle cx=%2222.5%22 cy=%2222.5%22 r=%2222.5%22 fill=%22%23f1f5f9%22/%3E%3Ctext x=%2250%25%22 y=%2250%25%22 text-anchor=%22middle%22 dy=%22.3em%22 font-size=%2218%22 fill=%22%2394a3b8%22%3E${p.web_name.charAt(0)}%3C/text%3E%3C/svg%3E'" 
-                                                 style="width: 45px; height: 45px; border-radius: 50%; object-fit: cover; border: 2px solid ${idx === 0 ? '#fbbf24' : '#e2e8f0'}; background: #f8fafc;">
+                                                 style="width: 45px; height: 45px; border-radius: 50%; object-fit: cover; border: 2px solid ${idx === 0 ? '#e0a032' : '#e4e9f1'}; background: #f5f8fc;">
                                             <div>
-                                                <div style="font-weight: 800; color: #0f172a; font-size: 16px;">${p.web_name} <span style="font-size: 13px; color: #8b5cf6; font-weight: 700;">(${p.position_name})</span></div>
-                                                <div style="font-size: 12px; color: #64748b; font-weight: 600;">${p.team_name}</div>
+                                                <div style="font-weight: 800; color: #101828; font-size: 16px;">${p.web_name} <span style="font-size: 13px; color: #0f56d9; font-weight: 700;">(${p.position_name})</span></div>
+                                                <div style="font-size: 12px; color: #5d6b82; font-weight: 600;">${p.team_name}</div>
                                             </div>
                                         </div>
                                     </div>
                                     <div style="display: flex; gap: 18px; align-items: center;">
                                         <div style="text-align: center;">
-                                            <div style="font-size: 18px; font-weight: 900; color: #10b981;">${xPts.toFixed(1)}</div>
-                                            <div style="font-size: 11px; color: #64748b; font-weight: 600;">צפי</div>
+                                            <div style="font-size: 18px; font-weight: 900; color: #0e9f5d;">${xPts.toFixed(1)}</div>
+                                            <div style="font-size: 11px; color: #5d6b82; font-weight: 600;">צפי</div>
                                         </div>
                                         <div style="text-align: center;">
-                                            <div style="font-size: 16px; font-weight: 800; color: #f59e0b;">${form.toFixed(1)}</div>
-                                            <div style="font-size: 11px; color: #64748b; font-weight: 600;">Form</div>
+                                            <div style="font-size: 16px; font-weight: 800; color: #d97706;">${form.toFixed(1)}</div>
+                                            <div style="font-size: 11px; color: #5d6b82; font-weight: 600;">Form</div>
                                         </div>
                                         <div style="text-align: center;">
-                                            <div style="font-size: 16px; font-weight: 800; color: #3b82f6;">£${price.toFixed(1)}</div>
-                                            <div style="font-size: 11px; color: #64748b; font-weight: 600;">מחיר</div>
+                                            <div style="font-size: 16px; font-weight: 800; color: #0f56d9;">£${price.toFixed(1)}</div>
+                                            <div style="font-size: 11px; color: #5d6b82; font-weight: 600;">מחיר</div>
                                         </div>
                                     </div>
                                 </div>
@@ -17176,16 +17186,16 @@ function renderNextRivalAnalysis(selectedOpponentId = null) {
 
         if (insights.length > 0) {
             html += `
-                <div class="insights-summary-section" style="background: linear-gradient(135deg, #ede9fe 0%, #ddd6fe 100%); padding: 20px; border-radius: 12px; border: 2px solid #8b5cf6; box-shadow: 0 4px 12px rgba(139, 92, 246, 0.2); margin-top: 20px;">
+                <div class="insights-summary-section" style="background: linear-gradient(135deg, #e7efff 0%, #c9daf8 100%); padding: 20px; border-radius: 12px; border: 2px solid #0f56d9; box-shadow: 0 4px 12px rgba(139, 92, 246, 0.2); margin-top: 20px;">
                     <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 15px;">
                         <span style="font-size: 24px;">🧠</span>
                         <h3 style="margin: 0; font-size: 16px; color: #5b21b6; font-weight: 800;">תובנות מפתח - מה חשוב לדעת</h3>
                     </div>
                     <div style="display: grid; gap: 10px;">
                         ${insights.map(insight => {
-                const bgColor = insight.type === 'success' ? '#d1fae5' : insight.type === 'warning' ? '#fee2e2' : '#dbeafe';
-                const borderColor = insight.type === 'success' ? '#10b981' : insight.type === 'warning' ? '#ef4444' : '#3b82f6';
-                const textColor = insight.type === 'success' ? '#065f46' : insight.type === 'warning' ? '#991b1b' : '#1e40af';
+                const bgColor = insight.type === 'success' ? '#e5f8ee' : insight.type === 'warning' ? '#ffe9f0' : '#e7efff';
+                const borderColor = insight.type === 'success' ? '#0e9f5d' : insight.type === 'warning' ? '#d92d5a' : '#0f56d9';
+                const textColor = insight.type === 'success' ? '#065f46' : insight.type === 'warning' ? '#991b1b' : '#0a44b0';
                 return `
                                 <div style="display: flex; align-items: center; gap: 12px; background: ${bgColor}; padding: 12px 15px; border-radius: 10px; border: 2px solid ${borderColor};">
                                     <span style="font-size: 24px;">${insight.icon}</span>
@@ -17205,38 +17215,38 @@ function renderNextRivalAnalysis(selectedOpponentId = null) {
         const oppTopScorer = oppSquad.reduce((max, p) => (parseFloat(p.total_points) || 0) > (parseFloat(max.total_points) || 0) ? p : max, oppSquad[0]);
 
         html += `
-            <div class="compact-stats-footer" style="background: linear-gradient(135deg, #f8fafc 0%, #ffffff 100%); padding: 20px 25px; border-radius: 12px; border: 2px solid #e2e8f0; margin-top: 20px; box-shadow: 0 4px 12px rgba(0,0,0,0.05);">
+            <div class="compact-stats-footer" style="background: linear-gradient(135deg, #f5f8fc 0%, #ffffff 100%); padding: 20px 25px; border-radius: 12px; border: 2px solid #e4e9f1; margin-top: 20px; box-shadow: 0 4px 12px rgba(0,0,0,0.05);">
                 <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 20px; font-size: 13px;">
                     <div style="text-align: center;">
-                        <div style="color: #64748b; margin-bottom: 6px; font-weight: 600; font-size: 12px;">🔥 כושר</div>
+                        <div style="color: #5d6b82; margin-bottom: 6px; font-weight: 600; font-size: 12px;">🔥 כושר</div>
                         <div style="display: flex; justify-content: center; gap: 10px; align-items: center;">
-                            <span style="font-weight: 900; color: #3b82f6; font-size: 18px;">${myStats.form.toFixed(1)}</span>
-                            <span style="color: #cbd5e1; font-size: 14px;">vs</span>
-                            <span style="font-weight: 900; color: #ef4444; font-size: 18px;">${oppStats.form.toFixed(1)}</span>
+                            <span style="font-weight: 900; color: #0f56d9; font-size: 18px;">${myStats.form.toFixed(1)}</span>
+                            <span style="color: #d5dce6; font-size: 14px;">vs</span>
+                            <span style="font-weight: 900; color: #d92d5a; font-size: 18px;">${oppStats.form.toFixed(1)}</span>
                         </div>
                     </div>
                     <div style="text-align: center;">
-                        <div style="color: #64748b; margin-bottom: 6px; font-weight: 600; font-size: 12px;">⚡ xGI</div>
+                        <div style="color: #5d6b82; margin-bottom: 6px; font-weight: 600; font-size: 12px;">⚡ xGI</div>
                         <div style="display: flex; justify-content: center; gap: 10px; align-items: center;">
-                            <span style="font-weight: 900; color: #3b82f6; font-size: 18px;">${myStats.xGI.toFixed(1)}</span>
-                            <span style="color: #cbd5e1; font-size: 14px;">vs</span>
-                            <span style="font-weight: 900; color: #ef4444; font-size: 18px;">${oppStats.xGI.toFixed(1)}</span>
+                            <span style="font-weight: 900; color: #0f56d9; font-size: 18px;">${myStats.xGI.toFixed(1)}</span>
+                            <span style="color: #d5dce6; font-size: 14px;">vs</span>
+                            <span style="font-weight: 900; color: #d92d5a; font-size: 18px;">${oppStats.xGI.toFixed(1)}</span>
                         </div>
                     </div>
                     <div style="text-align: center;">
-                        <div style="color: #64748b; margin-bottom: 6px; font-weight: 600; font-size: 12px;">👥 גודל סגל</div>
+                        <div style="color: #5d6b82; margin-bottom: 6px; font-weight: 600; font-size: 12px;">👥 גודל סגל</div>
                         <div style="display: flex; justify-content: center; gap: 10px; align-items: center;">
-                            <span style="font-weight: 900; color: #3b82f6; font-size: 18px;">${squadSize}</span>
-                            <span style="color: #cbd5e1; font-size: 14px;">vs</span>
-                            <span style="font-weight: 900; color: #ef4444; font-size: 18px;">${oppSquadSize}</span>
+                            <span style="font-weight: 900; color: #0f56d9; font-size: 18px;">${squadSize}</span>
+                            <span style="color: #d5dce6; font-size: 14px;">vs</span>
+                            <span style="font-weight: 900; color: #d92d5a; font-size: 18px;">${oppSquadSize}</span>
                         </div>
                     </div>
                     <div style="text-align: center;">
-                        <div style="color: #64748b; margin-bottom: 6px; font-weight: 600; font-size: 12px;">⭐ מלך השערים</div>
+                        <div style="color: #5d6b82; margin-bottom: 6px; font-weight: 600; font-size: 12px;">⭐ מלך השערים</div>
                         <div style="display: flex; justify-content: center; gap: 10px; align-items: center; font-size: 11px;">
-                            <span style="font-weight: 800; color: #3b82f6;">${myTopScorer?.web_name || '-'}</span>
-                            <span style="color: #cbd5e1; font-size: 12px;">vs</span>
-                            <span style="font-weight: 800; color: #ef4444;">${oppTopScorer?.web_name || '-'}</span>
+                            <span style="font-weight: 800; color: #0f56d9;">${myTopScorer?.web_name || '-'}</span>
+                            <span style="color: #d5dce6; font-size: 12px;">vs</span>
+                            <span style="font-weight: 800; color: #d92d5a;">${oppTopScorer?.web_name || '-'}</span>
                         </div>
                     </div>
                 </div>
@@ -17327,45 +17337,45 @@ function renderAllTeamsTrendChart(teamAggregates, mode = 'cumulative', highlight
     const currentSpeed = window.trendAnimationSpeed || 800;
 
     container.innerHTML = `
-        <div class="chart-controls-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; flex-wrap: wrap; gap: 15px; background: #f8fafc; padding: 15px; border-radius: 12px; border: 1px solid #e2e8f0;">
+        <div class="chart-controls-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; flex-wrap: wrap; gap: 15px; background: #f5f8fc; padding: 15px; border-radius: 12px; border: 1px solid #e4e9f1;">
             <div style="display: flex; align-items: center; gap: 15px; flex-wrap: wrap;">
-                <span style="font-weight: 700; color: #475569; font-size: 14px;">מצב מצטבר:</span>
+                <span style="font-weight: 700; color: #5d6b82; font-size: 14px;">מצב מצטבר:</span>
                 
-                <div class="chart-toggles" style="display: flex; background: white; border-radius: 8px; padding: 3px; border: 2px solid #e2e8f0;">
-                    <button onclick="updateTrendChartMetric('table_points')" style="padding: 7px 14px; border: none; background: ${currentMetric === 'table_points' ? 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)' : 'transparent'}; color: ${currentMetric === 'table_points' ? 'white' : '#64748b'}; font-weight: 700; border-radius: 6px; cursor: pointer; font-size: 12px; transition: all 0.2s;">נקודות בטבלה</button>
-                    <button onclick="updateTrendChartMetric('points')" style="padding: 7px 14px; border: none; background: ${currentMetric === 'points' ? 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)' : 'transparent'}; color: ${currentMetric === 'points' ? 'white' : '#64748b'}; font-weight: 700; border-radius: 6px; cursor: pointer; font-size: 12px; transition: all 0.2s;">נקודות בעד</button>
+                <div class="chart-toggles" style="display: flex; background: white; border-radius: 8px; padding: 3px; border: 2px solid #e4e9f1;">
+                    <button onclick="updateTrendChartMetric('table_points')" style="padding: 7px 14px; border: none; background: ${currentMetric === 'table_points' ? 'linear-gradient(135deg, #0f56d9 0%, #0f56d9 100%)' : 'transparent'}; color: ${currentMetric === 'table_points' ? 'white' : '#5d6b82'}; font-weight: 700; border-radius: 6px; cursor: pointer; font-size: 12px; transition: all 0.2s;">נקודות בטבלה</button>
+                    <button onclick="updateTrendChartMetric('points')" style="padding: 7px 14px; border: none; background: ${currentMetric === 'points' ? 'linear-gradient(135deg, #0f56d9 0%, #0f56d9 100%)' : 'transparent'}; color: ${currentMetric === 'points' ? 'white' : '#5d6b82'}; font-weight: 700; border-radius: 6px; cursor: pointer; font-size: 12px; transition: all 0.2s;">נקודות בעד</button>
                 </div>
 
-                <div style="display: flex; gap: 5px; background: white; padding: 3px; border-radius: 8px; border: 1px solid #e2e8f0;">
-                    <button onclick="setTrendSpeed(1500)" style="padding: 5px 10px; font-size: 11px; border: none; border-radius: 6px; background: ${currentSpeed === 1500 ? '#dbeafe' : 'transparent'}; color: ${currentSpeed === 1500 ? '#1e40af' : '#64748b'}; cursor: pointer; font-weight: 600;">⏱️ איטי</button>
-                    <button onclick="setTrendSpeed(800)" style="padding: 5px 10px; font-size: 11px; border: none; border-radius: 6px; background: ${currentSpeed === 800 ? '#dbeafe' : 'transparent'}; color: ${currentSpeed === 800 ? '#1e40af' : '#64748b'}; cursor: pointer; font-weight: 600;">⏱️ רגיל</button>
-                    <button onclick="setTrendSpeed(300)" style="padding: 5px 10px; font-size: 11px; border: none; border-radius: 6px; background: ${currentSpeed === 300 ? '#dbeafe' : 'transparent'}; color: ${currentSpeed === 300 ? '#1e40af' : '#64748b'}; cursor: pointer; font-weight: 600;">⚡ מהיר</button>
+                <div style="display: flex; gap: 5px; background: white; padding: 3px; border-radius: 8px; border: 1px solid #e4e9f1;">
+                    <button onclick="setTrendSpeed(1500)" style="padding: 5px 10px; font-size: 11px; border: none; border-radius: 6px; background: ${currentSpeed === 1500 ? '#e7efff' : 'transparent'}; color: ${currentSpeed === 1500 ? '#0a44b0' : '#5d6b82'}; cursor: pointer; font-weight: 600;">⏱️ איטי</button>
+                    <button onclick="setTrendSpeed(800)" style="padding: 5px 10px; font-size: 11px; border: none; border-radius: 6px; background: ${currentSpeed === 800 ? '#e7efff' : 'transparent'}; color: ${currentSpeed === 800 ? '#0a44b0' : '#5d6b82'}; cursor: pointer; font-weight: 600;">⏱️ רגיל</button>
+                    <button onclick="setTrendSpeed(300)" style="padding: 5px 10px; font-size: 11px; border: none; border-radius: 6px; background: ${currentSpeed === 300 ? '#e7efff' : 'transparent'}; color: ${currentSpeed === 300 ? '#0a44b0' : '#5d6b82'}; cursor: pointer; font-weight: 600;">⚡ מהיר</button>
                 </div>
             </div>
 
             <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
-                <button onclick="selectTopTeams()" style="padding: 8px 14px; background: linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%); color: #059669; border: 2px solid #10b981; border-radius: 10px; font-size: 13px; font-weight: 800; cursor: pointer; transition: all 0.2s; box-shadow: 0 2px 4px rgba(16, 185, 129, 0.15);">🔝 צמרת (4)</button>
+                <button onclick="selectTopTeams()" style="padding: 8px 14px; background: linear-gradient(135deg, #f2fcf7 0%, #e5f8ee 100%); color: #0b8a50; border: 2px solid #0e9f5d; border-radius: 10px; font-size: 13px; font-weight: 800; cursor: pointer; transition: all 0.2s; box-shadow: 0 2px 4px rgba(16, 185, 129, 0.15);">🔝 צמרת (4)</button>
                 <button onclick="selectBottomTeams()" style="padding: 8px 14px; background: linear-gradient(135deg, #fff1f2 0%, #ffe4e6 100%); color: #e11d48; border: 2px solid #f43f5e; border-radius: 10px; font-size: 13px; font-weight: 800; cursor: pointer; transition: all 0.2s; box-shadow: 0 2px 4px rgba(225, 29, 72, 0.15);">📉 תחתית (4)</button>
                 
-                <div style="width: 2px; height: 28px; background: #cbd5e1; margin: 0 5px;"></div>
+                <div style="width: 2px; height: 28px; background: #d5dce6; margin: 0 5px;"></div>
 
-                <button id="playTrendBtn" onclick="playTrendProgression()" style="padding: 10px 18px; background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%); color: white; border: none; border-radius: 10px; cursor: pointer; font-weight: 800; display: flex; align-items: center; gap: 8px; box-shadow: 0 4px 8px rgba(37, 99, 235, 0.3); transition: all 0.2s; font-size: 13px;">
+                <button id="playTrendBtn" onclick="playTrendProgression()" style="padding: 10px 18px; background: linear-gradient(135deg, #0f56d9 0%, #0f56d9 100%); color: white; border: none; border-radius: 10px; cursor: pointer; font-weight: 800; display: flex; align-items: center; gap: 8px; box-shadow: 0 4px 8px rgba(37, 99, 235, 0.3); transition: all 0.2s; font-size: 13px;">
                     <span id="playIcon">▶️</span> <span id="playText">נגן התקדמות</span>
                 </button>
             </div>
         </div>
 
         <div class="trend-chart-grid" style="display: grid; grid-template-columns: 1fr 220px; gap: 20px; align-items: start;">
-            <div class="chart-area" style="background: white; border-radius: 12px; border: 1px solid #e2e8f0; padding: 10px; height: 450px; position: relative;">
+            <div class="chart-area" style="background: white; border-radius: 12px; border: 1px solid #e4e9f1; padding: 10px; height: 450px; position: relative;">
             <canvas id="trendCanvas"></canvas>
             </div>
-            <div class="team-selector-sidebar" style="background: #f8fafc; border-radius: 12px; border: 1px solid #e2e8f0; padding: 15px; max-height: 450px; overflow-y: auto;">
-                <h4 style="margin: 0 0 10px 0; font-size: 14px; color: #475569; border-bottom: 1px solid #e2e8f0; padding-bottom: 8px;">השוואת קבוצות</h4>
+            <div class="team-selector-sidebar" style="background: #f5f8fc; border-radius: 12px; border: 1px solid #e4e9f1; padding: 15px; max-height: 450px; overflow-y: auto;">
+                <h4 style="margin: 0 0 10px 0; font-size: 14px; color: #5d6b82; border-bottom: 1px solid #e4e9f1; padding-bottom: 8px;">השוואת קבוצות</h4>
                 <div class="team-checkbox-list" id="trendTeamList" style="display: flex; flex-direction: column; gap: 8px;"></div>
-                <div style="margin-top: 10px; padding-top: 10px; border-top: 1px solid #e2e8f0; text-align: center;">
-                    <button onclick="selectAllTrendTeams()" style="font-size: 11px; color: #3b82f6; background: none; border: none; cursor: pointer;">בחר הכל</button>
-                    <span style="color: #cbd5e1;">|</span>
-                    <button onclick="clearAllTrendTeams()" style="font-size: 11px; color: #64748b; background: none; border: none; cursor: pointer;">נקה הכל</button>
+                <div style="margin-top: 10px; padding-top: 10px; border-top: 1px solid #e4e9f1; text-align: center;">
+                    <button onclick="selectAllTrendTeams()" style="font-size: 11px; color: #0f56d9; background: none; border: none; cursor: pointer;">בחר הכל</button>
+                    <span style="color: #d5dce6;">|</span>
+                    <button onclick="clearAllTrendTeams()" style="font-size: 11px; color: #5d6b82; background: none; border: none; cursor: pointer;">נקה הכל</button>
                 </div>
             </div>
         </div>
@@ -17374,11 +17384,11 @@ function renderAllTeamsTrendChart(teamAggregates, mode = 'cumulative', highlight
     const teamList = document.getElementById('trendTeamList');
     // 9 distinct colors - pastel versions for better visibility
     const colors = [
-        '#3b82f6', // Blue
-        '#ef4444', // Red
-        '#10b981', // Green
-        '#f59e0b', // Orange
-        '#8b5cf6', // Purple
+        '#0f56d9', // Blue
+        '#d92d5a', // Red
+        '#0e9f5d', // Green
+        '#d97706', // Orange
+        '#0f56d9', // Purple
         '#ec4899', // Pink
         '#06b6d4', // Cyan
         '#84cc16', // Lime
@@ -17388,20 +17398,20 @@ function renderAllTeamsTrendChart(teamAggregates, mode = 'cumulative', highlight
     entries.forEach((e, index) => {
         const isChecked = highlightTeamIds.includes(String(e.id));
         const isMyTeam = String(e.id) === String(state.draft.myTeamId);
-        const teamColor = isMyTeam ? '#0f172a' : colors[index % colors.length];
+        const teamColor = isMyTeam ? '#101828' : colors[index % colors.length];
         const teamLogo = getTeamLogo(e.entry_name);
 
         const label = document.createElement('label');
-        label.style.cssText = 'display: flex; align-items: center; gap: 8px; font-size: 13px; color: #334155; cursor: pointer; padding: 6px 8px; border-radius: 8px; transition: all 0.2s;';
+        label.style.cssText = 'display: flex; align-items: center; gap: 8px; font-size: 13px; color: #2b3648; cursor: pointer; padding: 6px 8px; border-radius: 8px; transition: all 0.2s;';
         if (isChecked) {
             label.style.background = '#eef2ff';
-            label.style.border = '1px solid #c7d2fe';
+            label.style.border = '1px solid #c9daf8';
         }
 
         // Add color indicator circle
-        const colorCircle = `<span style="display: inline-block; width: 12px; height: 12px; border-radius: 50%; background: ${teamColor}; border: 2px solid white; box-shadow: 0 0 0 1px #e2e8f0;"></span>`;
+        const colorCircle = `<span style="display: inline-block; width: 12px; height: 12px; border-radius: 50%; background: ${teamColor}; border: 2px solid white; box-shadow: 0 0 0 1px #e4e9f1;"></span>`;
 
-        label.innerHTML = `<input type="checkbox" value="${e.id}" ${isChecked ? 'checked' : ''} onchange="toggleTrendTeam('${e.id}')" style="accent-color: #3b82f6;">${colorCircle}<span style="font-size: 18px;">${teamLogo}</span><span style="${isMyTeam ? 'font-weight: 700; color: #0f172a;' : ''}">${isMyTeam ? '👤 ' : ''}${escapeHtml(e.entry_name)}</span>`;
+        label.innerHTML = `<input type="checkbox" value="${e.id}" ${isChecked ? 'checked' : ''} onchange="toggleTrendTeam('${e.id}')" style="accent-color: #0f56d9;">${colorCircle}<span style="font-size: 18px;">${teamLogo}</span><span style="${isMyTeam ? 'font-weight: 700; color: #101828;' : ''}">${isMyTeam ? '👤 ' : ''}${escapeHtml(e.entry_name)}</span>`;
         teamList.appendChild(label);
     });
 
@@ -17435,11 +17445,11 @@ function renderAllTeamsTrendChart(teamAggregates, mode = 'cumulative', highlight
         .map(([entryId, team], index) => {
             // 9 distinct colors matching the sidebar
             const chartColors = [
-                '#3b82f6', // Blue
-                '#ef4444', // Red
-                '#10b981', // Green
-                '#f59e0b', // Orange
-                '#8b5cf6', // Purple
+                '#0f56d9', // Blue
+                '#d92d5a', // Red
+                '#0e9f5d', // Green
+                '#d97706', // Orange
+                '#0f56d9', // Purple
                 '#ec4899', // Pink
                 '#06b6d4', // Cyan
                 '#84cc16', // Lime
@@ -17579,10 +17589,10 @@ function renderAllTeamsTrendChart(teamAggregates, mode = 'cumulative', highlight
                     beginAtZero: false,
                     min: suggestedMin,
                     max: suggestedMax,
-                    grid: { color: '#f1f5f9' },
+                    grid: { color: '#eef2f7' },
                     ticks: {
                         font: { size: 12, weight: '600' },
-                        color: '#64748b',
+                        color: '#5d6b82',
                         padding: 8
                     }
                 },
@@ -17590,7 +17600,7 @@ function renderAllTeamsTrendChart(teamAggregates, mode = 'cumulative', highlight
                     grid: { display: false },
                     ticks: {
                         font: { size: 11, weight: '600' },
-                        color: '#64748b'
+                        color: '#5d6b82'
                     }
                 }
             },

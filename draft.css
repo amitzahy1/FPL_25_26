@@ -928,3 +928,429 @@ body.tab-draft {
         font-weight: 600;
     }
 }
+
+/* ============================================================
+   Legacy view classes, brought into the Clubhouse system.
+
+   These class names predate this stylesheet and are emitted by the
+   older draft renderers. Rather than rewrite fifteen render functions
+   at once, their chrome is redefined here — scoped to the draft tab,
+   so the players page keeps the originals from style.css.
+   ============================================================ */
+
+/* ---- surfaces: everything that was a hand-rolled white box ---- */
+#draftTabContent .card,
+#draftTabContent .rec-card,
+#draftTabContent .feed-summary,
+#draftTabContent .board-col,
+#draftTabContent .lineup-stats-card,
+#draftTabContent .next-fixtures-card,
+#draftTabContent .analytics-card,
+#draftTabContent .analytics-header-card,
+#draftTabContent .matrix-card,
+#draftTabContent .chart-card,
+#draftTabContent .roster-card,
+#draftTabContent .rival-header,
+#draftTabContent .overlap-section,
+#draftTabContent .top-players-section,
+#draftTabContent .position-analysis-section,
+#draftTabContent .recommendations-section,
+#draftTabContent .insights-summary-section,
+#draftTabContent .compact-stats-footer {
+    background: var(--c-card);
+    border: none;
+    border-radius: var(--c-radius);
+    box-shadow: var(--c-shadow);
+    padding: 18px 20px;
+    margin-bottom: 16px;
+}
+
+/* ---- grids: auto-fit everywhere, so a card never gets a column it
+        cannot fill (the analytics grid was pinned at four) ---- */
+#draftTabContent .analytics-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 14px;
+}
+
+#draftTabContent .matrix-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+    gap: 14px;
+}
+
+#draftTabContent .matrix-card {
+    height: auto;
+    min-height: 380px;
+    display: flex;
+    flex-direction: column;
+}
+
+#draftTabContent .matrix-card canvas {
+    flex: 1;
+    min-height: 0;
+}
+
+#draftTabContent .roster-cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 14px;
+}
+
+#draftTabContent .draft-top-grid {
+    display: grid;
+    grid-template-columns: 1.6fr 1fr;
+    gap: 16px;
+    align-items: start;
+}
+
+@media (max-width: 900px) {
+    #draftTabContent .draft-top-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+/* ---- the league feed ---- */
+#draftTabContent .feed-stat {
+    background: var(--c-wash);
+    border: none;
+    border-radius: var(--c-radius-xs);
+    padding: 12px 14px;
+}
+
+#draftTabContent .feed-stat-label {
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--c-muted);
+}
+
+#draftTabContent .feed-stat-value {
+    font-size: 20px;
+    font-weight: 800;
+    color: var(--c-ink);
+    font-variant-numeric: tabular-nums;
+}
+
+#draftTabContent .feed-stat-value-sm {
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--c-ink);
+}
+
+#draftTabContent .feed-chip,
+#draftTabContent .team-badge,
+#draftTabContent .board-auto {
+    display: inline-block;
+    padding: 3px 10px;
+    border-radius: 999px;
+    background: var(--c-blue-soft);
+    color: var(--c-blue);
+    font-size: 11.5px;
+    font-weight: 600;
+}
+
+#draftTabContent .feed-item,
+#draftTabContent .board-pick,
+#draftTabContent .overlap-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    padding: 10px 4px;
+    border-bottom: 1px solid var(--c-line);
+    font-size: 13.5px;
+}
+
+#draftTabContent .feed-item:last-child,
+#draftTabContent .board-pick:last-child,
+#draftTabContent .overlap-item:last-child {
+    border-bottom: none;
+}
+
+#draftTabContent .feed-in { color: var(--c-green); font-weight: 600; }
+#draftTabContent .feed-out { color: var(--c-red); font-weight: 600; }
+#draftTabContent .feed-gw,
+#draftTabContent .feed-kind,
+#draftTabContent .board-num,
+#draftTabContent .board-meta,
+#draftTabContent .board-team,
+#draftTabContent .overlap-label {
+    font-size: 11.5px;
+    font-weight: 500;
+    color: var(--c-muted);
+}
+
+#draftTabContent .feed-empty {
+    padding: 30px 16px;
+    text-align: center;
+    font-size: 13.5px;
+    color: var(--c-muted);
+}
+
+#draftTabContent .board-points,
+#draftTabContent .board-rank,
+#draftTabContent .h2h-team-score,
+#draftTabContent .overlap-values {
+    font-weight: 800;
+    color: var(--c-blue);
+    font-variant-numeric: tabular-nums;
+}
+
+#draftTabContent .board-round {
+    margin-bottom: 14px;
+}
+
+/* ---- recommendations ---- */
+#draftTabContent .rec-header {
+    font-size: 15.5px;
+    font-weight: 700;
+    color: var(--c-ink);
+}
+
+#draftTabContent .rec-subtitle,
+#draftTabContent .rec-reason {
+    font-size: 12.5px;
+    font-weight: 400;
+    color: var(--c-muted);
+    line-height: 1.6;
+}
+
+#draftTabContent .rec-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+#draftTabContent .rec-player-row td,
+#draftTabContent .rec-reason-row td {
+    padding: 10px 8px;
+    border-bottom: 1px solid var(--c-line);
+    font-size: 13.5px;
+}
+
+#draftTabContent .rec-player-name {
+    font-weight: 600;
+    color: var(--c-ink);
+}
+
+#draftTabContent .rec-player-img {
+    border-radius: 50%;
+    background: var(--c-wash);
+}
+
+/* ---- head-to-head ---- */
+#draftTabContent .h2h-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 14px;
+}
+
+#draftTabContent .h2h-match-header,
+#draftTabContent .h2h-teams {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+}
+
+#draftTabContent .h2h-team-name {
+    font-size: 13.5px;
+    font-weight: 600;
+    color: var(--c-ink);
+}
+
+#draftTabContent .h2h-gw,
+#draftTabContent .h2h-vs {
+    font-size: 11.5px;
+    font-weight: 500;
+    color: var(--c-muted);
+}
+
+/* ---- rival comparison ---- */
+#draftTabContent .versus-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 6px 14px;
+    border-radius: var(--c-radius-xs);
+    background: var(--c-blue);
+    color: #fff;
+    font-size: 13px;
+    font-weight: 700;
+}
+
+#draftTabContent .my-team,
+#draftTabContent .opp-team {
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--c-ink);
+}
+
+#draftTabContent .overlap-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 12px;
+}
+
+/* ---- notices ---- */
+#draftTabContent .alert {
+    padding: 13px 16px;
+    border: none;
+    border-radius: var(--c-radius-sm);
+    font-size: 13.5px;
+    font-weight: 500;
+    line-height: 1.6;
+    margin-bottom: 14px;
+}
+
+#draftTabContent .alert-info { background: var(--c-blue-soft); color: #0b3d99; }
+#draftTabContent .alert-warning { background: var(--c-amber-soft); color: #8a5209; }
+#draftTabContent .alert-danger { background: var(--c-red-soft); color: #a01643; }
+
+/* ---- loading ---- */
+#draftTabContent .loader-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+    padding: 44px 16px;
+}
+
+#draftTabContent .loader,
+#draftTabContent .mini-loader,
+#draftTabContent .spinner {
+    width: 30px;
+    height: 30px;
+    border: 3px solid var(--c-line);
+    border-top-color: var(--c-blue);
+    border-radius: 50%;
+    animation: plc-spin .8s linear infinite;
+}
+
+#draftTabContent .mini-loader {
+    width: 18px;
+    height: 18px;
+    border-width: 2px;
+}
+
+@keyframes plc-spin {
+    to { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    #draftTabContent .loader,
+    #draftTabContent .mini-loader,
+    #draftTabContent .spinner {
+        animation-duration: 2.4s;
+    }
+}
+
+#draftTabContent .loader-text,
+#draftTabContent .chart-empty {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--c-muted);
+    text-align: center;
+}
+
+/* ---- controls ---- */
+#draftTabContent .lineup-toggle {
+    padding: 9px 18px;
+    border: 1px solid var(--c-line);
+    border-radius: var(--c-radius-xs);
+    background: var(--c-card);
+    font: inherit;
+    font-size: 13.5px;
+    font-weight: 600;
+    color: var(--c-muted);
+    cursor: pointer;
+}
+
+#draftTabContent .lineup-toggle.active {
+    background: var(--c-blue);
+    border-color: var(--c-blue);
+    color: #fff;
+    box-shadow: 0 4px 10px rgba(15, 86, 217, .3);
+}
+
+#draftTabContent .analytics-select {
+    padding: 9px 14px;
+    border: 1px solid var(--c-line);
+    border-radius: var(--c-radius-xs);
+    background: var(--c-card);
+    font: inherit;
+    font-size: 13.5px;
+    font-weight: 500;
+    color: var(--c-ink);
+    cursor: pointer;
+}
+
+#draftTabContent .analytics-select:focus {
+    outline: none;
+    border-color: var(--c-blue);
+    box-shadow: 0 0 0 3px rgba(15, 86, 217, .15);
+}
+
+#draftTabContent .analytics-controls {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 14px;
+    flex-wrap: wrap;
+}
+
+#draftTabContent .control-group {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+#draftTabContent .control-label,
+#draftTabContent .info-text {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--c-muted);
+}
+
+/* ---- tables emitted by the older renderers ---- */
+#draftTabContent .styled-table,
+#draftTabContent .draft-comparison-table {
+    width: 100%;
+    border-collapse: collapse;
+    background: var(--c-card);
+    border-radius: var(--c-radius-sm);
+    overflow: hidden;
+}
+
+#draftTabContent .draft-comparison-table th {
+    background: var(--c-card);
+    color: var(--c-muted);
+    font-size: 11.5px;
+    font-weight: 600;
+    padding: 10px 8px;
+    border-bottom: 1px solid var(--c-line);
+}
+
+#draftTabContent .draft-comparison-table td {
+    padding: 10px 8px;
+    font-size: 13.5px;
+    border-bottom: 1px solid var(--c-line);
+    font-variant-numeric: tabular-nums;
+}
+
+/* The pane titles the older markup still carries. */
+#draftTabContent .section-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 0 0 12px;
+    font-size: 15.5px;
+    font-weight: 700;
+    color: var(--c-ink);
+}
+
+#draftTabContent .section-sub {
+    margin: -6px 0 14px;
+    font-size: 12.5px;
+    color: var(--c-muted);
+}
