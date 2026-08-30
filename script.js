@@ -10393,8 +10393,14 @@ async function _loadDraftDataInBackground() {
                 }
             });
 
-            // Fetch all team rosters
-            const rosterPromises = details.league_entries
+            // Fetch all team rosters.
+            //
+            // Not before the draft: entry/{id}/event/{gw} has nothing to return
+            // until a squad exists, so this was one proxied 404 per manager on
+            // every single page load — ten of them, for a league whose rosters
+            // are all empty by definition.
+            const preDraft = details.league && details.league.draft_status === 'pre';
+            const rosterPromises = (preDraft ? [] : details.league_entries)
                 .filter(e => e && e.id && e.entry_id)
                 .map(async entry => {
                     const picksUrl = `${config.corsProxy}${encodeURIComponent(`https://draft.premierleague.com/api/entry/${entry.entry_id}/event/${currentGW}`)}`;
@@ -12617,10 +12623,22 @@ function showTab(tabName) {
         console.log("🎯 Draft tab activated, calling loadDraftLeague()...");
 
         // Always load draft league data when switching to this tab
-        loadDraftLeague().catch(err => {
+        loadDraftLeague().then(() => {
+            // Land on the room while the draft is still ahead. Every other
+            // sub-tab is empty by construction until somebody owns somebody —
+            // no standings, no rosters, no head-to-heads — so opening on מבט על
+            // meant the tab read as broken on precisely the days it matters.
+            if (draftStatus() !== 'post' && !state.draft._roomSeen) {
+                state.draft._roomSeen = true;
+                switchDraftTab('room');
+            }
+        }).catch(err => {
             console.error("❌ Failed to load draft league:", err);
             showToast('שגיאה', 'לא ניתן לטעון את ליגת הדראפט כרגע', 'error');
         });
+    } else {
+        // Leaving the draft tab entirely: nothing in the room is on screen.
+        stopDraftRoomPolling();
     }
 }
 
@@ -14894,6 +14912,459 @@ function renderNextRoundFixtures() {
     return html;
 }
 
+
+/* ==========================================================================
+   THE DRAFT ROOM
+   The board you read on the night, and the waiver board after it.
+
+   Before the draft the other seven sub-tabs are empty by construction: there are
+   no standings, no rosters, no head-to-heads and no lineups until somebody owns
+   somebody. This is what the draft tab is FOR in the fortnight when it matters
+   most, and it needs no new data — draft/{league}/choices and element-status are
+   already in config.urls and already fetched.
+   ========================================================================== */
+
+// A full FPL Draft squad. The gaps against this are the only thing that should
+// ever override "take the best player left".
+const DRAFT_SQUAD = { GKP: 2, DEF: 5, MID: 5, FWD: 3 };
+const DRAFT_SQUAD_SIZE = Object.values(DRAFT_SQUAD).reduce((a, b) => a + b, 0);
+
+// How often the room asks the league what has happened, while a draft is running.
+// The pick limit is 90 seconds, so this is well inside one pick — a player is
+// struck off long before the reader could act on stale information.
+const DRAFT_POLL_MS = 15000;
+
+const _draftRoom = { timer: null, polling: false, lastPickCount: -1, position: null };
+
+/** The league's own view of where the draft is: 'pre', 'active' or 'post'. */
+function draftStatus() {
+    const league = state.draft.details && state.draft.details.league;
+    return (league && league.draft_status) || null;
+}
+
+/** When it starts. Returned as a Date so the countdown has something to subtract. */
+function draftDateTime() {
+    const league = state.draft.details && state.draft.details.league;
+    const raw = league && (league.draft_dt || (league.drafts && league.drafts[0]
+        && league.drafts[0].draft_dt));
+    if (!raw) return null;
+    const at = new Date(raw);
+    return Number.isNaN(at.getTime()) ? null : at;
+}
+
+/** The picks made so far, oldest first. Empty before the draft, which is not an error. */
+function draftChoices() {
+    const raw = state.draft.choices;
+    const list = (raw && raw.choices) || [];
+    return [...list].sort((a, b) => (a.pick || 0) - (b.pick || 0) || (a.index || 0) - (b.index || 0));
+}
+
+/**
+ * The pick order, learned from round one rather than guessed.
+ *
+ * FPL publishes `order_method: random` and nothing else before the draft — there
+ * is no order to read until picks start arriving. Once the first round is
+ * complete the order IS the first round, so "your next pick is in N" becomes
+ * answerable. Until then the room says it does not know, which is the honest
+ * answer and better than an invented one.
+ */
+function draftPickOrder() {
+    const entries = (state.draft.details && state.draft.details.league_entries) || [];
+    const size = entries.length;
+    if (!size) return null;
+    const firstRound = draftChoices().filter(c => (c.round || 0) === 1);
+    if (firstRound.length < size) return null;
+    return firstRound.map(c => c.entry);
+}
+
+/**
+ * The next pick numbers belonging to one manager.
+ *
+ * FPL Draft snakes: round one runs down the order, round two back up it. Derived
+ * from the learned order, so it is right for whatever order the randomiser gave.
+ */
+function myUpcomingPicks(entryId, limit = 3) {
+    const order = draftPickOrder();
+    if (!order || !entryId) return [];
+    const size = order.length;
+    const seat = order.indexOf(entryId);
+    if (seat < 0) return [];
+    const made = draftChoices().length;
+    const out = [];
+    for (let round = 1; round <= DRAFT_SQUAD_SIZE && out.length < limit; round++) {
+        const withinRound = round % 2 === 1 ? seat : size - 1 - seat;
+        const pick = (round - 1) * size + withinRound + 1;
+        if (pick > made) out.push({ pick, round });
+    }
+    return out;
+}
+
+/** My league_entry id, from the team the reader has chosen on the overview tab. */
+function myDraftEntryId() {
+    const saved = state.draft.myTeamId;
+    if (saved) return saved;
+    const entries = (state.draft.details && state.draft.details.league_entries) || [];
+    return entries.length === 1 ? entries[0].id : null;
+}
+
+/** Which position each of my picks filled, and what is still missing. */
+function draftSquadGaps(entryId) {
+    const have = { GKP: 0, DEF: 0, MID: 0, FWD: 0 };
+    if (entryId) {
+        for (const c of draftChoices()) {
+            if (c.entry !== entryId) continue;
+            const p = draftRoomPlayer(c.element);
+            if (p && have[p.position_name] !== undefined) have[p.position_name]++;
+        }
+    }
+    return Object.keys(DRAFT_SQUAD).map(pos => ({
+        pos, have: have[pos], want: DRAFT_SQUAD[pos], missing: Math.max(0, DRAFT_SQUAD[pos] - have[pos])
+    }));
+}
+
+/**
+ * A drafted element id, resolved to the player on screen.
+ *
+ * The choices feed speaks Draft ids and the table speaks FPL ids, and they are
+ * not the same numbers — toFplId is the existing bridge, built by name and code
+ * when the two bootstraps are mapped.
+ */
+let _draftRoomIndex = { source: null, byId: new Map() };
+function draftRoomPlayer(elementId) {
+    const fplId = toFplId(elementId);
+    if (fplId === null) return null;
+    const processed = (state.allPlayersData[state.currentDataSource] || {}).processed || [];
+    // Indexed rather than scanned. This is called once per pick per board and
+    // there are eight boards a render, so a linear find over 572 players turns a
+    // full draft into most of a million comparisons every fifteen seconds.
+    if (_draftRoomIndex.source !== processed) {
+        _draftRoomIndex = { source: processed, byId: new Map(processed.map(p => [p.id, p])) };
+    }
+    return _draftRoomIndex.byId.get(fplId) || null;
+}
+
+/** Who took him, by team name. */
+function draftRoomOwner(entryId) {
+    return state.draft.entryIdToTeamName.get(entryId) || '';
+}
+
+/**
+ * At most this many tiers on a column. Tiers are a reading aid, not a
+ * classification: six bands over forty players is a shape you can hold in your
+ * head under a pick clock, and thirty is a list with lines in it.
+ */
+const DRAFT_MAX_TIERS = 6;
+
+/**
+ * The board: every player at a position, best first, with tier breaks.
+ *
+ * Ranked on projectedPointsOf(p, 'season') — the same index the הכי שווים panel
+ * uses, so the board and the panel cannot recommend different players.
+ *
+ * Tiers are drawn at the largest gaps, not at gaps over a threshold. A threshold
+ * has to be expressed in points, and the same number of points means something
+ * different at every position: measured, a "2.5x the median gap" rule drew 18
+ * breaks among forwards, whose tail is long and flat, and none at all among
+ * goalkeepers, whose spread is even. Taking the five biggest gaps instead is
+ * scale-free by construction — it asks "where does this position fall away", which
+ * is the question, and it answers it the same way for all four.
+ *
+ * The floor is still there so a genuinely smooth position gets no lines rather
+ * than five arbitrary ones.
+ */
+function draftRoomBoard(position, { limit = 40 } = {}) {
+    const processed = (state.allPlayersData[state.currentDataSource] || {}).processed || [];
+    const taken = new Map();
+    for (const c of draftChoices()) {
+        const p = draftRoomPlayer(c.element);
+        if (p) taken.set(p.id, c.entry);
+    }
+
+    const ranked = processed
+        .filter(p => p.position_name === position && !p.market_departed)
+        .map(p => ({ p, value: projectedPointsOf(p, 'season') }))
+        .filter(r => Number.isFinite(r.value) && r.value > 0)
+        .sort((a, b) => b.value - a.value)
+        .slice(0, limit);
+
+    // Measured over the players still available: a gap left behind by someone
+    // else's pick is not a drop in quality, it is a hole, and it closes when the
+    // next man is taken too.
+    const free = ranked.filter(r => !taken.has(r.p.id));
+    const gaps = [];
+    for (let i = 1; i < free.length; i++) {
+        gaps.push({ id: free[i].p.id, size: free[i - 1].value - free[i].value });
+    }
+    const typical = gaps.length ? _median(gaps.map(g => g.size)) : 0;
+    // A break has to be a real step down, not just the biggest of a flat set.
+    const floor = Math.max(typical * 1.5, 0.5);
+    const breaks = new Set(
+        [...gaps].sort((a, b) => b.size - a.size)
+            .filter(g => g.size >= floor)
+            .slice(0, DRAFT_MAX_TIERS - 1)
+            .map(g => g.id)
+    );
+
+    let tier = 1;
+    return ranked.map((r, i) => {
+        const owner = taken.get(r.p.id);
+        const isBreak = breaks.has(r.p.id);
+        if (isBreak) tier++;
+        return { ...r, owner: owner || null, tier, rank: i + 1, tierBreak: isBreak };
+    });
+}
+
+/**
+ * How many players are left in the top tier at each position — the run warning.
+ *
+ * Silent before the first pick: "3 defenders left in the top tier" is a fact
+ * about the tier's size then, not about anything having happened, and an alarm
+ * that is already sounding when you sit down is one you stop reading.
+ */
+function draftRoomScarcity() {
+    if (!draftChoices().length) return [];
+    return Object.keys(DRAFT_SQUAD).map(pos => {
+        const board = draftRoomBoard(pos);
+        const topTier = board.filter(r => r.tier === 1);
+        return { pos, left: topTier.filter(r => !r.owner).length, size: topTier.length };
+    });
+}
+
+/* ------------------------------ rendering -------------------------------- */
+
+/** "בעוד 2 ימים ו-4 שעות", or how long ago it started. */
+function draftCountdownText(at) {
+    const ms = at.getTime() - Date.now();
+    if (ms <= 0) return null;
+    const mins = Math.round(ms / 60000);
+    const days = Math.floor(mins / 1440);
+    const hours = Math.floor((mins % 1440) / 60);
+    if (days) return `בעוד ${days === 1 ? 'יום' : `${days} ימים`}${hours ? ` ו-${hours} שעות` : ''}`;
+    if (hours) return `בעוד ${hours === 1 ? 'שעה' : `${hours} שעות`}${mins % 60 ? ` ו-${mins % 60} דק׳` : ''}`;
+    return `בעוד ${mins} דק׳`;
+}
+
+/**
+ * "נשאר מגן אחד" and "נשארו 3 מגנים" — Hebrew does not let a count and a noun be
+ * concatenated the way English does, and "נשארו 1 מגנים" reads as a bug in the
+ * page rather than a warning about the draft.
+ */
+const POSITION_SINGULAR = { GKP: 'שוער אחד', DEF: 'מגן אחד', MID: 'קשר אחד', FWD: 'חלוץ אחד' };
+function scarcityWord(pos, left) {
+    return left === 1
+        ? `נשאר ${POSITION_SINGULAR[pos] || pos}`
+        : `נשארו ${left} ${POSITION_LABELS[pos] || pos}`;
+}
+
+/** The header: where the draft is, and where you are in it. */
+function draftRoomHeaderHtml() {
+    const status = draftStatus();
+    const at = draftDateTime();
+    const made = draftChoices().length;
+    const entries = (state.draft.details && state.draft.details.league_entries) || [];
+    const capacity = (state.draft.details && state.draft.details.league
+        && state.draft.details.league.max_entries) || entries.length;
+    const me = myDraftEntryId();
+
+    let line;
+    if (status === 'post' || (made && made >= capacity * DRAFT_SQUAD_SIZE)) {
+        line = `הדראפט הסתיים · ${made} פיקים · מכאן זה שוק החופשיים`;
+    } else if (made > 0) {
+        const round = Math.floor(made / Math.max(1, entries.length)) + 1;
+        const mine = myUpcomingPicks(me, 2);
+        const next = mine.length
+            ? `הפיק הבא שלך: #${mine[0].pick} (בעוד ${mine[0].pick - made - 1} פיקים)`
+            : 'סדר הפיקים ייוודע בסוף הסבב הראשון';
+        line = `סבב ${round} · נבחרו ${made} שחקנים · ${next}`;
+    } else if (at) {
+        const countdown = draftCountdownText(at);
+        const when = at.toLocaleString('he-IL', { weekday: 'long', day: 'numeric', month: 'numeric', hour: '2-digit', minute: '2-digit' });
+        line = `הדראפט ${countdown ? `${countdown} — ` : ''}${when} · ${entries.length} מתוך ${capacity} מנג׳רים נרשמו`;
+    } else {
+        line = 'הדראפט טרם התחיל';
+    }
+
+    const gaps = draftSquadGaps(me);
+    const needs = gaps.filter(g => g.missing > 0)
+        .map(g => `${POSITION_LABELS[g.pos] || g.pos} ${g.have}/${g.want}`).join(' · ');
+
+    const scarce = draftRoomScarcity().filter(s => s.size && s.left > 0 && s.left <= 3);
+    const warning = scarce.length
+        ? `<div class="dr-warn">⚠️ ${scarce.map(s =>
+            `${scarcityWord(s.pos, s.left)} בדרג העליון`).join(' · ')}</div>`
+        : '';
+
+    return `
+        <header class="dr-head">
+            <div class="dr-head-main">
+                <h2 class="dr-title">🎯 חדר הדראפט</h2>
+                <p class="dr-line">${escapeHtml(line)}</p>
+            </div>
+            ${made > 0 && needs ? `<div class="dr-needs"><span class="dr-needs-label">הסגל שלי</span>${escapeHtml(needs)}</div>` : ''}
+        </header>
+        ${warning}`;
+}
+
+/** One position column. */
+function draftRoomColumnHtml(position) {
+    const board = draftRoomBoard(position);
+    if (!board.length) {
+        return `<section class="dr-col"><h3 class="dr-col-head">${POSITION_LABELS[position] || position}</h3>
+            <p class="dr-empty">אין עדיין מספיק נתונים לדרג את העמדה הזו</p></section>`;
+    }
+    const freeLeft = board.filter(r => !r.owner).length;
+    return `
+        <section class="dr-col">
+            <h3 class="dr-col-head">${POSITION_LABELS[position] || position}
+                <span class="dr-col-count">${freeLeft} פנויים</span></h3>
+            <ol class="dr-list">
+                ${board.map(r => {
+        const p = r.p;
+        const owner = r.owner ? draftRoomOwner(r.owner) : '';
+        const weight = Number.isFinite(p.blend_weight) && state.currentDataSource === 'live'
+            ? `<span class="dr-w" title="משקל העונה הנוכחית בקצבים שלו">${Math.round(p.blend_weight * 100)}%</span>` : '';
+        return `${r.tierBreak ? '<li class="dr-tier-break" aria-hidden="true"><span>שבירת דרג</span></li>' : ''}
+                    <li class="dr-row ${r.owner ? 'is-taken' : ''}">
+                        <span class="dr-rank">${r.rank}</span>
+                        <span class="dr-name" title="${escapeHtml(p.team_name || '')}">${escapeHtml(p.web_name)}</span>
+                        <span class="dr-team">${escapeHtml(teamShort(p))}</span>
+                        ${weight}
+                        <span class="dr-val" title="נקודות צפויות עד סוף העונה">${Math.round(r.value)}</span>
+                        ${owner ? `<span class="dr-owner" title="נבחר על ידי ${escapeHtml(owner)}">${escapeHtml(owner)}</span>` : ''}
+                    </li>`;
+    }).join('')}
+            </ol>
+        </section>`;
+}
+
+/**
+ * The whole room.
+ *
+ * Cheap enough to redraw wholesale every poll: four columns of forty rows is
+ * ~160 list items, and rebuilding is what keeps "who is taken" from drifting out
+ * of step with the feed. There is no state in the DOM worth preserving here.
+ */
+function renderDraftRoom() {
+    const host = document.getElementById('draft-room');
+    if (!host) return;
+
+    if (!state.draft.details) {
+        host.innerHTML = `<p class="dr-empty">טוען את נתוני הליגה…</p>`;
+        return;
+    }
+
+    const positions = ['GKP', 'DEF', 'MID', 'FWD'];
+    host.innerHTML = `
+        ${draftRoomHeaderHtml()}
+        <p class="dr-note">מדורג לפי נקודות צפויות עד סוף העונה — אותו מדד של הכרטיס
+            "הכי שווים" בעמוד השחקנים. הקו המפריד הוא שבירת דרג: פער גדול מהרגיל לשחקן
+            הבא, כלומר הסיבה לקחת עכשיו ולא בסבב הבא.</p>
+        <div class="dr-grid">${positions.map(draftRoomColumnHtml).join('')}</div>`;
+}
+
+/* ------------------------------- polling --------------------------------- */
+
+/**
+ * Ask the league what has happened since last time.
+ *
+ * Uncached (a zero-minute duration), because during a draft a 30-minute cache is
+ * the difference between a board and a photograph of one. Everything else in the
+ * app keeps its own cache; only this one call is live.
+ *
+ * Writing to ownedElementIds is deliberate and is most of the value: the players
+ * table, the שחקנים חופשיים filter and the קח עכשיו verdict all read that set, so
+ * the entire site follows the draft without any of them knowing about this file.
+ */
+async function pollDraftRoom() {
+    const leagueId = state.draft.leagueId;
+    if (!leagueId) return;
+    const url = config.corsProxy + encodeURIComponent(config.urls.draftChoices(leagueId));
+    try {
+        const data = await fetchWithCache(url, `fpl_draft_choices_live_${leagueId}`, 0);
+        if (!data) return;
+        state.draft.choices = data;
+
+        // element_status rides along on the same response, so ownership costs no
+        // second request.
+        const status = data.element_status;
+        if (Array.isArray(status)) {
+            const owned = new Set();
+            const byFpl = new Map();
+            for (const row of status) {
+                if (!row || row.owner === null || row.owner === undefined) continue;
+                const fplId = toFplId(row.element);
+                if (fplId === null) continue;
+                owned.add(fplId);
+                byFpl.set(fplId, row.owner);
+            }
+            state.draft.ownedElementIds = owned;
+            state.draft.ownershipByFplId = byFpl;
+            state.draft.ownershipLoaded = true;
+            state.draft.draftHasHappened = owned.size > 0;
+        }
+
+        const made = draftChoices().length;
+        if (made === _draftRoom.lastPickCount) return;
+        _draftRoom.lastPickCount = made;
+
+        // Ownership moves replacement level, which moves VORP and every shortlist.
+        const processed = (state.allPlayersData[state.currentDataSource] || {}).processed;
+        if (processed) computeDraftMetrics(processed);
+        invalidateSignals();
+        renderDraftRoom();
+        renderTable();
+        renderDraftBoard();
+        syncFreeAgentButton();
+    } catch (e) {
+        console.warn('draft room: could not refresh the picks', e.message);
+    }
+}
+
+/**
+ * Poll only while it can tell you something: the room on screen, and a draft that
+ * has not finished. A finished draft is a fixed list, and a background timer
+ * hitting a public proxy every fifteen seconds for it is rude and pointless.
+ */
+function startDraftRoomPolling() {
+    stopDraftRoomPolling();
+    if (draftStatus() === 'post') return;
+    _draftRoom.polling = true;
+    _draftRoom.timer = setInterval(() => {
+        if (document.hidden) return;
+        pollDraftRoom();
+    }, DRAFT_POLL_MS);
+}
+
+function stopDraftRoomPolling() {
+    if (_draftRoom.timer) clearInterval(_draftRoom.timer);
+    _draftRoom.timer = null;
+    _draftRoom.polling = false;
+}
+/**
+ * One line above the sub-content, on the sub-tabs that cannot say anything yet.
+ *
+ * Deliberately not renderDraftNotice: that one hides every sibling, which is
+ * right for "the league does not exist" and wrong here — the navigation still
+ * works, the room still has the whole board on it, and the reader needs to be
+ * pointed at it rather than walled off from everything.
+ */
+function syncPreDraftNote(tabId) {
+    const host = document.getElementById(`draft-${tabId}`);
+    document.querySelectorAll('.dr-predraft').forEach(el => el.remove());
+    if (!host || tabId === 'room') return;
+    if (!state.draft.details || draftStatus() === 'post') return;
+    if (draftChoices().length) return;
+
+    const at = draftDateTime();
+    const when = at ? draftCountdownText(at) : null;
+    const note = document.createElement('div');
+    note.className = 'dr-predraft';
+    note.innerHTML = `${escapeHtml(`הדראפט עוד לא נערך${when ? ` — ${when}` : ''},`)}
+        ${escapeHtml('ולכן אין כאן עדיין טבלה, סגלים או מפגשים. הלוח לקראת הדראפט נמצא ב')}
+        <button type="button" class="dr-predraft-link" onclick="switchDraftTab('room')">חדר הדראפט</button>`;
+    host.prepend(note);
+}
+
 function switchDraftTab(tabId) {
     // Update Nav Buttons
     document.querySelectorAll('.draft-nav-btn').forEach(btn => {
@@ -14913,6 +15384,21 @@ function switchDraftTab(tabId) {
     if (activeDiv) {
         activeDiv.classList.add('active');
         activeDiv.style.display = 'block';
+    }
+
+    // Every other sub-tab is downstream of somebody owning somebody. Before the
+    // draft they render nothing, and a blank panel under a working navigation
+    // reads as a broken page rather than as an accurate one.
+    syncPreDraftNote(tabId);
+
+    // The room is the only sub-tab that keeps asking the server anything, so it
+    // starts and stops with its own visibility rather than running all session.
+    if (tabId === 'room') {
+        renderDraftRoom();
+        pollDraftRoom();
+        startDraftRoomPolling();
+    } else {
+        stopDraftRoomPolling();
     }
 
     // Specific logic for tabs

@@ -7,8 +7,8 @@
     <title>⚽ FPL Pro Analytics Hub</title>
     <!-- Inline so the tab icon needs no extra request; mirrors the header mark. -->
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='40' y2='40' gradientUnits='userSpaceOnUse'%3E%3Cstop stop-color='%2322D3EE'/%3E%3Cstop offset='.55' stop-color='%233B82F6'/%3E%3Cstop offset='1' stop-color='%236366F1'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='40' height='40' rx='9' fill='%230F172A'/%3E%3Cpath d='M20 5 8 9.7v9.9c0 7 4.9 12.4 12 14.1 7.1-1.7 12-7.1 12-14.1V9.7L20 5Z' fill='url(%23g)'/%3E%3Crect x='12.6' y='20.4' width='3.4' height='7' rx='1.2' fill='%23fff' fill-opacity='.95'/%3E%3Crect x='18.3' y='16.2' width='3.4' height='11.2' rx='1.2' fill='%23fff'/%3E%3Crect x='24' y='12' width='3.4' height='15.4' rx='1.2' fill='%23fff' fill-opacity='.95'/%3E%3C/svg%3E">
-    <link rel="stylesheet" href="style.css?v=2026.08.30.337">
-    <link rel="stylesheet" href="mobile.css?v=2026.08.30.337">
+    <link rel="stylesheet" href="style.css?v=2026.08.30.338">
+    <link rel="stylesheet" href="mobile.css?v=2026.08.30.338">
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.5.1"></script>
     <script
         src="https://cdnjs.cloudflare.com/ajax/libs/chartjs-plugin-annotation/2.2.1/chartjs-plugin-annotation.min.js"></script>
@@ -770,6 +770,10 @@
                     style="background: #ffffff; padding: 16px 0; border-bottom: 1px solid #f1f5f9; margin-bottom: 24px; position: sticky; top: 70px; z-index: 90;">
                     <div class="draft-sub-nav"
                         style="max-width: 100%; margin: 0 auto; display: flex; justify-content: center; gap: 8px; overflow-x: visible; flex-wrap: wrap;">
+                        <button class="draft-nav-btn" onclick="switchDraftTab('room')"
+                            style="padding: 12px 24px; border-radius: 12px; border: none; font-weight: 700; font-size: 16px; cursor: pointer; transition: all 0.2s; display: flex; align-items: center; gap: 8px; background: transparent; color: #64748b;">
+                            <span style="font-size: 18px;">🎯</span> חדר הדראפט
+                        </button>
                         <button class="draft-nav-btn active" onclick="switchDraftTab('overview')"
                             style="padding: 12px 24px; border-radius: 12px; border: none; font-weight: 700; font-size: 16px; cursor: pointer; transition: all 0.2s; display: flex; align-items: center; gap: 8px; background: #eff6ff; color: #3b82f6; box-shadow: 0 2px 4px rgba(59,130,246,0.1);">
                             <span style="font-size: 18px;">📊</span> מבט על
@@ -858,6 +862,10 @@
                         font-size: 18px;
                     }
                 </style>
+
+                <!-- The draft board on the night, and the waiver board after it.
+                     Everything in here is rendered by renderDraftRoom(). -->
+                <div id="draft-room" class="draft-sub-content"></div>
 
                 <div id="draft-overview" class="draft-sub-content active">
                     <!-- My Team Selector -->
@@ -1092,7 +1100,7 @@
     <!-- Version query is bumped by scripts/stamp-version.mjs on every commit
          (npm run stamp). It was left at 4.0.0 for months, so returning
          visitors kept running a cached script.js and never saw fixes. -->
-    <script src="script.js?v=2026.08.30.337" defer></script>
+    <script src="script.js?v=2026.08.30.338" defer></script>
 </body>
 
 </html>

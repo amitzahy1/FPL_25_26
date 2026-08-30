@@ -8,19 +8,26 @@ import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import { SCRIPT_SRC, extractFunction, installBrowserStubs } from './helpers/load-script.mjs';
 
-function loadDraftMetrics(draftState = {}) {
+function loadDraftMetrics(draftState = {}, stateOver = {}) {
+    return loadDraftMetricsWithState(draftState, stateOver).compute;
+}
+
+/** The same load, handing back the state it built — for the tests that assert on it. */
+function loadDraftMetricsWithState(draftState = {}, stateOver = {}) {
     installBrowserStubs();
     const state = {
         // replacementByPos is written per position so the value index can price
         // players who sit below computeDraftMetrics' own minutes bar.
         draft: { details: null, ownedElementIds: new Set(), replacementByPos: {}, ...draftState },
         allPlayersData: { live: { fixtures: null }, historical: { fixtures: null } },
-        currentDataSource: 'historical'
+        currentDataSource: 'historical',
+        ...stateOver
     };
     // draftLeagueSize rides along in the const slice below (it sits between
     // REPLACEMENT_SLOTS and computeDraftMetrics); these are the helpers it and
     // the evidence gate call out to.
-    const helpers = ['draftHasBeenHeld', 'playedGameweeks', 'scaleMinutes', 'sampleMinutes']
+    const helpers = ['draftHasBeenHeld', 'playedGameweeks', 'finishedGameweekCount',
+        'scaleMinutes', 'sampleMinutes']
         .map(n => extractFunction(n)).join('\n');
     const body = helpers + '\n' + extractFunction('computeDraftMetrics');
     const consts = SCRIPT_SRC.slice(
@@ -28,7 +35,7 @@ function loadDraftMetrics(draftState = {}) {
         SCRIPT_SRC.indexOf('function computeDraftMetrics')
     );
     const factory = new Function('state', `${consts}\n${body}\nreturn computeDraftMetrics;`);
-    return factory(state);
+    return { compute: factory(state), state };
 }
 
 /**
@@ -396,5 +403,93 @@ describe('smart filters', () => {
     test('form filter demands genuinely strong form, not merely non-zero', () => {
         assert.ok(!QUICK_FILTERS.form_kings.filter({ form: '0.4', minutes: 2000 }));
         assert.ok(QUICK_FILTERS.form_kings.filter({ form: '6.2', minutes: 2000 }));
+    });
+});
+
+describe('a young season', () => {
+    /**
+     * The August case, which used to produce nothing at all.
+     *
+     * The gate read `p.minutes >= 900` and two gameweeks is 180 minutes at the
+     * very most, so no player at any position cleared it, the loop returned
+     * before assigning anything, and every player in the league came out with a
+     * null VORP — emptying the column, the הפער מהחלופה panel and the
+     * underlying-value chart on exactly the days a draft is decided.
+     */
+    const YOUNG = {
+        currentDataSource: 'live',
+        allPlayersData: {
+            live: { raw: { events: [{ id: 1, finished: true }, { id: 2, finished: true }] }, fixtures: null },
+            historical: { fixtures: null }
+        }
+    };
+
+    /** Two gameweeks played, a full season of prior behind each player. */
+    const thisAugust = (position, count, over = {}) =>
+        squad(position, count, { minutes: 180, ...over })
+            .map(p => ({ ...p, appearances: 2, starts: 2, prior_minutes: 2700 }));
+
+    test('prices players off two gameweeks, using both seasons as the sample', () => {
+        const { compute, state } = loadDraftMetricsWithState({}, YOUNG);
+        const players = thisAugust('MID', 12);
+        compute(players);
+        assert.ok(players.every(p => Number.isFinite(p.vorp)),
+            'every one of them has a figure');
+        assert.ok(Number.isFinite(state.draft.replacementByPos.MID),
+            'and the position has a replacement level to price against');
+    });
+
+    test('a newcomer with no previous season is still given a figure', () => {
+        const { compute } = loadDraftMetricsWithState({}, YOUNG);
+        const players = [
+            ...thisAugust('DEF', 12),
+            {
+                id: 'new', web_name: 'Newcomer', position_name: 'DEF',
+                points_per_game: '5.00', minutes: 180, starts: 2, appearances: 2,
+                prior_minutes: 0, status: 'a', chance_of_playing_next_round: 100
+            }
+        ];
+        compute(players);
+        const newcomer = players.find(p => p.id === 'new');
+        assert.ok(Number.isFinite(newcomer.vorp),
+            'he cannot set the bar, but the gap to it is the number the reader came for');
+    });
+
+    test('the bar is rebuilt per season, never inherited from the other one', () => {
+        const { compute, state } = loadDraftMetricsWithState(
+            { replacementByPos: { MID: 99, FWD: 99 } }, YOUNG);
+        compute(thisAugust('MID', 12));
+        assert.notEqual(state.draft.replacementByPos.MID, 99, 'recomputed');
+        assert.equal(state.draft.replacementByPos.FWD, undefined,
+            'and a position this season cannot price is absent rather than stale');
+        assert.equal(state.draft.replacementSource, 'live');
+    });
+});
+
+describe('how many managers are drafting', () => {
+    /**
+     * Replacement level sits at leagueSize x startersAtPosition, so this number
+     * decides where the bar is drawn. `league_entries` counts who has joined so
+     * far, which before a draft is not the same thing — league 932 had 5 of its
+     * 10 entries a fortnight out, which drew the defender bar at the 20th
+     * defender instead of the 40th and inflated every VORP in the league.
+     */
+    const HALF_FULL = { league: { max_entries: 10 }, league_entries: [{ id: 1 }, { id: 2 }] };
+
+    test('before the draft, the seats nobody has taken yet still count', () => {
+        const { compute, state } = loadDraftMetricsWithState({ details: HALF_FULL });
+        compute(squad('DEF', 45, { startPpg: 9, step: 0.1 }));
+        // Ten managers x four defenders = the 40th defender, at 9 - 40*0.1.
+        assert.ok(Math.abs(state.draft.replacementByPos.DEF - 5.0) < 0.15,
+            `the 40th defender sets the bar, not the 8th: got ${state.draft.replacementByPos.DEF}`);
+    });
+
+    test('once it has happened, the league is whoever actually turned up', () => {
+        const { compute, state } = loadDraftMetricsWithState(
+            { details: HALF_FULL, ownedElementIds: new Set(['DEF0']) });
+        compute(squad('DEF', 45, { startPpg: 9, step: 0.1 }));
+        // Two managers x four defenders = the 8th, at 9 - 8*0.1.
+        assert.ok(state.draft.replacementByPos.DEF > 8.0,
+            `two managers, so the bar is the 8th defender: got ${state.draft.replacementByPos.DEF}`);
     });
 });
