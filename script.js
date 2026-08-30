@@ -12517,7 +12517,7 @@ function renderDraftComparison(aggregates) {
         <div style="margin-bottom: 20px;">
             <h2 style="text-align: center; color: #101828; font-size: 20px; margin-bottom: 15px; font-weight: 800;">📊 השוואת קבוצות</h2>
             <div style="overflow-x: auto; overflow-y: auto; max-height: 600px;">
-                <table class="styled-table draft-comparison-table" style="width: 100%; border-collapse: collapse; background: white; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.08); font-size: 11px;">
+                <table class="styled-table draft-comparison-table" style="width: 100%; border-collapse: collapse; background: white; border-radius: 12px; overflow: hidden; box-shadow: 0 1px 2px rgba(16,24,40,.05), 0 8px 24px rgba(16,24,40,.06); font-size: 11px;">
                     <thead style="position: sticky; top: 0; z-index: 10;">
                         <tr style="background: linear-gradient(135deg, #e7efff 0%, #c9daf8 100%);">
                             <th style="padding: 10px 8px; text-align: right; color: #4338ca; font-weight: 800; font-size: 11px; border-bottom: 2px solid #e4e9f1; position: sticky; right: 0; background: linear-gradient(135deg, #e7efff 0%, #c9daf8 100%); z-index: 11;">מדד</th>`;
@@ -15120,7 +15120,7 @@ function renderNextRoundFixtures() {
     const processedById = getProcessedByElementId();
 
     let html = `
-        <div class="next-fixtures-card" style="background: linear-gradient(135deg, #ffffff 0%, #f5f8fc 100%); padding: 20px; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.04); margin-bottom: 16px; border: 1px solid #e4e9f1;">
+        <div class="next-fixtures-card" style="background: #ffffff; padding: 20px; border-radius: 12px; box-shadow: 0 1px 2px rgba(16,24,40,.05), 0 8px 24px rgba(16,24,40,.06); margin-bottom: 16px; border: 1px solid #e4e9f1;">
             <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 16px;">
                 <span style="font-size: 24px;">⚔️</span>
                 <h3 style="margin: 0; font-size: 18px; color: #101828; font-weight: 800;">משחקי מחזור ${nextGW}</h3>
@@ -16294,7 +16294,7 @@ function renderH2HHistory() {
 
     // Create team selectors
     let html = `
-        <div style="background: linear-gradient(135deg, #ffffff 0%, #f5f8fc 100%); padding: 24px; border-radius: 16px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); margin-bottom: 24px; border: 2px solid #e4e9f1;">
+        <div style="background: #ffffff; padding: 24px; border-radius: 16px; box-shadow: 0 1px 2px rgba(16,24,40,.05), 0 8px 24px rgba(16,24,40,.06); margin-bottom: 24px; border: 1px solid #e4e9f1;">
             <div style="text-align: center; margin-bottom: 20px;">
                 <h2 style="margin: 0 0 8px 0; font-size: 24px; color: #101828; font-weight: 900;">📜 היסטוריית מפגשים</h2>
                 <p style="margin: 0; color: #5d6b82; font-size: 14px;">בחר שתי קבוצות כדי לראות את כל המשחקים ביניהן</p>
@@ -16380,8 +16380,8 @@ function renderH2HHistory() {
 
     // Matches table
     html += `
-        <div style="background: white; border-radius: 12px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.05); border: 1px solid #e4e9f1;">
-            <div style="background: linear-gradient(135deg, #f5f8fc 0%, #eef2f7 100%); padding: 16px; border-bottom: 2px solid #e4e9f1;">
+        <div style="background: white; border-radius: 12px; overflow: hidden; box-shadow: 0 1px 2px rgba(16,24,40,.05), 0 8px 24px rgba(16,24,40,.06); border: 1px solid #e4e9f1;">
+            <div style="background: #f5f8fc; padding: 16px; border-bottom: 2px solid #e4e9f1;">
                 <h3 style="margin: 0; font-size: 18px; color: #101828; font-weight: 800;">📋 כל המשחקים (${h2hMatches.length})</h3>
             </div>
             <div style="overflow-x: auto;">
@@ -16452,7 +16452,7 @@ function renderLineupAnalysis() {
     const currentGW = state.draft.details?.league?.current_event || getCurrentEventId();
 
     let html = `
-        <div style="background: linear-gradient(135deg, #ffffff 0%, #f5f8fc 100%); padding: 24px; border-radius: 16px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); margin-bottom: 24px; border: 2px solid #e4e9f1; text-align: center;">
+        <div style="background: #ffffff; padding: 24px; border-radius: 16px; box-shadow: 0 1px 2px rgba(16,24,40,.05), 0 8px 24px rgba(16,24,40,.06); margin-bottom: 24px; border: 1px solid #e4e9f1; text-align: center;">
             <h2 style="margin: 0 0 8px 0; font-size: 24px; color: #101828; font-weight: 900;">🔍 ניתוח החלטות הרכב</h2>
             <p style="margin: 0; color: #5d6b82; font-size: 14px;">כמה נקודות הפסדת בגלל שחקנים שהשארת על הספסל?</p>
         </div>
@@ -16517,8 +16517,8 @@ function renderLineupAnalysis() {
 
     // Detailed analysis
     html += `
-        <div style="background: white; border-radius: 12px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.05); border: 1px solid #e4e9f1;">
-            <div style="background: linear-gradient(135deg, #f5f8fc 0%, #eef2f7 100%); padding: 16px; border-bottom: 2px solid #e4e9f1;">
+        <div style="background: white; border-radius: 12px; overflow: hidden; box-shadow: 0 1px 2px rgba(16,24,40,.05), 0 8px 24px rgba(16,24,40,.06); border: 1px solid #e4e9f1;">
+            <div style="background: #f5f8fc; padding: 16px; border-bottom: 2px solid #e4e9f1;">
                 <h3 style="margin: 0; font-size: 18px; color: #101828; font-weight: 800;">📊 פירוט לפי מחזור</h3>
             </div>
             <div style="padding: 16px;">
@@ -16722,7 +16722,7 @@ function renderLineupStats(stats, diffs = null) {
     };
 
     return `
-        <div class="lineup-stats-card" style="margin-bottom: 20px; background: linear-gradient(135deg, #ffffff 0%, #f5f8fc 100%); border: 2px solid #e4e9f1; border-radius: 16px; padding: 20px; box-shadow: 0 4px 12px rgba(0,0,0,0.05);">
+        <div class="lineup-stats-card" style="margin-bottom: 20px; background: #ffffff; border: 1px solid #e4e9f1; border-radius: 16px; padding: 20px; box-shadow: 0 1px 2px rgba(16,24,40,.05), 0 8px 24px rgba(16,24,40,.06);">
             <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 15px;">
                 ${renderBox('צפי (GW הבא)', stats.predicted, '#0f56d9', diffs?.predicted)}
                 ${renderBox('נקודות (GW אחרון)', stats.lastGw, '#0e9f5d', diffs?.lastGw)}
@@ -17250,7 +17250,7 @@ function renderNextRivalAnalysis(selectedOpponentId = null) {
                 const oppPlayers = oppData.players.map(name => oppSquad.find(p => p.web_name === name)).filter(Boolean);
 
                 overlapsHtml += `
-                    <div class="overlap-item" style="padding: 18px; background: linear-gradient(135deg, #ffffff 0%, #f5f8fc 100%); border-radius: 12px; margin-bottom: 12px; border: 2px solid #e4e9f1; box-shadow: 0 2px 6px rgba(0,0,0,0.08);">
+                    <div class="overlap-item" style="padding: 18px; background: #ffffff; border-radius: 12px; margin-bottom: 12px; border: 1px solid #e4e9f1; box-shadow: 0 1px 2px rgba(16,24,40,.05), 0 8px 24px rgba(16,24,40,.06);">
                         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
                             <div class="overlap-label" style="font-weight: 800; font-size: 15px; color: #101828;">${key}</div>
                             <div class="overlap-values" style="font-family: monospace; font-weight: 900; font-size: 18px;">
@@ -17292,7 +17292,7 @@ function renderNextRivalAnalysis(selectedOpponentId = null) {
         });
         if (overlapsHtml) {
             html += `
-                <div class="overlap-section" style="background: linear-gradient(135deg, #ffffff 0%, #f5f8fc 100%); padding: 20px; border-radius: 12px; border: 2px solid #e4e9f1; box-shadow: 0 4px 12px rgba(0,0,0,0.05);">
+                <div class="overlap-section" style="background: #ffffff; padding: 20px; border-radius: 12px; border: 1px solid #e4e9f1; box-shadow: 0 1px 2px rgba(16,24,40,.05), 0 8px 24px rgba(16,24,40,.06);">
                     <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 15px;">
                         <span style="font-size: 24px;">🤝</span>
                         <h3 style="margin: 0; font-size: 16px; color: #101828; font-weight: 800;">חפיפות ונטרולים</h3>
@@ -17318,7 +17318,7 @@ function renderNextRivalAnalysis(selectedOpponentId = null) {
         const oppTop3 = [...oppSquad].sort((a, b) => (parseFloat(b.predicted_points_1_gw) || 0) - (parseFloat(a.predicted_points_1_gw) || 0)).slice(0, 3);
 
         html += `
-            <div class="top-players-section" style="background: linear-gradient(135deg, #ffffff 0%, #f5f8fc 100%); padding: 20px; border-radius: 12px; border: 2px solid #e4e9f1; box-shadow: 0 4px 12px rgba(0,0,0,0.05); margin-top: 20px;">
+            <div class="top-players-section" style="background: #ffffff; padding: 20px; border-radius: 12px; border: 1px solid #e4e9f1; box-shadow: 0 1px 2px rgba(16,24,40,.05), 0 8px 24px rgba(16,24,40,.06); margin-top: 20px;">
                 <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 15px;">
                     <span style="font-size: 24px;">⭐</span>
                     <h3 style="margin: 0; font-size: 16px; color: #101828; font-weight: 800;">שחקנים מובילים (צפי GW הבא)</h3>
@@ -17396,7 +17396,7 @@ function renderNextRivalAnalysis(selectedOpponentId = null) {
             const advantageText = advantage === 'you' ? '✓ יתרון לך' : advantage === 'opp' ? '✗ יתרון ליריב' : '= שווה';
 
             positionAnalysisHtml += `
-                <div style="background: white; padding: 15px; border-radius: 10px; border: 2px solid ${advantageColor}20; box-shadow: 0 2px 8px rgba(0,0,0,0.05);">
+                <div style="background: white; padding: 15px; border-radius: 10px; border: 2px solid ${advantageColor}20; box-shadow: 0 1px 2px rgba(16,24,40,.05), 0 8px 24px rgba(16,24,40,.06);">
                     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
                         <div style="display: flex; align-items: center; gap: 8px;">
                             <span style="font-size: 24px;">${positionIcons[pos]}</span>
@@ -17424,7 +17424,7 @@ function renderNextRivalAnalysis(selectedOpponentId = null) {
         });
 
         html += `
-            <div class="position-analysis-section" style="background: linear-gradient(135deg, #ffffff 0%, #f5f8fc 100%); padding: 20px; border-radius: 12px; border: 2px solid #e4e9f1; box-shadow: 0 4px 12px rgba(0,0,0,0.05); margin-top: 20px;">
+            <div class="position-analysis-section" style="background: #ffffff; padding: 20px; border-radius: 12px; border: 1px solid #e4e9f1; box-shadow: 0 1px 2px rgba(16,24,40,.05), 0 8px 24px rgba(16,24,40,.06); margin-top: 20px;">
                 <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 15px;">
                     <span style="font-size: 24px;">🎯</span>
                     <h3 style="margin: 0; font-size: 16px; color: #101828; font-weight: 800;">ניתוח לפי עמדות - איפה היתרון?</h3>
@@ -17586,7 +17586,7 @@ function renderNextRivalAnalysis(selectedOpponentId = null) {
         const oppTopScorer = oppSquad.reduce((max, p) => (parseFloat(p.total_points) || 0) > (parseFloat(max.total_points) || 0) ? p : max, oppSquad[0]);
 
         html += `
-            <div class="compact-stats-footer" style="background: linear-gradient(135deg, #f5f8fc 0%, #ffffff 100%); padding: 20px 25px; border-radius: 12px; border: 2px solid #e4e9f1; margin-top: 20px; box-shadow: 0 4px 12px rgba(0,0,0,0.05);">
+            <div class="compact-stats-footer" style="background: #ffffff; padding: 20px 25px; border-radius: 12px; border: 1px solid #e4e9f1; margin-top: 20px; box-shadow: 0 1px 2px rgba(16,24,40,.05), 0 8px 24px rgba(16,24,40,.06);">
                 <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 20px; font-size: 13px;">
                     <div style="text-align: center;">
                         <div style="color: #5d6b82; margin-bottom: 6px; font-weight: 600; font-size: 12px;">🔥 כושר</div>
