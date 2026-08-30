@@ -54,6 +54,7 @@ function load(verdicts = {}, over = {}) {
     // from this slice. These tests are about the rule, not about how a floor
     // shrinks in August — see tests/season-gate.test.mjs for that.
     globalThis.scaleMinutes = target => target;
+    globalThis.playedGameweeks = () => 38;
     globalThis.sampleMinutes = p => p.minutes || 0;
     globalThis.signalFor = p => verdicts[p.id]
         || { key: 'hold', label: 'ניטרלי', tone: 'muted', why: [] };

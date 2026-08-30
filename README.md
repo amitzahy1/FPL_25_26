@@ -48,19 +48,46 @@ Everything season-specific lives in `SEASON_CONFIG` at the top of `script.js`.
 
 ### Why two seasons
 
-At draft time the new season's API reports every player at zero minutes and
-zero points, so every computed metric collapses to zero — exactly when the tool
-is most needed. `data/season-<id>.json` is a frozen snapshot of the completed
-season, built from
-[vaastav/Fantasy-Premier-League](https://github.com/vaastav/Fantasy-Premier-League).
+A draft is decided in August, when the new season has produced 90 or 180 minutes
+a player. Ranked on that alone the board is whoever happened to score on the
+opening weekend; ignored entirely, it is last season's board and says nothing
+about a player whose role has changed. `data/season-<id>.json` is a frozen
+snapshot of the completed season, built from
+[vaastav/Fantasy-Premier-League](https://github.com/vaastav/Fantasy-Premier-League),
+and it is not a fallback — it is the prior the current season updates:
 
-Until the new season has five finished gameweeks, the app shows the completed
-season automatically and says so in a banner. Either season can be selected
-manually at any time.
+    w = minutes / (minutes + VALUE_TUNING.priorK)     priorK = 900 (ten matches)
+    rate = w x (this season) + (1 - w) x (last season)
+
+Standard empirical-Bayes shrinkage. At two gameweeks the current season carries
+~17%, at GW10 half, at GW38 ~79% — so the prior fades on its own and nothing has
+to be switched off in October. `applySeasonBlend` owns it, between
+`preprocessPlayerData` (which computes this season's rates) and
+`calculateAdvancedScores` (which ranks on them), so every consumer downstream
+reads the blended figure without knowing that is what it is reading.
+
+Only the derived *rates* are weighed. Minutes, goals, points and clean sheets on
+the row stay this season's, because that is what the reader is looking at. `form`
+is untouched, being the recent-signal term by construction.
 
 Players who never appeared are omitted from the snapshot. Their absence is how
-"no prior data" is represented, so promoted-team players and new signings are
-not shown as zeros that would sort them last and read as bad picks.
+"no prior data" is represented — and a player with no prior is held near the
+median regular at his position rather than left unshrunk, because otherwise a
+promoted club's defender with two clean sheets simply takes over the top of the
+board. `prior_is_baseline` marks them, and the `⬆️ קבוצות שעלו` / `🆕 חדשים בליגה`
+chips still find them.
+
+The blend is stated, never hidden: the banner gives the mix, the optional `משקל`
+column and a per-row badge give each player's own weight, the expanded row prints
+last season's figure in grey beside this season's on every blended rate, and
+`רק העונה הנוכחית` in the header turns it off.
+
+`sampleMinutes(p)` — this season plus the prior — is what every "has he played
+enough to judge?" gate counts, and `scaleMinutes(floor)` shrinks a season-length
+floor to the football actually played. Read as raw `p.minutes`, those gates were
+unreachable in August: measured on the live API with one finished gameweek, 51 of
+572 players had a draft score, none had a VORP, the verdict column was entirely
+neutral and three charts hid themselves.
 
 ## Data sources
 
@@ -113,12 +140,43 @@ Three blocks, in reading order:
    this season's bootstrap against the committed snapshot, so nothing needs
    updating each August, and both only apply on the current-season tab.
 2. **The table** — sortable and filterable, including by `סיגנל`, the one-verdict
-   column. Twelve columns are optional and remembered per browser.
-3. **`גרפים`** — eight cards, ordered by how directly each answers a decision,
+   column. Thirteen columns are optional and remembered per browser, including
+   `משקל` — how much of the row is this season.
+3. **`גרפים`** — twelve cards, ordered by how directly each answers a decision,
    defined by `CHART_SPECS`. They read the filtered set *before* the "top 20"
    slice, and a card with nothing to plot hides itself rather than drawing an
    empty axis. Quadrant colouring follows `goodDirection`, so green means good
-   even on the axes where lower is better (xGC, goals conceded).
+   even on the axes where lower is better (xGC, goals conceded). The `⤢` on any
+   card opens it full screen beside a sortable table of every plotted player and
+   both axis values; clicking a row activates that point through Chart.js's own
+   hover state, so the highlight cannot disagree with the tooltip. The table is
+   read back out of the built config, so it lists exactly what the chart drew and
+   a thirteenth chart needs no work for it.
+
+## The draft tab
+
+`חדר הדראפט` is the board on the night and the waiver board after it: four ranked
+columns, one per position, on `projectedPointsOf(p, 'season')` — the same index
+the `הכי שווים` panel uses, so the board and the panel cannot recommend different
+players. Tier breaks are drawn at the largest gaps rather than at gaps over a
+threshold, because a threshold has to be expressed in points and the same number
+of points means something different at every position.
+
+During a draft it polls `draft/{league}/choices` every 15s — well inside the
+90-second pick limit — and strikes players off in place, labelled with the
+manager who took them. Taken players keep their position rather than
+disappearing: the shape of what is gone is information, and a list that reflows
+under you on every pick cannot be read at speed. The poll also writes
+`ownedElementIds`, which the players table, the free-agent filter and the
+`קח עכשיו` verdict already read, so the whole site follows the draft live.
+
+The pick order is learned from round one rather than guessed — FPL publishes
+`order_method: random` and nothing else beforehand — then snaked, so "your next
+pick is #20, in 4 picks" is right for whatever order the randomiser gave. Before
+round one completes it says it does not know.
+
+Every other sub-tab is downstream of somebody owning somebody, so before the
+draft they say why they are empty and point at the room.
 
 ## Notes
 

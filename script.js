@@ -13468,12 +13468,17 @@ function buildTeamChart(data) {
             teams.set(p.team_name, { attMins: 0, defMins: 0, xgi: 0, xgc: 0, fdr: 0, fdrN: 0 });
         }
         const t = teams.get(p.team_name);
+        // From the blended per-90s rather than this season's raw totals, so the
+        // club rates say the same thing as every other number on the page. Scaled
+        // back up by minutes here and divided by the same minutes below, which
+        // makes the result a minutes-weighted mean of the players' own rates.
+        const played90 = (p.minutes || 0) / 90;
         if (['MID', 'FWD'].includes(p.position_name)) {
             t.attMins += p.minutes;
-            t.xgi += parseFloat(p.expected_goal_involvements) || 0;
+            t.xgi += (parseFloat(p.xGI_per90) || 0) * played90;
         } else {
             t.defMins += p.minutes;
-            t.xgc += parseFloat(p.expected_goals_conceded) || 0;
+            t.xgc += (parseFloat(p.expected_goals_conceded_per_90) || 0) * played90;
         }
         if (p.next_3_fdr > 0) { t.fdr += p.next_3_fdr; t.fdrN++; }
     });
@@ -14016,7 +14021,11 @@ function buildTeamTargetsChart(data, side) {
         // filters trimmed to three players is not compared against one with
         // eleven — and skip the club if that half is too thin to rate at all.
         const mins = attacking ? t.attMins : t.defMins;
-        if (mins < 900 || !t.fdrN) return null;
+        // 900 club-minutes is "about three players who have played most of the"
+        // football so far" in April, and more than a club's whole forward line has
+        // played by the end of August — so in August it disqualified every club
+        // and the card hid itself. Three players' worth of the season that exists.
+        if (mins < Math.min(900, 270 * Math.max(1, playedGameweeks())) || !t.fdrN) return null;
         const rate = (attacking ? t.xgi : t.xgc) / (mins / 90);
         return { x: t.fdr, y: rate, team, label: team, fdr: t.fdr };
     }).filter(Boolean);
