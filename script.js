@@ -15530,8 +15530,9 @@ function draftRoomBestHtml() {
             ${top.map((r, i) => `
                 <div class="drm-best-card" data-pos="${r.pos}">
                     <span class="drm-best-rank">${i + 1}</span>
+                    <span class="drm-best-pos">${escapeHtml(POSITION_SINGLE[r.pos] || r.pos)}</span>
                     <span class="drm-best-name" title="${escapeHtml(r.p.team_name || '')}">${escapeHtml(r.p.web_name)}</span>
-                    <span class="drm-best-meta">${escapeHtml(teamShort(r.p))} · ${escapeHtml(POSITION_SINGLE[r.pos] || r.pos)}</span>
+                    <span class="drm-best-team">${escapeHtml(teamShort(r.p))}</span>
                     <span class="drm-best-val" title="נקודות צפויות עד סוף העונה">${Math.round(r.value)}</span>
                 </div>`).join('')}
         </div>`;
@@ -15782,7 +15783,28 @@ function switchDraftTab(tabId) {
     draftNavigate(pair[0], pair[1], { replace: true });
 }
 
+/**
+ * The masthead's right-hand pill: which gameweek and how many managers.
+ * Silent until the league is loaded — an empty pill is worse than none.
+ */
+function syncDraftHeroMeta() {
+    const pill = document.getElementById('draftHeroMeta');
+    const sub = document.getElementById('draftHeroSub');
+    if (!pill) return;
+    const details = state.draft.details;
+    if (!details) { pill.hidden = true; return; }
+    const gw = details.league?.current_event || getCurrentEventId();
+    pill.textContent = gw ? `מחזור ${gw}` : SEASON_CONFIG.seasonLabel;
+    pill.hidden = false;
+    const managers = (details.league_entries || []).length;
+    if (sub && managers) {
+        sub.textContent = `${managers} מנג׳רים · עונת ${SEASON_CONFIG.seasonLabel}`;
+    }
+}
+
 function draftNavigate(section, segment, opts = {}) {
+    syncDraftHeroMeta();
+
     const ia = DRAFT_IA[section] || DRAFT_IA.overview;
     if (!DRAFT_IA[section]) section = 'overview';
     if (!ia.segments.includes(segment)) segment = ia.def;
@@ -15837,8 +15859,11 @@ function draftNavigate(section, segment, opts = {}) {
     } else if (segment === 'nextround') {
         const fixturesContainer = document.getElementById('nextFixturesOverview');
         if (fixturesContainer && state.draft.details) {
-            const fixturesHtml = renderNextRoundFixtures();
-            fixturesContainer.innerHTML = fixturesHtml || '<div style="text-align: center; padding: 40px; color: #64748b;">אין משחקים קרובים</div>';
+            // Whitespace counts as empty: a blank panel under a working
+            // navigation reads as a broken page rather than an empty fixture list.
+            const fixturesHtml = (renderNextRoundFixtures() || '').trim();
+            fixturesContainer.innerHTML = fixturesHtml ||
+                '<div class="plc-empty">אין משחקים קרובים להצגה</div>';
         }
     } else if (segment === 'h2h') {
         renderH2HHistory();
@@ -15884,7 +15909,7 @@ function renderH2HHistory() {
 
     const myTeam = findMyTeam();
     if (!myTeam) {
-        container.innerHTML = '<div style="text-align: center; padding: 40px; color: #64748b;">אנא בחר את הקבוצה שלך תחילה</div>';
+        container.innerHTML = '<div class="plc-empty">אנא בחר את הקבוצה שלך תחילה</div>';
         return;
     }
 
@@ -15926,7 +15951,7 @@ function renderH2HHistory() {
     const team2 = entries.find(e => e.id === team2Id);
 
     if (!team1 || !team2) {
-        container.innerHTML = html + '<div style="text-align: center; padding: 40px; color: #64748b;">לא נמצאו קבוצות</div>';
+        container.innerHTML = html + '<div class="plc-empty">לא נמצאו קבוצות</div>';
         return;
     }
 
@@ -16037,13 +16062,13 @@ function renderLineupAnalysis() {
 
     const myTeam = findMyTeam();
     if (!myTeam) {
-        container.innerHTML = '<div style="text-align: center; padding: 40px; color: #64748b;">אנא בחר את הקבוצה שלך תחילה</div>';
+        container.innerHTML = '<div class="plc-empty">אנא בחר את הקבוצה שלך תחילה</div>';
         return;
     }
 
     const historicalLineups = state.draft.historicalLineups.get(myTeam.id);
     if (!historicalLineups || Object.keys(historicalLineups).length === 0) {
-        container.innerHTML = '<div style="text-align: center; padding: 40px; color: #64748b;">טוען נתונים היסטוריים...</div>';
+        container.innerHTML = '<div class="plc-empty">טוען נתונים היסטוריים…</div>';
         return;
     }
 
@@ -16650,7 +16675,7 @@ function updateMyTeamForRival(newMyTeamId) {
 function renderNextRivalAnalysis(selectedOpponentId = null) {
     const container = document.getElementById('rivalAnalysisContainer');
     if (!container) return;
-    container.innerHTML = '<div style="text-align:center; padding:20px; color:#64748b;"><div class="spinner"></div> מחשב סיכויים ומנתח הרכבים...</div>';
+    container.innerHTML = '<div class="plc-empty"><div class="spinner"></div> מחשב סיכויים ומנתח הרכבים…</div>';
     try {
         const myTeam = findMyTeam();
         if (!myTeam) {

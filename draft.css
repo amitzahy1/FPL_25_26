@@ -1,96 +1,104 @@
 /*
- * draft.css — the draft-league tab's design layer ("Premier Light").
+ * draft.css — the draft-league tab's design layer ("Clubhouse").
+ *
+ * A modern sports-app surface: a soft blue-grey canvas, white rounded cards
+ * with a two-layer shadow, one strong blue accent, and colored position tags.
  *
  * Loaded AFTER style.css and mobile.css so its rules win by cascade order,
- * never by !important. Every rule in this file must be scoped under one of:
+ * never by !important. Every rule must be scoped under one of:
  *   #draftTabContent, #draftMobileBar, or body.tab-draft
  * so the players tab (#playersTabContent) is never affected. The bare :root
  * block below only declares custom properties, which are inert until used.
  *
- * This file is stamped with ?v= by scripts/stamp-version.mjs and validated by
+ * Stamped with ?v= by scripts/stamp-version.mjs and validated by
  * scripts/check-structure.mjs — both list it explicitly.
  */
 
 :root {
-    /* Premier Light palette — official-FPL DNA on a white ground */
-    --pl-purple: #38003C;
-    --pl-purple-deep: #23002B;
-    --pl-pink: #E90052;
-    --pl-cyan: #04F5FF;
-    --pl-green: #00FF85;
-    --pl-grad: linear-gradient(135deg, #E90052, #963CFF 55%, #04F5FF);
+    /* Clubhouse palette */
+    --c-bg: #eef2f7;
+    --c-card: #ffffff;
+    --c-ink: #101828;
+    --c-muted: #5d6b82;
+    --c-line: #e4e9f1;
+    --c-wash: #f5f8fc;
 
-    /* Neutrals tuned warm-purple so grays don't fight the brand */
-    --pl-ink: #240030;
-    --pl-muted: #6b5876;
-    --pl-line: #ece6ef;
-    --pl-surface: #ffffff;
-    --pl-bg: #faf8fb;
+    --c-blue: #0f56d9;
+    --c-blue-deep: #0a44b0;
+    --c-blue-soft: #e7efff;
 
-    /* States on light ground (the neon brights fail contrast as text) */
-    --pl-pos: #0a8f4d;
-    --pl-pos-bg: #e4fbef;
-    --pl-neg: #c81e5b;
-    --pl-neg-bg: #fde8f0;
+    /* Semantic, kept separate from the accent */
+    --c-green: #0e9f5d;
+    --c-green-soft: #e5f8ee;
+    --c-red: #d92d5a;
+    --c-red-soft: #ffe9f0;
+    --c-amber: #d97706;
+    --c-amber-soft: #fdf1e0;
+    --c-sky: #0369a1;
+    --c-sky-soft: #e7f6ff;
 
-    --pl-radius: 14px;
-    --pl-radius-sm: 10px;
-    --pl-shadow: 0 4px 16px rgba(56, 0, 60, .08);
-    --pl-shadow-lift: 0 8px 28px rgba(56, 0, 60, .14);
+    --c-radius: 16px;
+    --c-radius-sm: 14px;
+    --c-radius-xs: 10px;
+    /* Two layers: a hairline lift plus a soft ambient pool. */
+    --c-shadow: 0 1px 2px rgba(16, 24, 40, .05), 0 8px 24px rgba(16, 24, 40, .06);
+    --c-shadow-sm: 0 1px 2px rgba(16, 24, 40, .05), 0 6px 18px rgba(16, 24, 40, .05);
 
     --app-header-h: 70px;
 }
 
-/* Heebo carries all Hebrew text on the draft tab; the stack below it matches
-   the site-wide fallback in style.css so a failed font load degrades to the
-   exact same rendering as today. */
+/* Rubik carries the Latin numerals and Heebo the Hebrew; the stack below them
+   matches style.css so a failed font load degrades to today's rendering. */
 #draftTabContent,
 #draftMobileBar {
-    font-family: 'Heebo', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Inter', 'Roboto', sans-serif;
+    font-family: 'Rubik', 'Heebo', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+    color: var(--c-ink);
+}
+
+body.tab-draft {
+    background: var(--c-bg);
 }
 
 /* ============================================================
-   Hero — the deep-purple masthead with the pink→cyan signature
+   Masthead — a white card, not a colored band
    ============================================================ */
 
-body.tab-draft {
-    background: var(--pl-bg);
-}
-
 #draftHero {
-    position: relative;
-    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 14px;
+    flex-wrap: wrap;
     margin: 16px 0 0;
-    padding: 26px 24px 24px;
-    border-radius: var(--pl-radius);
-    background:
-        radial-gradient(560px 190px at 12% -30%, rgba(4, 245, 255, .22), transparent 70%),
-        radial-gradient(460px 190px at 88% 130%, rgba(233, 0, 82, .28), transparent 70%),
-        linear-gradient(160deg, var(--pl-purple-deep), var(--pl-purple) 62%, #4a0a53);
-}
-
-#draftHero::after {
-    content: "";
-    position: absolute;
-    inset-inline: 0;
-    bottom: 0;
-    height: 4px;
-    background: var(--pl-grad);
+    padding: 20px 24px;
+    background: var(--c-card);
+    border-radius: var(--c-radius);
+    box-shadow: var(--c-shadow);
 }
 
 #draftHero h2 {
     margin: 0;
-    font-size: 27px;
-    font-weight: 900;
-    color: #fff;
+    font-size: 22px;
+    font-weight: 800;
     letter-spacing: -.01em;
+    color: var(--c-ink);
 }
 
 #draftHero p {
-    margin: 5px 0 0;
-    font-size: 14px;
-    font-weight: 500;
-    color: rgba(255, 255, 255, .78);
+    margin: 2px 0 0;
+    font-size: 12.5px;
+    font-weight: 400;
+    color: var(--c-muted);
+}
+
+#draftTabContent .plc-gw-pill {
+    padding: 7px 15px;
+    border-radius: var(--c-radius-xs);
+    background: var(--c-blue-soft);
+    color: var(--c-blue);
+    font-size: 12.5px;
+    font-weight: 600;
+    white-space: nowrap;
 }
 
 /* ============================================================
@@ -105,26 +113,27 @@ body.tab-draft {
     display: block;
 }
 
-/* Top pill nav. Overrides the legacy .draft-sub-nav-container rules that still
-   live in style.css/mobile.css for the old nine-tab bar. */
+/* Section nav: a segmented control living inside its own card */
 #draftTabContent .draft-sub-nav-container {
     position: sticky;
     top: var(--app-header-h);
     z-index: 90;
-    background: var(--pl-surface);
-    border-bottom: 1px solid var(--pl-line);
+    background: transparent;
+    border: none;
     box-shadow: none;
-    padding: 12px 0;
-    margin-bottom: 20px;
+    padding: 14px 0 0;
+    margin-bottom: 16px;
 }
 
 #draftTabContent .draft-sub-nav {
     display: flex;
-    justify-content: center;
-    gap: 8px;
+    gap: 6px;
     flex-wrap: nowrap;
     overflow-x: auto;
-    padding: 2px 8px;
+    padding: 6px;
+    background: var(--c-card);
+    border-radius: var(--c-radius-sm);
+    box-shadow: var(--c-shadow-sm);
     scrollbar-width: none;
 }
 
@@ -133,27 +142,35 @@ body.tab-draft {
 }
 
 #draftTabContent .dnav-btn {
-    padding: 10px 22px;
-    border: 1px solid transparent;
-    border-radius: 999px;
+    flex: 1;
+    padding: 10px 16px;
+    border: none;
+    border-radius: var(--c-radius-xs);
     background: transparent;
-    color: var(--pl-muted);
+    color: var(--c-muted);
     font: inherit;
-    font-weight: 700;
-    font-size: 15px;
+    font-size: 13.5px;
+    font-weight: 600;
     white-space: nowrap;
     cursor: pointer;
     transition: background .15s ease, color .15s ease;
 }
 
 #draftTabContent .dnav-btn:hover {
-    background: var(--pl-bg);
-    color: var(--pl-ink);
+    background: var(--c-wash);
+    color: var(--c-ink);
 }
 
 #draftTabContent .dnav-btn.active {
-    background: var(--pl-purple);
+    background: var(--c-blue);
     color: #fff;
+    box-shadow: 0 4px 10px rgba(15, 86, 217, .3);
+}
+
+#draftTabContent .dnav-btn:focus-visible,
+#draftTabContent .plc-seg:focus-visible {
+    outline: 2px solid var(--c-blue);
+    outline-offset: 2px;
 }
 
 /* Segment bar inside a section */
@@ -161,67 +178,248 @@ body.tab-draft {
     display: flex;
     gap: 6px;
     flex-wrap: wrap;
-    margin: 4px 0 18px;
+    margin: 0 0 16px;
 }
 
 #draftTabContent .plc-seg {
-    padding: 8px 16px;
-    border: 1px solid var(--pl-line);
+    padding: 7px 15px;
+    border: 1px solid var(--c-line);
     border-radius: 999px;
-    background: var(--pl-surface);
-    color: var(--pl-muted);
+    background: var(--c-card);
+    color: var(--c-muted);
     font: inherit;
-    font-weight: 600;
-    font-size: 14px;
+    font-size: 13px;
+    font-weight: 500;
     cursor: pointer;
     transition: border-color .15s ease, color .15s ease, background .15s ease;
 }
 
 #draftTabContent .plc-seg:hover {
-    border-color: var(--pl-purple);
-    color: var(--pl-purple);
+    border-color: var(--c-blue);
+    color: var(--c-blue);
 }
 
 #draftTabContent .plc-seg.active {
-    border-color: var(--pl-purple);
-    color: var(--pl-purple);
-    background: #f6eef8;
+    background: var(--c-blue-soft);
+    border-color: var(--c-blue-soft);
+    color: var(--c-blue);
+    font-weight: 600;
 }
 
 /* ============================================================
-   Draft room — rebuilt as a usable draft-night tool: status
-   chips, squad tracker, best-available strip, search, and
-   position-colored boards with tier markers.
+   Components — the .plc-* vocabulary shared by every draft view
+   ============================================================ */
+
+#draftTabContent .plc-card {
+    background: var(--c-card);
+    border: none;
+    border-radius: var(--c-radius);
+    box-shadow: var(--c-shadow);
+    padding: 18px 20px;
+}
+
+#draftTabContent .plc-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 0 0 12px;
+    font-size: 15.5px;
+    font-weight: 700;
+    color: var(--c-ink);
+}
+
+#draftTabContent .plc-sub {
+    margin: -6px 0 14px;
+    font-size: 12.5px;
+    font-weight: 400;
+    color: var(--c-muted);
+}
+
+#draftTabContent .plc-empty {
+    padding: 36px 16px;
+    text-align: center;
+    font-size: 13.5px;
+    font-weight: 500;
+    color: var(--c-muted);
+    background: var(--c-card);
+    border-radius: var(--c-radius);
+    box-shadow: var(--c-shadow-sm);
+}
+
+#draftTabContent .plc-skeleton {
+    border-radius: var(--c-radius-xs);
+    background: linear-gradient(90deg, var(--c-line) 25%, var(--c-wash) 50%, var(--c-line) 75%);
+    background-size: 200% 100%;
+    animation: plc-shimmer 1.4s ease-in-out infinite;
+    min-height: 18px;
+}
+
+@keyframes plc-shimmer {
+    to { background-position: -200% 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    #draftTabContent .plc-skeleton,
+    #draftTabContent .drm-pill-live {
+        animation: none;
+    }
+}
+
+/* League tables — light header, circular rank chips, rounded active row */
+#draftTabContent .draft-table {
+    width: 100%;
+    border-collapse: collapse;
+    background: var(--c-card);
+    border-radius: var(--c-radius-sm);
+    overflow: hidden;
+    box-shadow: var(--c-shadow-sm);
+}
+
+#draftTabContent .draft-table thead th {
+    background: var(--c-card);
+    color: var(--c-muted);
+    font-size: 11.5px;
+    font-weight: 600;
+    padding: 11px 8px;
+    text-align: center;
+    cursor: pointer;
+    white-space: nowrap;
+    border: none;
+    border-bottom: 1px solid var(--c-line);
+}
+
+#draftTabContent .draft-table thead th:hover {
+    color: var(--c-blue);
+}
+
+#draftTabContent .draft-table tbody td {
+    padding: 11px 8px;
+    font-size: 13.5px;
+    text-align: center;
+    border: none;
+    border-bottom: 1px solid var(--c-line);
+    color: var(--c-ink);
+    font-variant-numeric: tabular-nums;
+}
+
+#draftTabContent .draft-table tbody tr:last-child td {
+    border-bottom: none;
+}
+
+#draftTabContent .draft-table tbody tr:hover td {
+    background: var(--c-wash);
+}
+
+#draftTabContent .draft-table tbody tr.is-me td {
+    background: var(--c-blue-soft);
+    font-weight: 600;
+}
+
+#draftTabContent .draft-table tbody tr.is-me td:first-child {
+    border-start-start-radius: var(--c-radius-xs);
+    border-end-start-radius: var(--c-radius-xs);
+}
+
+#draftTabContent .draft-table tbody tr.is-me td:last-child {
+    border-start-end-radius: var(--c-radius-xs);
+    border-end-end-radius: var(--c-radius-xs);
+}
+
+#draftTabContent .draft-table td.is-pos { color: var(--c-green); font-weight: 600; }
+#draftTabContent .draft-table td.is-neg { color: var(--c-red); font-weight: 600; }
+
+#draftTabContent .draft-table td:last-child {
+    font-weight: 800;
+}
+
+#draftTabContent .plc-team-logo {
+    font-size: 17px;
+    margin-inline-end: 6px;
+}
+
+#draftTabContent .plc-rank {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    background: #f1f4f9;
+    color: var(--c-muted);
+    font-size: 12px;
+    font-weight: 700;
+}
+
+#draftTabContent .plc-rank.is-top {
+    background: var(--c-blue);
+    color: #fff;
+}
+
+/* The my-team selector bar on the overview */
+#draftTabContent .plc-teambar {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    flex-wrap: wrap;
+    padding: 14px 18px;
+    margin-bottom: 16px;
+}
+
+#draftTabContent .plc-teambar label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13.5px;
+    font-weight: 600;
+    color: var(--c-ink);
+}
+
+#draftTabContent .plc-teambar select {
+    flex: 1;
+    max-width: 320px;
+    padding: 9px 14px;
+    border: 1px solid var(--c-line);
+    border-radius: var(--c-radius-xs);
+    background: var(--c-card);
+    font: inherit;
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--c-ink);
+    cursor: pointer;
+}
+
+#draftTabContent .plc-teambar select:focus {
+    outline: none;
+    border-color: var(--c-blue);
+    box-shadow: 0 0 0 3px rgba(15, 86, 217, .15);
+}
+
+#draftTabContent .plc-chart-body {
+    height: 400px;
+    width: 100%;
+}
+
+/* ============================================================
+   Draft room — the draft-night tool, in Clubhouse dress
    ============================================================ */
 
 /* Position accent, driven by data-pos on columns and best-cards */
-#draftTabContent [data-pos="GKP"] { --pos-accent: #d97706; }
-#draftTabContent [data-pos="DEF"] { --pos-accent: #0a8f4d; }
-#draftTabContent [data-pos="MID"] { --pos-accent: #0284c7; }
-#draftTabContent [data-pos="FWD"] { --pos-accent: var(--pl-pink); }
+#draftTabContent [data-pos="GKP"] { --pos-accent: var(--c-amber); --pos-soft: var(--c-amber-soft); }
+#draftTabContent [data-pos="DEF"] { --pos-accent: var(--c-green); --pos-soft: var(--c-green-soft); }
+#draftTabContent [data-pos="MID"] { --pos-accent: var(--c-sky); --pos-soft: var(--c-sky-soft); }
+#draftTabContent [data-pos="FWD"] { --pos-accent: var(--c-red); --pos-soft: var(--c-red-soft); }
 
 #draftTabContent .drm-head {
-    position: relative;
-    overflow: hidden;
     display: flex;
     align-items: center;
     justify-content: space-between;
     gap: 14px 20px;
     flex-wrap: wrap;
     padding: 18px 20px;
-    border-radius: var(--pl-radius);
-    background: linear-gradient(160deg, var(--pl-purple-deep), var(--pl-purple) 70%);
-    color: #fff;
-    margin-bottom: 12px;
-}
-
-#draftTabContent .drm-head::after {
-    content: "";
-    position: absolute;
-    inset-inline: 0;
-    top: 0;
-    height: 3px;
-    background: var(--pl-grad);
+    margin-bottom: 14px;
+    background: var(--c-card);
+    border-radius: var(--c-radius);
+    box-shadow: var(--c-shadow);
 }
 
 #draftTabContent .drm-head-row {
@@ -233,36 +431,32 @@ body.tab-draft {
 
 #draftTabContent .drm-title {
     margin: 0;
-    font-size: 20px;
-    font-weight: 900;
-    color: #fff;
+    font-size: 19px;
+    font-weight: 800;
+    color: var(--c-ink);
 }
 
 #draftTabContent .drm-pill {
-    padding: 4px 12px;
-    border-radius: 999px;
+    padding: 5px 13px;
+    border-radius: var(--c-radius-xs);
     font-size: 12px;
-    font-weight: 800;
-    letter-spacing: .02em;
+    font-weight: 600;
 }
 
 #draftTabContent .drm-pill-pre {
-    background: rgba(4, 245, 255, .16);
-    color: var(--pl-cyan);
-    border: 1px solid rgba(4, 245, 255, .4);
+    background: var(--c-blue-soft);
+    color: var(--c-blue);
 }
 
 #draftTabContent .drm-pill-live {
-    background: rgba(233, 0, 82, .25);
-    color: #ff7eb0;
-    border: 1px solid rgba(233, 0, 82, .6);
-    animation: drm-pulse 1.6s ease-in-out infinite;
+    background: var(--c-red-soft);
+    color: var(--c-red);
+    animation: drm-pulse 1.8s ease-in-out infinite;
 }
 
 #draftTabContent .drm-pill-post {
-    background: rgba(0, 255, 133, .14);
-    color: var(--pl-green);
-    border: 1px solid rgba(0, 255, 133, .4);
+    background: var(--c-green-soft);
+    color: var(--c-green);
 }
 
 @keyframes drm-pulse {
@@ -279,30 +473,29 @@ body.tab-draft {
     display: flex;
     flex-direction: column;
     gap: 1px;
-    min-width: 92px;
-    padding: 8px 14px;
-    border-radius: 10px;
-    background: rgba(255, 255, 255, .08);
-    border: 1px solid rgba(255, 255, 255, .14);
+    min-width: 96px;
+    padding: 9px 14px;
+    border-radius: var(--c-radius-xs);
+    background: var(--c-wash);
 }
 
 #draftTabContent .drm-chip-label {
-    font-size: 10.5px;
-    font-weight: 700;
-    color: rgba(255, 255, 255, .6);
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--c-muted);
 }
 
 #draftTabContent .drm-chip-value {
-    font-size: 16px;
-    font-weight: 900;
-    color: #fff;
+    font-size: 18px;
+    font-weight: 800;
+    color: var(--c-ink);
     font-variant-numeric: tabular-nums;
 }
 
 #draftTabContent .drm-chip-sub {
-    font-size: 10.5px;
-    font-weight: 600;
-    color: var(--pl-cyan);
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--c-blue);
 }
 
 #draftTabContent .drm-squad {
@@ -313,28 +506,36 @@ body.tab-draft {
 }
 
 #draftTabContent .drm-squad-chip {
-    padding: 4px 10px;
+    padding: 5px 11px;
     border-radius: 999px;
     font-size: 11.5px;
+    font-weight: 500;
+    background: var(--c-wash);
+    color: var(--c-muted);
+}
+
+#draftTabContent .drm-squad-chip b {
     font-weight: 700;
-    background: rgba(255, 255, 255, .1);
-    color: rgba(255, 255, 255, .85);
+    color: var(--c-ink);
 }
 
 #draftTabContent .drm-squad-chip.is-full {
-    background: rgba(0, 255, 133, .16);
-    color: var(--pl-green);
+    background: var(--c-green-soft);
+    color: var(--c-green);
+}
+
+#draftTabContent .drm-squad-chip.is-full b {
+    color: var(--c-green);
 }
 
 #draftTabContent .drm-warn {
-    padding: 10px 14px;
-    margin-bottom: 12px;
-    border-radius: 10px;
-    background: var(--pl-neg-bg);
-    border: 1px solid #f6bed3;
-    color: var(--pl-neg);
+    padding: 11px 16px;
+    margin-bottom: 14px;
+    border-radius: var(--c-radius-sm);
+    background: var(--c-amber-soft);
+    color: #92400e;
     font-size: 13.5px;
-    font-weight: 800;
+    font-weight: 600;
 }
 
 /* Tools: search + taken-toggle, built once so polling never steals focus */
@@ -342,59 +543,62 @@ body.tab-draft {
     display: flex;
     gap: 8px;
     align-items: center;
-    margin-bottom: 12px;
+    margin-bottom: 14px;
 }
 
 #draftTabContent .drm-search {
     flex: 1;
     max-width: 340px;
-    padding: 10px 14px;
-    border: 1px solid var(--pl-line);
-    border-radius: 999px;
-    background: var(--pl-surface);
+    padding: 10px 16px;
+    border: 1px solid var(--c-line);
+    border-radius: var(--c-radius-xs);
+    background: var(--c-card);
+    box-shadow: var(--c-shadow-sm);
     font: inherit;
-    font-size: 14px;
-    color: var(--pl-ink);
+    font-size: 13.5px;
+    color: var(--c-ink);
 }
 
 #draftTabContent .drm-search:focus {
     outline: none;
-    border-color: var(--pl-purple);
-    box-shadow: 0 0 0 3px rgba(56, 0, 60, .12);
+    border-color: var(--c-blue);
+    box-shadow: 0 0 0 3px rgba(15, 86, 217, .15);
 }
 
 #draftTabContent .drm-toggle {
-    padding: 9px 16px;
-    border: 1px solid var(--pl-line);
-    border-radius: 999px;
-    background: var(--pl-surface);
+    padding: 10px 16px;
+    border: 1px solid var(--c-line);
+    border-radius: var(--c-radius-xs);
+    background: var(--c-card);
+    box-shadow: var(--c-shadow-sm);
     font: inherit;
     font-size: 13px;
-    font-weight: 700;
-    color: var(--pl-muted);
+    font-weight: 500;
+    color: var(--c-muted);
     cursor: pointer;
     white-space: nowrap;
 }
 
 #draftTabContent .drm-toggle.active {
-    background: var(--pl-purple);
-    border-color: var(--pl-purple);
+    background: var(--c-blue);
+    border-color: var(--c-blue);
     color: #fff;
+    box-shadow: 0 4px 10px rgba(15, 86, 217, .3);
 }
 
 /* Best available strip */
 #draftTabContent .drm-best-title {
-    margin: 4px 0 8px;
+    margin: 2px 0 10px;
     font-size: 14px;
-    font-weight: 800;
-    color: var(--pl-ink);
+    font-weight: 700;
+    color: var(--c-ink);
 }
 
 #draftTabContent .drm-best-row {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-    gap: 10px;
-    margin-bottom: 16px;
+    gap: 12px;
+    margin-bottom: 18px;
 }
 
 #draftTabContent .drm-best-card {
@@ -402,43 +606,53 @@ body.tab-draft {
     display: flex;
     flex-direction: column;
     gap: 2px;
-    padding: 12px 14px 10px;
-    background: var(--pl-surface);
-    border: 1px solid var(--pl-line);
-    border-top: 3px solid var(--pos-accent, var(--pl-purple));
-    border-radius: var(--pl-radius-sm);
-    box-shadow: var(--pl-shadow);
+    padding: 13px 15px 11px;
+    background: var(--c-card);
+    border-radius: var(--c-radius-sm);
+    box-shadow: var(--c-shadow-sm);
 }
 
 #draftTabContent .drm-best-rank {
     position: absolute;
-    top: 8px;
-    inset-inline-end: 10px;
+    top: 10px;
+    inset-inline-end: 12px;
     font-size: 11px;
-    font-weight: 800;
-    color: var(--pl-muted);
+    font-weight: 600;
+    color: var(--c-muted);
+}
+
+/* The position tag: color is the only thing that says which line he plays. */
+#draftTabContent .drm-best-pos {
+    align-self: flex-start;
+    margin-bottom: 5px;
+    padding: 2px 9px;
+    border-radius: 6px;
+    background: var(--pos-soft, var(--c-wash));
+    color: var(--pos-accent, var(--c-muted));
+    font-size: 10.5px;
+    font-weight: 600;
 }
 
 #draftTabContent .drm-best-name {
-    font-size: 15px;
-    font-weight: 800;
-    color: var(--pl-ink);
+    font-size: 14.5px;
+    font-weight: 700;
+    color: var(--c-ink);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
 }
 
-#draftTabContent .drm-best-meta {
+#draftTabContent .drm-best-team {
     font-size: 11.5px;
-    font-weight: 600;
-    color: var(--pl-muted);
+    font-weight: 400;
+    color: var(--c-muted);
 }
 
 #draftTabContent .drm-best-val {
-    margin-top: 4px;
-    font-size: 20px;
-    font-weight: 900;
-    color: var(--pos-accent, var(--pl-purple));
+    margin-top: 6px;
+    font-size: 19px;
+    font-weight: 800;
+    color: var(--c-blue);
     font-variant-numeric: tabular-nums;
 }
 
@@ -451,32 +665,36 @@ body.tab-draft {
 }
 
 #draftTabContent .drm-col {
-    background: var(--pl-surface);
-    border: 1px solid var(--pl-line);
-    border-top: 3px solid var(--pos-accent, var(--pl-purple));
-    border-radius: var(--pl-radius-sm);
-    box-shadow: var(--pl-shadow);
-    padding: 12px 12px 8px;
+    background: var(--c-card);
+    border-radius: var(--c-radius-sm);
+    box-shadow: var(--c-shadow-sm);
+    padding: 14px 14px 8px;
     min-width: 0;
 }
 
 #draftTabContent .drm-col-head {
     display: flex;
-    align-items: baseline;
+    align-items: center;
     justify-content: space-between;
     gap: 8px;
-    margin: 0 0 8px;
-    padding-bottom: 8px;
-    border-bottom: 1px solid var(--pl-line);
-    font-size: 15px;
-    font-weight: 800;
-    color: var(--pos-accent, var(--pl-ink));
+    margin: 0 0 10px;
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--c-ink);
+}
+
+#draftTabContent .drm-col-head > span:first-child {
+    padding: 3px 11px;
+    border-radius: 7px;
+    background: var(--pos-soft, var(--c-wash));
+    color: var(--pos-accent, var(--c-ink));
+    font-size: 12.5px;
 }
 
 #draftTabContent .drm-col-count {
     font-size: 11.5px;
-    font-weight: 700;
-    color: var(--pl-muted);
+    font-weight: 500;
+    color: var(--c-muted);
 }
 
 #draftTabContent .drm-list {
@@ -490,8 +708,8 @@ body.tab-draft {
     grid-template-columns: 24px minmax(0, 1fr) auto;
     align-items: center;
     gap: 8px;
-    padding: 6px 4px;
-    border-bottom: 1px solid var(--pl-line);
+    padding: 7px 4px;
+    border-bottom: 1px solid var(--c-line);
 }
 
 #draftTabContent .drm-row:last-child {
@@ -499,18 +717,18 @@ body.tab-draft {
 }
 
 #draftTabContent .drm-row.is-taken {
-    opacity: .4;
+    opacity: .42;
 }
 
 #draftTabContent .drm-row.is-taken .drm-name {
     text-decoration: line-through;
-    text-decoration-color: var(--pl-muted);
+    text-decoration-color: var(--c-muted);
 }
 
 #draftTabContent .drm-rank {
     font-size: 11px;
-    font-weight: 700;
-    color: var(--pl-muted);
+    font-weight: 600;
+    color: var(--c-muted);
     font-variant-numeric: tabular-nums;
     text-align: center;
 }
@@ -523,8 +741,8 @@ body.tab-draft {
 
 #draftTabContent .drm-name {
     font-size: 13.5px;
-    font-weight: 700;
-    color: var(--pl-ink);
+    font-weight: 600;
+    color: var(--c-ink);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -532,8 +750,8 @@ body.tab-draft {
 
 #draftTabContent .drm-meta {
     font-size: 11px;
-    font-weight: 600;
-    color: var(--pl-muted);
+    font-weight: 400;
+    color: var(--c-muted);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -541,8 +759,8 @@ body.tab-draft {
 
 #draftTabContent .drm-val {
     font-size: 14px;
-    font-weight: 800;
-    color: var(--pos-accent, var(--pl-purple));
+    font-weight: 700;
+    color: var(--pos-accent, var(--c-blue));
     font-variant-numeric: tabular-nums;
 }
 
@@ -550,51 +768,53 @@ body.tab-draft {
     display: flex;
     align-items: center;
     gap: 8px;
-    margin: 4px 0;
+    margin: 6px 0;
     font-size: 10px;
-    font-weight: 800;
-    color: #fff;
+    font-weight: 600;
+    color: var(--c-muted);
     letter-spacing: .04em;
 }
 
 #draftTabContent .drm-tier span {
-    padding: 1px 8px;
+    padding: 2px 9px;
     border-radius: 999px;
-    background: var(--pl-purple);
+    background: var(--c-wash);
 }
 
 #draftTabContent .drm-tier::before,
 #draftTabContent .drm-tier::after {
     content: "";
     flex: 1;
-    height: 2px;
-    border-radius: 2px;
-    background: linear-gradient(90deg, rgba(233, 0, 82, .35), rgba(4, 245, 255, .35));
+    height: 1px;
+    background: var(--c-line);
 }
 
 #draftTabContent .drm-empty {
-    padding: 20px 12px;
+    padding: 22px 12px;
     text-align: center;
     font-size: 13px;
-    color: var(--pl-muted);
+    color: var(--c-muted);
 }
 
 #draftTabContent .drm-note {
-    margin: 14px 0 0;
+    margin: 16px 0 0;
     font-size: 12.5px;
     line-height: 1.6;
-    color: var(--pl-muted);
+    color: var(--c-muted);
 }
 
 /* The pre-draft pointer line (rendered by syncPreDraftNote on other panels) */
 #draftTabContent .dr-predraft {
-    background: #f6eef8;
-    border-color: #e2cfe8;
-    color: var(--pl-purple);
+    background: var(--c-blue-soft);
+    border: none;
+    border-radius: var(--c-radius-sm);
+    color: #0b3d99;
+    font-weight: 500;
 }
 
 #draftTabContent .dr-predraft-link {
-    color: var(--pl-pink);
+    color: var(--c-blue);
+    font-weight: 700;
 }
 
 /* ============================================================
@@ -607,24 +827,61 @@ body.tab-draft {
 
 @media (max-width: 768px) {
 
-    /* The bottom bar owns section navigation on phones; the sticky top pill
-       row would only duplicate it and cost 60px of a small screen. The
-       segment bars stay — they live inside the content. */
+    /* The bottom bar owns section navigation on phones; the sticky top row
+       would only duplicate it and cost 60px of a small screen. The segment
+       bars stay — they live inside the content. */
     #draftTabContent .draft-sub-nav-container {
         display: none;
     }
 
     #draftHero {
-        margin-top: 8px;
-        padding: 16px 16px 15px;
+        margin-top: 10px;
+        padding: 15px 16px;
     }
 
     #draftHero h2 {
-        font-size: 21px;
+        font-size: 19px;
     }
 
-    #draftHero p {
-        font-size: 13px;
+    #draftTabContent .plc-card {
+        padding: 14px 15px;
+    }
+
+    #draftTabContent .plc-chart-body {
+        height: 300px;
+    }
+
+    /* The status chips are a row of facts, not a stack of banners: at full
+       width each one ate a third of the screen before the board appeared. */
+    #draftTabContent .drm-chips {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(94px, 1fr));
+        gap: 8px;
+        width: 100%;
+    }
+
+    #draftTabContent .drm-chip {
+        min-width: 0;
+        padding: 8px 10px;
+    }
+
+    #draftTabContent .drm-chip-value {
+        font-size: 15px;
+    }
+
+    #draftTabContent .drm-head {
+        padding: 15px 16px;
+    }
+
+    /* A ten-column league table cannot fit 360px; it scrolls inside its own
+       card rather than pushing the page sideways. */
+    #draftTabContent .table-container {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    #draftTabContent .draft-table {
+        min-width: 560px;
     }
 
     body.tab-draft #mobileBar {
@@ -638,8 +895,9 @@ body.tab-draft {
         bottom: 0;
         inset-inline: 0;
         z-index: 110;
-        background: var(--pl-surface);
-        border-top: 1px solid var(--pl-line);
+        background: var(--c-card);
+        border-top: 1px solid var(--c-line);
+        box-shadow: 0 -4px 20px rgba(16, 24, 40, .08);
         padding: 6px 4px calc(6px + env(safe-area-inset-bottom));
     }
 
@@ -647,209 +905,26 @@ body.tab-draft {
         display: flex;
         flex-direction: column;
         align-items: center;
-        gap: 2px;
+        gap: 3px;
         min-height: 48px;
-        padding: 4px 2px;
+        padding: 5px 2px;
         border: none;
+        border-radius: var(--c-radius-xs);
         background: none;
         font: inherit;
-        font-size: 11px;
-        font-weight: 600;
-        color: var(--pl-muted);
+        font-size: 10.5px;
+        font-weight: 500;
+        color: var(--c-muted);
         cursor: pointer;
     }
 
     #draftMobileBar .dnav-mb span {
-        font-size: 20px;
+        font-size: 19px;
         line-height: 1;
     }
 
     #draftMobileBar .dnav-mb.active {
-        color: var(--pl-purple);
-    }
-}
-
-/* ============================================================
-   Components — the .plc-* vocabulary shared by every draft view
-   ============================================================ */
-
-#draftTabContent .plc-card {
-    background: var(--pl-surface);
-    border: 1px solid var(--pl-line);
-    border-radius: var(--pl-radius);
-    box-shadow: var(--pl-shadow);
-    padding: 18px 20px;
-}
-
-#draftTabContent .plc-title {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    margin: 0 0 6px;
-    font-size: 18px;
-    font-weight: 800;
-    color: var(--pl-ink);
-}
-
-#draftTabContent .plc-sub {
-    margin: 0 0 14px;
-    font-size: 13px;
-    font-weight: 500;
-    color: var(--pl-muted);
-}
-
-#draftTabContent .plc-empty {
-    padding: 36px 16px;
-    text-align: center;
-    font-size: 14px;
-    font-weight: 600;
-    color: var(--pl-muted);
-    background: var(--pl-surface);
-    border: 1px dashed var(--pl-line);
-    border-radius: var(--pl-radius);
-}
-
-#draftTabContent .plc-skeleton {
-    border-radius: var(--pl-radius-sm);
-    background: linear-gradient(90deg, var(--pl-line) 25%, #f6f2f8 50%, var(--pl-line) 75%);
-    background-size: 200% 100%;
-    animation: plc-shimmer 1.4s ease-in-out infinite;
-    min-height: 18px;
-}
-
-@keyframes plc-shimmer {
-    to { background-position: -200% 0; }
-}
-
-/* League tables — the purple-headed, zebra-striped Premier Light table */
-#draftTabContent .draft-table {
-    width: 100%;
-    border-collapse: collapse;
-    background: var(--pl-surface);
-    border-radius: var(--pl-radius-sm);
-    overflow: hidden;
-    box-shadow: var(--pl-shadow);
-}
-
-#draftTabContent .draft-table thead th {
-    background: var(--pl-purple);
-    color: #fff;
-    font-size: 12.5px;
-    font-weight: 700;
-    padding: 11px 10px;
-    text-align: center;
-    cursor: pointer;
-    white-space: nowrap;
-    border: none;
-}
-
-#draftTabContent .draft-table thead th:hover {
-    background: var(--pl-purple-deep);
-}
-
-#draftTabContent .draft-table tbody td {
-    padding: 10px;
-    font-size: 13.5px;
-    text-align: center;
-    border: none;
-    border-bottom: 1px solid var(--pl-line);
-    color: var(--pl-ink);
-    font-variant-numeric: tabular-nums;
-}
-
-#draftTabContent .draft-table tbody tr:nth-child(even) {
-    background: var(--pl-bg);
-}
-
-#draftTabContent .draft-table tbody tr:hover {
-    background: #f6eef8;
-}
-
-#draftTabContent .draft-table tbody tr.is-me {
-    background: #f1e6f4;
-    box-shadow: inset 3px 0 0 var(--pl-purple);
-}
-
-#draftTabContent .draft-table td.is-pos { color: var(--pl-pos); font-weight: 700; }
-#draftTabContent .draft-table td.is-neg { color: var(--pl-neg); font-weight: 700; }
-
-#draftTabContent .draft-table td:last-child {
-    font-weight: 800;
-}
-
-#draftTabContent .plc-team-logo {
-    font-size: 17px;
-    margin-inline-end: 6px;
-}
-
-#draftTabContent .plc-rank {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    min-width: 26px;
-    height: 26px;
-    padding: 0 4px;
-    border-radius: 8px;
-    background: var(--pl-bg);
-    color: var(--pl-muted);
-    font-size: 12.5px;
-    font-weight: 800;
-}
-
-#draftTabContent .plc-rank.is-top {
-    background: var(--pl-purple);
-    color: #fff;
-}
-
-/* The my-team selector bar on the overview */
-#draftTabContent .plc-teambar {
-    display: flex;
-    align-items: center;
-    gap: 14px;
-    flex-wrap: wrap;
-    padding: 14px 18px;
-    margin-bottom: 18px;
-}
-
-#draftTabContent .plc-teambar label {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    font-weight: 700;
-    color: var(--pl-ink);
-}
-
-#draftTabContent .plc-teambar select {
-    flex: 1;
-    max-width: 320px;
-    padding: 9px 14px;
-    border: 1px solid var(--pl-line);
-    border-radius: 10px;
-    background: var(--pl-surface);
-    font: inherit;
-    font-size: 14.5px;
-    font-weight: 600;
-    color: var(--pl-ink);
-    cursor: pointer;
-}
-
-#draftTabContent .plc-teambar select:focus {
-    outline: none;
-    border-color: var(--pl-purple);
-    box-shadow: 0 0 0 3px rgba(56, 0, 60, .12);
-}
-
-#draftTabContent .plc-chart-body {
-    height: 400px;
-    width: 100%;
-}
-
-@media (max-width: 768px) {
-    #draftTabContent .plc-chart-body {
-        height: 300px;
-    }
-
-    #draftTabContent .plc-card {
-        padding: 14px;
+        color: var(--c-blue);
+        font-weight: 600;
     }
 }
