@@ -15185,7 +15185,7 @@ const DRAFT_SQUAD_SIZE = Object.values(DRAFT_SQUAD).reduce((a, b) => a + b, 0);
 // struck off long before the reader could act on stale information.
 const DRAFT_POLL_MS = 15000;
 
-const _draftRoom = { timer: null, polling: false, lastPickCount: -1, position: null };
+const _draftRoom = { timer: null, polling: false, lastPickCount: -1, position: null, q: '', hideTaken: false };
 
 /** The league's own view of where the draft is: 'pre', 'active' or 'post'. */
 function draftStatus() {
@@ -15407,7 +15407,10 @@ function scarcityWord(pos, left) {
         : `נשארו ${left} ${POSITION_LABELS[pos] || pos}`;
 }
 
-/** The header: where the draft is, and where you are in it. */
+/** Singular position names for compact chips ("קשר", not "קשרים"). */
+const POSITION_SINGLE = { GKP: 'שוער', DEF: 'מגן', MID: 'קשר', FWD: 'חלוץ' };
+
+/** The header: where the draft is and where you are in it, as scannable chips. */
 function draftRoomHeaderHtml() {
     const status = draftStatus();
     const at = draftDateTime();
@@ -15416,101 +15419,189 @@ function draftRoomHeaderHtml() {
     const capacity = (state.draft.details && state.draft.details.league
         && state.draft.details.league.max_entries) || entries.length;
     const me = myDraftEntryId();
+    const total = entries.length * DRAFT_SQUAD_SIZE;
 
-    let line;
+    let pill = '';
+    const chips = [];
     if (status === 'post' || (made && made >= capacity * DRAFT_SQUAD_SIZE)) {
-        line = `הדראפט הסתיים · ${made} פיקים · מכאן זה שוק החופשיים`;
+        pill = '<span class="drm-pill drm-pill-post">הדראפט הסתיים</span>';
+        chips.push(['פיקים', String(made)], ['מכאן', 'שוק החופשיים']);
     } else if (made > 0) {
         const round = Math.floor(made / Math.max(1, entries.length)) + 1;
-        const mine = myUpcomingPicks(me, 2);
-        const next = mine.length
-            ? `הפיק הבא שלך: #${mine[0].pick} (בעוד ${mine[0].pick - made - 1} פיקים)`
-            : 'סדר הפיקים ייוודע בסוף הסבב הראשון';
-        line = `סבב ${round} · נבחרו ${made} שחקנים · ${next}`;
+        pill = '<span class="drm-pill drm-pill-live">● LIVE</span>';
+        chips.push(['סבב', String(round)], ['נבחרו', `${made}/${total}`]);
+        const mine = myUpcomingPicks(me, 1);
+        if (mine.length) {
+            chips.push(['הפיק הבא שלך', `#${mine[0].pick}`, `בעוד ${mine[0].pick - made - 1} פיקים`]);
+        } else {
+            chips.push(['הפיק הבא שלך', '—', 'ייוודע בסוף הסבב הראשון']);
+        }
     } else if (at) {
+        pill = '<span class="drm-pill drm-pill-pre">לקראת הדראפט</span>';
         const countdown = draftCountdownText(at);
-        const when = at.toLocaleString('he-IL', { weekday: 'long', day: 'numeric', month: 'numeric', hour: '2-digit', minute: '2-digit' });
-        line = `הדראפט ${countdown ? `${countdown} — ` : ''}${when} · ${entries.length} מתוך ${capacity} מנג׳רים נרשמו`;
+        const when = at.toLocaleString('he-IL', { weekday: 'long', day: 'numeric', month: 'numeric' });
+        const hour = at.toLocaleString('he-IL', { hour: '2-digit', minute: '2-digit' });
+        if (countdown) chips.push(['מתחיל', countdown]);
+        chips.push(['מתי', `${when} · ${hour}`], ['נרשמו', `${entries.length}/${capacity} מנג׳רים`]);
     } else {
-        line = 'הדראפט טרם התחיל';
+        pill = '<span class="drm-pill drm-pill-pre">הדראפט טרם התחיל</span>';
     }
 
-    const gaps = draftSquadGaps(me);
-    const needs = gaps.filter(g => g.missing > 0)
-        .map(g => `${POSITION_LABELS[g.pos] || g.pos} ${g.have}/${g.want}`).join(' · ');
+    const chipsHtml = chips.map(([label, value, sub]) => `
+        <div class="drm-chip">
+            <span class="drm-chip-label">${escapeHtml(label)}</span>
+            <span class="drm-chip-value">${escapeHtml(value)}</span>
+            ${sub ? `<span class="drm-chip-sub">${escapeHtml(sub)}</span>` : ''}
+        </div>`).join('');
+
+    // My squad, position by position, once there is a squad to track.
+    const squad = made > 0 && me ? `
+        <div class="drm-squad" title="כמה מכל עמדה כבר לקחת">
+            ${draftSquadGaps(me).map(g => `
+                <span class="drm-squad-chip${g.missing ? '' : ' is-full'}">
+                    ${escapeHtml(POSITION_LABELS[g.pos] || g.pos)}
+                    <b>${g.have}/${g.want}</b>${g.missing ? '' : ' ✓'}
+                </span>`).join('')}
+        </div>` : '';
 
     const scarce = draftRoomScarcity().filter(s => s.size && s.left > 0 && s.left <= 3);
     const warning = scarce.length
-        ? `<div class="dr-warn">⚠️ ${scarce.map(s =>
+        ? `<div class="drm-warn">⚠️ ${scarce.map(s =>
             `${scarcityWord(s.pos, s.left)} בדרג העליון`).join(' · ')}</div>`
         : '';
 
     return `
-        <header class="dr-head">
-            <div class="dr-head-main">
-                <h2 class="dr-title">🎯 חדר הדראפט</h2>
-                <p class="dr-line">${escapeHtml(line)}</p>
+        <header class="drm-head">
+            <div class="drm-head-row">
+                <h2 class="drm-title">חדר הדראפט</h2>
+                ${pill}
             </div>
-            ${made > 0 && needs ? `<div class="dr-needs"><span class="dr-needs-label">הסגל שלי</span>${escapeHtml(needs)}</div>` : ''}
+            ${chipsHtml ? `<div class="drm-chips">${chipsHtml}</div>` : ''}
+            ${squad}
         </header>
         ${warning}`;
 }
 
-/** One position column. */
+/** The five most valuable players still on the board, across all positions. */
+function draftRoomBestHtml() {
+    const pool = ['GKP', 'DEF', 'MID', 'FWD'].flatMap(pos =>
+        draftRoomBoard(pos).filter(r => !r.owner).slice(0, 8).map(r => ({ ...r, pos })));
+    pool.sort((a, b) => b.value - a.value);
+    const top = pool.slice(0, 5);
+    if (!top.length) return '';
+    return `
+        <h3 class="drm-best-title">הכי שווים על הלוח עכשיו</h3>
+        <div class="drm-best-row">
+            ${top.map((r, i) => `
+                <div class="drm-best-card" data-pos="${r.pos}">
+                    <span class="drm-best-rank">${i + 1}</span>
+                    <span class="drm-best-name" title="${escapeHtml(r.p.team_name || '')}">${escapeHtml(r.p.web_name)}</span>
+                    <span class="drm-best-meta">${escapeHtml(teamShort(r.p))} · ${escapeHtml(POSITION_SINGLE[r.pos] || r.pos)}</span>
+                    <span class="drm-best-val" title="נקודות צפויות עד סוף העונה">${Math.round(r.value)}</span>
+                </div>`).join('')}
+        </div>`;
+}
+
+/** One position column, filtered by the room's search box and taken-toggle. */
 function draftRoomColumnHtml(position) {
     const board = draftRoomBoard(position);
+    const label = POSITION_LABELS[position] || position;
     if (!board.length) {
-        return `<section class="dr-col"><h3 class="dr-col-head">${POSITION_LABELS[position] || position}</h3>
-            <p class="dr-empty">אין עדיין מספיק נתונים לדרג את העמדה הזו</p></section>`;
+        return `<section class="drm-col" data-pos="${position}">
+            <h3 class="drm-col-head"><span>${escapeHtml(label)}</span></h3>
+            <p class="drm-empty">אין עדיין מספיק נתונים לדרג את העמדה הזו</p></section>`;
     }
+
+    const q = _draftRoom.q;
+    const rows = board.filter(r => {
+        if (_draftRoom.hideTaken && r.owner) return false;
+        if (!q) return true;
+        return `${r.p.web_name} ${r.p.team_name || ''} ${teamShort(r.p)}`.toLowerCase().includes(q);
+    });
     const freeLeft = board.filter(r => !r.owner).length;
-    return `
-        <section class="dr-col">
-            <h3 class="dr-col-head">${POSITION_LABELS[position] || position}
-                <span class="dr-col-count">${freeLeft} פנויים</span></h3>
-            <ol class="dr-list">
-                ${board.map(r => {
-        const p = r.p;
+
+    let lastTier = 1;
+    const body = rows.map(r => {
         const owner = r.owner ? draftRoomOwner(r.owner) : '';
-        const weight = Number.isFinite(p.blend_weight) && state.currentDataSource === 'live'
-            ? `<span class="dr-w" title="משקל העונה הנוכחית בקצבים שלו">${Math.round(p.blend_weight * 100)}%</span>` : '';
-        return `${r.tierBreak ? '<li class="dr-tier-break" aria-hidden="true"><span>שבירת דרג</span></li>' : ''}
-                    <li class="dr-row ${r.owner ? 'is-taken' : ''}">
-                        <span class="dr-rank">${r.rank}</span>
-                        <span class="dr-name" title="${escapeHtml(p.team_name || '')}">${escapeHtml(p.web_name)}</span>
-                        <span class="dr-team">${escapeHtml(teamShort(p))}</span>
-                        ${weight}
-                        <span class="dr-val" title="נקודות צפויות עד סוף העונה">${Math.round(r.value)}</span>
-                        ${owner ? `<span class="dr-owner" title="נבחר על ידי ${escapeHtml(owner)}">${escapeHtml(owner)}</span>` : ''}
-                    </li>`;
-    }).join('')}
-            </ol>
+        // Tier chips are a shape of the whole column; under a search they would
+        // label an arbitrary subset, so they step aside for the results.
+        const tierChip = !q && r.tier > lastTier
+            ? `<li class="drm-tier" aria-hidden="true"><span>דרג ${r.tier}</span></li>` : '';
+        lastTier = Math.max(lastTier, r.tier);
+        return `${tierChip}
+            <li class="drm-row${r.owner ? ' is-taken' : ''}">
+                <span class="drm-rank">${r.rank}</span>
+                <div class="drm-who">
+                    <span class="drm-name" title="${escapeHtml(r.p.team_name || '')}">${escapeHtml(r.p.web_name)}</span>
+                    <span class="drm-meta">${escapeHtml(teamShort(r.p))}${owner ? ` · נלקח ע"י ${escapeHtml(owner)}` : ''}</span>
+                </div>
+                <span class="drm-val" title="נקודות צפויות עד סוף העונה">${Math.round(r.value)}</span>
+            </li>`;
+    }).join('');
+
+    return `
+        <section class="drm-col" data-pos="${position}">
+            <h3 class="drm-col-head"><span>${escapeHtml(label)}</span>
+                <span class="drm-col-count">${freeLeft} פנויים</span></h3>
+            <ol class="drm-list">${body ||
+                `<li class="drm-empty">${q ? 'אין תוצאות בעמדה הזו' : 'הכל נלקח'}</li>`}</ol>
         </section>`;
+}
+
+/** The boards alone — everything below the tools, redrawn per poll and per filter. */
+function renderDraftRoomBoards() {
+    const best = document.getElementById('drmBest');
+    if (best) best.innerHTML = draftRoomBestHtml();
+    const boards = document.getElementById('drmBoards');
+    if (boards) boards.innerHTML = ['GKP', 'DEF', 'MID', 'FWD'].map(draftRoomColumnHtml).join('');
 }
 
 /**
  * The whole room.
  *
- * Cheap enough to redraw wholesale every poll: four columns of forty rows is
- * ~160 list items, and rebuilding is what keeps "who is taken" from drifting out
- * of step with the feed. There is no state in the DOM worth preserving here.
+ * The shell — search box, taken-toggle, note — is built once and kept, so the
+ * fifteen-second poll never steals focus from a search mid-keystroke. Only the
+ * header, the best-available strip and the boards are redrawn per poll.
  */
 function renderDraftRoom() {
     const host = document.getElementById('draft-room');
     if (!host) return;
 
     if (!state.draft.details) {
-        host.innerHTML = `<p class="dr-empty">טוען את נתוני הליגה…</p>`;
+        host.innerHTML = '<p class="drm-empty">טוען את נתוני הליגה…</p>';
         return;
     }
 
-    const positions = ['GKP', 'DEF', 'MID', 'FWD'];
-    host.innerHTML = `
-        ${draftRoomHeaderHtml()}
-        <p class="dr-note">מדורג לפי נקודות צפויות עד סוף העונה — אותו מדד של הכרטיס
-            "הכי שווים" בעמוד השחקנים. הקו המפריד הוא שבירת דרג: פער גדול מהרגיל לשחקן
-            הבא, כלומר הסיבה לקחת עכשיו ולא בסבב הבא.</p>
-        <div class="dr-grid">${positions.map(draftRoomColumnHtml).join('')}</div>`;
+    if (!document.getElementById('drmShell')) {
+        host.innerHTML = `
+            <div id="drmShell">
+                <div id="drmHeader"></div>
+                <div class="drm-tools">
+                    <input id="drmSearch" class="drm-search" type="search" inputmode="search"
+                        placeholder="🔍 חיפוש שחקן מהיר…" autocomplete="off">
+                    <button type="button" id="drmHideTaken" class="drm-toggle"
+                        aria-pressed="false">הסתר שנבחרו</button>
+                </div>
+                <div id="drmBest"></div>
+                <div id="drmBoards" class="drm-grid"></div>
+                <p class="drm-note">מדורג לפי נקודות צפויות עד סוף העונה — אותו מדד של
+                    "הכי שווים" בעמוד השחקנים. קו <b>דרג</b> מסמן נפילת רמה: פער גדול
+                    מהרגיל לשחקן הבא, כלומר הסיבה לקחת עכשיו ולא בסבב הבא.</p>
+            </div>`;
+        document.getElementById('drmSearch').addEventListener('input', e => {
+            _draftRoom.q = e.target.value.trim().toLowerCase();
+            renderDraftRoomBoards();
+        });
+        document.getElementById('drmHideTaken').addEventListener('click', e => {
+            _draftRoom.hideTaken = !_draftRoom.hideTaken;
+            e.currentTarget.classList.toggle('active', _draftRoom.hideTaken);
+            e.currentTarget.setAttribute('aria-pressed', _draftRoom.hideTaken ? 'true' : 'false');
+            renderDraftRoomBoards();
+        });
+    }
+
+    document.getElementById('drmHeader').innerHTML = draftRoomHeaderHtml();
+    renderDraftRoomBoards();
 }
 
 /* ------------------------------- polling --------------------------------- */

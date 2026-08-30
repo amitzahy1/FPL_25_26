@@ -50,24 +50,47 @@
 }
 
 /* ============================================================
-   Hero
+   Hero — the deep-purple masthead with the pink→cyan signature
    ============================================================ */
 
+body.tab-draft {
+    background: var(--pl-bg);
+}
+
 #draftHero {
-    padding: 22px 0 12px;
+    position: relative;
+    overflow: hidden;
+    margin: 16px 0 0;
+    padding: 26px 24px 24px;
+    border-radius: var(--pl-radius);
+    background:
+        radial-gradient(560px 190px at 12% -30%, rgba(4, 245, 255, .22), transparent 70%),
+        radial-gradient(460px 190px at 88% 130%, rgba(233, 0, 82, .28), transparent 70%),
+        linear-gradient(160deg, var(--pl-purple-deep), var(--pl-purple) 62%, #4a0a53);
+}
+
+#draftHero::after {
+    content: "";
+    position: absolute;
+    inset-inline: 0;
+    bottom: 0;
+    height: 4px;
+    background: var(--pl-grad);
 }
 
 #draftHero h2 {
     margin: 0;
-    font-size: 26px;
+    font-size: 27px;
     font-weight: 900;
-    color: var(--pl-ink);
+    color: #fff;
+    letter-spacing: -.01em;
 }
 
 #draftHero p {
-    margin: 4px 0 0;
+    margin: 5px 0 0;
     font-size: 14px;
-    color: var(--pl-muted);
+    font-weight: 500;
+    color: rgba(255, 255, 255, .78);
 }
 
 /* ============================================================
@@ -166,6 +189,415 @@
 }
 
 /* ============================================================
+   Draft room — rebuilt as a usable draft-night tool: status
+   chips, squad tracker, best-available strip, search, and
+   position-colored boards with tier markers.
+   ============================================================ */
+
+/* Position accent, driven by data-pos on columns and best-cards */
+#draftTabContent [data-pos="GKP"] { --pos-accent: #d97706; }
+#draftTabContent [data-pos="DEF"] { --pos-accent: #0a8f4d; }
+#draftTabContent [data-pos="MID"] { --pos-accent: #0284c7; }
+#draftTabContent [data-pos="FWD"] { --pos-accent: var(--pl-pink); }
+
+#draftTabContent .drm-head {
+    position: relative;
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 14px 20px;
+    flex-wrap: wrap;
+    padding: 18px 20px;
+    border-radius: var(--pl-radius);
+    background: linear-gradient(160deg, var(--pl-purple-deep), var(--pl-purple) 70%);
+    color: #fff;
+    margin-bottom: 12px;
+}
+
+#draftTabContent .drm-head::after {
+    content: "";
+    position: absolute;
+    inset-inline: 0;
+    top: 0;
+    height: 3px;
+    background: var(--pl-grad);
+}
+
+#draftTabContent .drm-head-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+#draftTabContent .drm-title {
+    margin: 0;
+    font-size: 20px;
+    font-weight: 900;
+    color: #fff;
+}
+
+#draftTabContent .drm-pill {
+    padding: 4px 12px;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 800;
+    letter-spacing: .02em;
+}
+
+#draftTabContent .drm-pill-pre {
+    background: rgba(4, 245, 255, .16);
+    color: var(--pl-cyan);
+    border: 1px solid rgba(4, 245, 255, .4);
+}
+
+#draftTabContent .drm-pill-live {
+    background: rgba(233, 0, 82, .25);
+    color: #ff7eb0;
+    border: 1px solid rgba(233, 0, 82, .6);
+    animation: drm-pulse 1.6s ease-in-out infinite;
+}
+
+#draftTabContent .drm-pill-post {
+    background: rgba(0, 255, 133, .14);
+    color: var(--pl-green);
+    border: 1px solid rgba(0, 255, 133, .4);
+}
+
+@keyframes drm-pulse {
+    50% { opacity: .55; }
+}
+
+#draftTabContent .drm-chips {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+#draftTabContent .drm-chip {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    min-width: 92px;
+    padding: 8px 14px;
+    border-radius: 10px;
+    background: rgba(255, 255, 255, .08);
+    border: 1px solid rgba(255, 255, 255, .14);
+}
+
+#draftTabContent .drm-chip-label {
+    font-size: 10.5px;
+    font-weight: 700;
+    color: rgba(255, 255, 255, .6);
+}
+
+#draftTabContent .drm-chip-value {
+    font-size: 16px;
+    font-weight: 900;
+    color: #fff;
+    font-variant-numeric: tabular-nums;
+}
+
+#draftTabContent .drm-chip-sub {
+    font-size: 10.5px;
+    font-weight: 600;
+    color: var(--pl-cyan);
+}
+
+#draftTabContent .drm-squad {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    flex-basis: 100%;
+}
+
+#draftTabContent .drm-squad-chip {
+    padding: 4px 10px;
+    border-radius: 999px;
+    font-size: 11.5px;
+    font-weight: 700;
+    background: rgba(255, 255, 255, .1);
+    color: rgba(255, 255, 255, .85);
+}
+
+#draftTabContent .drm-squad-chip.is-full {
+    background: rgba(0, 255, 133, .16);
+    color: var(--pl-green);
+}
+
+#draftTabContent .drm-warn {
+    padding: 10px 14px;
+    margin-bottom: 12px;
+    border-radius: 10px;
+    background: var(--pl-neg-bg);
+    border: 1px solid #f6bed3;
+    color: var(--pl-neg);
+    font-size: 13.5px;
+    font-weight: 800;
+}
+
+/* Tools: search + taken-toggle, built once so polling never steals focus */
+#draftTabContent .drm-tools {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    margin-bottom: 12px;
+}
+
+#draftTabContent .drm-search {
+    flex: 1;
+    max-width: 340px;
+    padding: 10px 14px;
+    border: 1px solid var(--pl-line);
+    border-radius: 999px;
+    background: var(--pl-surface);
+    font: inherit;
+    font-size: 14px;
+    color: var(--pl-ink);
+}
+
+#draftTabContent .drm-search:focus {
+    outline: none;
+    border-color: var(--pl-purple);
+    box-shadow: 0 0 0 3px rgba(56, 0, 60, .12);
+}
+
+#draftTabContent .drm-toggle {
+    padding: 9px 16px;
+    border: 1px solid var(--pl-line);
+    border-radius: 999px;
+    background: var(--pl-surface);
+    font: inherit;
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--pl-muted);
+    cursor: pointer;
+    white-space: nowrap;
+}
+
+#draftTabContent .drm-toggle.active {
+    background: var(--pl-purple);
+    border-color: var(--pl-purple);
+    color: #fff;
+}
+
+/* Best available strip */
+#draftTabContent .drm-best-title {
+    margin: 4px 0 8px;
+    font-size: 14px;
+    font-weight: 800;
+    color: var(--pl-ink);
+}
+
+#draftTabContent .drm-best-row {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 10px;
+    margin-bottom: 16px;
+}
+
+#draftTabContent .drm-best-card {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 12px 14px 10px;
+    background: var(--pl-surface);
+    border: 1px solid var(--pl-line);
+    border-top: 3px solid var(--pos-accent, var(--pl-purple));
+    border-radius: var(--pl-radius-sm);
+    box-shadow: var(--pl-shadow);
+}
+
+#draftTabContent .drm-best-rank {
+    position: absolute;
+    top: 8px;
+    inset-inline-end: 10px;
+    font-size: 11px;
+    font-weight: 800;
+    color: var(--pl-muted);
+}
+
+#draftTabContent .drm-best-name {
+    font-size: 15px;
+    font-weight: 800;
+    color: var(--pl-ink);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+#draftTabContent .drm-best-meta {
+    font-size: 11.5px;
+    font-weight: 600;
+    color: var(--pl-muted);
+}
+
+#draftTabContent .drm-best-val {
+    margin-top: 4px;
+    font-size: 20px;
+    font-weight: 900;
+    color: var(--pos-accent, var(--pl-purple));
+    font-variant-numeric: tabular-nums;
+}
+
+/* Boards */
+#draftTabContent .drm-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: 12px;
+    align-items: start;
+}
+
+#draftTabContent .drm-col {
+    background: var(--pl-surface);
+    border: 1px solid var(--pl-line);
+    border-top: 3px solid var(--pos-accent, var(--pl-purple));
+    border-radius: var(--pl-radius-sm);
+    box-shadow: var(--pl-shadow);
+    padding: 12px 12px 8px;
+    min-width: 0;
+}
+
+#draftTabContent .drm-col-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 8px;
+    margin: 0 0 8px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--pl-line);
+    font-size: 15px;
+    font-weight: 800;
+    color: var(--pos-accent, var(--pl-ink));
+}
+
+#draftTabContent .drm-col-count {
+    font-size: 11.5px;
+    font-weight: 700;
+    color: var(--pl-muted);
+}
+
+#draftTabContent .drm-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+#draftTabContent .drm-row {
+    display: grid;
+    grid-template-columns: 24px minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 4px;
+    border-bottom: 1px solid var(--pl-line);
+}
+
+#draftTabContent .drm-row:last-child {
+    border-bottom: none;
+}
+
+#draftTabContent .drm-row.is-taken {
+    opacity: .4;
+}
+
+#draftTabContent .drm-row.is-taken .drm-name {
+    text-decoration: line-through;
+    text-decoration-color: var(--pl-muted);
+}
+
+#draftTabContent .drm-rank {
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--pl-muted);
+    font-variant-numeric: tabular-nums;
+    text-align: center;
+}
+
+#draftTabContent .drm-who {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+
+#draftTabContent .drm-name {
+    font-size: 13.5px;
+    font-weight: 700;
+    color: var(--pl-ink);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+#draftTabContent .drm-meta {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--pl-muted);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+#draftTabContent .drm-val {
+    font-size: 14px;
+    font-weight: 800;
+    color: var(--pos-accent, var(--pl-purple));
+    font-variant-numeric: tabular-nums;
+}
+
+#draftTabContent .drm-tier {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 4px 0;
+    font-size: 10px;
+    font-weight: 800;
+    color: #fff;
+    letter-spacing: .04em;
+}
+
+#draftTabContent .drm-tier span {
+    padding: 1px 8px;
+    border-radius: 999px;
+    background: var(--pl-purple);
+}
+
+#draftTabContent .drm-tier::before,
+#draftTabContent .drm-tier::after {
+    content: "";
+    flex: 1;
+    height: 2px;
+    border-radius: 2px;
+    background: linear-gradient(90deg, rgba(233, 0, 82, .35), rgba(4, 245, 255, .35));
+}
+
+#draftTabContent .drm-empty {
+    padding: 20px 12px;
+    text-align: center;
+    font-size: 13px;
+    color: var(--pl-muted);
+}
+
+#draftTabContent .drm-note {
+    margin: 14px 0 0;
+    font-size: 12.5px;
+    line-height: 1.6;
+    color: var(--pl-muted);
+}
+
+/* The pre-draft pointer line (rendered by syncPreDraftNote on other panels) */
+#draftTabContent .dr-predraft {
+    background: #f6eef8;
+    border-color: #e2cfe8;
+    color: var(--pl-purple);
+}
+
+#draftTabContent .dr-predraft-link {
+    color: var(--pl-pink);
+}
+
+/* ============================================================
    Mobile: the draft tab swaps the players action bar for its own
    ============================================================ */
 
@@ -174,6 +606,27 @@
 }
 
 @media (max-width: 768px) {
+
+    /* The bottom bar owns section navigation on phones; the sticky top pill
+       row would only duplicate it and cost 60px of a small screen. The
+       segment bars stay — they live inside the content. */
+    #draftTabContent .draft-sub-nav-container {
+        display: none;
+    }
+
+    #draftHero {
+        margin-top: 8px;
+        padding: 16px 16px 15px;
+    }
+
+    #draftHero h2 {
+        font-size: 21px;
+    }
+
+    #draftHero p {
+        font-size: 13px;
+    }
+
     body.tab-draft #mobileBar {
         display: none;
     }
