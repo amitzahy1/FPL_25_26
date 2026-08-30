@@ -1294,18 +1294,24 @@ async function init() {
 
     setupEventListeners();
     const lastTab = localStorage.getItem('fplToolActiveTab');
+    // A shared deep link (#draft/market/...) beats the remembered tab; the
+    // between-seasons maintenance state still beats both.
+    const hashTab = location.hash.startsWith('#draft') ? 'draft'
+        : location.hash === '#players' ? 'players' : null;
     // Between seasons the draft tab has nothing to show but an explanation, and
     // it is the tab most people were last on — so the site opened looking dead
     // while the whole of last season sat one click away. Open on the players tab
     // instead, and keep the remembered preference so the draft tab comes back on
     // its own once the game does.
     const draftIsDown = state.draft.apiMaintenance || state.draft.leagueMissing;
-    if (lastTab === 'draft' && draftIsDown) {
+    if ((hashTab || lastTab) === 'draft' && draftIsDown) {
         showTab('players');
         localStorage.setItem('fplToolActiveTab', 'draft');
         // The tab itself explains this at length; the pill is the standing note.
         setAppStatus('warn', 'ליגת הדראפט סגורה',
             `משחק הדראפט של FPL סגור בין עונות — מוצגים נתוני ${SEASON_CONFIG.previousSeasonLabel}`);
+    } else if (hashTab && applyNavHash()) {
+        // The URL named the view; nothing more to restore.
     } else {
         // Always, even with nothing remembered. The markup ships with ליגת דראפט
         // carrying the active class while #playersTabContent is the visible one,
@@ -12800,6 +12806,45 @@ function updateMyLineup(entryId) {
 // (it set display:grid, which the charts view no longer uses). The live one sits
 // with renderCharts, next to the thing it triggers.
 
+// ============================================
+// HASH ROUTING — #players · #draft · #draft/<section>/<segment>
+// ============================================
+// Deep links and a working back button over the same display-toggle navigation.
+// showTab/draftNavigate write the hash and hashchange reads it back; the flag
+// stops the echo, because applying a hash must never write it again.
+const NAV_HASH_RE = /^#(players|draft)(?:\/([a-z-]+))?(?:\/([a-z-]+))?$/;
+let _navFromHash = false;
+
+// replace=true rewrites the current history entry — for programmatic moves
+// (boot, the pre-draft auto-jump) that should not leave a back-button stop.
+function writeNavHash(hash, replace) {
+    if (_navFromHash || location.hash === hash) return;
+    if (replace) window.history.replaceState(null, '', hash);
+    else location.hash = hash;
+}
+
+/** Apply the current location.hash. True when it named a real view. */
+function applyNavHash() {
+    const m = location.hash.match(NAV_HASH_RE);
+    if (!m) return false;
+    _navFromHash = true;
+    try {
+        if (m[1] === 'players') {
+            showTab('players');
+        } else {
+            // An explicit section is a destination: the pre-draft auto-jump to
+            // the room must not stomp it once the league finishes loading.
+            if (m[2]) state.draft._roomSeen = true;
+            showTab('draft');
+            if (m[2]) draftNavigate(m[2], m[3]);
+        }
+    } finally {
+        _navFromHash = false;
+    }
+    return true;
+}
+window.addEventListener('hashchange', applyNavHash);
+
 function showTab(tabName) {
     document.querySelectorAll('.nav-item').forEach(btn => btn.classList.remove('active'));
     const activeBtn = document.getElementById(`nav-${tabName}`);
@@ -12823,10 +12868,12 @@ function showTab(tabName) {
         if (draftView) draftView.style.display = 'none';
         if (!alreadyHere) switchMainView('table');
         localStorage.setItem('fplToolActiveTab', 'players');
+        writeNavHash('#players', true);
     } else if (tabName === 'draft') {
         if (playersView) playersView.style.display = 'none';
         if (draftView) draftView.style.display = 'block';
         localStorage.setItem('fplToolActiveTab', 'draft');
+        if (!location.hash.startsWith('#draft')) writeNavHash('#draft', true);
 
         console.log("🎯 Draft tab activated, calling loadDraftLeague()...");
 
@@ -15742,10 +15789,12 @@ const LEGACY_DRAFT_TABS = {
 function switchDraftTab(tabId) {
     const pair = LEGACY_DRAFT_TABS[tabId] ||
         (DRAFT_IA[tabId] ? [tabId, DRAFT_IA[tabId].def] : ['overview', 'overview']);
-    draftNavigate(pair[0], pair[1]);
+    // Programmatic callers come through here; only direct clicks in
+    // initDraftNav push a history entry.
+    draftNavigate(pair[0], pair[1], { replace: true });
 }
 
-function draftNavigate(section, segment) {
+function draftNavigate(section, segment, opts = {}) {
     const ia = DRAFT_IA[section] || DRAFT_IA.overview;
     if (!DRAFT_IA[section]) section = 'overview';
     if (!ia.segments.includes(segment)) segment = ia.def;
@@ -15808,6 +15857,8 @@ function draftNavigate(section, segment) {
     } else if (segment === 'lineup-analysis') {
         renderLineupAnalysis();
     }
+
+    writeNavHash(`#draft/${section}/${segment}`, opts.replace === true);
 }
 
 // One delegated listener for all draft navigation surfaces. An explicit choice
