@@ -40,7 +40,8 @@ let html = readFileSync(INDEX, 'utf8');
 const ASSETS = [
     { name: 'script.js', tag: /(<script src="script\.js)(\?v=[^"]*)?(")/ },
     { name: 'style.css', tag: /(<link rel="stylesheet" href="style\.css)(\?v=[^"]*)?(")/ },
-    { name: 'mobile.css', tag: /(<link rel="stylesheet" href="mobile\.css)(\?v=[^"]*)?(")/ }
+    { name: 'mobile.css', tag: /(<link rel="stylesheet" href="mobile\.css)(\?v=[^"]*)?(")/ },
+    { name: 'draft.css', tag: /(<link rel="stylesheet" href="draft\.css)(\?v=[^"]*)?(")/ }
 ];
 
 const stamped = [];

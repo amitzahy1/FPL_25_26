@@ -48,8 +48,8 @@ if (thead) {
 }
 
 // 4. cache-buster present and consistent across assets
-const stamps = [...html.matchAll(/(?:script|style|mobile)\.(?:js|css)\?v=([\d.]+)/g)].map(m => m[1]);
-check(stamps.length >= 2, 'assets are missing the ?v= cache-buster');
+const stamps = [...html.matchAll(/(?:script|style|mobile|draft)\.(?:js|css)\?v=([\d.]+)/g)].map(m => m[1]);
+check(stamps.length >= 4, 'assets are missing the ?v= cache-buster');
 check(new Set(stamps).size <= 1, `assets carry mismatched cache-busters: ${[...new Set(stamps)].join(', ')}`);
 
 // 5. no localhost-only proxy as the shipped default

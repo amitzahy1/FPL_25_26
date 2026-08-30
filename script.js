@@ -12775,6 +12775,9 @@ function showTab(tabName) {
     const activeBtn = document.getElementById(`nav-${tabName}`);
     if (activeBtn) activeBtn.classList.add('active');
     state.currentTab = tabName;
+    // draft.css scopes all its chrome (mobile bar swap, backgrounds) under this
+    // class so the players tab never inherits draft styling.
+    document.body.classList.toggle('tab-draft', tabName === 'draft');
     closeMobileSheet();
 
     const playersView = document.getElementById('playersTabContent');
