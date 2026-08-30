@@ -87,6 +87,7 @@ function load(players, over = {}) {
         // the pre-season market cells; inert on the live tab, which is what the
         // rows here are, so they exercise the fallback path
         'priceCellHtml', 'ownershipCellHtml', 'ownershipCellTitle', 'marketBadgesHtml',
+        'blendWeightCellHtml',
         'displayCost', 'displayOwnership', 'marketOverlayActive', 'marketIndex',
         'displayNetTransfers'
     ], {}, [

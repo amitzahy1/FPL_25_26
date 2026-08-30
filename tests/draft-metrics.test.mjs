@@ -17,7 +17,12 @@ function loadDraftMetrics(draftState = {}) {
         allPlayersData: { live: { fixtures: null }, historical: { fixtures: null } },
         currentDataSource: 'historical'
     };
-    const body = extractFunction('computeDraftMetrics');
+    // draftLeagueSize rides along in the const slice below (it sits between
+    // REPLACEMENT_SLOTS and computeDraftMetrics); these are the helpers it and
+    // the evidence gate call out to.
+    const helpers = ['draftHasBeenHeld', 'playedGameweeks', 'scaleMinutes', 'sampleMinutes']
+        .map(n => extractFunction(n)).join('\n');
+    const body = helpers + '\n' + extractFunction('computeDraftMetrics');
     const consts = SCRIPT_SRC.slice(
         SCRIPT_SRC.indexOf('const REPLACEMENT_SLOTS'),
         SCRIPT_SRC.indexOf('function computeDraftMetrics')
@@ -146,6 +151,8 @@ describe('smart filters', () => {
             // about the shortlist rule, not about how the floor scales in August,
             // so it reports the full-season floor — see tests/season-gate.test.mjs.
             const seasonMinMinutes = (target) => target;
+            const scaleMinutes = (target) => target;
+            const sampleMinutes = (p) => p.minutes || 0;
             ${SCRIPT_SRC.slice(start, end)}
             return { QUICK_FILTERS, newcomerSets, newcomerUnavailable, isAvailableToDraft,
                 marketUnavailable, movedClub, movedClubUnavailable };`)();

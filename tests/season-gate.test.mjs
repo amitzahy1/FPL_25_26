@@ -15,8 +15,9 @@ import { extractFunction, extractDeclaration } from './helpers/load-script.mjs';
 const FUNCTIONS = [
     'currentSeasonIsTooEarly', 'seasonSampleIsThin', 'finishedGameweekCount',
     'getCompletedGWCount', 'benchMinMinutes', 'stripUnplayedSeasonStats',
-    'fillFromPreviousSeason', 'applyDefaultSortForSeason', 'defaultMinMinutes',
-    'gwWord', 'activeSnapshot', 'seasonMinMinutes'
+    'attachSeasonPrior', 'fillFromPreviousSeason', 'applyDefaultSortForSeason',
+    'defaultMinMinutes', 'gwWord', 'activeSnapshot', 'seasonMinMinutes',
+    'playedGameweeks', 'scaleMinutes', 'sampleMinutes'
 ];
 
 function load(events, over = {}) {

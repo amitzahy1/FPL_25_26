@@ -5114,6 +5114,12 @@ canvas {
    colouring already reads green as the thing you want. */
 .scout-free[aria-pressed="true"] { background: #15803d; border-color: #15803d; }
 
+/* The blend switch. Pressed means the blend is OFF — the reader has asked for
+   the raw current season — so it is amber rather than green: it is a narrowing
+   of the evidence, not a filter that found something. */
+.scout-blend[aria-pressed="true"] { background: #b45309; border-color: #b45309; color: #fff; }
+.scout-blend[hidden] { display: none; }
+
 /* Before draft night nobody owns anybody, so the switch has nothing to act on.
    Dimmed rather than hidden: the rule it will apply later is worth stating. */
 .scout-btn:disabled { opacity: .5; cursor: not-allowed; }

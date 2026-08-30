@@ -46,6 +46,11 @@ function load(stateOver = {}) {
     };
     globalThis.state = state;
     globalThis.escapeHtml = s => String(s);
+    // The evidence gate and the scaled floor live with the season model, far
+    // from this slice. These tests are about the rule, not about how a floor
+    // shrinks in August — see tests/season-gate.test.mjs for that.
+    globalThis.scaleMinutes = target => target;
+    globalThis.sampleMinutes = p => p.minutes || 0;
     globalThis.console = console;
     const fns = loadFunctions([
         'loadWatchlist', 'saveWatchlist',

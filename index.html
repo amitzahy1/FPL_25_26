@@ -7,8 +7,8 @@
     <title>⚽ FPL Pro Analytics Hub</title>
     <!-- Inline so the tab icon needs no extra request; mirrors the header mark. -->
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='40' y2='40' gradientUnits='userSpaceOnUse'%3E%3Cstop stop-color='%2322D3EE'/%3E%3Cstop offset='.55' stop-color='%233B82F6'/%3E%3Cstop offset='1' stop-color='%236366F1'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='40' height='40' rx='9' fill='%230F172A'/%3E%3Cpath d='M20 5 8 9.7v9.9c0 7 4.9 12.4 12 14.1 7.1-1.7 12-7.1 12-14.1V9.7L20 5Z' fill='url(%23g)'/%3E%3Crect x='12.6' y='20.4' width='3.4' height='7' rx='1.2' fill='%23fff' fill-opacity='.95'/%3E%3Crect x='18.3' y='16.2' width='3.4' height='11.2' rx='1.2' fill='%23fff'/%3E%3Crect x='24' y='12' width='3.4' height='15.4' rx='1.2' fill='%23fff' fill-opacity='.95'/%3E%3C/svg%3E">
-    <link rel="stylesheet" href="style.css?v=2026.08.06.335">
-    <link rel="stylesheet" href="mobile.css?v=2026.08.06.335">
+    <link rel="stylesheet" href="style.css?v=2026.08.06.336">
+    <link rel="stylesheet" href="mobile.css?v=2026.08.06.336">
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.5.1"></script>
     <script
         src="https://cdnjs.cloudflare.com/ajax/libs/chartjs-plugin-annotation/2.2.1/chartjs-plugin-annotation.min.js"></script>
@@ -98,6 +98,13 @@
                         </button>
                         <button class="scout-btn scout-free" id="freeAgentsOnlyBtn" aria-pressed="false"
                             disabled onclick="toggleFreeAgentsOnly()">🆓 רק חופשיים</button>
+                        <!-- The blend, as a switch. Every rate on the current-season
+                             tab is weighed against last season while the sample is thin;
+                             this turns that off so the two views can be read against each
+                             other. Shown only when there is a blend to turn off — see
+                             syncBlendButton(). -->
+                        <button class="scout-btn scout-blend" id="blendToggleBtn" aria-pressed="false"
+                            hidden onclick="toggleSeasonBlend()"></button>
 
                         <!-- Loading used to announce itself with a stack of
                              toasts nobody had asked a question of. The pill says
@@ -642,6 +649,10 @@
                                     <th data-sort="rotation_risk" title="אחוז ההופעות שבהן פתח בהרכב">הרכב<span
                                             class="sort-indicator"></span></th>
                                     <th data-sort="minutes">דקות<span class="sort-indicator"></span></th>
+                                    <!-- How much of the row is this season. Off by default:
+                                         it answers "how much should I trust this", which is a
+                                         second question, not the first one. -->
+                                    <th data-sort="blend_weight" title="משקל העונה הנוכחית בקצבים של השורה — השאר מגיע מהעונה שעברה">משקל<span class="sort-indicator"></span></th>
                                     <th data-sort="bonus_per90">בונוס/90<span class="sort-indicator"></span></th>
                                     <th data-sort="clean_sheets_per90">CS/90<span class="sort-indicator"></span></th>
                                     <th data-sort="now_cost">מחיר<span class="sort-indicator"></span></th>
@@ -1064,7 +1075,7 @@
     <!-- Version query is bumped by scripts/stamp-version.mjs on every commit
          (npm run stamp). It was left at 4.0.0 for months, so returning
          visitors kept running a cached script.js and never saw fixes. -->
-    <script src="script.js?v=2026.08.06.335" defer></script>
+    <script src="script.js?v=2026.08.06.336" defer></script>
 </body>
 
 </html>

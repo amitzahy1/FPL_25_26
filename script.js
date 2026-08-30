@@ -135,7 +135,7 @@ const config = {
         'stability_index', 'predicted_points_1_gw', 'next_3_fdr', 'team_name', 'draft_team',
         'position_name', 'now_cost', 'total_points', 'points_per_game_90', 'selected_by_percent',
         'dreamteam_count', 'net_transfers_event', 'def_contrib_per90', 'goals_scored_assists',
-        'xGI_per90', 'minutes', 'xDiff', 'ict_index_per90', 'bonus_per90', 'clean_sheets_per90',
+        'xGI_per90', 'minutes', 'blend_weight', 'xDiff', 'ict_index_per90', 'bonus_per90', 'clean_sheets_per90',
         'set_piece_priority.penalty', 'set_piece_priority.corner', 'set_piece_priority.free_kick', 'fixtures'
     ],
     // comparisonMetrics used to live here and nothing ever read it — the
@@ -338,6 +338,9 @@ const state = {
         // computeDraftMetrics, read by the value index for players who are
         // themselves below its minutes bar.
         replacementByPos: {},
+        // Which season the bars above were measured on, so a stale set from the
+        // other season is visible rather than silently priced against.
+        replacementSource: null,
         ownershipByFplId: new Map(),
         ownershipLoaded: false,   // false => fall back to diffing rosters
         draftHasHappened: false,  // element-status shows at least one owner
@@ -1206,6 +1209,9 @@ async function init() {
     }
 
     applySeasonLabels();
+    // Before the first process: the blend runs inside the pipeline, so a reader
+    // who turned it off must have it off on the very first paint, not after one.
+    loadSeasonBlendPreference();
 
     // Load data sources in sequence to ensure mapping works
     showLoading();
@@ -1221,7 +1227,7 @@ async function init() {
         await fetchAndProcessData();
         // Explain the season being shown even if the live API never answers,
         // so the numbers are never presented without their context.
-        showSeasonBanner(finishedGameweekCount());
+        showSeasonBanner(playedGameweeks());
 
         // 2. Then hand over to the current season, whether or not it has kicked
         //    off. The snapshot above is a fast first paint, not the destination.
@@ -1406,6 +1412,66 @@ function finishedGameweekCount() {
     const live = state.allPlayersData.live.raw;
     if (!live || !live.events) return 0;
     return live.events.filter(e => e.finished || e.finished_provisional).length;
+}
+
+/**
+ * How much season the *numbers on the page* stand on — which is not the same
+ * question as how many gameweeks are final.
+ *
+ * `finished` flips only once FPL has checked the data, typically the Tuesday
+ * after the last match. In between, the bootstrap's `minutes` and `total_points`
+ * already carry every match that has been played: on the Sunday of GW2 the
+ * finished count says 1 while half the league has 180 minutes on its row. Every
+ * scaled floor below divides by this number, so a count that lags reality sets
+ * every threshold at half what the evidence can actually clear.
+ *
+ * So: the finished count, or the number of gameweeks with a kicked-off fixture,
+ * whichever is larger. Fixtures may not have loaded — they deliberately do not
+ * block the first paint — in which case this is simply the finished count.
+ */
+function playedGameweeks() {
+    const finished = finishedGameweekCount();
+    const fixtures = state.allPlayersData.live.fixtures;
+    if (!Array.isArray(fixtures)) return finished;
+    const started = new Set();
+    for (const f of fixtures) {
+        if (f && f.event && (f.started || f.finished)) started.add(f.event);
+    }
+    return Math.max(finished, started.size);
+}
+
+/**
+ * A season-long minutes floor, scaled to how much season there is.
+ *
+ * The draft board asks for 450 minutes — five full matches — before it will
+ * recommend anyone, which is right in April and unreachable in August: after one
+ * gameweek nobody has played more than 90. Left as a constant it does not filter
+ * the weak picks, it removes every pick, and the panel prints nothing at all
+ * rather than saying why. 45 minutes per gameweek is "played about half the
+ * football there was", which is the same thing 450-out-of-a-season means.
+ *
+ * Only the live tab scales. Pre-season and on the previous-season tab the
+ * figures on screen are a full finished season, so the real floor applies.
+ */
+function scaleMinutes(target) {
+    if (state.currentDataSource !== 'live') return target;
+    const played = playedGameweeks();
+    if (!played) return target;
+    return Math.min(target, played * 45);
+}
+
+/**
+ * The minutes of evidence actually standing behind a player's rates.
+ *
+ * Every metric on the page reads blended figures (see applySeasonBlend), so the
+ * gates that decide whether a metric is trustworthy have to count the same
+ * sample the metric was computed from — this season's minutes plus the prior's.
+ * Using `p.minutes` alone is what silently emptied the board in August: it asks
+ * for a season of evidence and then measures only the fortnight.
+ */
+function sampleMinutes(p) {
+    if (!p) return 0;
+    return (p.minutes || 0) + (p.prior_minutes || 0);
 }
 
 // ============================================
@@ -1723,14 +1789,27 @@ async function fetchAndProcessData() {
                 return acc;
             }, {});
             const setPieceTakers = config.setPieceTakers;
-            // Before the season starts the bootstrap's own performance fields are
-            // last season's by accident and get cleared without warning, so they
-            // are replaced with the archive read deliberately and joined on code.
-            const preSeason = state.currentDataSource === 'live' && currentSeasonIsTooEarly();
-            const elements = preSeason
-                ? fillFromPreviousSeason(data.elements, await previousSeasonByCode())
+            // Last season is joined onto this season's squad on `code`, in one of
+            // two modes.
+            //
+            // Pre-season the bootstrap's own performance fields are last season's
+            // by accident and get cleared without warning, so they are replaced
+            // with the archive read deliberately. Once the season is under way the
+            // row keeps its own numbers and the archive rides along as a prior for
+            // applySeasonBlend — which is what stops two gameweeks of football
+            // from being ranked as though it were a season.
+            const isLive = state.currentDataSource === 'live';
+            const preSeason = isLive && currentSeasonIsTooEarly();
+            const elements = isLive
+                ? attachSeasonPrior(data.elements, await previousSeasonByCode(),
+                    { overwrite: preSeason })
                 : data.elements;
             let processedPlayers = preprocessPlayerData(elements.filter(p => p.status !== 'u'), setPieceTakers);
+
+            // Between the season's own rates and everything that ranks on them.
+            // Pre-season this is a no-op — the archive is already the row — and on
+            // the previous-season tab it never runs at all.
+            if (isLive && !preSeason) applySeasonBlend(processedPlayers);
 
             // Calculate FDR if fixtures are available
             if (state.allPlayersData.live.fixtures) {
@@ -1840,6 +1919,11 @@ function switchDataSource(source) {
     // been played.
     applyDefaultSortForSeason();
     clearEmptySeasonState();
+    // fetchAndProcessData runs its pipeline only once per season, so a season
+    // already processed skips computeDraftMetrics and would keep the other
+    // season's replacement level. Rebuild it here for the season being shown.
+    const already = state.allPlayersData[source] && state.allPlayersData[source].processed;
+    if (already) computeDraftMetrics(already);
     fetchAndProcessData();
 }
 
@@ -1908,7 +1992,7 @@ const UNPLAYED_STAT_FIELDS = [
  */
 function defaultMinMinutes() {
     if (state.currentDataSource !== 'live') return DEFAULT_MIN_MINUTES;
-    const played = finishedGameweekCount();
+    const played = playedGameweeks();
     // Pre-season the minutes on screen are last season's, so the full-season floor
     // is the right one — and it doubles as the newcomer filter, since a player with
     // no history has none.
@@ -1917,23 +2001,12 @@ function defaultMinMinutes() {
 }
 
 /**
- * A season-long minutes floor, scaled to how much season there is.
- *
- * The draft board asks for 450 minutes — five full matches — before it will
- * recommend anyone, which is right in April and unreachable in August: after one
- * gameweek nobody has played more than 90. Left as a constant it does not filter
- * the weak picks, it removes every pick, and renderDraftBoard prints nothing at
- * all rather than saying why. Same 45-minutes-per-gameweek rate as the table's
- * own floor above, so the two never disagree about who counts as a regular.
- *
- * Pre-season and on the previous-season tab the figures on screen are a full
- * finished season, so the real floor applies.
+ * The same floor, under the name the board and the panels have always called it
+ * by. One rule, one implementation: scaleMinutes owns it now, and this stays so
+ * that every existing caller keeps reading the way it reads.
  */
 function seasonMinMinutes(target) {
-    if (state.currentDataSource !== 'live') return target;
-    const played = finishedGameweekCount();
-    if (!played) return target;
-    return Math.min(target, played * 45);
+    return scaleMinutes(target);
 }
 
 /**
@@ -1954,9 +2027,14 @@ function syncSeasonSampleUi() {
             : 'מסנן שחקנים מתחת למספר הדקות הזה';
     }
 
+    syncBlendButton();
     // The banner used to be written only at startup, so every season switch left
     // the previous season's sentence sitting over the new season's table.
-    showSeasonBanner(finishedGameweekCount());
+    //
+    // playedGameweeks, not the finished count: on the Sunday of a gameweek the
+    // finished count still says the week before, and the banner would tell a
+    // reader the page is standing on half the football it is actually standing on.
+    showSeasonBanner(playedGameweeks());
     // The charts and the board used to be hidden here, back when the pre-season
     // tab had nothing but zeroes. They measure last season's rates now, which is
     // exactly what a draft is decided on, so they stay — and the banner carries
@@ -1998,25 +2076,58 @@ function stripUnplayedSeasonStats(elements) {
  * say which players those are rather than leaving a reader to wonder why a
  * £6.5m midfielder has no numbers.
  */
-function fillFromPreviousSeason(elements, archiveByCode) {
+/**
+ * Attach last season to every player in this season's squad.
+ *
+ * Two modes, one join, because they are the same operation seen at two points in
+ * the season:
+ *
+ *  - `overwrite: true` — pre-season. The new season's own fields are zero, so the
+ *    archive's numbers *become* the row. This is what fillFromPreviousSeason has
+ *    always done and it is still exactly right before a ball is kicked.
+ *  - `overwrite: false` — the season is under way. The row keeps its own numbers;
+ *    the archive rides along as `p.prior` for applySeasonBlend to weigh against
+ *    them. Nothing this season is overwritten and nothing last season is hidden.
+ *
+ * The join is on `code`, the only identifier that survives a season change; `id`
+ * is reassigned every year, which is why `history_id` is recorded separately for
+ * the per-match logs.
+ *
+ * A player with no row in the archive is a genuine newcomer — a promoted club's
+ * squad, or a signing from abroad. He gets `no_history`, so nothing invents a
+ * season he never played and the table can say which players those are rather
+ * than leaving a reader to wonder why a £6.5m midfielder has no numbers.
+ */
+function attachSeasonPrior(elements, archiveByCode, { overwrite = true } = {}) {
     let filled = 0, newcomers = 0;
     const out = (elements || []).map(p => {
         const past = p.code ? archiveByCode.get(p.code) : null;
         const merged = { ...p };
         if (!past) {
-            for (const field of UNPLAYED_STAT_FIELDS) {
-                if (field in merged) merged[field] = 0;
+            if (overwrite) {
+                for (const field of UNPLAYED_STAT_FIELDS) {
+                    if (field in merged) merged[field] = 0;
+                }
             }
             merged.no_history = true;
+            merged.prior = null;
+            merged.prior_minutes = 0;
             newcomers++;
             return merged;
         }
-        for (const field of ARCHIVE_STAT_FIELDS) {
-            if (past[field] !== undefined) merged[field] = past[field];
+        if (overwrite) {
+            for (const field of ARCHIVE_STAT_FIELDS) {
+                if (past[field] !== undefined) merged[field] = past[field];
+            }
+            // points_per_game is the honest stand-in for form in a finished season,
+            // which is what the snapshot loader does for the previous-season tab too.
+            merged.form = past.points_per_game;
         }
-        // points_per_game is the honest stand-in for form in a finished season,
-        // which is what the snapshot loader does for the previous-season tab too.
-        merged.form = past.points_per_game;
+        // The archive row itself, kept whole. applySeasonBlend reads a dozen fields
+        // off it and the expanded row prints them beside this season's, so copying
+        // a chosen subset onto the player would only be a list to keep in step.
+        merged.prior = past;
+        merged.prior_minutes = past.minutes || 0;
         merged.no_history = false;
         merged.history_season = SEASON_CONFIG.previousSeasonId;
         // The id his per-match logs are filed under last season, which is not the
@@ -2032,9 +2143,404 @@ function fillFromPreviousSeason(elements, archiveByCode) {
         filled++;
         return merged;
     });
-    console.log(`🗄️ ${SEASON_CONFIG.previousSeasonLabel} history for ${filled} of the`
+    console.log(`🗄️ ${SEASON_CONFIG.previousSeasonLabel} ${overwrite ? 'history' : 'prior'} for ${filled} of the`
         + ` ${SEASON_CONFIG.seasonLabel} squad · ${newcomers} newcomers with no history`);
     return out;
+}
+
+/**
+ * The pre-season case, under the name every caller and test already uses.
+ */
+function fillFromPreviousSeason(elements, archiveByCode) {
+    return attachSeasonPrior(elements, archiveByCode, { overwrite: true });
+}
+
+/* ------------------------- the blended season model ----------------------- */
+
+/**
+ * How this season's rates are read while the season is young.
+ *
+ * Every per-90 and per-match figure on the page divides by minutes. After two
+ * gameweeks that denominator is 180 at the very most, which is not a rate — it is
+ * an anecdote with a decimal point. Ranking 572 players on it put whoever scored
+ * on the opening weekend above every player worth a first-round pick, and left
+ * 521 of them on a flat zero.
+ *
+ * So the current season is read as evidence *updating* last season rather than
+ * replacing it:
+ *
+ *     w = minutes / (minutes + PRIOR_K)
+ *     rate = w × (this season) + (1 − w) × (2025/26)
+ *
+ * Standard empirical-Bayes shrinkage toward an informative prior, and the one
+ * thing that makes August numbers mean anything. PRIOR_K is in minutes, so at 180
+ * minutes w ≈ 0.17, at ten gameweeks ≈ 0.5, at twenty ≈ 0.67: the prior fades on
+ * its own as real evidence arrives, and nothing has to be switched off in
+ * October.
+ *
+ * What is NOT blended, deliberately:
+ *  - the raw counting stats. minutes, goals, points and clean sheets on the row
+ *    stay this season's truth, because that is what the reader is looking at.
+ *    Only the derived rates that feed the rankings are weighed.
+ *  - `form`. It is the recent-signal term by construction; blending it away would
+ *    delete the very thing it exists to carry.
+ *  - anyone with no archive row. A newcomer gets w = 1 and this season alone;
+ *    nothing is invented from a season he did not play.
+ */
+
+/**
+ * The per-90s to blend, and where the archive keeps each one.
+ *
+ * `native` is the archive's own ready-made per-90 where the snapshot has one;
+ * `total` is the season total to divide by the archive's minutes where it does
+ * not. Both are listed for the fields that have both, because the ready-made
+ * value is the authoritative one and the total is the fallback — the same rule
+ * preprocessPlayerData applies to the live bootstrap.
+ */
+const BLEND_PER90 = {
+    xGI_per90: { native: 'expected_goal_involvements_per_90', total: 'expected_goal_involvements' },
+    expected_goals_per_90: { native: 'expected_goals_per_90', total: 'expected_goals' },
+    expected_assists_per_90: { native: 'expected_assists_per_90', total: 'expected_assists' },
+    expected_goals_conceded_per_90: { native: 'expected_goals_conceded_per_90', total: 'expected_goals_conceded' },
+    saves_per_90: { native: 'saves_per_90', total: 'saves' },
+    def_contrib_per90: { native: 'defensive_contribution_per_90', total: 'defensive_contribution' },
+    clean_sheets_per90: { native: 'clean_sheets_per_90', total: 'clean_sheets' },
+    goals_conceded_per90: { native: 'goals_conceded_per_90', total: 'goals_conceded' },
+    bonus_per90: { total: 'bonus' },
+    ict_index_per90: { total: 'ict_index' },
+    influence_per90: { total: 'influence' },
+    creativity_per90: { total: 'creativity' },
+    threat_per90: { total: 'threat' }
+};
+
+/**
+ * calculateAdvancedScores and the chart builders read some of these under a
+ * second name with an underscore before the 90. preprocessPlayerData sets both;
+ * so must this, or half the app would go on reading the unblended figure.
+ */
+const BLEND_ALIASES = {
+    def_contrib_per90: 'defensive_contribution_per_90',
+    clean_sheets_per90: 'clean_sheets_per_90',
+    goals_conceded_per90: 'goals_conceded_per_90',
+    creativity_per90: 'creativity_per_90',
+    threat_per90: 'threat_per_90',
+    influence_per90: 'influence_per_90'
+};
+
+/** One archive per-90, from its own field or derived from the season total. */
+function priorRate(prior, spec) {
+    if (!prior) return null;
+    if (spec.native) {
+        const native = parseFloat(prior[spec.native]);
+        if (Number.isFinite(native) && native !== 0) return native;
+    }
+    const minutes = prior.minutes || 0;
+    if (!minutes || !spec.total) return null;
+    const total = parseFloat(prior[spec.total]);
+    return Number.isFinite(total) ? total / (minutes / 90) : null;
+}
+
+/** Appearances the archive recorded, or the same minutes estimate used elsewhere. */
+function priorAppearances(prior) {
+    if (!prior) return 0;
+    if (Number.isFinite(prior.appearances) && prior.appearances > 0) return prior.appearances;
+    return prior.minutes > 0 ? Math.round(prior.minutes / 70) : 0;
+}
+
+/**
+ * The weight this season's own numbers carry, 0 to 1.
+ *
+ * Zero minutes gives zero — which is the right answer, not a missing one: a
+ * proven player who has not featured yet should read as last season's player,
+ * not as a blank. PRIOR_K of 0 turns the blend off entirely and is what the
+ * "current season only" switch sets.
+ */
+function seasonBlendWeight(p) {
+    const k = VALUE_TUNING.priorK;
+    if (!(k > 0)) return 1;
+    if (!p || !p.prior) return 1;
+    const minutes = p.minutes || 0;
+    return minutes / (minutes + k);
+}
+
+/**
+ * Everything the blend needs from a season, in one shape.
+ *
+ * Reducing the archive row to this up front is what lets a player with no
+ * archive row at all be given a *positional* prior instead — the two are the
+ * same object by the time the blend reads them, so there is one blending path
+ * rather than a real one and a special case for newcomers.
+ */
+function seasonProfile(row) {
+    if (!row) return null;
+    const minutes = row.minutes || 0;
+    if (!minutes) return null;
+    const apps = priorAppearances(row);
+    const rates = {};
+    for (const [field, spec] of Object.entries(BLEND_PER90)) {
+        const v = priorRate(row, spec);
+        if (v !== null) rates[field] = v;
+    }
+    const ppg = parseFloat(row.points_per_game);
+    const gaTotal = (row.goals_scored || 0) + (row.assists || 0);
+    const xgi = parseFloat(row.expected_goal_involvements) || 0;
+    return {
+        minutes,
+        apps,
+        rates,
+        ppg: Number.isFinite(ppg) ? ppg : null,
+        per90pts: (row.total_points || 0) / (minutes / 90),
+        gaPer90: gaTotal / (minutes / 90),
+        startShare: apps && Number.isFinite(row.starts) ? Math.min(row.starts / apps, 1) : null,
+        defconHitRate: Number.isFinite(parseFloat(row.defcon_hit_rate))
+            ? parseFloat(row.defcon_hit_rate) : null,
+        defconHits: row.defcon_hits || 0,
+        defconApps: row.defcon_eligible_apps || 0,
+        diffRate: apps ? (gaTotal - xgi) / apps : null,
+        playRate: Math.min(1, apps / SEASON_CONFIG.totalGameweeks)
+    };
+}
+
+const _median = values => {
+    const sorted = values.filter(Number.isFinite).sort((a, b) => a - b);
+    if (!sorted.length) return null;
+    const mid = sorted.length >> 1;
+    return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+};
+
+/**
+ * The prior for a player who has never played in this league.
+ *
+ * Left with no prior at all he gets w = 1 — this season alone — which is the
+ * exact failure the blend exists to prevent, just narrowed to the players we know
+ * least about. Measured: with newcomers unshrunk, the top of the board was Mendy,
+ * Ajayi, Dedić, Egan and Thomas off one or two matches each, above Haaland.
+ *
+ * The honest prior for "we know nothing about him" is not zero and it is not his
+ * two good games. It is *an ordinary regular at his position*: the median of last
+ * season's players who cleared a third of a season there. He can still climb out
+ * of it — that is what w is for — he just has to actually play first.
+ */
+let _positionPriors = { source: null, byPosition: new Map() };
+function positionPriorProfile(players, position) {
+    if (_positionPriors.source !== players) {
+        const byPos = new Map();
+        for (const p of players) {
+            if (!p.prior || (p.prior.minutes || 0) < 900) continue;
+            const profile = seasonProfile(p.prior);
+            if (!profile) continue;
+            if (!byPos.has(p.position_name)) byPos.set(p.position_name, []);
+            byPos.get(p.position_name).push(profile);
+        }
+        const medians = new Map();
+        for (const [pos, list] of byPos) {
+            if (!list.length) continue;
+            const rateKeys = new Set();
+            list.forEach(pr => Object.keys(pr.rates).forEach(k => rateKeys.add(k)));
+            const rates = {};
+            for (const key of rateKeys) {
+                const v = _median(list.map(pr => pr.rates[key]));
+                if (v !== null) rates[key] = v;
+            }
+            const pick = fn => _median(list.map(fn));
+            medians.set(pos, {
+                minutes: pick(pr => pr.minutes),
+                apps: pick(pr => pr.apps),
+                rates,
+                ppg: pick(pr => pr.ppg),
+                per90pts: pick(pr => pr.per90pts),
+                gaPer90: pick(pr => pr.gaPer90),
+                startShare: pick(pr => pr.startShare),
+                defconHitRate: pick(pr => pr.defconHitRate),
+                defconHits: 0,
+                defconApps: 0,
+                diffRate: pick(pr => pr.diffRate),
+                playRate: pick(pr => pr.playRate),
+                // Marked, so the row can say the baseline is a stand-in rather
+                // than a season this player actually played.
+                synthetic: true
+            });
+        }
+        _positionPriors = { source: players, byPosition: medians };
+    }
+    return _positionPriors.byPosition.get(position) || null;
+}
+
+/**
+ * Overwrite the derived rates with their blended values, in place.
+ *
+ * Runs between preprocessPlayerData (which computes this season's rates) and
+ * calculateAdvancedScores (which ranks on them), so every consumer downstream —
+ * the score, the signals, the charts, the board, the value index — reads the
+ * blended figure without knowing that is what it is reading. That is the point:
+ * one place decides how much of last season counts, rather than thirty call
+ * sites each inventing a minutes threshold.
+ */
+function applySeasonBlend(players) {
+    let blended = 0, baselined = 0;
+    const gws = playedGameweeks();
+    const k = VALUE_TUNING.priorK;
+
+    for (const p of players) {
+        const own = seasonProfile(p.prior);
+        // A player with no season behind him is priced as an ordinary regular at
+        // his position until he has played enough to say otherwise.
+        const prior = own || positionPriorProfile(players, p.position_name);
+        p.prior_is_baseline = !own && !!prior;
+        if (p.prior_is_baseline) baselined++;
+
+        const minutes = p.minutes || 0;
+        const w = (!(k > 0) || !prior) ? 1 : minutes / (minutes + k);
+        p.blend_weight = w;
+        p.blend_minutes = (p.minutes || 0) + (own ? own.minutes : 0);
+
+        // Matches he is on course to play across a whole season. It is what makes
+        // a rate comparable to a season total, which is how draft_score and xDiff
+        // stop depending on how much season has been played.
+        const apps = appearancesOf(p);
+        const playRate = gws > 0 ? Math.min(1, apps / gws) : null;
+        const priorPlayRate = prior ? prior.playRate : null;
+        const rate = playRate === null ? priorPlayRate
+            : priorPlayRate === null ? playRate
+                : w * playRate + (1 - w) * priorPlayRate;
+        p.projected_apps_38 = SEASON_CONFIG.totalGameweeks * (rate === null ? 0 : rate);
+
+        if (w >= 1 || !prior) continue;
+        const mix = (cur, past) => (past === null || past === undefined || !Number.isFinite(past))
+            ? cur
+            : w * (Number.isFinite(cur) ? cur : 0) + (1 - w) * past;
+
+        for (const field of Object.keys(BLEND_PER90)) {
+            const past = prior.rates[field];
+            if (past === undefined) continue;
+            p[field] = mix(parseFloat(p[field]) || 0, past);
+            const alias = BLEND_ALIASES[field];
+            if (alias) p[alias] = p[field];
+        }
+
+        // Goals and assists per 90, which draft_score weighs at 12%.
+        p.ga_per90 = mix(p.ga_per90 || 0, prior.gaPer90);
+
+        // Points per appearance, and its per-90 twin. Both are levels rather than
+        // totals, so both blend directly.
+        p.points_per_game = mix(parseFloat(p.points_per_game) || 0, prior.ppg);
+        p.points_per_game_90 = mix(p.points_per_game_90 || 0, prior.per90pts);
+
+        // Start share. A season fact about a role, and the one the draft cares
+        // most about, since a rotated player cannot simply be transferred out.
+        if (prior.startShare !== null) {
+            p.rotation_risk = Number.isFinite(p.rotation_risk)
+                ? mix(p.rotation_risk, prior.startShare)
+                : prior.startShare;
+        }
+
+        // DEFCON is a per-match threshold, so what blends is the hit rate — never
+        // a per-90 average, which misrepresents it in either season.
+        if (prior.defconHitRate !== null) {
+            p.defcon_hit_rate = Number.isFinite(p.defcon_hit_rate)
+                ? mix(p.defcon_hit_rate, prior.defconHitRate)
+                : prior.defconHitRate;
+            p.defcon_hits = (p.defcon_hits || 0) + prior.defconHits;
+            p.defcon_eligible_apps = (p.defcon_eligible_apps || 0) + prior.defconApps;
+        }
+
+        // Conversion luck, as a rate before it is a total. xDiff is G+A minus xGI
+        // over a season, and the signals threshold it at ±1.5 and ±2 — figures that
+        // mean nothing after two matches. Blended per appearance and re-expressed
+        // over a projected season, it says the same thing in August as in April.
+        const curDiffRate = apps ? ((p.goals_scored || 0) + (p.assists || 0)
+            - (parseFloat(p.expected_goal_involvements) || 0)) / apps : 0;
+        if (prior.diffRate !== null) {
+            p.xDiff = mix(curDiffRate, prior.diffRate) * (p.projected_apps_38 || apps || 1);
+        }
+
+        blended++;
+    }
+    if (blended) {
+        console.log(`⚖️ ${SEASON_CONFIG.previousSeasonLabel} weighed into ${blended} players`
+            + ` · this season carries ${Math.round(seasonBlendShare() * 100)}%`
+            + `${baselined ? ` · ${baselined} with no history held at their position's baseline` : ''}`);
+    }
+    return players;
+}
+
+/**
+ * The headline weight, for the banner: what a player on a full run of minutes
+ * would give this season. Reported rather than each player's own, because the
+ * banner is one sentence about the page and not about a row.
+ */
+function seasonBlendShare() {
+    const k = VALUE_TUNING.priorK;
+    if (!(k > 0)) return 1;
+    const minutes = playedGameweeks() * 90;
+    if (!minutes) return 0;
+    return minutes / (minutes + k);
+}
+
+/** True when the page is showing blended numbers and ought to say so. */
+function seasonBlendActive() {
+    return state.currentDataSource === 'live'
+        && VALUE_TUNING.priorK > 0
+        && playedGameweeks() > 0
+        && seasonBlendShare() < 0.95;
+}
+
+/* --------------------------- the blend, as a switch ----------------------- */
+
+const BLEND_OFF_KEY = 'seasonBlendOff';
+
+/** Restore the reader's choice, before the first process. */
+function loadSeasonBlendPreference() {
+    const off = readSettings()[BLEND_OFF_KEY] === true;
+    VALUE_TUNING.priorK = off ? 0 : DEFAULT_PRIOR_K;
+    return off;
+}
+
+/**
+ * Turn the blend off, or back on, and rebuild the season from scratch.
+ *
+ * A full reprocess rather than a recompute: the blend runs inside the pipeline
+ * that also builds the percentiles, the scores, the replacement levels and the
+ * value index, and every one of those reads the blended fields. Patching them
+ * afterwards would leave the page in a state that is half one model and half the
+ * other, which is worse than either.
+ */
+function toggleSeasonBlend() {
+    const off = VALUE_TUNING.priorK > 0;
+    VALUE_TUNING.priorK = off ? 0 : DEFAULT_PRIOR_K;
+    writeSettings({ [BLEND_OFF_KEY]: off });
+
+    // The processed array is the cache; dropping it is what makes the pipeline
+    // run again. The raw bootstrap is kept, so nothing is re-fetched.
+    if (state.allPlayersData.live) state.allPlayersData.live.processed = null;
+    invalidateSignals();
+    syncBlendButton();
+    fetchAndProcessData();
+}
+
+/**
+ * The switch says what it will do, not what is on — and it is hidden entirely on
+ * a season old enough that the blend is doing nothing, because a control that
+ * cannot change what you see is noise.
+ */
+function syncBlendButton() {
+    const btn = document.getElementById('blendToggleBtn');
+    if (!btn) return;
+    const off = !(VALUE_TUNING.priorK > 0);
+    const relevant = state.currentDataSource === 'live'
+        && playedGameweeks() > 0
+        && (off || seasonBlendActive());
+    btn.hidden = !relevant;
+    if (!relevant) return;
+    btn.setAttribute('aria-pressed', String(off));
+    btn.textContent = off
+        ? `⚖️ משוקלל עם ${SEASON_CONFIG.previousSeasonLabel}`
+        : `📅 רק ${SEASON_CONFIG.seasonLabel}`;
+    btn.title = off
+        ? `כרגע מוצגים רק נתוני ${SEASON_CONFIG.seasonLabel} הגולמיים — ${gwWord(playedGameweeks())} בלבד.`
+            + ' לחיצה תחזיר את השקלול מול העונה שעברה'
+        : `הקצבים משוקללים מול ${SEASON_CONFIG.previousSeasonLabel}.`
+            + ` לחיצה תציג רק את מה שקרה ב-${SEASON_CONFIG.seasonLabel}`;
 }
 
 /**
@@ -2165,11 +2671,17 @@ function showSeasonBanner(playedGws) {
             + ` — המחיר, אחוז הבחירה ודירוג הדראפט הם של ${SEASON_CONFIG.seasonLabel};`
             + ` כל שאר המספרים בעמוד הם מה שהשחקן עשה ב-${SEASON_CONFIG.previousSeasonLabel}.`
             + (newcomers ? ` ${newcomers} שחקנים חדשים בליגה — להם אין היסטוריה בכלל.` : '');
+    } else if (seasonBlendActive()) {
+        // The mix, stated. "מדגם קטן" was true and useless: it told the reader the
+        // numbers were shaky without telling them what had been done about it, and
+        // something HAS been done — every rate on the page is weighed against last
+        // season in exactly this proportion. A reader who knows the split can judge
+        // a row; one who only knows the sample is small cannot.
+        const share = Math.round(seasonBlendShare() * 100);
+        liveMsg = `עונת ${SEASON_CONFIG.seasonLabel} — ${gwWord(playedGws)}.`
+            + ` הקצבים משוקללים: ~${share}% העונה, ~${100 - share}% ${SEASON_CONFIG.previousSeasonLabel}`
+            + ' · דקות, שערים ונקודות בטבלה הם של העונה הזו בלבד';
     } else if (seasonSampleIsThin()) {
-        // No claim about where the elite bar came from: resolveBenchmark decides
-        // that per metric, and the composite card already reports its own answer.
-        // A banner asserting "taken from last season" was measurably wrong the
-        // moment a young season could produce a bar of its own.
         liveMsg = `עונת ${SEASON_CONFIG.seasonLabel} — ${gwWord(playedGws)} בלבד.`
             + ' מדגם קטן: כל קצב ל-90 עוד רועד';
     } else {
@@ -2302,6 +2814,10 @@ function preprocessPlayerData(players, setPieceTakers) {
 
         p.points_per_game_90 = p.minutes > 0 ? (p.total_points / mins90) : 0;
         p.goals_scored_assists = (p.goals_scored || 0) + (p.assists || 0);
+        // G+A as a rate. draft_score used to derive this inline from the season
+        // totals, which meant the one term it could not blend was also one of its
+        // largest. As a field it goes through applySeasonBlend like every other.
+        p.ga_per90 = mins > 0 ? p.goals_scored_assists / mins90 : 0;
         p.expected_goals_assists = parseFloat(p.expected_goal_involvements) || 0;
 
         // --- NEW METRICS 2025 ---
@@ -2817,15 +3333,15 @@ const SIGNAL_RULES = [
     {
         key: 'clinical', label: 'יעיל', tone: 'clinical',
         blurb: 'מסיים מעל הצפוי, ולאורך הרבה משחקים — כשזה עקבי זו יכולת ולא מזל',
-        test: p => p.xDiff >= 1.5 && p.minutes >= 900 && (parseFloat(p.xGI_per90) || 0) >= 0.35
+        test: p => p.xDiff >= 1.5 && sampleMinutes(p) >= scaleMinutes(900) && (parseFloat(p.xGI_per90) || 0) >= 0.35
             && (pointsConcentration(p) === null || pointsConcentration(p) < 0.5),
-        why: p => [`מסיים טוב יותר מהצפוי, ובאופן עקבי לאורך ${Math.round(p.minutes / 90)} משחקים`]
+        why: p => [`מסיים טוב יותר מהצפוי, ובאופן עקבי לאורך ${Math.round(sampleMinutes(p) / 90)} משחקים`]
     },
     {
         key: 'overperf', label: 'מימוש יתר', tone: 'bad',
         blurb: 'הנקודות גבוהות ממה שהביצועים מצדיקים, או שרובן הגיעו ממחזור בודד — הצפי הוא ירידה',
         test: p => {
-            if (p.xDiff < 1.5 || p.minutes < 270) return false;
+            if (p.xDiff < 1.5 || sampleMinutes(p) < scaleMinutes(270)) return false;
             const thin = (parseFloat(p.xGI_per90) || 0) < 0.30;
             const conc = pointsConcentration(p);
             return thin || (conc !== null && conc >= 0.5);
@@ -2846,7 +3362,7 @@ const SIGNAL_RULES = [
     {
         key: 'buylow', label: 'קנייה בזול', tone: 'info',
         blurb: 'מגיע להזדמנויות והנקודות עוד לא באו — בדרך כלל זה מתיישר',
-        test: p => p.xDiff <= -1.5 && p.minutes >= 360,
+        test: p => p.xDiff <= -1.5 && sampleMinutes(p) >= scaleMinutes(360),
         why: p => ['מגיע להזדמנויות אבל הנקודות לא באו — בדרך כלל זה מתיישר']
     },
     {
@@ -2856,7 +3372,7 @@ const SIGNAL_RULES = [
         // and the filter cannot disagree about who is available. The roster walk it
         // used before could say "free" for a player the filter had already excluded.
         test: p => state.draft.ownedElementIds.size > 0 && !state.draft.ownedElementIds.has(p.id)
-            && p.draft_score >= 45 && p.minutes >= 270,
+            && p.draft_score >= 45 && sampleMinutes(p) >= scaleMinutes(270),
         why: p => [p.set_piece_priority && p.set_piece_priority.penalty === 1
             ? 'חופשי, בועט את הפנדלים, ובאיכות של שחקן הרכב'
             : 'חופשי, ובאיכות של שחקן שפותח אצל רוב הקבוצות בליגה']
@@ -2864,13 +3380,13 @@ const SIGNAL_RULES = [
     {
         key: 'swing', label: 'לו״ז מתהפך', tone: 'plum',
         blurb: 'שלושת המשחקים הבאים שלו מהקלים בליגה — חלון קצר שכדאי לנצל',
-        test: p => p.next_3_fdr > 0 && p.next_3_fdr <= 2.4 && p.minutes >= 270,
+        test: p => p.next_3_fdr > 0 && p.next_3_fdr <= 2.4 && sampleMinutes(p) >= scaleMinutes(270),
         why: p => ['שלושת המשחקים הבאים שלו מהקלים בליגה']
     },
     {
         key: 'rotation', label: 'סיכון סיבוב', tone: 'warn',
         blurb: 'לא מובטח בהרכב — רמה טובה שלא תמיד נמצאת על הדשא',
-        test: p => Number.isFinite(p.rotation_risk) && p.rotation_risk < 0.6 && p.minutes >= 180,
+        test: p => Number.isFinite(p.rotation_risk) && p.rotation_risk < 0.6 && sampleMinutes(p) >= scaleMinutes(180),
         why: p => [`לא מובטח בהרכב — פתח רק ב-${Math.round(p.rotation_risk * 100)}% מהמשחקים`]
     }
 ];
@@ -3892,6 +4408,39 @@ function buildPercentileBase(rows) {
  * lifted by a million over the summer is FPL's own model saying it expects more
  * from him than last season's row shows.
  */
+/**
+ * How much of this row is this season, as a cell.
+ *
+ * The blend is the largest single thing standing between the numbers and the
+ * reader, so it gets a column rather than a footnote. Three states, and they mean
+ * different things:
+ *
+ *   87%   most of the row is this season — read it as this season's form
+ *   17%   two gameweeks; the row is mostly what he did last season
+ *   חדש   no previous season at all, so the low figure he is being held near is
+ *         his position's baseline rather than his own history
+ */
+function blendWeightCellHtml(player) {
+    const w = player.blend_weight;
+    if (!Number.isFinite(w) || state.currentDataSource !== 'live') {
+        return '<span class="cell-none">–</span>';
+    }
+    const pct = Math.round(w * 100);
+    if (player.prior_is_baseline) {
+        return cellBadge(`חדש ${pct}%`, 'warn',
+            `אין לו עונה קודמת בליגה — הקצבים שלו מוחזקים ליד הרמה החציונית של ${player.position_name}`
+            + ` עד שיצבור דקות. ${pct}% מהקצב בשורה הוא מה שעשה העונה.`);
+    }
+    if (pct >= 95) {
+        return cellBadge(`${pct}%`, 'good', 'מספיק דקות העונה — השורה היא כמעט כולה העונה הזו');
+    }
+    const tone = pct >= 50 ? 'info' : 'muted';
+    return cellBadge(`${pct}%`, tone,
+        `${pct}% מהקצבים בשורה מגיעים מ-${SEASON_CONFIG.seasonLabel}`
+        + ` ו-${100 - pct}% מ-${SEASON_CONFIG.previousSeasonLabel}`
+        + ` (${player.minutes || 0} דקות העונה, ${player.prior_minutes || 0} בעונה שעברה)`);
+}
+
 function priceCellHtml(player) {
     const cost = displayCost(player);
     const base = `£${cost.toFixed(1)}`;
@@ -4049,6 +4598,7 @@ function createPlayerRowHtml(player, index) {
         <td class="${toneClass('xDiff', player.xDiff, displayedValues.xDiff)}" data-tooltip="${config.columnTooltips.xDiff}">${player.xDiff > 0 ? '+' : ''}${player.xDiff.toFixed(2)}</td>
         <td class="${toneClass('rotation_risk', player.rotation_risk, displayedValues.rotation_risk)}" data-tooltip="${config.columnTooltips.rotation_risk}">${formatRotation(player.rotation_risk)}</td>
         <td class="${toneClass('minutes', player.minutes, displayedValues.minutes)}">${player.minutes}</td>
+        <td class="blend-cell">${blendWeightCellHtml(player)}</td>
         <td class="${toneClass('bonus_per90', parseFloat(player.bonus_per90) || 0, displayedValues.bonus_per90)}">${(parseFloat(player.bonus_per90) || 0).toFixed(2)}</td>
         <td class="${toneClass('clean_sheets_per90', parseFloat(player.clean_sheets_per90) || 0, displayedValues.clean_sheets_per90)}">${(parseFloat(player.clean_sheets_per90) || 0).toFixed(2)}</td>
         <td class="price-cell">${priceCellHtml(player)}</td>
@@ -4096,6 +4646,7 @@ const OPTIONAL_COLUMNS = [
     { key: 'xDiff', label: 'xDiff' },
     { key: 'rotation_risk', label: 'הרכב' },
     { key: 'minutes', label: 'דקות' },
+    { key: 'blend_weight', label: 'משקל' },
     { key: 'bonus_per90', label: 'בונוס/90' },
     { key: 'clean_sheets_per90', label: 'CS/90' },
     { key: 'now_cost', label: 'מחיר' }
@@ -4674,18 +5225,18 @@ const QUICK_FILTERS = {
         sortKey: 'set_piece_priority.penalty', sortDirection: 'asc'
     },
     attacking_defenders: {
-        filter: p => p.position_name === 'DEF' && p.minutes > 300,
+        filter: p => p.position_name === 'DEF' && sampleMinutes(p) > scaleMinutes(300),
         sortKey: 'xGI_per90'
     },
     // "form > 0" matched essentially the whole league. Require a genuinely
     // strong recent return from someone who is actually playing.
     form_kings: {
-        filter: p => parseFloat(p.form) >= 4.5 && p.minutes > 450,
+        filter: p => parseFloat(p.form) >= 4.5 && sampleMinutes(p) > scaleMinutes(450),
         sortKey: 'points_per_game_90'
     },
     // Creating more than they have converted: candidates to improve.
     underperformers: {
-        filter: p => p.minutes > 600 && p.xDiff < -1.5,
+        filter: p => sampleMinutes(p) > scaleMinutes(600) && p.xDiff < -1.5,
         sortKey: 'xDiff', sortDirection: 'asc'
     },
     // The four position chips: the best free agents at one position over the next
@@ -7271,8 +7822,25 @@ const VALUE_TUNING = {
     // is blind to the thing that decides a return — a player who appears in 12
     // of 20 gameweeks and starts all 12 scores 1.0 on it, identically to a man
     // who starts every week. Both together is no better than playRate alone.
-    volume: 'playRate'
+    volume: 'playRate',
+    // How many minutes of *this* season it takes before this season outweighs
+    // last season, in the empirical-Bayes blend that applySeasonBlend applies to
+    // every rate on the page. 900 is ten matches: at the two gameweeks that exist
+    // on draft day the current season carries ~17%, by GW10 half, by GW20 two
+    // thirds. Set to 0 to read the current season raw, which is what the
+    // "current season only" switch does.
+    //
+    // A draft is decided in August, so this is the single most consequential
+    // constant in the file: at priorK 0 the board ranks 572 players on one match
+    // and puts whoever scored on the opening weekend first.
+    priorK: 900
 };
+
+// The shipped value of priorK, captured before the "current season only" switch
+// can reassign it. Declared here rather than beside the switch: a const at the
+// top of the file initialises when the file loads, which is before VALUE_TUNING
+// exists, and would throw on every page load.
+const DEFAULT_PRIOR_K = VALUE_TUNING.priorK;
 
 /**
  * formK is how many matches of window form it would take to outweigh the season
@@ -7304,10 +7872,14 @@ function seasonMatchesLeft() {
 
 /** Points per appearance over the whole season, the level the form regresses to. */
 function seasonPointsPerApp(p) {
-    const apps = p.appearances || (p.minutes > 0 ? Math.round(p.minutes / 70) : 0);
-    if (!apps) return null;
+    // The blended level, when there is one. Requiring an appearance count first
+    // returned null for every proven player yet to feature this season, so the
+    // value index simply had no opinion about them in August — 251 of 572 players
+    // priced, and the missing ones were disproportionately the good ones.
     const perApp = parseFloat(p.points_per_game);
-    return Number.isFinite(perApp) && perApp > 0 ? perApp : (p.total_points || 0) / apps;
+    if (Number.isFinite(perApp) && perApp > 0) return perApp;
+    const apps = p.appearances || (p.minutes > 0 ? Math.round(p.minutes / 70) : 0);
+    return apps ? (p.total_points || 0) / apps : null;
 }
 
 /**
@@ -8388,7 +8960,7 @@ function showVisualization(type) {
     const isFiltered = state.displayedData.length < state.allPlayersData[state.currentDataSource].processed.length;
     const players = isFiltered
         ? state.displayedData.filter(p => spec.pos.includes(p.position_name))
-        : state.displayedData.filter(p => spec.pos.includes(p.position_name) && p.minutes > 300);
+        : state.displayedData.filter(p => spec.pos.includes(p.position_name) && sampleMinutes(p) > scaleMinutes(300));
     if (players.length < 2) {
         showToast('אין מספיק נתונים', `לא נמצאו מספיק שחקנים (${spec.pos.join('/')}) להשוואה`, 'warning', 4000);
         return;
@@ -8670,8 +9242,38 @@ function formatRotation(r) {
 // the next player at that position is realistically available to anyone.
 const REPLACEMENT_SLOTS = { GKP: 1, DEF: 4, MID: 4, FWD: 2 };
 
+/**
+ * How many managers will be drafting.
+ *
+ * Replacement level sits at leagueSize x startersAtPosition, so this number
+ * decides where the bar is drawn: in a ten-team league the fourth-choice
+ * defender bar is the 40th defender, in an eight-team league the 32nd.
+ *
+ * `league_entries` counts who has *joined so far*, which before a draft is not
+ * the same thing — league 932 had 5 of its 10 entries a fortnight out. Taking it
+ * literally drew the bar at half depth and inflated every VORP in the league.
+ * Once the draft has happened the joined entries are the league, and `max_entries`
+ * would be the wrong answer if someone never showed up.
+ */
+function draftLeagueSize() {
+    const details = state.draft.details;
+    const joined = details?.league_entries?.length || 0;
+    const capacity = details?.league?.max_entries || 0;
+    const size = draftHasBeenHeld() ? joined : Math.max(joined, capacity);
+    return size || 8;
+}
+
 function computeDraftMetrics(players) {
-    const leagueSize = state.draft.details?.league_entries?.length || 8;
+    // Rebuilt from scratch, never merged into what is already there.
+    //
+    // The app paints the committed snapshot first and upgrades to the live season
+    // afterwards, and this object is a single global. Left standing, the live tab
+    // priced this season's players against LAST season's replacement level —
+    // measured at GKP 3.5 / DEF 3.7 / MID 3.9 / FWD 3.2, never recomputed. Every
+    // value on the board was a comparison between two different seasons.
+    state.draft.replacementByPos = {};
+    state.draft.replacementSource = state.currentDataSource;
+    const leagueSize = draftLeagueSize();
     const ownedIds = state.draft.ownedElementIds;
     // Only treat ownership as known once the league says somebody owns somebody.
     // element-status answers this directly; before the draft it correctly
@@ -8684,18 +9286,35 @@ function computeDraftMetrics(players) {
     // Points per APPEARANCE, not per 90 minutes. Per-90 divides by playing time,
     // so a substitute with 10 points in 100 minutes scores 9.0 -- higher than
     // any genuine starter -- and would top the VORP table on noise alone.
+    // points_per_game first, because after applySeasonBlend it IS the blended
+    // level and it is defined for a player who has not featured this season yet.
+    // Deriving from appearances first put every such player at 0.0 — including,
+    // measured, enough forwards to drag the position's own replacement level to
+    // exactly zero, which made every forward's VORP his raw scoring rate.
     const scoreOf = p => {
-        const apps = p.appearances || (p.minutes > 0 ? Math.round(p.minutes / 70) : 0);
-        if (!apps) return 0;
         const perApp = parseFloat(p.points_per_game);
-        return Number.isFinite(perApp) && perApp > 0 ? perApp : (p.total_points || 0) / apps;
+        if (Number.isFinite(perApp) && perApp > 0) return perApp;
+        const apps = p.appearances || (p.minutes > 0 ? Math.round(p.minutes / 70) : 0);
+        return apps ? (p.total_points || 0) / apps : 0;
     };
 
+    // Roughly a third of a season of evidence, counted across both seasons
+    // because that is the sample the blended points_per_game above was computed
+    // from. Read as `p.minutes` alone it was unreachable in August — with a
+    // maximum of 180 minutes played it matched nobody, `atPos` came out empty, the
+    // loop returned before assigning anything, and every player in the league had
+    // a null VORP. That emptied the VORP column, the הפער מהחלופה panel and the
+    // underlying-value chart at exactly the moment a draft needs them.
+    const EVIDENCE = 900;
+    // The floor for being *given* a VORP, which is a lower bar than being used to
+    // set one: a promoted club's midfielder has no prior and never will have 900
+    // minutes before the draft, but the gap between him and a replacement is
+    // still the number the reader came for.
+    const ratedFloor = Math.max(scaleMinutes(EVIDENCE), 90);
+
     ['GKP', 'DEF', 'MID', 'FWD'].forEach(pos => {
-        // Require roughly a third of a season. Below that the sample is too
-        // small to describe anyone's true level.
         const atPos = players
-            .filter(p => p.position_name === pos && p.minutes >= 900)
+            .filter(p => p.position_name === pos && sampleMinutes(p) >= EVIDENCE)
             .sort((a, b) => scoreOf(b) - scoreOf(a));
         if (!atPos.length) return;
 
@@ -8709,7 +9328,7 @@ function computeDraftMetrics(players) {
         // every shortlist the moment the league's rosters loaded.
         //
         // So the index keeps the slot rule all season: the level of a startable
-        // player at this position in an eight-team league. It does not move when
+        // player at this position in a league of this size. It does not move when
         // somebody else drafts, which is what makes two positions comparable.
         const slotIdx = Math.min(leagueSize * (REPLACEMENT_SLOTS[pos] || 2), atPos.length - 1);
         state.draft.replacementByPos[pos] = Math.round(scoreOf(atPos[slotIdx]) * 100) / 100;
@@ -8722,11 +9341,15 @@ function computeDraftMetrics(players) {
         } else {
             // Pre-draft: nobody is owned yet, so replacement level is the first
             // player past the point where every team has filled that position.
-            const idx = Math.min(leagueSize * (REPLACEMENT_SLOTS[pos] || 2), atPos.length - 1);
-            replacementScore = scoreOf(atPos[idx]);
+            replacementScore = scoreOf(atPos[slotIdx]);
         }
 
-        atPos.forEach(p => {
+        // Everyone at the position who has played enough to be worth pricing —
+        // not only the players who set the bar. They are two different questions
+        // and conflating them is what left every newcomer without a figure.
+        players.forEach(p => {
+            if (p.position_name !== pos) return;
+            if (sampleMinutes(p) < ratedFloor) return;
             p.replacement_score = Math.round(replacementScore * 100) / 100;
             p.vorp = Math.round((scoreOf(p) - replacementScore) * 100) / 100;
         });
@@ -9077,10 +9700,23 @@ function calculateStabilityIndex(player) {
 }
 
 function calculateAdvancedScores(players) {
-    // Filter out players with less than 180 minutes (2 full games)
-    const activePlayers = players.filter(p => (p.minutes || 0) >= 180);
+    // Two full matches of evidence, counted across both seasons — the same sample
+    // the blended rates below were computed from.
+    //
+    // Read as `p.minutes >= 180` it excluded 521 of 572 players in August, because
+    // two gameweeks is 180 minutes at the absolute maximum. Everyone excluded was
+    // then given a hard `draft_score = 0`, and the table opens sorted on that
+    // score: the board's top ten was whoever happened to score on the opening
+    // weekend, with every player worth a first-round pick tied at zero beneath
+    // them.
+    const activeFloor = scaleMinutes(180);
+    const activePlayers = players.filter(p => sampleMinutes(p) >= activeFloor);
 
     // Calculate percentiles for all metrics (only for active players)
+    //
+    // Every performance key here is a RATE, never a season total. A total answers
+    // "how much has he accumulated so far", which in August is mostly a question
+    // about the calendar; `bonus` was the last one left and is now bonus_per90.
     const metricsToPercentile = [
         { key: 'xGI_per90', asc: false },
         { key: 'def_contrib_per90', asc: false },
@@ -9090,10 +9726,9 @@ function calculateAdvancedScores(players) {
         { key: 'threat_per_90', asc: false },
         { key: 'now_cost', asc: true },
         { key: 'form', asc: false },
-        { key: 'minutes', asc: false },
-        { key: 'total_points', asc: false },
-        { key: 'bonus', asc: false },
-        { key: 'clean_sheets', asc: false },
+        { key: 'blend_minutes', asc: false },
+        { key: 'points_per_game', asc: false },
+        { key: 'bonus_per90', asc: false },
         { key: 'selected_by_percent', asc: false },
         { key: 'dreamteam_count', asc: false }
     ];
@@ -9102,20 +9737,33 @@ function calculateAdvancedScores(players) {
     // Calculate scores for active players
     activePlayers.forEach(p => {
         const pos = p.position_name;
-        const minutes = p.minutes || 1; // Avoid division by zero
-        const gamesPlayed = Math.max(minutes / 90, 0.1); // At least 0.1 to avoid division by zero
 
-        // Calculate per-game metrics
-        const goalsPerGame = (p.goals_scored || 0) / gamesPlayed;
-        const assistsPerGame = (p.assists || 0) / gamesPlayed;
-        const gaPerGame = goalsPerGame + assistsPerGame;
-        const xgPerGame = (parseFloat(p.expected_goals) || 0) / gamesPlayed;
-        const xaPerGame = (parseFloat(p.expected_assists) || 0) / gamesPlayed;
-        const xgiPerGame = xgPerGame + xaPerGame;
+        // Per-90 rates, read off the blended fields rather than recomputed from
+        // this season's totals — otherwise the score would silently disagree with
+        // every other number on the row.
+        const gaPerGame = Number.isFinite(p.ga_per90) ? p.ga_per90 : 0;
+        const xgiPerGame = parseFloat(p.xGI_per90) || 0;
 
         // 1. נקודות בפועל (35%) - הכי חשוב! 🏆
-        const totalPoints = p.total_points || 0;
-        const pointsScore = Math.min(totalPoints / 2, 100); // Normalize: 200 pts = 100
+        //
+        // A projected season rather than the running total. The old
+        // `total_points / 2` was the largest term in the score and a raw
+        // accumulation: after two gameweeks the best player in the league scores 11
+        // out of 100 on it, and a player yet to make his season debut scores zero
+        // however good he is. Level × matches he is on course to play answers the
+        // same question — how many points is he worth over a season — without
+        // asking what month it is.
+        //
+        // Scale-preserving by construction: over a finished season points-per-
+        // appearance × appearances IS the season total, so every threshold tuned
+        // against the old figure (the `claim` signal's 45, the chart axes) keeps
+        // meaning exactly what it meant.
+        const perApp = parseFloat(p.points_per_game) || 0;
+        const projectedApps = Number.isFinite(p.projected_apps_38) && p.projected_apps_38 > 0
+            ? p.projected_apps_38
+            : (p.minutes > 0 ? Math.round(p.minutes / 70) : 0);
+        const projectedPoints = perApp * projectedApps;
+        const pointsScore = Math.min(projectedPoints / 2, 100); // Normalize: 200 pts = 100
 
         // 2. תרומה הגנתית (15%) - DefCon 🛡️
         const defconScore = p.percentiles.def_contrib_per90 || 0;
@@ -9142,7 +9790,7 @@ function calculateAdvancedScores(players) {
         const ownershipScore = 100 - (p.percentiles.selected_by_percent || 0);
 
         // 7. בונוס (8%) ⭐
-        const bonusScore = p.percentiles.bonus || 0;
+        const bonusScore = p.percentiles.bonus_per90 || 0;
 
         // Calculate final draft score with weights
         p.draft_score = (
@@ -9172,9 +9820,11 @@ function calculateAdvancedScores(players) {
         p = calculateAllPredictions([p])[0];
     });
 
-    // Set draft_score to 0 for inactive players (less than 180 minutes)
+    // Zeroed for anyone below the evidence floor above. The two tests must be
+    // the same test: while this one read raw minutes and the floor read the
+    // blended sample, a player could be scored and then have his score wiped.
     players.forEach(p => {
-        if ((p.minutes || 0) < 180) {
+        if (sampleMinutes(p) < activeFloor) {
             p.draft_score = 0;
             p.quality_score = 0;
             p.base_score = 0;
@@ -12360,7 +13010,7 @@ function buildOpportunityChart(data) {
 
     const raw = data.map(p => {
         const delta = trendDelta(p, 'pts');
-        if (delta === null || p.minutes < 450) return null;
+        if (delta === null || sampleMinutes(p) < scaleMinutes(450)) return null;
         return {
             x: p.draft_score, y: delta, name: p.web_name, team: p.team_name,
             pos: p.position_name,
@@ -12567,7 +13217,7 @@ function buildConversionChart(data) {
     const floor = windowed ? 0.6 : 2;
 
     const raw = data.map(p => {
-        if (!windowed && p.minutes < 450) return null;
+        if (!windowed && sampleMinutes(p) < scaleMinutes(450)) return null;
         const x = xr.read(p);
         const y = windowed ? yr.read(p) : (p.goals_scored || 0) + (p.assists || 0);
         if (x === null || y === null || x < floor) return null;
@@ -12717,7 +13367,7 @@ function buildMinutesChart(data) {
     const yr = metricReader('points_per_game_90');
     const raw = data.map(p => {
         if (p.rotation_risk === null || p.rotation_risk === undefined) return null;
-        if (!yr.windowed && p.minutes < 600) return null;
+        if (!yr.windowed && sampleMinutes(p) < scaleMinutes(600)) return null;
         const y = yr.read(p);
         if (y === null) return null;
         return {
@@ -13060,7 +13710,7 @@ function buildUnderlyingValueChart(data) {
     const raw = data.map(p => {
         if (p.position_name === 'GKP' || p.market_departed) return null;
         if (!Number.isFinite(p.vorp)) return null;
-        if (!xr.windowed && p.minutes < 450) return null;
+        if (!xr.windowed && sampleMinutes(p) < scaleMinutes(450)) return null;
         const x = xr.read(p);
         if (x === null) return null;
         return { x, y: p.vorp, name: p.web_name, team: p.team_name, pos: p.position_name };

@@ -50,6 +50,11 @@ function load(verdicts = {}, over = {}) {
     const state = { currentDataSource: 'historical', chartFacets: {},
         trendWindow: 5, trendGws: [], ...over };
     const fns = loadFunctions(FNS, { state }, DEPS);
+    // The evidence gate and the scaled floor live with the season model, far
+    // from this slice. These tests are about the rule, not about how a floor
+    // shrinks in August — see tests/season-gate.test.mjs for that.
+    globalThis.scaleMinutes = target => target;
+    globalThis.sampleMinutes = p => p.minutes || 0;
     globalThis.signalFor = p => verdicts[p.id]
         || { key: 'hold', label: 'ניטרלי', tone: 'muted', why: [] };
     // Stubbed: the real CHART_SPECS closes over every build function in the
