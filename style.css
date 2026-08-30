@@ -5117,7 +5117,12 @@ canvas {
 /* The blend switch. Pressed means the blend is OFF — the reader has asked for
    the raw current season — so it is amber rather than green: it is a narrowing
    of the evidence, not a filter that found something. */
-.scout-blend[aria-pressed="true"] { background: #b45309; border-color: #b45309; color: #fff; }
+/* The emphasis belongs on the state that moves the numbers, and since the blend
+   now starts off, that is the blended one. Filled while the page weighs last
+   season in; quiet while it shows this season raw — which is the default, and a
+   default has no business shouting from the header on every visit. */
+.scout-blend[aria-pressed="true"] { background: #fff; border-color: #e2e8f0; color: #475569; }
+.scout-blend[aria-pressed="false"] { background: #fef3c7; border-color: #fcd34d; color: #92400e; }
 .scout-blend[hidden] { display: none; }
 
 /* Before draft night nobody owns anybody, so the switch has nothing to act on.
