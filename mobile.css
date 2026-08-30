@@ -557,6 +557,31 @@
     padding: 8px 6px 12px;
 }
 
+/* The card's own controls and caption, inside the overlay. Full screen is where
+   you actually want to switch position or facet — the chart is finally big enough
+   to read the difference — so the expanded view carries the same chips the card
+   does rather than being the one place you cannot filter. */
+.cf-controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 8px 14px 0;
+    flex: none;
+}
+
+.cf-controls[hidden] { display: none; }
+
+.cf-note {
+    margin: 0;
+    padding: 8px 14px 0;
+    font-size: 12px;
+    line-height: 1.6;
+    color: #64748b;
+    flex: none;
+}
+
+.cf-note[hidden] { display: none; }
+
 /* --------------------------------------------------------------------------
    The reading pane, wide screens only.
    A chart the size of a screen still answers only the questions you can ask by

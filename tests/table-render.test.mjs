@@ -81,7 +81,7 @@ function load(players, over = {}) {
         'fourthTrendMetric', 'fixtureForGw', 'getDraftTeamForPlayer', 'trendPlayerIndex',
         'pointsConcentration',
         'miniSparkHtml',
-        'trendBarsHtml', 'roleTrend', 'trendBenchmark', 'benchmarkMedian',
+        'trendBarsHtml', 'roleTrend', 'trendBenchmark', 'benchmarkMedian', 'windowGwWord',
         // the three stat boxes in the expanded row
         'boxAttack', 'boxDefence', 'boxValue',
         // The grey "and last season" figures beside each rate.

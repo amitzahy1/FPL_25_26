@@ -18,7 +18,7 @@ const FNS = [
     'buildMarketFlowChart', 'buildSignalSpreadChart', 'buildSignalFocusChart',
     'buildUnderlyingValueChart', 'buildTeamTargetsChart', 'signalLegendHtml',
     'metricReader', 'windowRate', 'windowRateSupported', 'windowMinMinutes',
-    'windowAxisLabel', 'gwDefensiveContribution',
+    'windowAxisLabel', 'windowGwWord', 'gwDefensiveContribution',
     'barRowLabel', 'barRowTicks', 'signalFocusHeight',
     'scopeToFacet', 'chartFacetChipsHtml', 'setChartFacet', 'chartFacetValue'
 ];

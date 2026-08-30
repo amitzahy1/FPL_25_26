@@ -50,8 +50,171 @@
 }
 
 /* ============================================================
-   Sections & navigation (functional rules land in Phase 2)
+   Hero
    ============================================================ */
+
+#draftHero {
+    padding: 22px 0 12px;
+}
+
+#draftHero h2 {
+    margin: 0;
+    font-size: 26px;
+    font-weight: 900;
+    color: var(--pl-ink);
+}
+
+#draftHero p {
+    margin: 4px 0 0;
+    font-size: 14px;
+    color: var(--pl-muted);
+}
+
+/* ============================================================
+   Sections & navigation
+   ============================================================ */
+
+#draftTabContent .draft-section {
+    display: none;
+}
+
+#draftTabContent .draft-section.active {
+    display: block;
+}
+
+/* Top pill nav. Overrides the legacy .draft-sub-nav-container rules that still
+   live in style.css/mobile.css for the old nine-tab bar. */
+#draftTabContent .draft-sub-nav-container {
+    position: sticky;
+    top: var(--app-header-h);
+    z-index: 90;
+    background: var(--pl-surface);
+    border-bottom: 1px solid var(--pl-line);
+    box-shadow: none;
+    padding: 12px 0;
+    margin-bottom: 20px;
+}
+
+#draftTabContent .draft-sub-nav {
+    display: flex;
+    justify-content: center;
+    gap: 8px;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    padding: 2px 8px;
+    scrollbar-width: none;
+}
+
+#draftTabContent .draft-sub-nav::-webkit-scrollbar {
+    display: none;
+}
+
+#draftTabContent .dnav-btn {
+    padding: 10px 22px;
+    border: 1px solid transparent;
+    border-radius: 999px;
+    background: transparent;
+    color: var(--pl-muted);
+    font: inherit;
+    font-weight: 700;
+    font-size: 15px;
+    white-space: nowrap;
+    cursor: pointer;
+    transition: background .15s ease, color .15s ease;
+}
+
+#draftTabContent .dnav-btn:hover {
+    background: var(--pl-bg);
+    color: var(--pl-ink);
+}
+
+#draftTabContent .dnav-btn.active {
+    background: var(--pl-purple);
+    color: #fff;
+}
+
+/* Segment bar inside a section */
+#draftTabContent .plc-segbar {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    margin: 4px 0 18px;
+}
+
+#draftTabContent .plc-seg {
+    padding: 8px 16px;
+    border: 1px solid var(--pl-line);
+    border-radius: 999px;
+    background: var(--pl-surface);
+    color: var(--pl-muted);
+    font: inherit;
+    font-weight: 600;
+    font-size: 14px;
+    cursor: pointer;
+    transition: border-color .15s ease, color .15s ease, background .15s ease;
+}
+
+#draftTabContent .plc-seg:hover {
+    border-color: var(--pl-purple);
+    color: var(--pl-purple);
+}
+
+#draftTabContent .plc-seg.active {
+    border-color: var(--pl-purple);
+    color: var(--pl-purple);
+    background: #f6eef8;
+}
+
+/* ============================================================
+   Mobile: the draft tab swaps the players action bar for its own
+   ============================================================ */
+
+#draftMobileBar {
+    display: none;
+}
+
+@media (max-width: 768px) {
+    body.tab-draft #mobileBar {
+        display: none;
+    }
+
+    body.tab-draft #draftMobileBar {
+        display: grid;
+        grid-template-columns: repeat(5, 1fr);
+        position: fixed;
+        bottom: 0;
+        inset-inline: 0;
+        z-index: 110;
+        background: var(--pl-surface);
+        border-top: 1px solid var(--pl-line);
+        padding: 6px 4px calc(6px + env(safe-area-inset-bottom));
+    }
+
+    #draftMobileBar .dnav-mb {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 2px;
+        min-height: 48px;
+        padding: 4px 2px;
+        border: none;
+        background: none;
+        font: inherit;
+        font-size: 11px;
+        font-weight: 600;
+        color: var(--pl-muted);
+        cursor: pointer;
+    }
+
+    #draftMobileBar .dnav-mb span {
+        font-size: 20px;
+        line-height: 1;
+    }
+
+    #draftMobileBar .dnav-mb.active {
+        color: var(--pl-purple);
+    }
+}
 
 /* ============================================================
    Components — .plc-* vocabulary (rolled out in Phase 6)

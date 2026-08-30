@@ -113,10 +113,14 @@
                         <!-- Loading used to announce itself with a stack of
                              toasts nobody had asked a question of. The pill says
                              the same thing once, quietly, and keeps saying it. -->
+                        <!-- #headerGW used to sit here, shipping the literal string
+                             "GW--". Nothing has ever written to it, so it rendered
+                             that placeholder forever — and on an RTL page the bidi
+                             algorithm split the two dashes off the letters, printing
+                             "-GW" and a stray "-" on separate lines. The gameweek is
+                             in the banner, where it is a sentence rather than a stub. -->
                         <div class="status-pill is-busy" id="statusPill" title="טוען נתונים">
                             <span class="status-dot"></span>
-                            <span id="headerGW">GW--</span>
-                            <span class="status-sep" aria-hidden="true">·</span>
                             <span id="statusHealth" aria-live="polite">טוען…</span>
                             <span id="lastUpdated" style="display:none;"></span> <!-- Hidden holder for JS -->
                         </div>
@@ -256,6 +260,20 @@
                     font-size: 12px;
                     font-weight: 700;
                     color: #059669;
+                    /* One line, always. It sits in a row of 33-39px controls, and a
+                       label long enough to wrap made it 52px and three lines deep,
+                       which pushed the whole row out of alignment. Anything that
+                       does not fit belongs in the hover text, which already carries
+                       the full detail. */
+                    white-space: nowrap;
+                    max-width: 260px;
+                    overflow: hidden;
+                    text-overflow: ellipsis;
+                }
+
+                .status-pill #statusHealth {
+                    overflow: hidden;
+                    text-overflow: ellipsis;
                 }
 
                 .status-dot {
@@ -328,63 +346,6 @@
                     100% {
                         opacity: 1;
                     }
-                }
-            </style>
-
-            <!-- Draft Sub Navigation (Sticky below header) -->
-
-            <style>
-                .draft-sub-nav-container {
-                    background: white;
-                    border-bottom: 1px solid #e2e8f0;
-                    padding: 0 24px;
-                    position: sticky;
-                    top: 70px;
-                    z-index: 90;
-                    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
-                }
-
-                .draft-sub-nav {
-                    max-width: 100%;
-                    margin: 0 auto;
-                    display: flex;
-                    gap: 8px;
-                    overflow-x: visible;
-                    padding: 16px 0;
-                    flex-wrap: wrap;
-                    justify-content: center;
-                }
-
-                .draft-nav-btn {
-                    padding: 10px 20px;
-                    border: 1px solid transparent;
-                    background: #f8fafc;
-                    color: #64748b;
-                    font-weight: 700;
-                    font-size: 15px;
-                    border-radius: 12px;
-                    cursor: pointer;
-                    transition: all 0.2s ease;
-                    white-space: nowrap;
-                    display: flex;
-                    align-items: center;
-                    gap: 8px;
-                }
-
-                .draft-nav-btn:hover {
-                    background: #f1f5f9;
-                    color: #334155;
-                }
-
-                .draft-nav-btn.active {
-                    background: #eff6ff;
-                    color: #3b82f6;
-                    border-color: #bfdbfe;
-                    box-shadow: 0 2px 4px rgba(59, 130, 246, 0.1);
-                }
-
-                .nav-icon {
-                    font-size: 18px;
                 }
             </style>
 
@@ -761,116 +722,48 @@
                      page reload. -->
                 <div id="draftNotice" hidden></div>
 
-                <!-- Simple Title Section (Clean) -->
-                <div class="draft-header-simple" style="padding: 24px 0 10px 0;">
-                    <h2 style="font-size: 24px; font-weight: 800; color: #1e293b; margin: 0;">ליגת הדראפט שלי</h2>
-                    <p style="font-size: 14px; color: #64748b; margin: 4px 0 0 0;">סטטיסטיקה, טבלאות ונתונים בזמן אמת
-                    </p>
-                </div>
-
-                <!-- Draft Sub Navigation -->
-                <!-- Draft Sub Navigation (Improved Design) -->
-                <div id="draftSubNav" class="draft-sub-nav-container"
-                    style="background: #ffffff; padding: 16px 0; border-bottom: 1px solid #f1f5f9; margin-bottom: 24px; position: sticky; top: 70px; z-index: 90;">
-                    <div class="draft-sub-nav"
-                        style="max-width: 100%; margin: 0 auto; display: flex; justify-content: center; gap: 8px; overflow-x: visible; flex-wrap: wrap;">
-                        <button class="draft-nav-btn" onclick="switchDraftTab('room')"
-                            style="padding: 12px 24px; border-radius: 12px; border: none; font-weight: 700; font-size: 16px; cursor: pointer; transition: all 0.2s; display: flex; align-items: center; gap: 8px; background: transparent; color: #64748b;">
-                            <span style="font-size: 18px;">🎯</span> חדר הדראפט
-                        </button>
-                        <button class="draft-nav-btn active" onclick="switchDraftTab('overview')"
-                            style="padding: 12px 24px; border-radius: 12px; border: none; font-weight: 700; font-size: 16px; cursor: pointer; transition: all 0.2s; display: flex; align-items: center; gap: 8px; background: #eff6ff; color: #3b82f6; box-shadow: 0 2px 4px rgba(59,130,246,0.1);">
-                            <span style="font-size: 18px;">📊</span> מבט על
-                        </button>
-                        <button class="draft-nav-btn" onclick="switchDraftTab('nextround')"
-                            style="padding: 12px 24px; border-radius: 12px; border: none; font-weight: 700; font-size: 16px; cursor: pointer; transition: all 0.2s; display: flex; align-items: center; gap: 8px; background: transparent; color: #64748b;">
-                            <span style="font-size: 18px;">⚔️</span> המחזור הבא
-                        </button>
-                        <button class="draft-nav-btn" onclick="switchDraftTab('standings')"
-                            style="padding: 12px 24px; border-radius: 12px; border: none; font-weight: 700; font-size: 16px; cursor: pointer; transition: all 0.2s; display: flex; align-items: center; gap: 8px; background: transparent; color: #64748b;">
-                            <span style="font-size: 18px;">📋</span> טבלה וסגלים
-                        </button>
-                        <button class="draft-nav-btn" onclick="switchDraftTab('market')"
-                            style="padding: 12px 24px; border-radius: 12px; border: none; font-weight: 700; font-size: 16px; cursor: pointer; transition: all 0.2s; display: flex; align-items: center; gap: 8px; background: transparent; color: #64748b;">
-                            <span style="font-size: 18px;">💡</span> שוק והמלצות
-                        </button>
-                        <button class="draft-nav-btn" onclick="switchDraftTab('analytics')"
-                            style="padding: 12px 24px; border-radius: 12px; border: none; font-weight: 700; font-size: 16px; cursor: pointer; transition: all 0.2s; display: flex; align-items: center; gap: 8px; background: transparent; color: #64748b;">
-                            <span style="font-size: 18px;">📈</span> אנליטיקס
-                        </button>
-                        <button class="draft-nav-btn" onclick="switchDraftTab('rival')"
-                            style="padding: 12px 24px; border-radius: 12px; border: none; font-weight: 700; font-size: 16px; cursor: pointer; transition: all 0.2s; display: flex; align-items: center; gap: 8px; background: transparent; color: #64748b;">
-                            <span style="font-size: 18px;">🎯</span> השוואת יריב
-                        </button>
-                        <button class="draft-nav-btn" onclick="switchDraftTab('h2h')"
-                            style="padding: 12px 24px; border-radius: 12px; border: none; font-weight: 700; font-size: 16px; cursor: pointer; transition: all 0.2s; display: flex; align-items: center; gap: 8px; background: transparent; color: #64748b;">
-                            <span style="font-size: 18px;">📜</span> היסטוריית מפגשים
-                        </button>
-                        <button class="draft-nav-btn" onclick="switchDraftTab('lineup-analysis')"
-                            style="padding: 12px 24px; border-radius: 12px; border: none; font-weight: 700; font-size: 16px; cursor: pointer; transition: all 0.2s; display: flex; align-items: center; gap: 8px; background: transparent; color: #64748b;">
-                            <span style="font-size: 18px;">🔍</span> ניתוח החלטות הרכב
-                        </button>
+                <!-- Premier Light hero — the draft tab's own masthead. Styled
+                     entirely from draft.css. -->
+                <div id="draftHero">
+                    <div class="draft-hero-inner">
+                        <h2>ליגת הדראפט שלי</h2>
+                        <p>סטטיסטיקה, טבלאות ונתונים בזמן אמת</p>
                     </div>
                 </div>
-                <style>
-                    .draft-sub-nav-container {
-                        background: white;
-                        border-bottom: 1px solid #e2e8f0;
-                        padding: 16px 0;
-                        margin-bottom: 24px;
-                        position: sticky;
-                        top: 0;
-                        /* Adjust if header is sticky */
-                        z-index: 90;
-                    }
 
-                    .draft-sub-nav {
-                        display: flex;
-                        gap: 8px;
-                        overflow-x: visible;
-                        padding: 4px 8px;
-                        flex-wrap: wrap;
-                        justify-content: center;
-                    }
+                <!-- Draft navigation — five sections as pill tabs. Which pill is
+                     active is driven by data-tab from draftNavigate(); there is
+                     deliberately no per-button onclick and no inline styling. -->
+                <div id="draftSubNav" class="draft-sub-nav-container">
+                    <div class="draft-sub-nav" role="tablist" aria-label="ניווט ליגת הדראפט">
+                        <button type="button" class="dnav-btn" data-tab="room" role="tab"
+                            aria-selected="false" aria-controls="draft-room">🎯 חדר הדראפט</button>
+                        <button type="button" class="dnav-btn active" data-tab="overview" role="tab"
+                            aria-selected="true" aria-controls="draft-sec-overview">📊 מבט על</button>
+                        <button type="button" class="dnav-btn" data-tab="gameweek" role="tab"
+                            aria-selected="false" aria-controls="draft-sec-gameweek">⚔️ המחזור</button>
+                        <button type="button" class="dnav-btn" data-tab="market" role="tab"
+                            aria-selected="false" aria-controls="draft-sec-market">💡 שוק והמלצות</button>
+                        <button type="button" class="dnav-btn" data-tab="analytics" role="tab"
+                            aria-selected="false" aria-controls="draft-sec-analytics">📈 אנליטיקס</button>
+                    </div>
+                </div>
 
-                    .draft-nav-btn {
-                        padding: 10px 20px;
-                        border: 1px solid #e2e8f0;
-                        background: #f8fafc;
-                        color: #64748b;
-                        font-weight: 700;
-                        font-size: 15px;
-                        border-radius: 12px;
-                        cursor: pointer;
-                        transition: all 0.2s ease;
-                        white-space: nowrap;
-                        display: flex;
-                        align-items: center;
-                        gap: 8px;
-                    }
-
-                    .draft-nav-btn:hover {
-                        background: #f1f5f9;
-                        color: #334155;
-                        transform: translateY(-1px);
-                    }
-
-                    .draft-nav-btn.active {
-                        background: #eff6ff;
-                        color: #3b82f6;
-                        border-color: #bfdbfe;
-                        box-shadow: 0 2px 4px rgba(59, 130, 246, 0.1);
-                    }
-
-                    .nav-icon {
-                        font-size: 18px;
-                    }
-                </style>
+                <!-- Five sections; the segment panels inside keep their legacy
+                     draft-* ids so switchDraftTab(legacy id), syncPreDraftNote()
+                     and loadDraftLeague()'s container clears keep working. -->
 
                 <!-- The draft board on the night, and the waiver board after it.
                      Everything in here is rendered by renderDraftRoom(). -->
-                <div id="draft-room" class="draft-sub-content"></div>
+                <section id="draft-room" class="draft-section draft-sub-content"></section>
 
+                <section id="draft-sec-overview" class="draft-section active">
+                    <div class="plc-segbar" role="tablist" aria-label="מבט על">
+                        <button type="button" class="plc-seg active" data-seg="overview" role="tab"
+                            aria-selected="true" aria-controls="draft-overview">טבלה והרכב</button>
+                        <button type="button" class="plc-seg" data-seg="standings" role="tab"
+                            aria-selected="false" aria-controls="draft-standings">סגלים לפי קבוצה</button>
+                    </div>
                 <div id="draft-overview" class="draft-sub-content active">
                     <!-- My Team Selector -->
                     <div class="my-team-selector-container"
@@ -934,24 +827,50 @@
                     </div>
 
                 </div>
-
-                <div id="draft-nextround" class="draft-sub-content">
-                    <div id="nextFixturesOverview"></div>
-                </div>
-
                 <div id="draft-standings" class="draft-sub-content">
                     <h3 class="section-title" style="margin-top:14px;">סגלים לפי קבוצה</h3>
                     <div id="otherRosters" class="roster-cards"></div>
                 </div>
+                </section>
 
-                <div id="draft-market" class="draft-sub-content">
+                <section id="draft-sec-gameweek" class="draft-section">
+                    <div class="plc-segbar" role="tablist" aria-label="המחזור">
+                        <button type="button" class="plc-seg active" data-seg="nextround" role="tab"
+                            aria-selected="true" aria-controls="draft-nextround">המחזור הבא</button>
+                        <button type="button" class="plc-seg" data-seg="rival" role="tab"
+                            aria-selected="false" aria-controls="draft-rival">השוואת יריב</button>
+                    </div>
+                <div id="draft-nextround" class="draft-sub-content active">
+                    <div id="nextFixturesOverview"></div>
+                </div>
+                <div id="draft-rival" class="draft-sub-content">
+                    <div class="rival-analysis-container" id="rivalAnalysisContainer">
+                        <div class="loader-container">
+                            <div class="loader"></div>
+                            <div class="loader-text">טוען ניתוח יריבה...</div>
+                        </div>
+                    </div>
+                </div>
+                </section>
+
+                <section id="draft-sec-market" class="draft-section">
+                    <div class="plc-segbar" role="tablist" aria-label="שוק והמלצות">
+                        <button type="button" class="plc-seg active" data-seg="market" role="tab"
+                            aria-selected="true" aria-controls="draft-market">המלצות</button>
+                        <button type="button" class="plc-seg" data-seg="market-moves" role="tab"
+                            aria-selected="false" aria-controls="draft-market-moves">תנועות בליגה</button>
+                        <button type="button" class="plc-seg" data-seg="market-history" role="tab"
+                            aria-selected="false" aria-controls="draft-market-history">לוח הדראפט</button>
+                    </div>
+                <div id="draft-market" class="draft-sub-content active">
                     <div style="margin-top: 10px;">
                         <h3 class="section-title">
                             <span style="font-size: 24px;">💡</span> המלצות חכמות להחלפת שחקנים
                         </h3>
                         <div id="draftRecommendations"></div>
                     </div>
-
+                </div>
+                <div id="draft-market-moves" class="draft-sub-content">
                     <div style="margin-top: 28px;">
                         <h3 class="section-title">
                             <span style="font-size: 24px;">🔁</span> תנועות בליגה
@@ -959,7 +878,8 @@
                         <p class="section-sub">מי נלקח, מי שוחרר, ומי הכי פעיל — מתוך יומן הוויוורים של הליגה</p>
                         <div id="transactionsFeed"></div>
                     </div>
-
+                </div>
+                <div id="draft-market-history" class="draft-sub-content">
                     <div style="margin-top: 28px;">
                         <h3 class="section-title">
                             <span style="font-size: 24px;">🎲</span> לוח הדראפט — מבט לאחור
@@ -968,8 +888,18 @@
                         <div id="draftBoardHistory"></div>
                     </div>
                 </div>
+                </section>
 
-                <div id="draft-analytics" class="draft-sub-content">
+                <section id="draft-sec-analytics" class="draft-section">
+                    <div class="plc-segbar" role="tablist" aria-label="אנליטיקס">
+                        <button type="button" class="plc-seg active" data-seg="analytics" role="tab"
+                            aria-selected="true" aria-controls="draft-analytics">גרפים ומטריצות</button>
+                        <button type="button" class="plc-seg" data-seg="h2h" role="tab"
+                            aria-selected="false" aria-controls="draft-h2h">היסטוריית מפגשים</button>
+                        <button type="button" class="plc-seg" data-seg="lineup-analysis" role="tab"
+                            aria-selected="false" aria-controls="draft-lineup-analysis">ניתוח החלטות הרכב</button>
+                    </div>
+                <div id="draft-analytics" class="draft-sub-content active">
                     <h3 class="section-title" style="margin-top:14px;">
                         <span style="font-size: 24px;">📈</span> התקדמות נקודות לאורך העונה
                     </h3>
@@ -1007,30 +937,17 @@
                     <h3 class="section-title" style="margin-top:14px;">מטריצות דראפט</h3>
                     <div id="draftMatrices" class="matrix-grid"></div>
                 </div>
-
-                <!-- NEXT RIVAL TAB -->
-                <div id="draft-rival" class="draft-sub-content">
-                    <div class="rival-analysis-container" id="rivalAnalysisContainer">
-                        <div class="loader-container">
-                            <div class="loader"></div>
-                            <div class="loader-text">טוען ניתוח יריבה...</div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- HEAD-TO-HEAD HISTORY TAB -->
                 <div id="draft-h2h" class="draft-sub-content">
                     <div id="h2hHistoryContainer" style="max-width: 1200px; margin: 24px auto; padding: 0 15px;">
                         <!-- Head-to-head history will be rendered here -->
                     </div>
                 </div>
-
-                <!-- LINEUP DECISIONS ANALYSIS TAB -->
                 <div id="draft-lineup-analysis" class="draft-sub-content">
                     <div id="lineupAnalysisContainer" style="max-width: 1200px; margin: 24px auto; padding: 0 15px;">
                         <!-- Lineup decisions analysis will be rendered here -->
                     </div>
                 </div>
+                </section>
 
             </div> <!-- end draftTabContent -->
 
@@ -1055,6 +972,18 @@
             onclick="toggleMobileSheet()"><span>☰</span>עוד</button>
     </nav>
 
+    <!-- DRAFT MOBILE BAR
+         The draft tab's own thumb bar: the five draft sections, nothing else.
+         #mobileBar above is players-only, so the two swap on body.tab-draft —
+         see draft.css. Shown only below 768px. -->
+    <nav class="draft-mobile-bar" id="draftMobileBar" aria-label="ניווט ליגת הדראפט">
+        <button type="button" class="dnav-mb" data-tab="room"><span>🎯</span>החדר</button>
+        <button type="button" class="dnav-mb active" data-tab="overview"><span>📊</span>מבט על</button>
+        <button type="button" class="dnav-mb" data-tab="gameweek"><span>⚔️</span>המחזור</button>
+        <button type="button" class="dnav-mb" data-tab="market"><span>💡</span>שוק</button>
+        <button type="button" class="dnav-mb" data-tab="analytics"><span>📈</span>אנליטיקס</button>
+    </nav>
+
     <!-- FULLSCREEN CHART VIEWER
          A 500-point scatter in a 260px card on a 360px screen is a thumbnail,
          not a chart. Tapping the ⤢ on any card redraws that same chart — same
@@ -1066,6 +995,12 @@
             <button type="button" class="cf-close" id="chartFullClose"
                 onclick="closeChartFull()" aria-label="סגירה">✕</button>
         </div>
+        <!-- The card's own controls, in the overlay. Full screen is where you
+             actually want to switch position or facet — the chart is finally big
+             enough to read the difference — and without them the expanded view
+             was the one place you could not filter. Filled by drawChartFull(). -->
+        <div class="cf-controls" id="chartFullControls"></div>
+        <p class="cf-note" id="chartFullNote"></p>
         <p class="cf-hint" id="chartFullHint">סובבו את המכשיר לרוחב לתצוגה רחבה יותר</p>
         <!-- Chart and reading pane side by side above 900px; the pane is hidden
              below that, where it would take the screen the chart came here for.

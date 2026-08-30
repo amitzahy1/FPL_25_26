@@ -1026,16 +1026,32 @@ function reportAppStatus() {
         ? SEASON_CONFIG.previousSeasonLabel : SEASON_CONFIG.seasonLabel;
     bits.push(`עונת ${season}`);
 
-    // A young season is shown, not withheld — but "הכל תקין" over one gameweek of
+    // A young season is shown, not withheld — but "הכל תקין" over two gameweeks of
     // per-90 rates would be the pill lying by omission.
+    //
+    // playedGameweeks, not the finished count. The banner two lines below reads
+    // the former and the pill read the latter, so on the Sunday of a gameweek the
+    // page said "מחזור אחד בלבד" directly above "2 מחזורים" — the same screen
+    // disagreeing with itself about the one number everything else is scaled by.
     if (state.currentDataSource === 'live') {
-        const played = finishedGameweekCount();
+        const played = playedGameweeks();
         if (!played) {
             const newcomers = (src.processed || []).filter(p => p.no_history).length;
             setAppStatus('warn', `נתוני ${SEASON_CONFIG.previousSeasonLabel}`,
                 `סגל ${SEASON_CONFIG.seasonLabel} · ${bits.join(' · ')}`
                 + ` · הביצועים הם של ${SEASON_CONFIG.previousSeasonLabel}`
                 + (newcomers ? ` · ${newcomers} חדשים בליגה ללא היסטוריה` : ''));
+            return;
+        }
+        // The pill is a chip, not a second banner. It names the state in two or
+        // three words and leaves the explanation to the hover — the banner is
+        // already carrying the sentence, and two of them said the same thing
+        // twice, differently.
+        if (seasonBlendActive()) {
+            const share = Math.round(seasonBlendShare() * 100);
+            setAppStatus('warn', `${gwWord(played)} · משוקלל`,
+                `${bits.join(' · ')} · הקצבים משוקללים: ~${share}% ${SEASON_CONFIG.seasonLabel},`
+                + ` ~${100 - share}% ${SEASON_CONFIG.previousSeasonLabel}`);
             return;
         }
         if (seasonSampleIsThin()) {
@@ -1311,6 +1327,10 @@ document.addEventListener('DOMContentLoaded', () => {
     // Render season names immediately. init() runs only after sign-in, so
     // labelling there left the season toggle blank on the landing screen.
     applySeasonLabels();
+
+    // Draft navigation clicks (pills, segment bars, mobile bar) are delegated,
+    // so this is wired once regardless of what renders later.
+    initDraftNav();
 
     // Initialize authentication
     auth.init();
@@ -2635,9 +2655,13 @@ function syncBlendButton() {
     btn.hidden = !relevant;
     if (!relevant) return;
     btn.setAttribute('aria-pressed', String(off));
+    // Both faces of one switch, so both carry the same scale icon. The off state
+    // used to be "📅 רק 2026/27", which sat next to the season buttons and the
+    // date-shaped מחיר filter and read as a third date control rather than as a
+    // mode. What changes here is the weighting, and ⚖️ is what the weighting is.
     btn.textContent = off
-        ? `⚖️ משוקלל עם ${SEASON_CONFIG.previousSeasonLabel}`
-        : `📅 רק ${SEASON_CONFIG.seasonLabel}`;
+        ? `⚖️ שקלול מול ${SEASON_CONFIG.previousSeasonLabel}`
+        : `⚖️ רק ${SEASON_CONFIG.seasonLabel}`;
     btn.title = off
         ? `כרגע מוצגים רק נתוני ${SEASON_CONFIG.seasonLabel} הגולמיים — ${gwWord(playedGameweeks())} בלבד.`
             + ' לחיצה תחזיר את השקלול מול העונה שעברה'
@@ -3983,14 +4007,20 @@ function metricReader(key) {
 }
 
 /** Axis text that states the span it was measured over. */
-function windowAxisLabel(base, windowed) {
-    if (!windowed) return `${base} · כל העונה`;
-    // The gameweeks the window actually holds, not the number that was asked
-    // for. In August the request is five and the answer is one, and an axis
-    // labelled "5 מחזורים" over a single match is the page overstating its own
-    // evidence — the one thing it must never do.
+/**
+ * The gameweeks the window actually holds, worded.
+ *
+ * Every label that names the window must count what loaded, not what was asked
+ * for: in August the request is five and the answer is one, and a chart headed
+ * "5 מחזורים" over a single match is the page overstating its own evidence.
+ */
+function windowGwWord() {
     const have = (state.trendGws || []).length || state.trendWindow;
-    return `${base} · ${have === 1 ? "מחזור אחד" : `${have} מחזורים`}`;
+    return have === 1 ? 'מחזור אחד' : `${have} מחזורים`;
+}
+
+function windowAxisLabel(base, windowed) {
+    return windowed ? `${base} · ${windowGwWord()}` : `${base} · כל העונה`;
 }
 
 /* ------------------------- top-20 position benchmark ---------------------- */
@@ -4473,7 +4503,7 @@ function playerDetailRowHtml(player, colSpan) {
                     </section>
 
                     <section class="detail-sum">
-                        <h4>${state.trendWindow} המחזורים האחרונים <span class="h4-note">(לא כל העונה)</span></h4>
+                        <h4>${windowGwWord()} אחרונים <span class="h4-note">(לא כל העונה)</span></h4>
                         ${summary}
                         <div class="detail-next">
                             <span class="detail-next-label">המשחקים הבאים</span>
@@ -13239,7 +13269,7 @@ function buildOpportunityChart(data) {
     const points = labelTop(raw, pt => (pt.free ? 1000 : 0) + pt.x + pt.y * 3);
 
     return getMatrixChartConfig(points, 'ציון דראפט',
-        `שינוי נקודות מול ${state.trendWindow} המחזורים שלפני`, {
+        `שינוי נקודות מול ${windowGwWord()} שלפני`, {
         topRight: 'איכות ומומנטום', topLeft: 'מתחמם אבל חלש',
         bottomRight: 'איכות שמתקררת', bottomLeft: 'לא עכשיו'
     }, {
@@ -13309,6 +13339,7 @@ function buildPositionMatrix(data) {
 function setChartPosition(pos) {
     state.chartPosition = POSITION_MATRIX[pos] ? pos : 'MID';
     renderCharts();
+    if (typeof _chartFull !== 'undefined' && _chartFull.specId) drawChartFull();
 }
 
 /* ------------------------------- 3. trend -------------------------------- */
@@ -14148,6 +14179,13 @@ function setChartFacet(chartId, value) {
         ? null
         : next;
     renderCharts();
+    // renderCharts only redraws the inline cards. With the overlay open the chip
+    // you just pressed is the one on screen, so it has to redraw too — otherwise
+    // the control moves and the chart under it does not.
+    //
+    // typeof-guarded like labelBudget: these are run headless by the chart tests,
+    // where neither the overlay state nor the DOM exists.
+    if (typeof _chartFull !== 'undefined' && _chartFull.specId) drawChartFull();
 }
 
 /* -------------------------------- the list ------------------------------- */
@@ -14651,6 +14689,32 @@ function drawChartFull() {
         && config.options.plugins.datalabels
         && config.options.plugins.datalabels.display === 'auto') {
         config.options.plugins.datalabels.display = true;
+    }
+
+    // The card's controls, rebuilt from the same spec the card uses. Position
+    // charts get their position segment, faceted charts get their chips, and a
+    // chart with neither gets an empty row rather than a stray border.
+    const controls = document.getElementById('chartFullControls');
+    if (controls) {
+        const seg = spec.positions
+            ? `<div class="chart-seg" role="group" aria-label="עמדה">
+                ${Object.keys(POSITION_MATRIX).map(pos => `<button type="button"
+                    data-chart-pos="${pos}" aria-pressed="${String(pos === state.chartPosition)}"
+                    onclick="setChartPosition('${pos}')">${POSITION_LABELS[pos]}</button>`).join('')}
+               </div>`
+            : '';
+        const chips = spec.facet ? chartFacetChipsHtml(spec, currentChartData()) : '';
+        controls.innerHTML = seg + chips;
+        controls.hidden = !(seg || chips);
+    }
+
+    // The caption too. It is what says green means good on this chart and which
+    // span the axes were measured over, and the overlay had neither.
+    const note = document.getElementById('chartFullNote');
+    if (note) {
+        const text = chartNote(spec, currentChartData());
+        note.innerHTML = text || '';
+        note.hidden = !text;
     }
 
     // The pane reads the same config the canvas does, before Chart.js is handed
@@ -15552,35 +15616,83 @@ function syncPreDraftNote(tabId) {
     host.prepend(note);
 }
 
+// ============================================
+// DRAFT NAVIGATION — five sections, legacy ids
+// ============================================
+// The draft tab is five sections; inside each, segment panels keep the pre-2026
+// sub-tab ids (#draft-overview, #draft-h2h, ...) so syncPreDraftNote(),
+// loadDraftLeague()'s container clears and the smoke test all navigate by the
+// names they always used. `def` is where a bare section navigation lands.
+const DRAFT_IA = {
+    room: { segments: ['room'], def: 'room' },
+    overview: { segments: ['overview', 'standings'], def: 'overview' },
+    gameweek: { segments: ['nextround', 'rival'], def: 'nextround' },
+    market: { segments: ['market', 'market-moves', 'market-history'], def: 'market' },
+    analytics: { segments: ['analytics', 'h2h', 'lineup-analysis'], def: 'analytics' }
+};
+
+// Every pre-2026 sub-tab id → [section, segment].
+const LEGACY_DRAFT_TABS = {
+    room: ['room', 'room'],
+    overview: ['overview', 'overview'],
+    standings: ['overview', 'standings'],
+    nextround: ['gameweek', 'nextround'],
+    rival: ['gameweek', 'rival'],
+    market: ['market', 'market'],
+    'market-moves': ['market', 'market-moves'],
+    'market-history': ['market', 'market-history'],
+    analytics: ['analytics', 'analytics'],
+    h2h: ['analytics', 'h2h'],
+    'lineup-analysis': ['analytics', 'lineup-analysis']
+};
+
+// Kept as the public entry point: old call sites and the smoke test navigate
+// by legacy sub-tab id, and it still works for section names too.
 function switchDraftTab(tabId) {
-    // Update Nav Buttons
-    document.querySelectorAll('.draft-nav-btn').forEach(btn => {
-        btn.classList.remove('active');
-        if (btn.getAttribute('onclick') && btn.getAttribute('onclick').includes(tabId)) {
-            btn.classList.add('active');
-        }
+    const pair = LEGACY_DRAFT_TABS[tabId] ||
+        (DRAFT_IA[tabId] ? [tabId, DRAFT_IA[tabId].def] : ['overview', 'overview']);
+    draftNavigate(pair[0], pair[1]);
+}
+
+function draftNavigate(section, segment) {
+    const ia = DRAFT_IA[section] || DRAFT_IA.overview;
+    if (!DRAFT_IA[section]) section = 'overview';
+    if (!ia.segments.includes(segment)) segment = ia.def;
+
+    // One section on screen. The room's panel is the section itself.
+    const sectionElId = section === 'room' ? 'draft-room' : `draft-sec-${section}`;
+    document.querySelectorAll('#draftTabContent .draft-section').forEach(el => {
+        el.classList.toggle('active', el.id === sectionElId);
     });
 
-    // Update Content Areas
-    document.querySelectorAll('.draft-sub-content').forEach(div => {
-        div.classList.remove('active');
-        div.style.display = 'none';
+    // One segment panel inside it. Inline display kept in sync because older
+    // render code reads .style.display to decide whether it is on screen.
+    document.querySelectorAll('#draftTabContent .draft-sub-content').forEach(el => {
+        const on = el.id === `draft-${segment}`;
+        el.classList.toggle('active', on);
+        el.style.display = on ? 'block' : 'none';
     });
 
-    const activeDiv = document.getElementById(`draft-${tabId}`);
-    if (activeDiv) {
-        activeDiv.classList.add('active');
-        activeDiv.style.display = 'block';
-    }
+    // Active states: top pills, mobile bar, and the section's segment bar.
+    document.querySelectorAll('#draftSubNav .dnav-btn, #draftMobileBar .dnav-mb').forEach(btn => {
+        const on = btn.dataset.tab === section;
+        btn.classList.toggle('active', on);
+        btn.setAttribute('aria-selected', on ? 'true' : 'false');
+    });
+    document.querySelectorAll('#draftTabContent .plc-seg').forEach(btn => {
+        const on = btn.dataset.seg === segment;
+        btn.classList.toggle('active', on);
+        btn.setAttribute('aria-selected', on ? 'true' : 'false');
+    });
 
-    // Every other sub-tab is downstream of somebody owning somebody. Before the
+    // Every other segment is downstream of somebody owning somebody. Before the
     // draft they render nothing, and a blank panel under a working navigation
     // reads as a broken page rather than as an accurate one.
-    syncPreDraftNote(tabId);
+    syncPreDraftNote(segment);
 
-    // The room is the only sub-tab that keeps asking the server anything, so it
+    // The room is the only segment that keeps asking the server anything, so it
     // starts and stops with its own visibility rather than running all session.
-    if (tabId === 'room') {
+    if (segment === 'room') {
         renderDraftRoom();
         pollDraftRoom();
         startDraftRoomPolling();
@@ -15588,28 +15700,45 @@ function switchDraftTab(tabId) {
         stopDraftRoomPolling();
     }
 
-    // Specific logic for tabs
-    if (tabId === 'rival') {
+    if (segment === 'rival') {
         renderNextRivalAnalysis();
-    } else if (tabId === 'overview') {
-        // Ensure overview components are rendered if data exists
+    } else if (segment === 'overview') {
         if (state.draft.details) {
             renderAllTeamsTrendChart(null, window.currentTrendState?.mode || 'cumulative', window.currentTrendState?.highlightTeamIds || []);
         }
-    } else if (tabId === 'nextround') {
-        // Render next round fixtures
+    } else if (segment === 'nextround') {
         const fixturesContainer = document.getElementById('nextFixturesOverview');
         if (fixturesContainer && state.draft.details) {
             const fixturesHtml = renderNextRoundFixtures();
             fixturesContainer.innerHTML = fixturesHtml || '<div style="text-align: center; padding: 40px; color: #64748b;">אין משחקים קרובים</div>';
         }
-    } else if (tabId === 'h2h') {
-        // Render head-to-head history
+    } else if (segment === 'h2h') {
         renderH2HHistory();
-    } else if (tabId === 'lineup-analysis') {
-        // Render lineup decisions analysis
+    } else if (segment === 'lineup-analysis') {
         renderLineupAnalysis();
     }
+}
+
+// One delegated listener for all draft navigation surfaces. An explicit choice
+// also outranks the pre-draft auto-jump to the room (see showTab), so the jump
+// never stomps a click that happened while the league was still loading.
+function initDraftNav() {
+    document.addEventListener('click', e => {
+        const nav = e.target.closest('.dnav-btn, .dnav-mb');
+        if (nav && nav.dataset.tab) {
+            state.draft._roomSeen = true;
+            draftNavigate(nav.dataset.tab, (DRAFT_IA[nav.dataset.tab] || {}).def);
+            return;
+        }
+        const seg = e.target.closest('.plc-seg');
+        if (seg && seg.dataset.seg) {
+            const section = Object.keys(DRAFT_IA).find(s => DRAFT_IA[s].segments.includes(seg.dataset.seg));
+            if (section) {
+                state.draft._roomSeen = true;
+                draftNavigate(section, seg.dataset.seg);
+            }
+        }
+    });
 }
 
 // ============================================
