@@ -11,9 +11,9 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link rel="stylesheet"
         href="https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;700;800;900&family=Rubik:wght@400;500;600;700;800&display=swap">
-    <link rel="stylesheet" href="style.css?v=2026.08.30.349">
-    <link rel="stylesheet" href="mobile.css?v=2026.08.30.349">
-    <link rel="stylesheet" href="draft.css?v=2026.08.30.349">
+    <link rel="stylesheet" href="style.css?v=2026.08.30.350">
+    <link rel="stylesheet" href="mobile.css?v=2026.08.30.350">
+    <link rel="stylesheet" href="draft.css?v=2026.08.30.350">
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.5.1"></script>
     <script
         src="https://cdnjs.cloudflare.com/ajax/libs/chartjs-plugin-annotation/2.2.1/chartjs-plugin-annotation.min.js"></script>
@@ -248,6 +248,11 @@
                     display: flex;
                     align-items: center;
                     gap: 16px;
+                    /* Six controls in one row overflowed a 1024px laptop and
+                       scrolled the whole page sideways. They wrap instead. */
+                    flex-wrap: wrap;
+                    justify-content: flex-end;
+                    min-width: 0;
                 }
 
                 .status-pill {
@@ -769,6 +774,11 @@
                     </div>
                 <div id="draft-overview" class="draft-sub-content active">
                     <!-- My Team Selector -->
+                    <!-- Live gameweek, power rankings and league records. Each is
+                         built by its own render function and hides itself when it
+                         has nothing true to say. -->
+                    <div id="gwLiveHub" hidden></div>
+
                     <div class="plc-card plc-teambar">
                         <label for="myTeamSelect">👤 בחר את הקבוצה שלי:</label>
                         <select id="myTeamSelect" onchange="setMyTeam(this.value)">
@@ -809,6 +819,9 @@
                             <div id="myLineupContainer"></div>
                         </div>
                     </div>
+                    <div id="powerLuckCard" hidden></div>
+                    <div id="recordsBoard" hidden></div>
+
                     <!-- League Progress Chart -->
                     <div class="plc-card" style="margin-top: 20px;">
                         <h3 class="plc-title">📈 המירוץ לאליפות (מגמת נקודות)</h3>
@@ -1012,7 +1025,7 @@
     <!-- Version query is bumped by scripts/stamp-version.mjs on every commit
          (npm run stamp). It was left at 4.0.0 for months, so returning
          visitors kept running a cached script.js and never saw fixes. -->
-    <script src="script.js?v=2026.08.30.349" defer></script>
+    <script src="script.js?v=2026.08.30.350" defer></script>
 </body>
 
 </html>

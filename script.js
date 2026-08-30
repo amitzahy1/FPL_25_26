@@ -106,6 +106,8 @@ const config = {
         draftElementStatus: (leagueId) => `https://draft.premierleague.com/api/league/${leagueId}/element-status`,
         // Real per-gameweek totals per manager.
         draftEntryHistory: (entryId) => `https://draft.premierleague.com/api/entry/${entryId}/history`,
+        // Live points for a gameweek in play, keyed by DRAFT element id.
+        draftEventLive: (gw) => `https://draft.premierleague.com/api/event/${gw}/live`,
         // Waiver / free-agent add-drop feed for the whole league.
         draftTransactions: (leagueId) => `https://draft.premierleague.com/api/draft/league/${leagueId}/transactions`,
         // The original draft board, pick by pick.
@@ -10095,7 +10097,7 @@ function draftStandingsRowHtml(s) {
             <td>${s.losses}</td>
             <td>${s.pf}</td>
             <td>${s.pa}</td>
-            <td class="${s.diff > 0 ? 'is-pos' : s.diff < 0 ? 'is-neg' : ''}">${s.diff > 0 ? '+' : ''}${s.diff}</td>
+            <td class="${s.diff > 0 ? 'is-pos' : s.diff < 0 ? 'is-neg' : ''}"><span class="plc-num">${s.diff > 0 ? '+' : ''}${s.diff}</span></td>
             <td>${s.total}</td>
         </tr>`;
 }
@@ -12892,6 +12894,7 @@ function showTab(tabName) {
     } else {
         // Leaving the draft tab entirely: nothing in the room is on screen.
         stopDraftRoomPolling();
+        stopGwLivePolling();
     }
 }
 
@@ -15793,6 +15796,361 @@ function switchDraftTab(tabId) {
     draftNavigate(pair[0], pair[1], { replace: true });
 }
 
+/* ============================================================
+   OVERVIEW EXTRAS — power rankings, records, live gameweek
+   ============================================================
+   All three read state.draft.details.matches, which carries every
+   manager's score per gameweek. That is the league's own record of what
+   happened, so none of this re-fetches anything; only the live hub adds
+   a call, and only while a gameweek is actually in play. */
+
+/** Finished matches, oldest first. The shared input for the two boards. */
+function draftFinishedMatches() {
+    return ((state.draft.details && state.draft.details.matches) || [])
+        .filter(m => m.finished && m.league_entry_1 && m.league_entry_2)
+        .sort((a, b) => (a.event || 0) - (b.event || 0));
+}
+
+/** Every team's score in one gameweek: Map<entryId, points>. */
+function draftScoresByGw(matches) {
+    const byGw = new Map();
+    for (const m of matches) {
+        if (!byGw.has(m.event)) byGw.set(m.event, new Map());
+        const row = byGw.get(m.event);
+        row.set(m.league_entry_1, m.league_entry_1_points || 0);
+        row.set(m.league_entry_2, m.league_entry_2_points || 0);
+    }
+    return byGw;
+}
+
+/**
+ * Power ranking and luck, from scores rather than from results.
+ *
+ * A head-to-head table rewards who you were drawn against. Expected wins asks
+ * the schedule-free question instead: in each gameweek, what share of the OTHER
+ * managers did you outscore? Sum that across the season and you have the record
+ * a neutral fixture list would have given you. Luck is the gap between that and
+ * the wins actually banked — positive means the draw has been kind.
+ *
+ * Ties count as half, the same convention the win share itself uses.
+ */
+function computeDraftPowerRankings() {
+    const matches = draftFinishedMatches();
+    if (!matches.length) return [];
+    const byGw = draftScoresByGw(matches);
+    const teams = new Map();
+
+    const seed = id => {
+        if (!teams.has(id)) {
+            teams.set(id, {
+                entryId: id, name: state.draft.entryIdToTeamName.get(id) || '—',
+                pf: 0, gws: 0, xWins: 0, wins: 0, best: 0
+            });
+        }
+        return teams.get(id);
+    };
+
+    for (const [, row] of byGw) {
+        const ids = [...row.keys()];
+        if (ids.length < 2) continue;
+        for (const id of ids) {
+            const t = seed(id);
+            const mine = row.get(id);
+            const others = ids.filter(o => o !== id);
+            const beaten = others.filter(o => mine > row.get(o)).length;
+            const tied = others.filter(o => mine === row.get(o)).length;
+            t.xWins += (beaten + tied / 2) / others.length;
+            t.pf += mine;
+            t.gws++;
+            t.best = Math.max(t.best, mine);
+        }
+    }
+
+    for (const m of matches) {
+        const a = seed(m.league_entry_1), b = seed(m.league_entry_2);
+        if (m.league_entry_1_points > m.league_entry_2_points) a.wins++;
+        else if (m.league_entry_1_points < m.league_entry_2_points) b.wins++;
+        else { a.wins += 0.5; b.wins += 0.5; }
+    }
+
+    return [...teams.values()]
+        .map(t => ({ ...t, avg: t.gws ? t.pf / t.gws : 0, luck: t.wins - t.xWins }))
+        // Ranked by average score: the strength measure the schedule cannot touch.
+        .sort((a, b) => b.avg - a.avg)
+        .map((t, i) => ({ ...t, rank: i + 1 }));
+}
+
+function renderPowerRankings() {
+    const host = document.getElementById('powerLuckCard');
+    if (!host) return;
+    const rows = computeDraftPowerRankings();
+    // Luck needs more than one gameweek to mean anything: after a single week
+    // every record is either 1-0 or 0-1 and the gap reads as noise.
+    if (rows.length < 2 || rows[0].gws < 2) { host.hidden = true; return; }
+
+    const myId = state.draft.myTeamId;
+    host.hidden = false;
+    host.className = 'plc-card';
+    host.style.marginTop = '16px';
+    host.innerHTML = `
+        <h3 class="plc-title">⚡ דירוג כוח ומדד מזל</h3>
+        <p class="plc-sub">מדורג לפי ממוצע נקודות — מה שהלוח משחקים לא יכול לשנות.
+            מדד המזל הוא הפער בין הניצחונות בפועל לניצחונות הצפויים מול כל הליגה.</p>
+        <div class="plc-scroll">
+        <table class="draft-table">
+            <thead>
+                <tr><th>#</th><th style="text-align:start">קבוצה</th><th>ממוצע</th>
+                    <th>נצ׳ בפועל</th><th>נצ׳ צפויות</th><th>מזל</th></tr>
+            </thead>
+            <tbody>
+                ${rows.map(t => {
+        const isMe = myId && String(t.entryId) === String(myId);
+        const luck = t.luck;
+        const cls = luck >= 0.75 ? 'is-pos' : luck <= -0.75 ? 'is-neg' : '';
+        const word = luck >= 0.75 ? 'בר מזל' : luck <= -0.75 ? 'ביש מזל' : 'הוגן';
+        return `
+                    <tr${isMe ? ' class="is-me"' : ''}>
+                        <td><span class="plc-rank${t.rank === 1 ? ' is-top' : ''}">${t.rank}</span></td>
+                        <td class="plc-name-cell">${escapeHtml(t.name)}</td>
+                        <td>${t.avg.toFixed(1)}</td>
+                        <td>${_fmtWins(t.wins)}</td>
+                        <td>${t.xWins.toFixed(1)}</td>
+                        <td class="${cls}"><span class="plc-num">${luck > 0 ? '+' : ''}${luck.toFixed(1)}</span>
+                            <span class="plc-luck-word">${word}</span></td>
+                    </tr>`;
+    }).join('')}
+            </tbody>
+        </table>
+        </div>`;
+}
+
+/** Half-wins come from drawn weeks, so 2.5 must not print as 2.5000000001. */
+function _fmtWins(w) {
+    return Number.isInteger(w) ? String(w) : w.toFixed(1);
+}
+
+/**
+ * The honours board: the handful of numbers people actually argue about.
+ * Every entry names the holder, so a record with no holder is not shown.
+ */
+function computeDraftRecords() {
+    const matches = draftFinishedMatches();
+    if (!matches.length) return [];
+    const name = id => state.draft.entryIdToTeamName.get(id) || '—';
+
+    let topScore = null, biggestWin = null, lowScore = null;
+    for (const m of matches) {
+        const sides = [
+            { id: m.league_entry_1, pts: m.league_entry_1_points || 0, opp: m.league_entry_2 },
+            { id: m.league_entry_2, pts: m.league_entry_2_points || 0, opp: m.league_entry_1 }
+        ];
+        for (const s of sides) {
+            if (!topScore || s.pts > topScore.pts) topScore = { ...s, event: m.event };
+            if (!lowScore || s.pts < lowScore.pts) lowScore = { ...s, event: m.event };
+        }
+        const margin = Math.abs(sides[0].pts - sides[1].pts);
+        const winner = sides[0].pts >= sides[1].pts ? sides[0] : sides[1];
+        const loser = sides[0].pts >= sides[1].pts ? sides[1] : sides[0];
+        if (margin > 0 && (!biggestWin || margin > biggestWin.margin)) {
+            biggestWin = { margin, winner: winner.id, loser: loser.id, event: m.event };
+        }
+    }
+
+    // Longest current win streak, walked forward per team.
+    const streaks = new Map();
+    let bestStreak = null;
+    for (const m of matches) {
+        const a = m.league_entry_1, b = m.league_entry_2;
+        const pa = m.league_entry_1_points || 0, pb = m.league_entry_2_points || 0;
+        const bump = (id, won) => {
+            const n = won ? (streaks.get(id) || 0) + 1 : 0;
+            streaks.set(id, n);
+            if (won && (!bestStreak || n > bestStreak.n)) bestStreak = { id, n };
+        };
+        bump(a, pa > pb);
+        bump(b, pb > pa);
+    }
+
+    const out = [];
+    if (topScore) out.push({ icon: '🔥', label: 'הציון הגבוה בעונה',
+        value: `${topScore.pts}`, who: name(topScore.id), when: `מחזור ${topScore.event}` });
+    if (biggestWin) out.push({ icon: '💥', label: 'הניצחון הגדול',
+        value: `+${biggestWin.margin}`, who: name(biggestWin.winner),
+        when: `על ${name(biggestWin.loser)} · מחזור ${biggestWin.event}` });
+    if (bestStreak && bestStreak.n > 1) out.push({ icon: '📈', label: 'רצף הניצחונות הארוך',
+        value: `${bestStreak.n}`, who: name(bestStreak.id), when: 'מחזורים ברצף' });
+    if (lowScore) out.push({ icon: '🥄', label: 'הכפית של העונה',
+        value: `${lowScore.pts}`, who: name(lowScore.id), when: `מחזור ${lowScore.event}` });
+    return out;
+}
+
+function renderRecordsBoard() {
+    const host = document.getElementById('recordsBoard');
+    if (!host) return;
+    const records = computeDraftRecords();
+    if (!records.length) { host.hidden = true; return; }
+    host.hidden = false;
+    host.className = 'plc-card';
+    host.style.marginTop = '16px';
+    host.innerHTML = `
+        <h3 class="plc-title">🏅 שיאי הליגה</h3>
+        <div class="plc-records">
+            ${records.map(r => `
+                <div class="plc-record">
+                    <span class="plc-record-icon" aria-hidden="true">${r.icon}</span>
+                    <span class="plc-record-label">${escapeHtml(r.label)}</span>
+                    <span class="plc-record-value">${escapeHtml(r.value)}</span>
+                    <span class="plc-record-who">${escapeHtml(r.who)}</span>
+                    <span class="plc-record-when">${escapeHtml(r.when)}</span>
+                </div>`).join('')}
+        </div>`;
+}
+
+/* ------------------------------ live gameweek ---------------------------- */
+
+const GW_LIVE_POLL_MS = 60000;
+const _gwLive = { timer: null, points: null, gw: null };
+
+/** The gameweek in play, or null when nothing is live. */
+function liveGameweek() {
+    const events = (state.allPlayersData[state.currentDataSource] || {}).events
+        || (state.bootstrapData && state.bootstrapData.events) || [];
+    const current = events.find(e => e.is_current);
+    if (current && !current.finished) return current.id;
+    return null;
+}
+
+/**
+ * Live points per element, uncached.
+ *
+ * A thirty-minute cache during a gameweek is a photograph of a scoreboard, so
+ * this one call skips the cache the same way the draft room's poll does.
+ */
+async function fetchGwLive(gw) {
+    const url = config.corsProxy + encodeURIComponent(config.urls.draftEventLive(gw));
+    const data = await fetchWithCache(url, `fpl_draft_live_${gw}`, 0);
+    const raw = (data && data.elements) || {};
+    const points = new Map();
+    for (const id of Object.keys(raw)) {
+        const stats = raw[id] && raw[id].stats;
+        if (stats) points.set(Number(id), stats.total_points || 0);
+    }
+    return points;
+}
+
+/**
+ * FPL id → draft element id, the inverse of toFplId().
+ *
+ * The lineups are stored in FPL ids and the live feed is keyed by draft ids, so
+ * one of the two has to be translated. Built once per mapping and cached, since
+ * it is walked for every starting eleven on every poll.
+ */
+let _fplToDraftIndex = { source: null, map: new Map() };
+function fplIdToDraftIndex() {
+    const source = state.draft.draftToFplIdMap;
+    if (_fplToDraftIndex.source !== source) {
+        const map = new Map();
+        for (const [draftId] of source) {
+            const fplId = toFplId(draftId);
+            if (fplId !== null) map.set(fplId, draftId);
+        }
+        _fplToDraftIndex = { source, map };
+    }
+    return _fplToDraftIndex.map;
+}
+
+/** This gameweek's matchups with live totals, or null when it cannot be built. */
+function buildGwLiveRows(gw) {
+    const details = state.draft.details;
+    if (!details || !_gwLive.points) return null;
+    const fixtures = (details.matches || []).filter(m => m.event === gw);
+    if (!fixtures.length) return null;
+
+    const draftIdByFpl = fplIdToDraftIndex();
+    const totalFor = entryId => {
+        const lineup = state.draft.lineupsByEntryId.get(entryId);
+        if (!lineup || !lineup.starting) return null;
+        let sum = 0;
+        for (const fplId of lineup.starting) {
+            const pts = _gwLive.points.get(draftIdByFpl.get(fplId));
+            if (Number.isFinite(pts)) sum += pts;
+        }
+        return sum;
+    };
+
+    return fixtures.map(m => ({
+        home: state.draft.entryIdToTeamName.get(m.league_entry_1) || '—',
+        away: state.draft.entryIdToTeamName.get(m.league_entry_2) || '—',
+        homeId: m.league_entry_1,
+        awayId: m.league_entry_2,
+        // The league's own figure once it has one; ours only while it is 0.
+        homePts: m.league_entry_1_points || totalFor(m.league_entry_1) || 0,
+        awayPts: m.league_entry_2_points || totalFor(m.league_entry_2) || 0,
+        finished: !!m.finished
+    }));
+}
+
+function renderGwLiveHub() {
+    const host = document.getElementById('gwLiveHub');
+    if (!host) return;
+    const gw = _gwLive.gw;
+    const rows = gw ? buildGwLiveRows(gw) : null;
+    if (!rows || !rows.length) { host.hidden = true; return; }
+
+    const myId = state.draft.myTeamId;
+    host.hidden = false;
+    host.className = 'plc-card plc-live';
+    host.innerHTML = `
+        <h3 class="plc-title">
+            <span class="plc-live-dot" aria-hidden="true"></span>
+            מחזור ${gw} — עכשיו
+        </h3>
+        <p class="plc-sub">מתעדכן לבד כל דקה כל עוד המחזור פתוח והלשונית פתוחה.</p>
+        <div class="plc-live-rows">
+            ${rows.map(r => {
+        const mine = myId && (String(r.homeId) === String(myId) || String(r.awayId) === String(myId));
+        const lead = r.homePts === r.awayPts ? 'draw' : r.homePts > r.awayPts ? 'home' : 'away';
+        return `
+                <div class="plc-live-row${mine ? ' is-mine' : ''}">
+                    <span class="plc-live-team${lead === 'home' ? ' is-lead' : ''}">${escapeHtml(r.home)}</span>
+                    <span class="plc-live-score">${r.homePts} : ${r.awayPts}</span>
+                    <span class="plc-live-team${lead === 'away' ? ' is-lead' : ''}">${escapeHtml(r.away)}</span>
+                </div>`;
+    }).join('')}
+        </div>`;
+}
+
+async function pollGwLive() {
+    const gw = liveGameweek();
+    _gwLive.gw = gw;
+    if (!gw) { renderGwLiveHub(); return; }
+    try {
+        _gwLive.points = await fetchGwLive(gw);
+    } catch (e) {
+        console.warn('live gameweek unavailable:', e.message);
+    }
+    renderGwLiveHub();
+}
+
+/**
+ * Poll only while it can tell you something: a gameweek in play, the overview
+ * on screen, and the tab in the foreground.
+ */
+function startGwLivePolling() {
+    stopGwLivePolling();
+    if (!liveGameweek()) return;
+    pollGwLive();
+    _gwLive.timer = setInterval(() => {
+        if (document.hidden) return;
+        pollGwLive();
+    }, GW_LIVE_POLL_MS);
+}
+
+function stopGwLivePolling() {
+    if (_gwLive.timer) clearInterval(_gwLive.timer);
+    _gwLive.timer = null;
+}
+
 /**
  * The masthead's right-hand pill: which gameweek and how many managers.
  * Silent until the league is loaded — an empty pill is worse than none.
@@ -15814,6 +16172,7 @@ function syncDraftHeroMeta() {
 
 function draftNavigate(section, segment, opts = {}) {
     syncDraftHeroMeta();
+
 
     const ia = DRAFT_IA[section] || DRAFT_IA.overview;
     if (!DRAFT_IA[section]) section = 'overview';
@@ -15860,11 +16219,18 @@ function draftNavigate(section, segment, opts = {}) {
         stopDraftRoomPolling();
     }
 
+    // The live hub asks the server for scores, so it runs only while it is the
+    // panel on screen — the same contract the draft room's poll keeps.
+    if (segment === 'overview') startGwLivePolling();
+    else stopGwLivePolling();
+
     if (segment === 'rival') {
         renderNextRivalAnalysis();
     } else if (segment === 'overview') {
         if (state.draft.details) {
             renderAllTeamsTrendChart(null, window.currentTrendState?.mode || 'cumulative', window.currentTrendState?.highlightTeamIds || []);
+            renderPowerRankings();
+            renderRecordsBoard();
         }
     } else if (segment === 'nextround') {
         const fixturesContainer = document.getElementById('nextFixturesOverview');
@@ -16302,6 +16668,11 @@ function setMyTeam(teamId) {
     renderRecommendations();
     renderNextRivalAnalysis(); // Update Rival Analysis
     renderAllTeamsTrendChart(null, 'cumulative', [teamId]); // Default to showing my team
+    // Three overview boards highlight the reader's own row, so they follow the
+    // choice rather than waiting for the next navigation to repaint them.
+    renderPowerRankings();
+    renderRecordsBoard();
+    renderGwLiveHub();
     showToast('הקבוצה עודכנה', 'הנתונים וההמלצות עודכנו בהתאם לקבוצה שנבחרה', 'success');
 }
 

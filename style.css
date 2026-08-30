@@ -437,7 +437,6 @@ span.tone-down { background: none !important; color: #1d4ed8; font-weight: 700; 
     transform: rotate(90deg);
 }
 
-
 .fixture { padding: 2px 4px; border-radius: 4px; margin-right: 3px; font-weight: bold; display: inline-block; min-width: 50px; text-align: center; font-size: 0.8em;}
 .fdr-1 { background-color: #E8F8F5; color: #16A085; border: 1px solid #A3E4D7;}
 .fdr-2 { background-color: #E8F8F5; color: #16A085; border: 1px solid #A3E4D7;}
@@ -751,7 +750,6 @@ span.tone-down { background: none !important; color: #1d4ed8; font-weight: 700; 
     padding-top: 2px;
 }
 
-
 .bench-strip {
     display: flex;
     justify-content: center;
@@ -793,12 +791,10 @@ span.tone-down { background: none !important; color: #1d4ed8; font-weight: 700; 
 #draftStandingsTable th, #draftStandingsTable td { font-size: 1.05em; }
 /* Matrix sizing guard */
 #draftMatrixCanvas { width: 100% !important; height: 100% !important; max-height: 423px !important; }
-/* Analytics Cards - OLD STYLES REMOVED - See NEW DESIGN section below (line ~2420) */
 /* Matrices grid */
 .matrix-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
 .matrix-card { background: white; border-radius: 12px; padding: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.08); height: 488px; display: flex; flex-direction: column; border: 2px solid #e2e8f0; }
 .matrix-card .title { font-weight: 800; color: #2c3e50; margin-bottom: 6px; font-size: 1.15em; }
-/* Recommendations tables - moved to line 1640 */
 .matrix-card .chart-host { flex: 1; min-height: 0; }
 /* Draft tables */
 #draftStandingsInfo { text-align: center; margin: 8px 0; color: #495057; }
@@ -806,7 +802,6 @@ span.tone-down { background: none !important; color: #1d4ed8; font-weight: 700; 
 .rec-list { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
 .rec-item { display: flex; align-items: center; gap: 10px; padding: 8px; border: 1px solid #ecf0f1; border-radius: 10px; }
 .rec-metrics { display: flex; gap: 8px; font-size: 0.85em; color: #2c3e50; }
-/* Analytics grid - REMOVED OLD STYLES */
 
 /* H2H Calendar */
 .h2h-grid {
@@ -1481,7 +1476,6 @@ span.tone-down { background: none !important; color: #1d4ed8; font-weight: 700; 
     margin: 20px auto;
 }
 
-
 /* Responsive Design */
 @media (max-width: 1200px) {
     .draft-main-layout {
@@ -2056,7 +2050,6 @@ span.tone-down { background: none !important; color: #1d4ed8; font-weight: 700; 
     color: #2d3748;
     margin-bottom: 10px;
 }
-
 
 /* ============================================
    LOGIN SCREEN & AUTHENTICATION
@@ -3760,47 +3753,8 @@ span.tone-down { background: none !important; color: #1d4ed8; font-weight: 700; 
     max-width: 100%;
 }
 
-
 /* ============================================
    DRAMATIC DRAFT HEADER SECTION
-   ============================================ */
-.draft-hero-section {
-    background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
-    padding: 32px 24px;
-    border-radius: 24px;
-    margin-bottom: 32px;
-    position: relative;
-    overflow: hidden;
-    box-shadow: 0 10px 30px rgba(15, 23, 42, 0.2);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    color: white;
-}
-
-.draft-hero-section::before {
-    content: "";
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    background: 
-        radial-gradient(circle at 20% 50%, rgba(99, 102, 241, 0.15) 0%, transparent 50%),
-        radial-gradient(circle at 80% 80%, rgba(16, 185, 129, 0.1) 0%, transparent 50%);
-    z-index: 0;
-}
-
-.draft-hero-content {
-    position: relative;
-    z-index: 1;
-    display: flex;
-    align-items: center;
-    gap: 32px;
-    flex-wrap: wrap;
-}
-
-.draft-hero-icon {
-    flex-shrink: 0;
-}
 
 .icon-wrapper {
     width: 80px;
@@ -3830,21 +3784,6 @@ span.tone-down { background: none !important; color: #1d4ed8; font-weight: 700; 
     border-radius: 50%;
 }
 
-.draft-hero-text {
-    flex-grow: 1;
-}
-
-.draft-title {
-    font-size: 32px;
-    font-weight: 800;
-    margin: 0 0 8px 0;
-    background: linear-gradient(135deg, #ffffff 0%, #e2e8f0 100%);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    letter-spacing: -0.5px;
-    text-shadow: 0 2px 10px rgba(0,0,0,0.1);
-}
-
 .draft-subtitle {
     font-size: 16px;
     color: #94a3b8;
@@ -3859,24 +3798,6 @@ span.tone-down { background: none !important; color: #1d4ed8; font-weight: 700; 
     display: flex;
     gap: 16px;
     flex-wrap: wrap;
-}
-
-.hero-stat-card {
-    background: rgba(255, 255, 255, 0.05);
-    padding: 12px 20px;
-    border-radius: 16px;
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    backdrop-filter: blur(5px);
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    min-width: 100px;
-    transition: transform 0.2s ease;
-}
-
-.hero-stat-card:hover {
-    background: rgba(255, 255, 255, 0.1);
-    transform: translateY(-2px);
 }
 
 .stat-icon {
@@ -3907,49 +3828,6 @@ span.tone-down { background: none !important; color: #1d4ed8; font-weight: 700; 
 
 /* ============================================
    REDESIGNED DRAFT TABS
-   ============================================ */
-.draft-tabs-redesigned {
-    display: flex;
-    justify-content: center;
-    gap: 12px;
-    margin-bottom: 32px;
-    background: white;
-    padding: 8px;
-    border-radius: 16px;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
-    border: 1px solid #e2e8f0;
-    flex-wrap: wrap;
-    position: sticky;
-    top: 20px;
-    z-index: 100;
-}
-
-.draft-tab-btn {
-    flex: 1;
-    min-width: 140px;
-    max-width: 200px;
-    padding: 12px 20px;
-    border: none;
-    background: transparent;
-    border-radius: 12px;
-    color: #64748b;
-    font-weight: 600;
-    font-size: 14px;
-    cursor: pointer;
-    transition: all 0.3s ease;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 8px;
-    position: relative;
-    overflow: hidden;
-}
-
-.draft-tab-btn:hover {
-    background: #f8fafc;
-    color: #1e293b;
-    transform: translateY(-1px);
-}
 
 .draft-tab-btn.active {
     background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
@@ -4037,7 +3915,6 @@ th {
     td:not(.trend-col):not([hidden]),
     th:not(.trend-col):not([hidden]) { display: table-cell !important; }
 }
-
 
 /* Enhanced Navigation Buttons */
 .nav-tab {
@@ -4249,35 +4126,6 @@ th {
     color: #22c55e;
 }
 
-
-/* LIGHTER DRAFT HERO SECTION */
-.draft-hero-section {
-    background: linear-gradient(135deg, #3b82f6 0%, #1e40af 100%) !important;
-    border: 1px solid rgba(255, 255, 255, 0.2) !important;
-    box-shadow: 0 10px 25px rgba(37, 99, 235, 0.3) !important;
-}
-
-.draft-hero-section::before {
-    background: 
-        radial-gradient(circle at 20% 50%, rgba(255, 255, 255, 0.15) 0%, transparent 50%),
-        radial-gradient(circle at 80% 80%, rgba(96, 165, 250, 0.2) 0%, transparent 50%) !important;
-}
-
-.draft-title {
-    background: linear-gradient(135deg, #ffffff 0%, #bfdbfe 100%) !important;
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-}
-
-.hero-stat-card {
-    background: rgba(255, 255, 255, 0.1) !important;
-    border: 1px solid rgba(255, 255, 255, 0.2) !important;
-}
-
-.hero-stat-card:hover {
-    background: rgba(255, 255, 255, 0.2) !important;
-}
-
 .analytics-header-card {
     background: #f0f9ff;
     padding: 16px;
@@ -4294,7 +4142,6 @@ th {
     border: 1px solid #7dd3fc;
     background-color: white;
 }
-
 
 /* Overlap Section Styles */
 .overlap-section {
@@ -4353,7 +4200,6 @@ th {
     margin-top: 4px;
 }
 
-
 /* Enhanced My Team Selector */
 .my-team-selector-container {
     background: linear-gradient(to right, #ffffff, #f8fafc) !important;
@@ -4400,7 +4246,6 @@ th {
     overflow-y: auto;
     overscroll-behavior: contain;
 }
-
 
 /* Pitch Improvements */
 .pitch-container {
@@ -4467,7 +4312,6 @@ th {
     box-shadow: 0 6px 16px rgba(99, 102, 241, 0.4);
 }
 
-
 /* --- User Request Updates --- */
 
 /* 1. Pitch Improvements: Smaller pitch, larger centered images */
@@ -4520,7 +4364,6 @@ th {
     font-size: 14px;
 }
 
-
 /* 4. Market Manual Selection */
 .market-manual-select {
     background: white;
@@ -4536,7 +4379,6 @@ th {
     color: #1e293b;
     margin-bottom: 10px;
 }
-
 
 .rec-stat-box {
     text-align: center;
@@ -4581,7 +4423,6 @@ th {
     pointer-events: none;
     box-shadow: 0 4px 6px rgba(0,0,0,0.1);
 }
-
 
 /* Manual Recommendation Styles */
 .manual-recommendation-section {
@@ -4652,7 +4493,6 @@ th {
     width: 95%; /* Reduce overall width */
     margin: 0 auto;
 }
-
 
 /* Chart Colors Separation */
 canvas {
@@ -6117,7 +5957,6 @@ canvas {
 .cmp-tags .signal-badge { font-size: 11.5px; padding: 2px 8px; }
 .cmp-tags .detail-tag { font-size: 11.5px; }
 
-
 /* FPL Draft's own ranking, and the projection beside it, are shaded by the same
    green-to-red percentile rule as every other number in the row. Each used to
    carry its own colour language — a gold/blue/grey badge and plain indigo text —
@@ -6299,7 +6138,6 @@ canvas {
 .trend-cell[data-metric="xgi"] .trend-bar b { inset-inline: -6px; font-size: 9px; }
 .trend-cell[data-metric="pts"] { min-width: 116px; }
 
-
 /* ==========================================================================
    COLUMNS MENU
    A secondary control does not need its own full-width row above the table.
@@ -6372,7 +6210,6 @@ canvas {
 .more-charts[open] > summary::after { transform: rotate(180deg); }
 .more-charts > summary:hover { border-color: #94a3b8; }
 .more-charts[open] > .charts-dashboard-grid { margin-top: 12px; }
-
 
 /* ==========================================================================
    TABLE BAR — the table's own controls, on the table
