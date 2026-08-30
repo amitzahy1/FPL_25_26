@@ -10072,6 +10072,24 @@ function calculateAdvancedScores(players) {
     return players;
 }
 
+/** One standings row — shared by the initial render and every re-sort. */
+function draftStandingsRowHtml(s) {
+    const isMe = state.draft.myTeamId && String(s.entry_id) === String(state.draft.myTeamId);
+    return `
+        <tr${isMe ? ' class="is-me"' : ''}>
+            <td><span class="plc-rank${s.rank === 1 ? ' is-top' : ''}">${s.rank}</span></td>
+            <td>${escapeHtml(s.manager)}</td>
+            <td><span class="plc-team-logo">${getTeamLogo(s.team)}</span>${escapeHtml(s.team)}</td>
+            <td>${s.wins}</td>
+            <td>${s.draws}</td>
+            <td>${s.losses}</td>
+            <td>${s.pf}</td>
+            <td>${s.pa}</td>
+            <td class="${s.diff > 0 ? 'is-pos' : s.diff < 0 ? 'is-neg' : ''}">${s.diff > 0 ? '+' : ''}${s.diff}</td>
+            <td>${s.total}</td>
+        </tr>`;
+}
+
 function sortTableDraft(field) {
     const standingsData = state.draft._standingsData;
     if (!standingsData || !standingsData.length) return;
@@ -10096,22 +10114,7 @@ function sortTableDraft(field) {
     });
 
     const tbody = document.querySelector('#draftStandingsTable tbody');
-    if (tbody) {
-        tbody.innerHTML = standingsData.map(s => `
-            <tr>
-                <td>${s.rank}</td>
-                <td>${escapeHtml(s.manager)}</td>
-                <td>${escapeHtml(s.team)}</td>
-                <td>${s.wins}</td>
-                <td>${s.draws}</td>
-                <td>${s.losses}</td>
-                <td>${s.pf}</td>
-                <td>${s.pa}</td>
-                <td>${s.diff > 0 ? '+' : ''}${s.diff}</td>
-                <td>${s.total}</td>
-            </tr>
-        `).join('');
-    }
+    if (tbody) tbody.innerHTML = standingsData.map(draftStandingsRowHtml).join('');
 }
 
 // REMOVED: Duplicate showTab function - using the one at line ~4803 instead
@@ -11369,7 +11372,7 @@ function renderDraftStandings() {
 
     if (finalStandings.length === 0 || !leagueEntries) {
         console.warn('renderDraftStandings: No standings data and no matches data to generate from.');
-        container.innerHTML = '<p style="text-align:center; padding:20px;">לא נמצא מידע על טבלת הליגה.</p>';
+        container.innerHTML = '<p class="plc-empty">לא נמצא מידע על טבלת הליגה.</p>';
         return;
     }
 
@@ -11427,22 +11430,7 @@ function renderDraftStandings() {
 
     const tbody = document.createElement('tbody');
     tbody.id = 'draftStandingsBody'; // Add ID for sorting
-    tbody.innerHTML = standingsData.map(s => {
-        const teamLogo = getTeamLogo(s.team);
-        return `
-        <tr>
-            <td>${s.rank}</td>
-            <td>${escapeHtml(s.manager)}</td>
-            <td><span style="font-size: 18px; margin-left: 6px;">${teamLogo}</span>${escapeHtml(s.team)}</td>
-            <td>${s.wins}</td>
-            <td>${s.draws}</td>
-            <td>${s.losses}</td>
-            <td>${s.pf}</td>
-            <td>${s.pa}</td>
-            <td>${s.diff > 0 ? '+' : ''}${s.diff}</td>
-            <td>${s.total}</td>
-        </tr>
-    `}).join('');
+    tbody.innerHTML = standingsData.map(draftStandingsRowHtml).join('');
     table.appendChild(tbody);
 
     console.log("📋 Standings table created with", standingsData.length, "rows");

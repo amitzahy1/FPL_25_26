@@ -670,5 +670,186 @@ body.tab-draft {
 }
 
 /* ============================================================
-   Components — .plc-* vocabulary (rolled out in Phase 6)
+   Components — the .plc-* vocabulary shared by every draft view
    ============================================================ */
+
+#draftTabContent .plc-card {
+    background: var(--pl-surface);
+    border: 1px solid var(--pl-line);
+    border-radius: var(--pl-radius);
+    box-shadow: var(--pl-shadow);
+    padding: 18px 20px;
+}
+
+#draftTabContent .plc-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 0 0 6px;
+    font-size: 18px;
+    font-weight: 800;
+    color: var(--pl-ink);
+}
+
+#draftTabContent .plc-sub {
+    margin: 0 0 14px;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--pl-muted);
+}
+
+#draftTabContent .plc-empty {
+    padding: 36px 16px;
+    text-align: center;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--pl-muted);
+    background: var(--pl-surface);
+    border: 1px dashed var(--pl-line);
+    border-radius: var(--pl-radius);
+}
+
+#draftTabContent .plc-skeleton {
+    border-radius: var(--pl-radius-sm);
+    background: linear-gradient(90deg, var(--pl-line) 25%, #f6f2f8 50%, var(--pl-line) 75%);
+    background-size: 200% 100%;
+    animation: plc-shimmer 1.4s ease-in-out infinite;
+    min-height: 18px;
+}
+
+@keyframes plc-shimmer {
+    to { background-position: -200% 0; }
+}
+
+/* League tables — the purple-headed, zebra-striped Premier Light table */
+#draftTabContent .draft-table {
+    width: 100%;
+    border-collapse: collapse;
+    background: var(--pl-surface);
+    border-radius: var(--pl-radius-sm);
+    overflow: hidden;
+    box-shadow: var(--pl-shadow);
+}
+
+#draftTabContent .draft-table thead th {
+    background: var(--pl-purple);
+    color: #fff;
+    font-size: 12.5px;
+    font-weight: 700;
+    padding: 11px 10px;
+    text-align: center;
+    cursor: pointer;
+    white-space: nowrap;
+    border: none;
+}
+
+#draftTabContent .draft-table thead th:hover {
+    background: var(--pl-purple-deep);
+}
+
+#draftTabContent .draft-table tbody td {
+    padding: 10px;
+    font-size: 13.5px;
+    text-align: center;
+    border: none;
+    border-bottom: 1px solid var(--pl-line);
+    color: var(--pl-ink);
+    font-variant-numeric: tabular-nums;
+}
+
+#draftTabContent .draft-table tbody tr:nth-child(even) {
+    background: var(--pl-bg);
+}
+
+#draftTabContent .draft-table tbody tr:hover {
+    background: #f6eef8;
+}
+
+#draftTabContent .draft-table tbody tr.is-me {
+    background: #f1e6f4;
+    box-shadow: inset 3px 0 0 var(--pl-purple);
+}
+
+#draftTabContent .draft-table td.is-pos { color: var(--pl-pos); font-weight: 700; }
+#draftTabContent .draft-table td.is-neg { color: var(--pl-neg); font-weight: 700; }
+
+#draftTabContent .draft-table td:last-child {
+    font-weight: 800;
+}
+
+#draftTabContent .plc-team-logo {
+    font-size: 17px;
+    margin-inline-end: 6px;
+}
+
+#draftTabContent .plc-rank {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 26px;
+    height: 26px;
+    padding: 0 4px;
+    border-radius: 8px;
+    background: var(--pl-bg);
+    color: var(--pl-muted);
+    font-size: 12.5px;
+    font-weight: 800;
+}
+
+#draftTabContent .plc-rank.is-top {
+    background: var(--pl-purple);
+    color: #fff;
+}
+
+/* The my-team selector bar on the overview */
+#draftTabContent .plc-teambar {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    flex-wrap: wrap;
+    padding: 14px 18px;
+    margin-bottom: 18px;
+}
+
+#draftTabContent .plc-teambar label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-weight: 700;
+    color: var(--pl-ink);
+}
+
+#draftTabContent .plc-teambar select {
+    flex: 1;
+    max-width: 320px;
+    padding: 9px 14px;
+    border: 1px solid var(--pl-line);
+    border-radius: 10px;
+    background: var(--pl-surface);
+    font: inherit;
+    font-size: 14.5px;
+    font-weight: 600;
+    color: var(--pl-ink);
+    cursor: pointer;
+}
+
+#draftTabContent .plc-teambar select:focus {
+    outline: none;
+    border-color: var(--pl-purple);
+    box-shadow: 0 0 0 3px rgba(56, 0, 60, .12);
+}
+
+#draftTabContent .plc-chart-body {
+    height: 400px;
+    width: 100%;
+}
+
+@media (max-width: 768px) {
+    #draftTabContent .plc-chart-body {
+        height: 300px;
+    }
+
+    #draftTabContent .plc-card {
+        padding: 14px;
+    }
+}
