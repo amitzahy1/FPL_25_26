@@ -60,45 +60,42 @@ body.tab-draft {
 }
 
 /* ============================================================
-   Masthead — a white card, not a colored band
+   The league bar — title and navigation on one line
    ============================================================ */
 
-#draftHero {
+#draftTabContent .draft-bar {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 14px;
-    flex-wrap: wrap;
-    margin: 16px 0 0;
-    padding: 20px 24px;
+    gap: 16px;
+    padding: 7px 14px;
     background: var(--c-card);
-    border-radius: var(--c-radius);
-    box-shadow: var(--c-shadow);
+    border-radius: var(--c-radius-sm);
+    box-shadow: var(--c-shadow-sm);
 }
 
-#draftHero h2 {
+#draftTabContent .draft-bar-title {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    min-width: 0;
+}
+
+#draftTabContent .draft-bar-title h2 {
     margin: 0;
-    font-size: 22px;
-    font-weight: 800;
-    letter-spacing: -.01em;
+    font-size: 15px;
+    font-weight: 700;
     color: var(--c-ink);
+    white-space: nowrap;
 }
 
-#draftHero p {
-    margin: 2px 0 0;
-    font-size: 12.5px;
+#draftTabContent .draft-bar-title span {
+    font-size: 12px;
     font-weight: 400;
     color: var(--c-muted);
-}
-
-#draftTabContent .plc-gw-pill {
-    padding: 7px 15px;
-    border-radius: var(--c-radius-xs);
-    background: var(--c-blue-soft);
-    color: var(--c-blue);
-    font-size: 12.5px;
-    font-weight: 600;
     white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 /* ============================================================
@@ -118,22 +115,21 @@ body.tab-draft {
     position: sticky;
     top: var(--app-header-h);
     z-index: 90;
-    background: transparent;
+    background: var(--c-bg);
     border: none;
     box-shadow: none;
-    padding: 14px 0 0;
-    margin-bottom: 16px;
+    padding: 10px 0;
+    margin-bottom: 12px;
 }
 
 #draftTabContent .draft-sub-nav {
     display: flex;
-    gap: 6px;
+    gap: 4px;
     flex-wrap: nowrap;
     overflow-x: auto;
-    padding: 6px;
-    background: var(--c-card);
-    border-radius: var(--c-radius-sm);
-    box-shadow: var(--c-shadow-sm);
+    background: transparent;
+    border-radius: 0;
+    box-shadow: none;
     scrollbar-width: none;
 }
 
@@ -142,14 +138,16 @@ body.tab-draft {
 }
 
 #draftTabContent .dnav-btn {
-    flex: 1;
-    padding: 10px 16px;
+    /* Was flex:1, which gave every pill a fifth of the window — 362px of pill
+       for 110px of label. They size to what they say. */
+    flex: 0 0 auto;
+    padding: 8px 14px;
     border: none;
     border-radius: var(--c-radius-xs);
     background: transparent;
     color: var(--c-muted);
     font: inherit;
-    font-size: 13.5px;
+    font-size: 13px;
     font-weight: 600;
     white-space: nowrap;
     cursor: pointer;
@@ -422,17 +420,26 @@ body.tab-draft {
     /* The bottom bar owns section navigation on phones; the sticky top row
        would only duplicate it and cost 60px of a small screen. The segment
        bars stay — they live inside the content. */
-    #draftTabContent .draft-sub-nav-container {
+    /* The bottom bar owns section navigation on phones, so the pills go and
+       the bar keeps the one thing it alone says: which league, how many
+       managers, which gameweek. */
+    #draftTabContent .draft-sub-nav {
         display: none;
     }
 
-    #draftHero {
-        margin-top: 10px;
-        padding: 15px 16px;
+    #draftTabContent .draft-sub-nav-container {
+        padding: 8px 0;
+        margin-bottom: 10px;
     }
 
-    #draftHero h2 {
-        font-size: 19px;
+    #draftTabContent .draft-bar {
+        padding: 8px 12px;
+    }
+
+    #draftTabContent .draft-bar-title {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 1px;
     }
 
     #draftTabContent .plc-card {

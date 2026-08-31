@@ -15962,18 +15962,19 @@ function stopGwLivePolling() {
  * Silent until the league is loaded — an empty pill is worse than none.
  */
 function syncDraftHeroMeta() {
-    const pill = document.getElementById('draftHeroMeta');
     const sub = document.getElementById('draftHeroSub');
-    if (!pill) return;
+    if (!sub) return;
     const details = state.draft.details;
-    if (!details) { pill.hidden = true; return; }
+    if (!details) { sub.textContent = ''; return; }
+    // One line, in the order you would say it out loud, and silent about
+    // anything it does not know yet rather than printing a placeholder.
     const gw = details.league?.current_event || getCurrentEventId();
-    pill.textContent = gw ? `מחזור ${gw}` : SEASON_CONFIG.seasonLabel;
-    pill.hidden = false;
     const managers = (details.league_entries || []).length;
-    if (sub && managers) {
-        sub.textContent = `${managers} מנג׳רים · עונת ${SEASON_CONFIG.seasonLabel}`;
-    }
+    sub.textContent = [
+        managers ? `${managers} מנג׳רים` : null,
+        gw ? `מחזור ${gw}` : null,
+        SEASON_CONFIG.seasonLabel
+    ].filter(Boolean).join(' · ');
 }
 
 function draftNavigate(section, segment, opts = {}) {

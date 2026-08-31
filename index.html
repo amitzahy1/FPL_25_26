@@ -11,9 +11,9 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link rel="stylesheet"
         href="https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;700;800;900&family=Rubik:wght@400;500;600;700;800&display=swap">
-    <link rel="stylesheet" href="style.css?v=2026.08.31.355">
-    <link rel="stylesheet" href="mobile.css?v=2026.08.31.355">
-    <link rel="stylesheet" href="draft.css?v=2026.08.31.355">
+    <link rel="stylesheet" href="style.css?v=2026.08.31.356">
+    <link rel="stylesheet" href="mobile.css?v=2026.08.31.356">
+    <link rel="stylesheet" href="draft.css?v=2026.08.31.356">
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.5.1"></script>
     <script
         src="https://cdnjs.cloudflare.com/ajax/libs/chartjs-plugin-annotation/2.2.1/chartjs-plugin-annotation.min.js"></script>
@@ -518,22 +518,20 @@
                      page reload. -->
                 <div id="draftNotice" hidden></div>
 
-                <!-- Premier Light hero — the draft tab's own masthead. Styled
-                     entirely from draft.css. -->
-                <div id="draftHero">
-                    <div class="draft-hero-inner">
-                        <h2>ליגת הדראפט שלי</h2>
-                        <p id="draftHeroSub">סטטיסטיקה, טבלאות ונתונים בזמן אמת</p>
-                    </div>
-                    <!-- Filled by syncDraftHeroMeta() once the league is known. -->
-                    <span id="draftHeroMeta" class="plc-gw-pill" hidden></span>
-                </div>
-
-                <!-- Draft navigation — five sections as pill tabs. Which pill is
-                     active is driven by data-tab from draftNavigate(); there is
-                     deliberately no per-button onclick and no inline styling. -->
+                <!-- Title and navigation on one line.
+                     The masthead used to be a 97px card holding two lines of
+                     text, with the nav a further 68px card below it: 165px of
+                     chrome before any content, and a wide empty gap through the
+                     middle of both. The title is now a run of text at the start
+                     of the nav bar, which is the only sticky thing on the page. -->
                 <div id="draftSubNav" class="draft-sub-nav-container">
-                    <div class="draft-sub-nav" role="tablist" aria-label="ניווט ליגת הדראפט">
+                    <div class="draft-bar">
+                        <div class="draft-bar-title">
+                            <h2>ליגת הדראפט שלי</h2>
+                            <!-- Both filled by syncDraftHeroMeta() once the league is known. -->
+                            <span id="draftHeroSub"></span>
+                        </div>
+                        <div class="draft-sub-nav" role="tablist" aria-label="ניווט ליגת הדראפט">
                         <button type="button" class="dnav-btn active" data-tab="overview" role="tab"
                             aria-selected="true" aria-controls="draft-sec-overview">📊 מבט על</button>
                         <button type="button" class="dnav-btn" data-tab="gameweek" role="tab"
@@ -542,6 +540,7 @@
                             aria-selected="false" aria-controls="draft-sec-market">💡 שוק והמלצות</button>
                         <button type="button" class="dnav-btn" data-tab="analytics" role="tab"
                             aria-selected="false" aria-controls="draft-sec-analytics">📈 אנליטיקס</button>
+                        </div>
                     </div>
                 </div>
 
@@ -808,7 +807,7 @@
     <!-- Version query is bumped by scripts/stamp-version.mjs on every commit
          (npm run stamp). It was left at 4.0.0 for months, so returning
          visitors kept running a cached script.js and never saw fixes. -->
-    <script src="script.js?v=2026.08.31.355" defer></script>
+    <script src="script.js?v=2026.08.31.356" defer></script>
 </body>
 
 </html>
