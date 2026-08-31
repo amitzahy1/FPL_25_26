@@ -505,38 +505,6 @@ span.tone-down { background: none !important; color: #1d4ed8; font-weight: 700; 
     border: 1px solid var(--border-color);
 }
 
-.tab-button { 
-    background: transparent;
-    color: var(--text-secondary); 
-    border: none;
-    padding: 14px 32px; 
-    border-radius: var(--radius-sm); 
-    cursor: pointer; 
-    font-weight: 700; 
-    transition: all 0.2s ease; 
-    font-size: 1.05rem;
-    letter-spacing: 0.3px;
-    position: relative;
-}
-
-.tab-button::after {
-    content: '';
-    position: absolute;
-    bottom: 0;
-    left: 50%;
-    transform: translateX(-50%) scaleX(0);
-    width: 80%;
-    height: 3px;
-    background: var(--primary-color);
-    border-radius: 2px;
-    transition: transform 0.2s ease;
-}
-
-.tab-button:hover { 
-    color: var(--text-primary);
-    background: rgba(99, 102, 241, 0.05);
-}
-
 .tab-button.active { 
     background: linear-gradient(135deg, var(--primary-color) 0%, var(--primary-light) 100%); 
     color: white;
@@ -1546,11 +1514,6 @@ span.tone-down { background: none !important; color: #1d4ed8; font-weight: 700; 
         gap: 8px;
     }
     
-    .tab-button {
-        width: 100%;
-        padding: 12px;
-    }
-    
     /* Controls */
     .main-controls, .secondary-controls, .visualization-controls {
         flex-direction: column;
@@ -1693,11 +1656,6 @@ span.tone-down { background: none !important; color: #1d4ed8; font-weight: 700; 
 @media (max-width: 480px) {
     header h1 {
         font-size: 1.5em;
-    }
-    
-    .tab-button {
-        font-size: 0.9em;
-        padding: 10px;
     }
     
     .h2h-team-name {
@@ -3876,10 +3834,6 @@ span.tone-down { background: none !important; color: #1d4ed8; font-weight: 700; 
     box-shadow: 0 4px 12px rgba(15, 23, 42, 0.2);
 }
 
-.tab-icon {
-    font-size: 18px;
-}
-
 .draft-sub-content {
     display: none;
     animation: fadeIn 0.4s ease-out;
@@ -4996,7 +4950,6 @@ canvas {
     }
 }
 
-
 .status-pill {
     display: flex;
     align-items: center;
@@ -5066,20 +5019,6 @@ canvas {
     display: flex;
     align-items: center;
     gap: 8px;
-}
-
-.user-avatar-mini {
-    width: 32px;
-    height: 32px;
-    border-radius: 50%;
-    border: 2px solid white;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-}
-
-#userNameHeader {
-    font-size: 13px;
-    font-weight: 600;
-    color: #334155;
 }
 
 @keyframes pulse {
