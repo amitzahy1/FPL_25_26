@@ -229,8 +229,15 @@ th {
     cursor: pointer; 
     user-select: none; 
     transition: all 0.2s ease; 
-    position: sticky; 
-    top: 0; 
+    /* Inert, and has been all along: .table-container is `overflow-x: auto`,
+       which per spec computes overflow-y to `auto` as well, making the
+       container — not the page — this row's sticky context. The container has
+       no height cap, so it never scrolls vertically and the offset never
+       applies. Left in place because it costs nothing and is correct the day
+       the table gets its own scroll box; the column names simply scroll away
+       with the page until then. */
+    position: sticky;
+    top: 0;
     z-index: 10;
     letter-spacing: 0.3px;
     font-size: 0.9em;
@@ -522,12 +529,17 @@ span.tone-down { background: none !important; color: #1d4ed8; font-weight: 700; 
 .tab-button.active::after {
     transform: translateX(-50%) scaleX(1);
 }
-.tab-content { 
-    width: 100%; 
-    overflow-y: auto;
-    overflow-x: hidden;
-    max-height: calc(100vh - 140px); /* Account for header + nav */
-    padding-bottom: 40px; /* Extra space at bottom */
+/* One scroller for the whole document.
+   Each tab used to be its own scrollport (overflow-y:auto plus a
+   calc(100vh - 140px) cap), which cost three things: position:sticky inside a
+   tab measured from the tab's top rather than the viewport's, so the draft
+   sub-nav pinned 70px too low; the 140px reservation over-reserved by 50px
+   against the real 90px of chrome; and the page grew two nested scrollbars on
+   a short window. mobile.css already opted out at =768px for the same reason. */
+.tab-content {
+    width: 100%;
+    overflow-x: clip;
+    padding-bottom: 24px;
 }
 /* Cards and grids for draft */
 .card { 
@@ -4693,6 +4705,38 @@ canvas {
 }
 
 /* =========================================
+   PAGE FRAME
+   One width for the header row and the content below it. #mainApp carried no
+   rule at all, so at a 1900px window the cards ran to 1860px while the header
+   stopped at 1400px — the two disagreed by 230px a side, which read as the
+   content being misaligned rather than uncapped.
+   ========================================= */
+
+:root {
+    --page-max: 1500px;
+    /* The real rendered height of .app-header. Read by the sticky table header,
+       the draft sub-nav and every scroll-margin below, so it lives here rather
+       than being repeated as a literal. */
+    --app-header-h: 70px;
+}
+
+#mainApp {
+    max-width: var(--page-max);
+    margin-inline: auto;
+}
+
+/* Anything reached by scrollIntoView({block:'start'}) has to clear the sticky
+   header, or it lands underneath it. */
+#draftBoard,
+#mainTableView,
+#chartsPanel,
+#filtersPanel,
+#colsMenu,
+.player-row {
+    scroll-margin-top: calc(var(--app-header-h) + 12px);
+}
+
+/* =========================================
    APP HEADER
    Moved here verbatim from an inline <style> block in index.html, which
    sat after every stylesheet and therefore beat mobile.css: ten of its
@@ -4723,7 +4767,7 @@ canvas {
     justify-content: space-between;
     align-items: center;
     width: 100%;
-    max-width: 1400px;
+    max-width: var(--page-max);
     margin: 0 auto;
 }
 

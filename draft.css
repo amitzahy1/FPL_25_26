@@ -44,7 +44,7 @@
     --c-shadow: 0 1px 2px rgba(16, 24, 40, .05), 0 8px 24px rgba(16, 24, 40, .06);
     --c-shadow-sm: 0 1px 2px rgba(16, 24, 40, .05), 0 6px 18px rgba(16, 24, 40, .05);
 
-    --app-header-h: 70px;
+    /* --app-header-h is declared in style.css, next to the header it measures. */
 }
 
 /* Rubik carries the Latin numerals and Heebo the Hebrew; the stack below them

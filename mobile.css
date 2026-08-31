@@ -456,20 +456,11 @@
        one dimension a phone can still give a scatter. */
     .chart-canvas { height: 420px; }
 
-    /* --- the page scrolls, not a box inside it ---------------------------
-       .tab-content is `overflow-y: auto; max-height: calc(100vh - 140px)`, which
-       assumes a 140px header. On a phone the header, the season toggle, the
-       filter row and the tabs come to ~470px, so the inner box runs off the
-       bottom of the screen and the document itself can only scroll about 200px.
-       The header therefore never scrolls away — it behaves exactly like a sticky
-       header without being one, which is why unsticking things did not help —
-       and every chart is read through a ~300px slot.
-       Letting the document scroll gives the charts the whole screen and lets the
-       header leave. The padding clears the fixed bottom bar. */
+    /* The document is the scroller everywhere now (see .tab-content in
+       style.css), so all this override still owes the page is room to end
+       above the fixed bottom bar. */
     .tab-content {
-        overflow: visible;
-        max-height: none;
-        padding-bottom: 84px;
+        padding-bottom: 12px;
     }
     .chart-head { flex-direction: column; align-items: stretch; gap: 8px; }
     .matrix-grid { grid-template-columns: 1fr !important; }
@@ -833,8 +824,12 @@
     .mb-free[aria-pressed="true"] { background: #15803d; color: #fff; }
     .mb-btn:disabled { opacity: .4; }
 
-    /* The bar floats over the page, so the page needs somewhere to end. */
-    body { padding-bottom: 72px; }
+    /* The bar floats over the page, so the page needs somewhere to end. It is
+       60px tall (48px button + 6px padding twice) plus the home-indicator
+       inset, which the flat 72px used to guess at — over-reserving 12px on a
+       button phone and under-reserving 22px on a notched one, where the last
+       row of the bar sat on top of the content. */
+    body { padding-bottom: calc(68px + env(safe-area-inset-bottom)); }
 
     .mobile-sheet { display: block; }
     .mobile-sheet[hidden] { display: none; }
