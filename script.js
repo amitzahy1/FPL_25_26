@@ -1350,6 +1350,9 @@ document.addEventListener('DOMContentLoaded', () => {
     // The header's overflow panel.
     initHeaderTools();
 
+    // Expanding a league chart.
+    initDraftChartFull();
+
     // Two things measure rendered text exactly once and cache the answer. With
     // display=swap the first measurement can happen in the fallback font, so
     // re-run them when the real one lands: a stale --cmp-strip-h puts the
@@ -6354,7 +6357,7 @@ function compareRadarConfig(players, spanId = 'season') {
                     min: 0, suggestedMax: 150, beginAtZero: true,
                     ticks: {
                         stepSize: 50, showLabelBackdrop: false,
-                        color: '#94a3b8', font: { size: 9 },
+                        color: '#94a3b8', font: { size: 7.2 },
                         callback: v => (v === 100 ? 'עילית' : v)
                     },
                     // The 100 ring is the whole reference, so it is drawn as a
@@ -6365,7 +6368,7 @@ function compareRadarConfig(players, spanId = 'season') {
                         lineWidth: ctx => (ctx && ctx.tick && ctx.tick.value === 100 ? 1.5 : 1)
                     },
                     angleLines: { color: 'rgba(15, 23, 42, 0.10)' },
-                    pointLabels: { color: '#334155', font: { size: 11, weight: '700' } }
+                    pointLabels: { color: '#334155', font: { size: 8.8, weight: '700' } }
                 }
             },
             plugins: {
@@ -6601,7 +6604,7 @@ function compareTrendConfig(players, metricKey, cumulative, spanId) {
             responsive: true, maintainAspectRatio: false,
             interaction: { mode: 'index', intersect: false },
             scales: {
-                x: { grid: { display: false }, ticks: { color: '#94a3b8', font: { size: 10 } } },
+                x: { grid: { display: false }, ticks: { color: '#94a3b8', font: { size: 8 } } },
                 y: chartAxis(cumulative ? `${def.label} — מצטבר` : def.label)
             },
             plugins: {
@@ -9289,7 +9292,7 @@ function getChartConfig(data, xKey, yKey, xLabel, yLabel, quadLabels = {}, color
                         color: '#475569'
                     },
                     ticks: {
-                        font: { size: 11.5, weight: '600' },
+                        font: { size: 9.2, weight: '600' },
                         color: '#64748b'
                     },
                     grid: {
@@ -9300,11 +9303,11 @@ function getChartConfig(data, xKey, yKey, xLabel, yLabel, quadLabels = {}, color
                     title: {
                         display: true,
                         text: yLabel,
-                        font: { size: 13.8, weight: '700' },
+                        font: { size: 11, weight: '700' },
                         color: '#475569'
                     },
                     ticks: {
-                        font: { size: 11.5, weight: '600' },
+                        font: { size: 9.2, weight: '600' },
                         color: '#64748b'
                     },
                     grid: {
@@ -12121,7 +12124,7 @@ function renderProgressChart() {
                     },
                     ticks: {
                         color: '#64748b',
-                        font: { size: 11 }
+                        font: { size: 8.8 }
                     }
                 },
                 x: {
@@ -12138,11 +12141,96 @@ function renderProgressChart() {
                     },
                     ticks: {
                         color: '#475569',
-                        font: { size: 11 }
+                        font: { size: 8.8 }
                     }
                 }
             }
         }
+    });
+}
+
+/* ------------------- expanding a league chart -------------------------- */
+
+/**
+ * Every league chart's config, by key, so it can be redrawn larger.
+ *
+ * The players tab expands a chart by looking its spec up in CHART_SPECS and
+ * rebuilding from the filtered rows. The league's charts have no spec — they are
+ * built inline from the team aggregates — so what gets kept is the config they
+ * were drawn from. Redrawing that guarantees the big version shows exactly what
+ * the small one did, rather than a parallel computation that could disagree.
+ */
+const _draftChartFull = { configs: new Map(), chart: null };
+
+function registerDraftChart(key, title, config) {
+    _draftChartFull.configs.set(key, { title, config });
+}
+
+function openDraftChart(key) {
+    const entry = _draftChartFull.configs.get(key);
+    const overlay = document.getElementById('draftChartFull');
+    if (!entry || !overlay) return;
+
+    const title = document.getElementById('draftChartFullTitle');
+    if (title) title.textContent = entry.title;
+
+    overlay.hidden = false;
+    // The page behind must not scroll under the overlay: on iOS a touch that
+    // starts on the canvas otherwise drags the document.
+    document.body.style.overflow = 'hidden';
+
+    // After the unhide, so the canvas has measured its flex height — drawing
+    // into a display:none box gives the zero-height chart the inline cards
+    // already guard against.
+    requestAnimationFrame(() => {
+        if (_draftChartFull.chart) _draftChartFull.chart.destroy();
+        const canvas = document.getElementById('draftChartFullCanvas');
+        if (!canvas) return;
+        // A deep-ish clone: Chart.js mutates the config it is given, so handing
+        // it the card's own object would leave the small chart holding state
+        // from the big one.
+        const cfg = JSON.parse(JSON.stringify({ type: entry.config.type, data: entry.config.data }));
+        cfg.options = {
+            ...entry.config.options,
+            responsive: true,
+            maintainAspectRatio: false,
+            // The whole point of the big view is room for labels.
+            animation: { duration: 200 }
+        };
+        // Scale the axis text back up: the inline cards run it small because
+        // they are small, and here there is space.
+        for (const axis of Object.values(cfg.options.scales || {})) {
+            if (axis && axis.ticks && axis.ticks.font) {
+                axis.ticks.font = { ...axis.ticks.font, size: Math.round((axis.ticks.font.size || 11) * 1.5) };
+            }
+        }
+        _draftChartFull.chart = new Chart(canvas.getContext('2d'), cfg);
+    });
+}
+
+function closeDraftChart() {
+    const overlay = document.getElementById('draftChartFull');
+    if (!overlay) return;
+    overlay.hidden = true;
+    document.body.style.overflow = '';
+    if (_draftChartFull.chart) {
+        _draftChartFull.chart.destroy();
+        _draftChartFull.chart = null;
+    }
+}
+
+/** One listener for every expandable card, wired once. */
+function initDraftChartFull() {
+    document.addEventListener('click', e => {
+        const opener = e.target.closest('[data-chart-key]');
+        if (opener) {
+            openDraftChart(opener.dataset.chartKey);
+            return;
+        }
+        if (e.target.closest('#draftChartFullClose')) closeDraftChart();
+    });
+    document.addEventListener('keydown', e => {
+        if (e.key === 'Escape') closeDraftChart();
     });
 }
 
@@ -12204,6 +12292,15 @@ function renderDraftAnalytics(teamAggregates) {
         canvas.id = `draftAnalytic_${dim.key}`;
         canvasContainer.appendChild(canvas);
 
+        const expand = document.createElement('button');
+        expand.type = 'button';
+        expand.className = 'plc-expand';
+        expand.dataset.chartKey = `analytics:${dim.key}`;
+        expand.title = 'הגדלה';
+        expand.setAttribute('aria-label', `הגדלת הגרף ${dim.label}`);
+        expand.textContent = '⤢';
+        header.appendChild(expand);
+
         card.appendChild(header);
         card.appendChild(canvasContainer);
         host.appendChild(card);
@@ -12218,7 +12315,7 @@ function renderDraftAnalytics(teamAggregates) {
         if (state.draft.charts.analytics[dim.key]) { state.draft.charts.analytics[dim.key].destroy(); }
 
         const ctx = canvas.getContext('2d');
-        state.draft.charts.analytics[dim.key] = new Chart(ctx, {
+        const analyticsConfig = {
             type: 'bar',
             data: {
                 labels,
@@ -12268,7 +12365,7 @@ function renderDraftAnalytics(teamAggregates) {
                         },
                         ticks: {
                             color: '#5d6b82',
-                            font: { size: 14, weight: '600' },
+                            font: { size: 11.2, weight: '600' },
                             padding: 8
                         }
                     },
@@ -12276,7 +12373,7 @@ function renderDraftAnalytics(teamAggregates) {
                         grid: { display: false },
                         ticks: {
                             color: '#5d6b82',
-                            font: { size: 11, weight: '600' },
+                            font: { size: 8.8, weight: '600' },
                             padding: 6,
                             maxRotation: 45,
                             minRotation: 0
@@ -12463,7 +12560,10 @@ function renderDraftAnalytics(teamAggregates) {
                     }
                 }
             }
-        });
+        };
+
+        state.draft.charts.analytics[dim.key] = new Chart(ctx, analyticsConfig);
+        registerDraftChart(`analytics:${dim.key}`, dim.label, analyticsConfig);
     });
 }
 
@@ -12489,6 +12589,15 @@ function renderDraftMatrices(teamAggregates) {
         titleEl.textContent = spec.title;
         card.appendChild(titleEl);
 
+        const expand = document.createElement('button');
+        expand.type = 'button';
+        expand.className = 'plc-expand';
+        expand.dataset.chartKey = `matrix:${spec.key}`;
+        expand.title = 'הגדלה';
+        expand.setAttribute('aria-label', `הגדלת הגרף ${spec.title}`);
+        expand.textContent = '⤢';
+        titleEl.appendChild(expand);
+
         const chartHost = document.createElement('div');
         chartHost.className = 'chart-host';
         const canvas = document.createElement('canvas');
@@ -12508,6 +12617,7 @@ function renderDraftMatrices(teamAggregates) {
         // Create improved matrix chart
         const configChart = getMatrixChartConfig(data, spec.xLabel, spec.yLabel, spec.quads);
         state.draft.charts.matrix[spec.key] = new Chart(canvas.getContext('2d'), configChart);
+        registerDraftChart(`matrix:${spec.key}`, spec.title, configChart);
     });
 }
 
@@ -13272,7 +13382,7 @@ function chartAxis(text) {
     return {
         title: { display: true, text, font: { weight: 'bold', size: 12 }, color: '#64748b' },
         grid: { color: 'rgba(0,0,0,0.05)' },
-        ticks: { color: '#94a3b8', font: { size: 11 }, callback: ltrTick }
+        ticks: { color: '#94a3b8', font: { size: 8.8 }, callback: ltrTick }
     };
 }
 
@@ -13902,7 +14012,7 @@ function buildSignalSpreadChart(data) {
                     min: -0.6, max: columns.length - 0.4,
                     grid: { display: false },
                     ticks: {
-                        color: '#475569', font: { size: 10.5, weight: 'bold' },
+                        color: '#475569', font: { size: 8.4, weight: 'bold' },
                         // One tick per column, at the column's own centre. autoSkip
                         // would drop labels on a narrow card and leave dots above a
                         // blank axis, which is worse than a crowded one.
@@ -17893,7 +18003,7 @@ function renderAllTeamsTrendChart(teamAggregates, mode = 'cumulative', highlight
                     max: suggestedMax,
                     grid: { color: '#eef2f7' },
                     ticks: {
-                        font: { size: 12, weight: '600' },
+                        font: { size: 9.6, weight: '600' },
                         color: '#5d6b82',
                         padding: 8
                     }
@@ -17901,7 +18011,7 @@ function renderAllTeamsTrendChart(teamAggregates, mode = 'cumulative', highlight
                 x: {
                     grid: { display: false },
                     ticks: {
-                        font: { size: 11, weight: '600' },
+                        font: { size: 8.8, weight: '600' },
                         color: '#5d6b82'
                     }
                 }

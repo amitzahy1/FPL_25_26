@@ -11,9 +11,9 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link rel="stylesheet"
         href="https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;700;800;900&family=Rubik:wght@400;500;600;700;800;900&display=swap">
-    <link rel="stylesheet" href="style.css?v=2026.08.31.360">
-    <link rel="stylesheet" href="mobile.css?v=2026.08.31.360">
-    <link rel="stylesheet" href="draft.css?v=2026.08.31.360">
+    <link rel="stylesheet" href="style.css?v=2026.08.31.361">
+    <link rel="stylesheet" href="mobile.css?v=2026.08.31.361">
+    <link rel="stylesheet" href="draft.css?v=2026.08.31.361">
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.5.1"></script>
     <script
         src="https://cdnjs.cloudflare.com/ajax/libs/chartjs-plugin-annotation/2.2.1/chartjs-plugin-annotation.min.js"></script>
@@ -765,6 +765,22 @@
         <button type="button" class="dnav-mb" data-tab="analytics"><span>📈</span>אנליטיקס</button>
     </nav>
 
+    <!-- EXPANDED DRAFT CHART
+         Every analytics and matrix card can be opened full-screen. The players
+         tab has its own viewer (#chartFull below) built around CHART_SPECS; the
+         league's charts are built elsewhere and carry no spec, so they get this
+         one, which redraws whatever config the card was drawn from. -->
+    <div class="dcf" id="draftChartFull" hidden>
+        <div class="dcf-bar">
+            <h2 class="dcf-title" id="draftChartFullTitle"></h2>
+            <button type="button" class="dcf-close" id="draftChartFullClose"
+                aria-label="סגירה">✕</button>
+        </div>
+        <div class="dcf-body">
+            <canvas id="draftChartFullCanvas"></canvas>
+        </div>
+    </div>
+
     <!-- FULLSCREEN CHART VIEWER
          A 500-point scatter in a 260px card on a 360px screen is a thumbnail,
          not a chart. Tapping the ⤢ on any card redraws that same chart — same
@@ -820,7 +836,7 @@
     <!-- Version query is bumped by scripts/stamp-version.mjs on every commit
          (npm run stamp). It was left at 4.0.0 for months, so returning
          visitors kept running a cached script.js and never saw fixes. -->
-    <script src="script.js?v=2026.08.31.360" defer></script>
+    <script src="script.js?v=2026.08.31.361" defer></script>
 </body>
 
 </html>

@@ -630,16 +630,45 @@ body.tab-draft {
 
 /* ---- grids: auto-fit everywhere, so a card never gets a column it
         cannot fill (the analytics grid was pinned at four) ---- */
+/* Four to a row, not five.
+   auto-fit with a 280px floor fitted five columns into 1500px and each chart
+   got 280px of canvas for five bars and five rotated team names. A fixed count
+   trades a little emptiness at the far end for a chart you can actually read,
+   and steps down on narrower screens rather than shrinking further. */
 #draftTabContent .analytics-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    grid-template-columns: repeat(4, minmax(0, 1fr));
     gap: 14px;
+}
+
+@media (max-width: 1200px) {
+    #draftTabContent .analytics-grid {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+}
+
+@media (max-width: 900px) {
+    #draftTabContent .analytics-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+@media (max-width: 600px) {
+    #draftTabContent .analytics-grid {
+        grid-template-columns: 1fr;
+    }
 }
 
 #draftTabContent .matrix-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 14px;
+}
+
+@media (max-width: 900px) {
+    #draftTabContent .matrix-grid {
+        grid-template-columns: 1fr;
+    }
 }
 
 #draftTabContent .matrix-card {
@@ -1191,4 +1220,131 @@ body.tab-draft {
 #draftTabContent .table-container {
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
+}
+
+/* ============================================================
+   Expanding a league chart
+   ============================================================ */
+
+/* The affordance sits in the card's own header, at the end of the line, and
+   only firms up on hover — it should be findable, not loud. */
+#draftTabContent .plc-expand {
+    margin-inline-start: auto;
+    flex: none;
+    width: 26px;
+    height: 26px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid var(--c-line);
+    border-radius: 8px;
+    background: var(--c-card);
+    font: inherit;
+    font-size: 13px;
+    line-height: 1;
+    color: var(--c-muted);
+    cursor: pointer;
+    opacity: .55;
+    transition: opacity .15s ease, border-color .15s ease, color .15s ease;
+}
+
+#draftTabContent .analytics-card:hover .plc-expand,
+#draftTabContent .matrix-card:hover .plc-expand,
+#draftTabContent .plc-expand:focus-visible {
+    opacity: 1;
+}
+
+#draftTabContent .plc-expand:hover {
+    border-color: var(--c-blue);
+    color: var(--c-blue);
+}
+
+#draftTabContent .plc-expand:focus-visible {
+    outline: 2px solid var(--c-blue);
+    outline-offset: 2px;
+}
+
+/* The card headers have to allow the button its place at the end. */
+#draftTabContent .analytics-card-header,
+#draftTabContent .matrix-card .title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+/* The overlay itself. Fixed above everything except a modal, and its own
+   flex column so the canvas gets whatever height is left over. */
+.dcf {
+    position: fixed;
+    inset: 0;
+    z-index: 1150;
+    display: flex;
+    flex-direction: column;
+    background: var(--c-bg);
+    padding: 12px 16px 16px;
+}
+
+.dcf[hidden] {
+    display: none;
+}
+
+.dcf-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    flex: none;
+    padding-bottom: 10px;
+}
+
+.dcf-title {
+    margin: 0;
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--c-ink);
+}
+
+.dcf-close {
+    flex: none;
+    width: 36px;
+    height: 36px;
+    border: 1px solid var(--c-line);
+    border-radius: var(--c-radius-xs);
+    background: var(--c-card);
+    font: inherit;
+    font-size: 16px;
+    line-height: 1;
+    color: var(--c-muted);
+    cursor: pointer;
+}
+
+.dcf-close:hover {
+    border-color: var(--c-blue);
+    color: var(--c-blue);
+}
+
+/* min-height:0 is what lets the canvas shrink inside the flex column instead
+   of pushing the bar off the top. */
+.dcf-body {
+    flex: 1;
+    min-height: 0;
+    background: var(--c-card);
+    border-radius: var(--c-radius);
+    box-shadow: var(--c-shadow);
+    padding: 16px;
+}
+
+.dcf-body canvas {
+    width: 100% !important;
+    height: 100% !important;
+}
+
+@media (max-width: 768px) {
+    .dcf {
+        padding: 10px 10px 12px;
+    }
+
+    .dcf-title {
+        font-size: 14px;
+    }
 }
