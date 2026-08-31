@@ -1,6 +1,11 @@
 /*
  * draft.css — the draft-league tab's design layer ("Clubhouse").
  *
+ * Type scale: 11 · 12 · 13 · 14 · 15 · 16 · 19 · 22. Half-steps round DOWN,
+ * because almost every text surface here is a nowrap chip or a fixed-track
+ * cell, where the failure mode of a size change is a clipped label rather than
+ * a loose one.
+ *
  * A modern sports-app surface: a soft blue-grey canvas, white rounded cards
  * with a two-layer shadow, one strong blue accent, and colored position tags.
  *
@@ -220,14 +225,14 @@ body.tab-draft {
     align-items: center;
     gap: 8px;
     margin: 0 0 12px;
-    font-size: 15.5px;
+    font-size: 15px;
     font-weight: 700;
     color: var(--c-ink);
 }
 
 #draftTabContent .plc-sub {
     margin: -6px 0 14px;
-    font-size: 12.5px;
+    font-size: 13px;
     font-weight: 400;
     color: var(--c-muted);
 }
@@ -235,7 +240,7 @@ body.tab-draft {
 #draftTabContent .plc-empty {
     padding: 36px 16px;
     text-align: center;
-    font-size: 13.5px;
+    font-size: 13px;
     font-weight: 500;
     color: var(--c-muted);
     background: var(--c-card);
@@ -271,7 +276,7 @@ body.tab-draft {
 #draftTabContent .draft-table thead th {
     background: var(--c-card);
     color: var(--c-muted);
-    font-size: 11.5px;
+    font-size: 12px;
     font-weight: 600;
     padding: 11px 8px;
     text-align: center;
@@ -287,7 +292,7 @@ body.tab-draft {
 
 #draftTabContent .draft-table tbody td {
     padding: 11px 8px;
-    font-size: 13.5px;
+    font-size: 13px;
     text-align: center;
     border: none;
     border-bottom: 1px solid var(--c-line);
@@ -326,7 +331,7 @@ body.tab-draft {
 }
 
 #draftTabContent .plc-team-logo {
-    font-size: 17px;
+    font-size: 16px;
     margin-inline-end: 6px;
 }
 
@@ -421,7 +426,7 @@ body.tab-draft {
 }
 
 #draftTabContent .plc-kpi-value {
-    font-size: 21px;
+    font-size: 22px;
     font-weight: 800;
     color: var(--c-ink);
     font-variant-numeric: tabular-nums;
@@ -520,7 +525,7 @@ body.tab-draft {
     }
 
     #draftTabContent .plc-kpi-value {
-        font-size: 18px;
+        font-size: 19px;
     }
 
     #draftTabContent .plc-card {
@@ -570,7 +575,7 @@ body.tab-draft {
         border-radius: var(--c-radius-xs);
         background: none;
         font: inherit;
-        font-size: 10.5px;
+        font-size: 11px;
         font-weight: 500;
         color: var(--c-muted);
         cursor: pointer;
@@ -683,7 +688,7 @@ body.tab-draft {
 }
 
 #draftTabContent .feed-stat-value {
-    font-size: 20px;
+    font-size: 19px;
     font-weight: 800;
     color: var(--c-ink);
     font-variant-numeric: tabular-nums;
@@ -703,7 +708,7 @@ body.tab-draft {
     border-radius: 999px;
     background: var(--c-blue-soft);
     color: var(--c-blue);
-    font-size: 11.5px;
+    font-size: 12px;
     font-weight: 600;
 }
 
@@ -716,7 +721,7 @@ body.tab-draft {
     flex-wrap: wrap;
     padding: 10px 4px;
     border-bottom: 1px solid var(--c-line);
-    font-size: 13.5px;
+    font-size: 13px;
 }
 
 #draftTabContent .feed-item:last-child,
@@ -733,7 +738,7 @@ body.tab-draft {
 #draftTabContent .board-meta,
 #draftTabContent .board-team,
 #draftTabContent .overlap-label {
-    font-size: 11.5px;
+    font-size: 12px;
     font-weight: 500;
     color: var(--c-muted);
 }
@@ -741,7 +746,7 @@ body.tab-draft {
 #draftTabContent .feed-empty {
     padding: 30px 16px;
     text-align: center;
-    font-size: 13.5px;
+    font-size: 13px;
     color: var(--c-muted);
 }
 
@@ -760,14 +765,14 @@ body.tab-draft {
 
 /* ---- recommendations ---- */
 #draftTabContent .rec-header {
-    font-size: 15.5px;
+    font-size: 15px;
     font-weight: 700;
     color: var(--c-ink);
 }
 
 #draftTabContent .rec-subtitle,
 #draftTabContent .rec-reason {
-    font-size: 12.5px;
+    font-size: 13px;
     font-weight: 400;
     color: var(--c-muted);
     line-height: 1.6;
@@ -782,7 +787,7 @@ body.tab-draft {
 #draftTabContent .rec-reason-row td {
     padding: 10px 8px;
     border-bottom: 1px solid var(--c-line);
-    font-size: 13.5px;
+    font-size: 13px;
 }
 
 #draftTabContent .rec-player-name {
@@ -811,14 +816,14 @@ body.tab-draft {
 }
 
 #draftTabContent .h2h-team-name {
-    font-size: 13.5px;
+    font-size: 13px;
     font-weight: 600;
     color: var(--c-ink);
 }
 
 #draftTabContent .h2h-gw,
 #draftTabContent .h2h-vs {
-    font-size: 11.5px;
+    font-size: 12px;
     font-weight: 500;
     color: var(--c-muted);
 }
@@ -854,7 +859,7 @@ body.tab-draft {
     padding: 13px 16px;
     border: none;
     border-radius: var(--c-radius-sm);
-    font-size: 13.5px;
+    font-size: 13px;
     font-weight: 500;
     line-height: 1.6;
     margin-bottom: 14px;
@@ -917,7 +922,7 @@ body.tab-draft {
     border-radius: var(--c-radius-xs);
     background: var(--c-card);
     font: inherit;
-    font-size: 13.5px;
+    font-size: 13px;
     font-weight: 600;
     color: var(--c-muted);
     cursor: pointer;
@@ -936,7 +941,7 @@ body.tab-draft {
     border-radius: var(--c-radius-xs);
     background: var(--c-card);
     font: inherit;
-    font-size: 13.5px;
+    font-size: 13px;
     font-weight: 500;
     color: var(--c-ink);
     cursor: pointer;
@@ -983,7 +988,7 @@ body.tab-draft {
 #draftTabContent .draft-comparison-table th {
     background: var(--c-card);
     color: var(--c-muted);
-    font-size: 11.5px;
+    font-size: 12px;
     font-weight: 600;
     padding: 10px 8px;
     border-bottom: 1px solid var(--c-line);
@@ -991,7 +996,7 @@ body.tab-draft {
 
 #draftTabContent .draft-comparison-table td {
     padding: 10px 8px;
-    font-size: 13.5px;
+    font-size: 13px;
     border-bottom: 1px solid var(--c-line);
     font-variant-numeric: tabular-nums;
 }
@@ -1002,14 +1007,14 @@ body.tab-draft {
     align-items: center;
     gap: 8px;
     margin: 0 0 12px;
-    font-size: 15.5px;
+    font-size: 15px;
     font-weight: 700;
     color: var(--c-ink);
 }
 
 #draftTabContent .section-sub {
     margin: -6px 0 14px;
-    font-size: 12.5px;
+    font-size: 13px;
     color: var(--c-muted);
 }
 
@@ -1030,7 +1035,7 @@ body.tab-draft {
 
 #draftTabContent .plc-luck-word {
     display: block;
-    font-size: 10.5px;
+    font-size: 11px;
     font-weight: 500;
     color: var(--c-muted);
 }
@@ -1059,7 +1064,7 @@ body.tab-draft {
 
 #draftTabContent .plc-record-icon {
     grid-area: icon;
-    font-size: 24px;
+    font-size: 22px;
     line-height: 1;
 }
 
@@ -1136,7 +1141,7 @@ body.tab-draft {
 }
 
 #draftTabContent .plc-live-team {
-    font-size: 13.5px;
+    font-size: 13px;
     font-weight: 500;
     color: var(--c-muted);
     overflow: hidden;
