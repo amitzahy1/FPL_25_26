@@ -12831,18 +12831,24 @@ function applyNavHash() {
     const m = location.hash.match(NAV_HASH_RE);
     if (!m) return false;
     _navFromHash = true;
+    let settled = null;
     try {
         if (m[1] === 'players') {
             showTab('players');
         } else {
-            // An explicit section is a destination: the pre-draft auto-jump to
-            // the room must not stomp it once the league finishes loading.
-            if (m[2]) state.draft._roomSeen = true;
             showTab('draft');
-            if (m[2]) draftNavigate(m[2], m[3]);
+            if (m[2]) settled = draftNavigate(m[2], m[3]);
         }
     } finally {
         _navFromHash = false;
+    }
+    // A link to a section that no longer exists still resolves — draftNavigate
+    // falls back to the overview — but the address bar kept the dead name,
+    // because writes are suppressed while a hash is being applied. Correct it
+    // once, in place, so the URL says what the page is showing.
+    if (settled) {
+        const canonical = `#draft/${settled.section}/${settled.segment}`;
+        if (location.hash !== canonical) window.history.replaceState(null, '', canonical);
     }
     return true;
 }
@@ -12882,21 +12888,17 @@ function showTab(tabName) {
 
         // Always load draft league data when switching to this tab
         loadDraftLeague().then(() => {
-            // Land on the room while the draft is still ahead. Every other
-            // sub-tab is empty by construction until somebody owns somebody —
-            // no standings, no rosters, no head-to-heads — so opening on מבט על
-            // meant the tab read as broken on precisely the days it matters.
-            if (draftStatus() !== 'post' && !state.draft._roomSeen) {
-                state.draft._roomSeen = true;
-                switchDraftTab('room');
-            }
+            // No section steals the landing: מבט על is the first tab and stays
+            // the one you get. Ownership keeps refreshing while the tab is open,
+            // because the players page reads that set too.
+            startOwnershipPolling();
         }).catch(err => {
             console.error("❌ Failed to load draft league:", err);
             showToast('שגיאה', 'לא ניתן לטעון את ליגת הדראפט כרגע', 'error');
         });
     } else {
-        // Leaving the draft tab entirely: nothing in the room is on screen.
-        stopDraftRoomPolling();
+        // Nothing from the league is on screen, so stop asking about it.
+        stopOwnershipPolling();
         stopGwLivePolling();
     }
 }
@@ -15234,9 +15236,11 @@ const DRAFT_SQUAD_SIZE = Object.values(DRAFT_SQUAD).reduce((a, b) => a + b, 0);
 // How often the room asks the league what has happened, while a draft is running.
 // The pick limit is 90 seconds, so this is well inside one pick — a player is
 // struck off long before the reader could act on stale information.
-const DRAFT_POLL_MS = 15000;
+const OWNERSHIP_POLL_MS = 15000;
 
-const _draftRoom = { timer: null, polling: false, lastPickCount: -1, position: null, q: '', hideTaken: false };
+/* The ownership refresh's own bookkeeping. Outlived the draft-room page it was
+   named for, because the players page reads what it writes. */
+const _ownership = { timer: null, lastPickCount: -1 };
 
 /** The league's own view of where the draft is: 'pre', 'active' or 'post'. */
 function draftStatus() {
@@ -15244,20 +15248,22 @@ function draftStatus() {
     return (league && league.draft_status) || null;
 }
 
-/** When it starts. Returned as a Date so the countdown has something to subtract. */
-function draftDateTime() {
-    const league = state.draft.details && state.draft.details.league;
-    const raw = league && (league.draft_dt || (league.drafts && league.drafts[0]
-        && league.drafts[0].draft_dt));
-    if (!raw) return null;
-    const at = new Date(raw);
-    return Number.isNaN(at.getTime()) ? null : at;
-}
 
-/** The picks made so far, oldest first. Empty before the draft, which is not an error. */
+/**
+ * The picks made so far, oldest first. Empty before the draft, which is not an
+ * error.
+ *
+ * Tolerant of both shapes on purpose, because two writers disagreed for
+ * months: loadDraftChoices stored `data.choices` (a bare array) while the room's
+ * poll stored `data` (the wrapper). This function only understood the wrapper,
+ * so after a normal page load it returned [] — which silently disabled the
+ * "has the draft happened" guard in syncPreDraftNote — and
+ * renderDraftBoardHistory only understood the array, so the poll broke that
+ * instead. Whichever one wrote last, something was wrong.
+ */
 function draftChoices() {
     const raw = state.draft.choices;
-    const list = (raw && raw.choices) || [];
+    const list = Array.isArray(raw) ? raw : (raw && raw.choices) || [];
     return [...list].sort((a, b) => (a.pick || 0) - (b.pick || 0) || (a.index || 0) - (b.index || 0));
 }
 
@@ -15345,10 +15351,6 @@ function draftRoomPlayer(elementId) {
     return _draftRoomIndex.byId.get(fplId) || null;
 }
 
-/** Who took him, by team name. */
-function draftRoomOwner(entryId) {
-    return state.draft.entryIdToTeamName.get(entryId) || '';
-}
 
 /**
  * At most this many tiers on a column. Tiers are a reading aid, not a
@@ -15434,17 +15436,6 @@ function draftRoomScarcity() {
 
 /* ------------------------------ rendering -------------------------------- */
 
-/** "בעוד 2 ימים ו-4 שעות", or how long ago it started. */
-function draftCountdownText(at) {
-    const ms = at.getTime() - Date.now();
-    if (ms <= 0) return null;
-    const mins = Math.round(ms / 60000);
-    const days = Math.floor(mins / 1440);
-    const hours = Math.floor((mins % 1440) / 60);
-    if (days) return `בעוד ${days === 1 ? 'יום' : `${days} ימים`}${hours ? ` ו-${hours} שעות` : ''}`;
-    if (hours) return `בעוד ${hours === 1 ? 'שעה' : `${hours} שעות`}${mins % 60 ? ` ו-${mins % 60} דק׳` : ''}`;
-    return `בעוד ${mins} דק׳`;
-}
 
 /**
  * "נשאר מגן אחד" and "נשארו 3 מגנים" — Hebrew does not let a count and a noun be
@@ -15459,224 +15450,57 @@ function scarcityWord(pos, left) {
 }
 
 /** Singular position names for compact chips ("קשר", not "קשרים"). */
-const POSITION_SINGLE = { GKP: 'שוער', DEF: 'מגן', MID: 'קשר', FWD: 'חלוץ' };
 
-/** The header: where the draft is and where you are in it, as scannable chips. */
-function draftRoomHeaderHtml() {
-    const status = draftStatus();
-    const at = draftDateTime();
-    const made = draftChoices().length;
-    const entries = (state.draft.details && state.draft.details.league_entries) || [];
-    const capacity = (state.draft.details && state.draft.details.league
-        && state.draft.details.league.max_entries) || entries.length;
-    const me = myDraftEntryId();
-    const total = entries.length * DRAFT_SQUAD_SIZE;
 
-    let pill = '';
-    const chips = [];
-    if (status === 'post' || (made && made >= capacity * DRAFT_SQUAD_SIZE)) {
-        pill = '<span class="drm-pill drm-pill-post">הדראפט הסתיים</span>';
-        chips.push(['פיקים', String(made)], ['מכאן', 'שוק החופשיים']);
-    } else if (made > 0) {
-        const round = Math.floor(made / Math.max(1, entries.length)) + 1;
-        pill = '<span class="drm-pill drm-pill-live">● LIVE</span>';
-        chips.push(['סבב', String(round)], ['נבחרו', `${made}/${total}`]);
-        const mine = myUpcomingPicks(me, 1);
-        if (mine.length) {
-            chips.push(['הפיק הבא שלך', `#${mine[0].pick}`, `בעוד ${mine[0].pick - made - 1} פיקים`]);
-        } else {
-            chips.push(['הפיק הבא שלך', '—', 'ייוודע בסוף הסבב הראשון']);
-        }
-    } else if (at) {
-        pill = '<span class="drm-pill drm-pill-pre">לקראת הדראפט</span>';
-        const countdown = draftCountdownText(at);
-        const when = at.toLocaleString('he-IL', { weekday: 'long', day: 'numeric', month: 'numeric' });
-        const hour = at.toLocaleString('he-IL', { hour: '2-digit', minute: '2-digit' });
-        if (countdown) chips.push(['מתחיל', countdown]);
-        chips.push(['מתי', `${when} · ${hour}`], ['נרשמו', `${entries.length}/${capacity} מנג׳רים`]);
-    } else {
-        pill = '<span class="drm-pill drm-pill-pre">הדראפט טרם התחיל</span>';
-    }
 
-    const chipsHtml = chips.map(([label, value, sub]) => `
-        <div class="drm-chip">
-            <span class="drm-chip-label">${escapeHtml(label)}</span>
-            <span class="drm-chip-value">${escapeHtml(value)}</span>
-            ${sub ? `<span class="drm-chip-sub">${escapeHtml(sub)}</span>` : ''}
-        </div>`).join('');
 
-    // My squad, position by position, once there is a squad to track.
-    const squad = made > 0 && me ? `
-        <div class="drm-squad" title="כמה מכל עמדה כבר לקחת">
-            ${draftSquadGaps(me).map(g => `
-                <span class="drm-squad-chip${g.missing ? '' : ' is-full'}">
-                    ${escapeHtml(POSITION_LABELS[g.pos] || g.pos)}
-                    <b>${g.have}/${g.want}</b>${g.missing ? '' : ' ✓'}
-                </span>`).join('')}
-        </div>` : '';
-
-    const scarce = draftRoomScarcity().filter(s => s.size && s.left > 0 && s.left <= 3);
-    const warning = scarce.length
-        ? `<div class="drm-warn">⚠️ ${scarce.map(s =>
-            `${scarcityWord(s.pos, s.left)} בדרג העליון`).join(' · ')}</div>`
-        : '';
-
-    return `
-        <header class="drm-head">
-            <div class="drm-head-row">
-                <h2 class="drm-title">חדר הדראפט</h2>
-                ${pill}
-            </div>
-            ${chipsHtml ? `<div class="drm-chips">${chipsHtml}</div>` : ''}
-            ${squad}
-        </header>
-        ${warning}`;
-}
-
-/** The five most valuable players still on the board, across all positions. */
-function draftRoomBestHtml() {
-    const pool = ['GKP', 'DEF', 'MID', 'FWD'].flatMap(pos =>
-        draftRoomBoard(pos).filter(r => !r.owner).slice(0, 8).map(r => ({ ...r, pos })));
-    pool.sort((a, b) => b.value - a.value);
-    const top = pool.slice(0, 5);
-    if (!top.length) return '';
-    return `
-        <h3 class="drm-best-title">הכי שווים על הלוח עכשיו</h3>
-        <div class="drm-best-row">
-            ${top.map((r, i) => `
-                <div class="drm-best-card" data-pos="${r.pos}">
-                    <span class="drm-best-rank">${i + 1}</span>
-                    <span class="drm-best-pos">${escapeHtml(POSITION_SINGLE[r.pos] || r.pos)}</span>
-                    <span class="drm-best-name" title="${escapeHtml(r.p.team_name || '')}">${escapeHtml(r.p.web_name)}</span>
-                    <span class="drm-best-team">${escapeHtml(teamShort(r.p))}</span>
-                    <span class="drm-best-val" title="נקודות צפויות עד סוף העונה">${Math.round(r.value)}</span>
-                </div>`).join('')}
-        </div>`;
-}
-
-/** One position column, filtered by the room's search box and taken-toggle. */
-function draftRoomColumnHtml(position) {
-    const board = draftRoomBoard(position);
-    const label = POSITION_LABELS[position] || position;
-    if (!board.length) {
-        return `<section class="drm-col" data-pos="${position}">
-            <h3 class="drm-col-head"><span>${escapeHtml(label)}</span></h3>
-            <p class="drm-empty">אין עדיין מספיק נתונים לדרג את העמדה הזו</p></section>`;
-    }
-
-    const q = _draftRoom.q;
-    const rows = board.filter(r => {
-        if (_draftRoom.hideTaken && r.owner) return false;
-        if (!q) return true;
-        return `${r.p.web_name} ${r.p.team_name || ''} ${teamShort(r.p)}`.toLowerCase().includes(q);
-    });
-    const freeLeft = board.filter(r => !r.owner).length;
-
-    let lastTier = 1;
-    const body = rows.map(r => {
-        const owner = r.owner ? draftRoomOwner(r.owner) : '';
-        // Tier chips are a shape of the whole column; under a search they would
-        // label an arbitrary subset, so they step aside for the results.
-        const tierChip = !q && r.tier > lastTier
-            ? `<li class="drm-tier" aria-hidden="true"><span>דרג ${r.tier}</span></li>` : '';
-        lastTier = Math.max(lastTier, r.tier);
-        return `${tierChip}
-            <li class="drm-row${r.owner ? ' is-taken' : ''}">
-                <span class="drm-rank">${r.rank}</span>
-                <div class="drm-who">
-                    <span class="drm-name" title="${escapeHtml(r.p.team_name || '')}">${escapeHtml(r.p.web_name)}</span>
-                    <span class="drm-meta">${escapeHtml(teamShort(r.p))}${owner ? ` · נלקח ע"י ${escapeHtml(owner)}` : ''}</span>
-                </div>
-                <span class="drm-val" title="נקודות צפויות עד סוף העונה">${Math.round(r.value)}</span>
-            </li>`;
-    }).join('');
-
-    return `
-        <section class="drm-col" data-pos="${position}">
-            <h3 class="drm-col-head"><span>${escapeHtml(label)}</span>
-                <span class="drm-col-count">${freeLeft} פנויים</span></h3>
-            <ol class="drm-list">${body ||
-                `<li class="drm-empty">${q ? 'אין תוצאות בעמדה הזו' : 'הכל נלקח'}</li>`}</ol>
-        </section>`;
-}
-
-/** The boards alone — everything below the tools, redrawn per poll and per filter. */
-function renderDraftRoomBoards() {
-    const best = document.getElementById('drmBest');
-    if (best) best.innerHTML = draftRoomBestHtml();
-    const boards = document.getElementById('drmBoards');
-    if (boards) boards.innerHTML = ['GKP', 'DEF', 'MID', 'FWD'].map(draftRoomColumnHtml).join('');
-}
-
-/**
- * The whole room.
- *
- * The shell — search box, taken-toggle, note — is built once and kept, so the
- * fifteen-second poll never steals focus from a search mid-keystroke. Only the
- * header, the best-available strip and the boards are redrawn per poll.
- */
-function renderDraftRoom() {
-    const host = document.getElementById('draft-room');
-    if (!host) return;
-
-    if (!state.draft.details) {
-        host.innerHTML = '<p class="drm-empty">טוען את נתוני הליגה…</p>';
-        return;
-    }
-
-    if (!document.getElementById('drmShell')) {
-        host.innerHTML = `
-            <div id="drmShell">
-                <div id="drmHeader"></div>
-                <div class="drm-tools">
-                    <input id="drmSearch" class="drm-search" type="search" inputmode="search"
-                        placeholder="🔍 חיפוש שחקן מהיר…" autocomplete="off">
-                    <button type="button" id="drmHideTaken" class="drm-toggle"
-                        aria-pressed="false">הסתר שנבחרו</button>
-                </div>
-                <div id="drmBest"></div>
-                <div id="drmBoards" class="drm-grid"></div>
-                <p class="drm-note">מדורג לפי נקודות צפויות עד סוף העונה — אותו מדד של
-                    "הכי שווים" בעמוד השחקנים. קו <b>דרג</b> מסמן נפילת רמה: פער גדול
-                    מהרגיל לשחקן הבא, כלומר הסיבה לקחת עכשיו ולא בסבב הבא.</p>
-            </div>`;
-        document.getElementById('drmSearch').addEventListener('input', e => {
-            _draftRoom.q = e.target.value.trim().toLowerCase();
-            renderDraftRoomBoards();
-        });
-        document.getElementById('drmHideTaken').addEventListener('click', e => {
-            _draftRoom.hideTaken = !_draftRoom.hideTaken;
-            e.currentTarget.classList.toggle('active', _draftRoom.hideTaken);
-            e.currentTarget.setAttribute('aria-pressed', _draftRoom.hideTaken ? 'true' : 'false');
-            renderDraftRoomBoards();
-        });
-    }
-
-    document.getElementById('drmHeader').innerHTML = draftRoomHeaderHtml();
-    renderDraftRoomBoards();
-}
 
 /* ------------------------------- polling --------------------------------- */
 
 /**
- * Ask the league what has happened since last time.
+ * Ask the league who owns whom, and refresh everything downstream of the answer.
  *
- * Uncached (a zero-minute duration), because during a draft a 30-minute cache is
- * the difference between a board and a photograph of one. Everything else in the
- * app keeps its own cache; only this one call is live.
+ * Uncached (a zero-minute duration): loadDraftElementStatus covers the same
+ * ground on a five-minute cache, which is fine for a settled league and useless
+ * on a day when picks are landing. It also guards with `if (owned.size > 0)`, so
+ * it can never clear a set that has gone stale, and this can.
  *
- * Writing to ownedElementIds is deliberate and is most of the value: the players
- * table, the שחקנים חופשיים filter and the קח עכשיו verdict all read that set, so
- * the entire site follows the draft without any of them knowing about this file.
+ * The write to ownedElementIds is most of the value and is why this outlived the
+ * draft-room page it used to belong to: the players table, the שחקנים חופשיים
+ * filter and the קח עכשיו verdict all read that set, so the whole site follows
+ * the league without any of them knowing about this function.
  */
-async function pollDraftRoom() {
+/**
+ * Keep ownership fresh while the league tab is open.
+ *
+ * Same contract the draft room's poll kept, minus the room: a background timer
+ * hitting a public proxy every fifteen seconds for a league nobody is looking at
+ * is rude, so it starts on entering the tab and stops on leaving it or on the
+ * window going to the background.
+ */
+function startOwnershipPolling() {
+    stopOwnershipPolling();
+    refreshDraftOwnership();
+    _ownership.timer = setInterval(() => {
+        if (document.hidden) return;
+        refreshDraftOwnership();
+    }, OWNERSHIP_POLL_MS);
+}
+
+function stopOwnershipPolling() {
+    if (_ownership.timer) clearInterval(_ownership.timer);
+    _ownership.timer = null;
+}
+
+async function refreshDraftOwnership() {
     const leagueId = state.draft.leagueId;
     if (!leagueId) return;
     const url = config.corsProxy + encodeURIComponent(config.urls.draftChoices(leagueId));
     try {
         const data = await fetchWithCache(url, `fpl_draft_choices_live_${leagueId}`, 0);
         if (!data) return;
-        state.draft.choices = data;
+        // The array, matching loadDraftChoices — see draftChoices().
+        state.draft.choices = data.choices || [];
 
         // element_status rides along on the same response, so ownership costs no
         // second request.
@@ -15697,43 +15521,25 @@ async function pollDraftRoom() {
             state.draft.draftHasHappened = owned.size > 0;
         }
 
+        // Only redraw when something actually moved: this runs on a timer, and
+        // recomputing the metrics is the expensive half.
         const made = draftChoices().length;
-        if (made === _draftRoom.lastPickCount) return;
-        _draftRoom.lastPickCount = made;
+        if (made === _ownership.lastPickCount) return;
+        _ownership.lastPickCount = made;
 
         // Ownership moves replacement level, which moves VORP and every shortlist.
         const processed = (state.allPlayersData[state.currentDataSource] || {}).processed;
         if (processed) computeDraftMetrics(processed);
         invalidateSignals();
-        renderDraftRoom();
         renderTable();
         renderDraftBoard();
         syncFreeAgentButton();
     } catch (e) {
-        console.warn('draft room: could not refresh the picks', e.message);
+        console.warn('ownership: could not refresh the picks', e.message);
     }
 }
 
-/**
- * Poll only while it can tell you something: the room on screen, and a draft that
- * has not finished. A finished draft is a fixed list, and a background timer
- * hitting a public proxy every fifteen seconds for it is rude and pointless.
- */
-function startDraftRoomPolling() {
-    stopDraftRoomPolling();
-    if (draftStatus() === 'post') return;
-    _draftRoom.polling = true;
-    _draftRoom.timer = setInterval(() => {
-        if (document.hidden) return;
-        pollDraftRoom();
-    }, DRAFT_POLL_MS);
-}
 
-function stopDraftRoomPolling() {
-    if (_draftRoom.timer) clearInterval(_draftRoom.timer);
-    _draftRoom.timer = null;
-    _draftRoom.polling = false;
-}
 /**
  * One line above the sub-content, on the sub-tabs that cannot say anything yet.
  *
@@ -15745,17 +15551,16 @@ function stopDraftRoomPolling() {
 function syncPreDraftNote(tabId) {
     const host = document.getElementById(`draft-${tabId}`);
     document.querySelectorAll('.dr-predraft').forEach(el => el.remove());
-    if (!host || tabId === 'room') return;
+    if (!host) return;
     if (!state.draft.details || draftStatus() === 'post') return;
     if (draftChoices().length) return;
 
-    const at = draftDateTime();
-    const when = at ? draftCountdownText(at) : null;
     const note = document.createElement('div');
     note.className = 'dr-predraft';
-    note.innerHTML = `${escapeHtml(`הדראפט עוד לא נערך${when ? ` — ${when}` : ''},`)}
-        ${escapeHtml('ולכן אין כאן עדיין טבלה, סגלים או מפגשים. הלוח לקראת הדראפט נמצא ב')}
-        <button type="button" class="dr-predraft-link" onclick="switchDraftTab('room')">חדר הדראפט</button>`;
+    // No countdown and no date: the draft itself happens on the official
+    // Premier League site, so a clock here was answering a question nobody
+    // asks of this page.
+    note.textContent = 'הדראפט עוד לא נערך, ולכן אין כאן עדיין טבלה, סגלים או מפגשים.';
     host.prepend(note);
 }
 
@@ -15767,7 +15572,6 @@ function syncPreDraftNote(tabId) {
 // loadDraftLeague()'s container clears and the smoke test all navigate by the
 // names they always used. `def` is where a bare section navigation lands.
 const DRAFT_IA = {
-    room: { segments: ['room'], def: 'room' },
     overview: { segments: ['overview', 'standings'], def: 'overview' },
     gameweek: { segments: ['nextround', 'rival'], def: 'nextround' },
     market: { segments: ['market', 'market-moves', 'market-history'], def: 'market' },
@@ -15776,7 +15580,6 @@ const DRAFT_IA = {
 
 // Every pre-2026 sub-tab id → [section, segment].
 const LEGACY_DRAFT_TABS = {
-    room: ['room', 'room'],
     overview: ['overview', 'overview'],
     standings: ['overview', 'standings'],
     nextround: ['gameweek', 'nextround'],
@@ -16181,8 +15984,7 @@ function draftNavigate(section, segment, opts = {}) {
     if (!DRAFT_IA[section]) section = 'overview';
     if (!ia.segments.includes(segment)) segment = ia.def;
 
-    // One section on screen. The room's panel is the section itself.
-    const sectionElId = section === 'room' ? 'draft-room' : `draft-sec-${section}`;
+    const sectionElId = `draft-sec-${section}`;
     document.querySelectorAll('#draftTabContent .draft-section').forEach(el => {
         el.classList.toggle('active', el.id === sectionElId);
     });
@@ -16211,16 +16013,6 @@ function draftNavigate(section, segment, opts = {}) {
     // draft they render nothing, and a blank panel under a working navigation
     // reads as a broken page rather than as an accurate one.
     syncPreDraftNote(segment);
-
-    // The room is the only segment that keeps asking the server anything, so it
-    // starts and stops with its own visibility rather than running all session.
-    if (segment === 'room') {
-        renderDraftRoom();
-        pollDraftRoom();
-        startDraftRoomPolling();
-    } else {
-        stopDraftRoomPolling();
-    }
 
     // The live hub asks the server for scores, so it runs only while it is the
     // panel on screen — the same contract the draft room's poll keeps.
@@ -16251,6 +16043,7 @@ function draftNavigate(section, segment, opts = {}) {
     }
 
     writeNavHash(`#draft/${section}/${segment}`, opts.replace === true);
+    return { section, segment };
 }
 
 /**
@@ -16289,24 +16082,18 @@ function initHeaderTools() {
     });
 }
 
-// One delegated listener for all draft navigation surfaces. An explicit choice
-// also outranks the pre-draft auto-jump to the room (see showTab), so the jump
-// never stomps a click that happened while the league was still loading.
+// One delegated listener for all draft navigation surfaces.
 function initDraftNav() {
     document.addEventListener('click', e => {
         const nav = e.target.closest('.dnav-btn, .dnav-mb');
         if (nav && nav.dataset.tab) {
-            state.draft._roomSeen = true;
             draftNavigate(nav.dataset.tab, (DRAFT_IA[nav.dataset.tab] || {}).def);
             return;
         }
         const seg = e.target.closest('.plc-seg');
         if (seg && seg.dataset.seg) {
             const section = Object.keys(DRAFT_IA).find(s => DRAFT_IA[s].segments.includes(seg.dataset.seg));
-            if (section) {
-                state.draft._roomSeen = true;
-                draftNavigate(section, seg.dataset.seg);
-            }
+            if (section) draftNavigate(section, seg.dataset.seg);
         }
     });
 }

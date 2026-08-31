@@ -11,9 +11,9 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link rel="stylesheet"
         href="https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;700;800;900&family=Rubik:wght@400;500;600;700;800&display=swap">
-    <link rel="stylesheet" href="style.css?v=2026.08.31.354">
-    <link rel="stylesheet" href="mobile.css?v=2026.08.31.354">
-    <link rel="stylesheet" href="draft.css?v=2026.08.31.354">
+    <link rel="stylesheet" href="style.css?v=2026.08.31.355">
+    <link rel="stylesheet" href="mobile.css?v=2026.08.31.355">
+    <link rel="stylesheet" href="draft.css?v=2026.08.31.355">
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.5.1"></script>
     <script
         src="https://cdnjs.cloudflare.com/ajax/libs/chartjs-plugin-annotation/2.2.1/chartjs-plugin-annotation.min.js"></script>
@@ -534,8 +534,6 @@
                      deliberately no per-button onclick and no inline styling. -->
                 <div id="draftSubNav" class="draft-sub-nav-container">
                     <div class="draft-sub-nav" role="tablist" aria-label="ניווט ליגת הדראפט">
-                        <button type="button" class="dnav-btn" data-tab="room" role="tab"
-                            aria-selected="false" aria-controls="draft-room">🎯 חדר הדראפט</button>
                         <button type="button" class="dnav-btn active" data-tab="overview" role="tab"
                             aria-selected="true" aria-controls="draft-sec-overview">📊 מבט על</button>
                         <button type="button" class="dnav-btn" data-tab="gameweek" role="tab"
@@ -547,13 +545,9 @@
                     </div>
                 </div>
 
-                <!-- Five sections; the segment panels inside keep their legacy
+                <!-- Four sections; the segment panels inside keep their legacy
                      draft-* ids so switchDraftTab(legacy id), syncPreDraftNote()
                      and loadDraftLeague()'s container clears keep working. -->
-
-                <!-- The draft board on the night, and the waiver board after it.
-                     Everything in here is rendered by renderDraftRoom(). -->
-                <section id="draft-room" class="draft-section draft-sub-content"></section>
 
                 <section id="draft-sec-overview" class="draft-section active">
                     <div class="plc-segbar" role="tablist" aria-label="מבט על">
@@ -753,7 +747,6 @@
          #mobileBar above is players-only, so the two swap on body.tab-draft —
          see draft.css. Shown only below 768px. -->
     <nav class="draft-mobile-bar" id="draftMobileBar" aria-label="ניווט ליגת הדראפט">
-        <button type="button" class="dnav-mb" data-tab="room"><span>🎯</span>החדר</button>
         <button type="button" class="dnav-mb active" data-tab="overview"><span>📊</span>מבט על</button>
         <button type="button" class="dnav-mb" data-tab="gameweek"><span>⚔️</span>המחזור</button>
         <button type="button" class="dnav-mb" data-tab="market"><span>💡</span>שוק</button>
@@ -815,7 +808,7 @@
     <!-- Version query is bumped by scripts/stamp-version.mjs on every commit
          (npm run stamp). It was left at 4.0.0 for months, so returning
          visitors kept running a cached script.js and never saw fixes. -->
-    <script src="script.js?v=2026.08.31.354" defer></script>
+    <script src="script.js?v=2026.08.31.355" defer></script>
 </body>
 
 </html>

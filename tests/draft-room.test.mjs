@@ -1,22 +1,27 @@
 /**
- * The draft room: the board on the night, and the arithmetic behind it.
+ * What the league knows about its own draft, and the arithmetic behind it.
+ *
+ * The draft-room page is gone — the draft itself happens on the official
+ * Premier League site — but its reading of the league survived it, because the
+ * rest of the app is built on the same facts: who has been picked (which drives
+ * the players page's free-agent set and every replacement level), how much of
+ * each position a squad still owes, and how a snake order runs. This file pins
+ * that arithmetic.
  *
  * The pick order is the interesting part. FPL publishes `order_method: random`
  * and nothing else before a draft, so the order is not knowable until round one
- * has run — and once it has, it snakes. Getting that wrong points the reader at
- * the wrong pick number under a 90-second clock, which is the one failure this
- * view cannot have.
+ * has run — and once it has, it snakes.
  */
 
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import { loadFunctions, installBrowserStubs } from './helpers/load-script.mjs';
 
-const FNS = ['draftStatus', 'draftDateTime', 'draftChoices', 'draftPickOrder',
+const FNS = ['draftStatus', 'draftChoices', 'draftPickOrder',
     'myUpcomingPicks', 'myDraftEntryId', 'draftSquadGaps', 'draftRoomPlayer',
-    'draftRoomBoard', 'draftRoomScarcity', 'scarcityWord', 'draftCountdownText'];
+    'draftRoomBoard', 'draftRoomScarcity', 'scarcityWord'];
 
-const DEPS = ['DRAFT_SQUAD', 'DRAFT_SQUAD_SIZE', 'DRAFT_MAX_TIERS', '_draftRoom',
+const DEPS = ['DRAFT_SQUAD', 'DRAFT_SQUAD_SIZE', 'DRAFT_MAX_TIERS',
     '_draftRoomIndex', 'POSITION_LABELS', 'POSITION_SINGULAR', '_median'];
 
 /** Four managers, so the snake is visible without the fixture becoming a table. */
