@@ -865,16 +865,18 @@ try {
         switchMainView('charts');
         await new Promise(r => setTimeout(r, 900));
 
-        // The page leads with six managed slots and benches the rest behind
-        // עוד גרפים. Capture the split, then open the fold so every card is
-        // measurable below.
-        const topSix = [...document.querySelectorAll('#chartsGrid .chart-card')]
+        // One grid holds every card, the six chosen leads first. There is no
+        // second grid and no fold: the עוד גרפים fold was removed because a
+        // self-hidden lead left the visible grid's last row nearly empty while
+        // four usable charts waited behind it.
+        const gridOrder = [...document.querySelectorAll('#chartsGrid .chart-card')]
             .map(c => c.id.replace(/^card-/, ''));
-        const benched = [...document.querySelectorAll('#moreChartsGrid .chart-card')].length;
-        const foldedDrawn = [...document.querySelectorAll('#moreChartsGrid canvas')]
-            .filter(cv => charts[cv.id]).length;
-        document.getElementById('moreCharts').open = true;
-        renderCharts();
+        const topSix = gridOrder.slice(0, 6);
+        const strayGrids = document.querySelectorAll(
+            '#mainChartsView .charts-dashboard-grid:not(#chartsGrid), #moreCharts').length;
+
+        // Twelve charts now draw on the first pass instead of six, so give the
+        // last of them the settling time the fold's re-render used to provide.
         await new Promise(r => setTimeout(r, 700));
 
         const cards = [...document.querySelectorAll('#mainChartsView .chart-card')];
@@ -1090,7 +1092,7 @@ try {
         await new Promise(r => setTimeout(r, 400));
         switchMainView('table');
         return { cards: cards.length, visible: visible.length, drawn: drawn.length,
-            notes: notes.length, afterToggle, faults, topSix, benched, foldedDrawn,
+            notes: notes.length, afterToggle, faults, topSix, gridOrder, strayGrids,
             spreadTicks, spreadColours: spreadColours.size, legendLabels,
             hasUnderlying: !!underlying, keepersPlotted,
             underlyingPoints: underlying ? underlying.data.datasets[0].data.length : 0,
@@ -1105,8 +1107,8 @@ try {
         ['chart-opportunity', 'chart-position', 'chart-team-targets',
             'chart-defcon', 'chart-signal-spread', 'chart-underlying']),
         `the six lead slots hold the chosen defaults (${chartsView.topSix.join(', ')})`);
-    check(chartsView.benched === 6 && chartsView.foldedDrawn === 0,
-        `${chartsView.benched} benched cards stay undrawn until עוד גרפים opens`);
+    check(chartsView.gridOrder.length === 12 && chartsView.strayGrids === 0,
+        `all ${chartsView.gridOrder.length} cards sit in one grid — nothing is folded away`);
     check(chartsView.spreadTicks.length >= 2,
         `the signal spread labels its columns (${chartsView.spreadTicks.join(', ')})`);
     check(chartsView.spreadColours > 1,
@@ -1401,7 +1403,7 @@ try {
         processChange();
         await new Promise(r => setTimeout(r, 500));
 
-        // The six lead slots are pinned; the rest are behind the fold.
+        // One grid holds all twelve; the six chosen leads hold the first slots.
         const lead = [...document.querySelectorAll('#chartsGrid .chart-card')]
             .map(c => c.id.replace(/^card-/, ''));
         const noSwapControl = document.querySelectorAll('.chart-swap').length === 0;
@@ -1415,8 +1417,8 @@ try {
     check(/לפי הסינון/.test(onePage.scope),
         `and the board's scope line says it is filtered ("${onePage.scope.trim()}")`);
     check(onePage.oppPoints > 0, 'the lead chart redraws from the same filtered set');
-    check(onePage.lead[0] === 'chart-opportunity' && onePage.lead.length === 6,
-        'the six lead slots are pinned and survive a filter round-trip');
+    check(onePage.lead[0] === 'chart-opportunity' && onePage.lead.length === 12,
+        'the lead order is pinned across all 12 cards and survives a filter round-trip');
     check(onePage.noSwapControl, 'and carry no per-slot swap control');
 
     // Two things that were quietly wrong: the momentum window drove the table

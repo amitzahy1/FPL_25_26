@@ -3585,7 +3585,13 @@ span.tone-down { background: none !important; color: #1d4ed8; font-weight: 700; 
     margin-top: 14px;
 }
 
-@media (min-width: 1120px) {
+/* 1280, not 1120. At 1120 this cap forced three columns of ~350px — narrower
+   than the 440px floor the rule above sets, so the override was undercutting the
+   readability it exists to protect. It showed up in the signal card, whose eight
+   category chips cannot fit one line of a 350px card at any legible size. From
+   1300 up, three columns are ~410px and hold — measured against the signal card,
+   which clipped a chip at 1280; below it, auto-fill gives two wide ones. */
+@media (min-width: 1300px) {
     .charts-dashboard-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
 
@@ -3604,6 +3610,9 @@ span.tone-down { background: none !important; color: #1d4ed8; font-weight: 700; 
 .chart-card {
     display: flex;
     flex-direction: column;
+    /* The containing block for .chart-expand, which is pinned to the corner
+       rather than taking a row of the head. */
+    position: relative;
     background: #fff;
     padding: 11px 13px 9px;
     border-radius: 14px;
@@ -3621,6 +3630,12 @@ span.tone-down { background: none !important; color: #1d4ed8; font-weight: 700; 
    broken chart rather than as "this needs data the season does not have yet". */
 .chart-card[hidden] { display: none; }
 
+/* The trailing card, stretched by fillChartGridTail() over the columns the last
+   row would otherwise leave empty. It gets height to match the width, or a card
+   three columns across is a 1400x360 smear — the same flat-cloud problem the
+   column cap avoids, arrived at from the other side. */
+.chart-card.is-wide .chart-canvas { height: 430px; }
+
 /* One row, not three.
    The head used to stack: a title, a wrapping sentence under it, then the
    position chips on a line of their own and the facet chips on another. Four
@@ -3631,6 +3646,9 @@ span.tone-down { background: none !important; color: #1d4ed8; font-weight: 700; 
     display: flex;
     align-items: center;
     gap: 10px;
+    /* The inline-end inset (the far corner in RTL) is reserved for the pinned
+       expand button, so the chips stop before it instead of running under it. */
+    padding-inline-end: 24px;
     padding-bottom: 7px;
     margin-bottom: 8px;
     border-bottom: 1px solid #f1f5f9;
@@ -3692,10 +3710,16 @@ span.tone-down { background: none !important; color: #1d4ed8; font-weight: 700; 
     flex: none;
 }
 
-/* No flex:1 here. In a flex column that sets flex-basis to 0 and overrides the
-   height, which collapsed every canvas to about half the space it asked for. */
+/* flex-basis stays `auto`, never 0: basis 0 discards the height below and
+   collapsed every canvas to about half the space it asked for. With basis auto
+   the height is the starting size and flex-grow only adds to it.
+   Growing matters because the cards are grid items and a grid row stretches all
+   of its cards to the tallest one. A card whose head is one line shorter than
+   its neighbour's used to end in a strip of empty white, because the canvas held
+   at exactly 360px and nothing else in the column could take up the slack. */
 .chart-canvas {
     position: relative;
+    flex: 1 1 auto;
     /* 360. A scatter of 400 players in a 600x250 box is a wide, flat smear — the
        cloud has nowhere to separate vertically. The head gave back three rows of
        chrome; they go here, where they buy resolution rather than describe it. */
@@ -3739,17 +3763,76 @@ span.tone-down { background: none !important; color: #1d4ed8; font-weight: 700; 
 
    It wraps rather than scrolls: a chip you have to drag sideways to reach is a
    chip you will not find, which is the mistake the quick-filter row made once. */
-/* At the end of the head's row, not on a row of its own. */
-.chart-facet { flex: 0 1 auto; min-width: 0; margin-inline-start: auto; }
-.chart-head > .chart-seg { margin-inline-start: auto; }
-.chart-head > .chart-seg + .chart-facet { margin-inline-start: 0; }
+/* A line of its own, the full width of the card.
+   It used to try for the end of the title's line and wrap when it did not fit,
+   which meant the widest chip run on the page — eight signal categories — was
+   competing with the caption for room and losing, two rows deep. Given the whole
+   line it fits in one, and every card's head ends up the same height, which is
+   also what stops a stretched grid row from leaving white under a chart.
 
+   The negative inline-end margin takes back the corner that .chart-head reserves
+   for the expand button. That reservation is only needed on the head's first
+   line: the button is 20px tall at an 8px offset, so it clears anything below.
+   Those 24px are what make the eight-chip line fit a three-column card. */
+.chart-facet {
+    flex: 1 0 100%;
+    min-width: 0;
+    margin-inline-end: -24px;
+}
+
+.chart-head > .chart-seg { margin-inline-start: auto; }
+
+/* One line, always.
+   Wrapping was worse than it looks: the signal card offers eight categories, and
+   at the title's side they stacked two rows deep — a second row of chrome above
+   every plot, on the widest card on the page. The chips are shrunk instead, which
+   is enough for eight of them across a third of the grid. `overflow-x` is the
+   backstop for a card narrower than its own chip run (a phone, or a category list
+   the data grows); the scrollbar is hidden because a visible one would eat the
+   row it is protecting. */
+/* flex-start, not flex-end. With `justify-content: flex-end` on a scroll
+   container the overflow lands on the *start* edge, where it is both clipped and
+   unreachable — browsers do not let you scroll back to it, and it is not in
+   scrollWidth either, so it fails silently. It cost the signal card its הכל chip,
+   which is the one that is selected by default. Starting the run at the reading
+   edge sends any overflow the other way, where a scroll can still reach it. */
+/* inline-flex, so the pill group wraps its chips instead of stretching the whole
+   card width — a two-chip card would otherwise show two chips in a box with a
+   card's worth of empty space beside them. It still cannot exceed the line. */
 .chart-facet .chart-seg {
-    display: flex;
-    flex-wrap: wrap;
-    justify-content: flex-end;
-    row-gap: 3px;
+    display: inline-flex;
+    flex-wrap: nowrap;
+    justify-content: flex-start;
+    gap: 1px;
+    padding: 2px;
     max-width: 100%;
+    overflow-x: auto;
+    scrollbar-width: none;
+}
+
+.chart-facet .chart-seg::-webkit-scrollbar { display: none; }
+
+/* Sized to the worst case rather than the comfortable one: the signal card's
+   eight categories have to fit one line of the narrowest three-column card,
+   which is ~370px once the head reserves its corner. Measured at 10px/5px they
+   come to ~350. The page's other chip rows keep the roomier .chart-seg size —
+   these are the only ones that have to survive eight of themselves. */
+.chart-facet .chart-seg button {
+    padding: 3px 5px;
+    font-size: 10px;
+    white-space: nowrap;
+}
+
+/* A phone card is narrower than eight chips at any legible size, so there the
+   run is allowed a second line rather than hiding a chip off the edge. Wrapping
+   only happens when the run does not fit, so a card that can hold one line still
+   holds one. */
+@media (max-width: 900px) {
+    .chart-facet .chart-seg {
+        flex-wrap: wrap;
+        overflow-x: visible;
+        row-gap: 2px;
+    }
 }
 
 /* ============================================
@@ -6552,32 +6635,9 @@ canvas {
 
 .charts-wrap { margin: 12px 0; }
 
-/* .chart-swap removed with the per-slot swap control. */
-
-.more-charts { margin-top: 14px; }
-
-.more-charts > summary {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    width: fit-content;
-    padding: 8px 16px;
-    border: 1px solid #e2e8f0;
-    border-radius: 10px;
-    background: #fff;
-    font-size: 14px;
-    font-weight: 700;
-    color: #475569;
-    cursor: pointer;
-    list-style: none;
-    user-select: none;
-}
-
-.more-charts > summary::-webkit-details-marker { display: none; }
-.more-charts > summary::after { content: '▾'; color: #94a3b8; transition: transform .18s ease; }
-.more-charts[open] > summary::after { transform: rotate(180deg); }
-.more-charts > summary:hover { border-color: #94a3b8; }
-.more-charts[open] > .charts-dashboard-grid { margin-top: 12px; }
+/* .chart-swap removed with the per-slot swap control.
+   .more-charts removed with the עוד גרפים fold — every card is in one grid now,
+   so the trailing charts backfill the last row instead of hiding behind it. */
 
 /* ==========================================================================
    TABLE BAR — the table's own controls, on the table

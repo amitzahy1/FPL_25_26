@@ -1891,14 +1891,13 @@ async function fetchAndProcessData() {
         loadWatchlist();
         state.shownOptional = loadOptionalColumns();
         state.freeAgentsOnly = loadFreeAgentsOnly();
-        // The folds skip rendering while closed, so opening one has to render
-        // what it skipped. Idempotent via the dataset flag.
-        for (const id of ['chartsPanel', 'moreCharts']) {
-            const fold = document.getElementById(id);
-            if (fold && !fold.dataset.renders) {
-                fold.dataset.renders = '1';
-                fold.addEventListener('toggle', () => { if (fold.open) renderCharts(); });
-            }
+        // The charts fold skips rendering while closed (the phone default), so
+        // opening it has to render what it skipped. Idempotent via the dataset
+        // flag.
+        const chartsFold = document.getElementById('chartsPanel');
+        if (chartsFold && !chartsFold.dataset.renders) {
+            chartsFold.dataset.renders = '1';
+            chartsFold.addEventListener('toggle', () => { if (chartsFold.open) renderCharts(); });
         }
         invalidateSignals();
         renderDraftBoard();
@@ -14491,9 +14490,9 @@ function positionLegendHtml() {
 /* ------------------------------ the top six ------------------------------- */
 
 /**
- * Which six cards lead the page, in order — chosen with the user; the rest sit
- * behind the עוד גרפים fold. (A per-slot swap menu existed for one release and
- * was removed on request: the fold already answers "where is the rest".)
+ * Which six cards lead the page, in order — chosen with the user. The rest are
+ * not hidden, they simply follow: one grid, reading order carrying the ranking.
+ * (A per-slot swap menu existed for one release and was removed on request.)
  */
 const DEFAULT_TOP_CHARTS = [
     'chart-opportunity', 'chart-position', 'chart-team-targets',
@@ -14501,36 +14500,33 @@ const DEFAULT_TOP_CHARTS = [
 ];
 
 /**
- * Deal the cards: the chosen six into the top grid in slot order, the rest into
- * the עוד גרפים fold. Runs every render — a no-op when nothing changed, and
- * cheap when it did, because appendChild MOVES a node. renderCharts destroys
+ * Order the one grid: the chosen six into the first slots, the rest trailing in
+ * CHART_SPECS order. Runs every render — a no-op when nothing changed, and
+ * cheap when it did, because insertBefore MOVES a node. renderCharts destroys
  * and recreates every Chart.js instance right after, so a moved canvas is never
  * drawn on while detached.
+ *
+ * The trailing cards used to live in a second grid behind an עוד גרפים fold.
+ * That spent real estate rather than saving it: a self-hidden lead (a chart with
+ * nothing to plot yet, which is most of them before the draft) left the visible
+ * grid's last row holding one card and three empty columns, while four perfectly
+ * good charts waited out of sight. One grid backfills those columns for free.
  */
 function arrangeChartCards() {
     const grid = document.getElementById('chartsGrid');
-    const more = document.getElementById('moreChartsGrid');
-    if (!grid || !more) return;
+    if (!grid) return;
 
-    const top = DEFAULT_TOP_CHARTS;
-    top.forEach((id, slot) => {
+    const order = [
+        ...DEFAULT_TOP_CHARTS,
+        ...CHART_SPECS.map(s => s.id).filter(id => !DEFAULT_TOP_CHARTS.includes(id))
+    ];
+    order.forEach((id, slot) => {
         const card = document.getElementById(`card-${id}`);
         if (!card) return;
-        if (card.parentElement !== grid || grid.children[slot] !== card) {
+        if (grid.children[slot] !== card) {
             grid.insertBefore(card, grid.children[slot] || null);
         }
     });
-    for (const spec of CHART_SPECS) {
-        if (top.includes(spec.id)) continue;
-        const card = document.getElementById(`card-${spec.id}`);
-        if (card && card.parentElement !== more) more.appendChild(card);
-    }
-
-    const count = document.getElementById('moreChartsCount');
-    if (count) {
-        const benched = [...more.children].filter(c => !c.hidden).length;
-        count.textContent = benched ? `(${benched})` : '';
-    }
 }
 
 function ensureChartCards() {
@@ -14622,15 +14618,6 @@ function renderCharts() {
             if (noteEl.innerHTML !== text) noteEl.innerHTML = text;
         }
 
-        // Behind the closed עוד גרפים fold nothing has a size, so drawing there
-        // produces the zero-height layouts described above. The chart instance
-        // is dropped rather than kept stale; opening the fold re-renders.
-        const moreWrap = card.closest('#moreCharts');
-        if (moreWrap && !moreWrap.open) {
-            if (charts[spec.id]) { charts[spec.id].destroy(); charts[spec.id] = null; }
-            return;
-        }
-
         let config = null;
         try {
             // The facet value goes to the builder too: a filtering facet has
@@ -14670,10 +14657,60 @@ function renderCharts() {
         charts[spec.id] = new Chart(canvas.getContext('2d'), config);
     });
 
+    // Only now is `hidden` settled on every card, so only now can the last row
+    // be measured.
+    fillChartGridTail();
+
     // The open chart is drawn from the same specs and the same rows, so a
     // filter change behind the overlay has to reach it too.
     if (_chartFull.specId) drawChartFull();
 }
+
+/**
+ * Widen the trailing card(s) so the grid's last row has no empty columns.
+ *
+ * Twelve cards over three columns divide evenly; the number that survive
+ * `hidden` does not. Before a season has been played two cards have nothing to
+ * plot, which leaves ten — three full rows and one card sitting alone beside two
+ * columns of nothing. Stretching the orphan across the gap costs no height and
+ * spends the space on the chart that would otherwise be the narrowest thing on
+ * the page.
+ *
+ * The column count is read from the resolved grid rather than tracked against
+ * the breakpoints, so it stays right at every width without this function
+ * knowing where the breakpoints are.
+ */
+function fillChartGridTail() {
+    const grid = document.getElementById('chartsGrid');
+    if (!grid) return;
+
+    const cards = [...grid.children].filter(c => !c.hidden);
+    cards.forEach(c => {
+        c.style.gridColumn = '';
+        c.classList.remove('is-wide');
+    });
+
+    const cols = (getComputedStyle(grid).gridTemplateColumns || '').split(' ').filter(Boolean).length;
+    if (cols < 2 || !cards.length) return;
+
+    const remainder = cards.length % cols;
+    if (!remainder) return;
+
+    const last = cards[cards.length - 1];
+    const span = 1 + (cols - remainder);
+    last.style.gridColumn = `span ${span}`;
+    last.classList.add('is-wide');
+}
+
+/* Crossing a breakpoint changes the column count and therefore the remainder, so
+   the tail is recomputed on resize. Debounced: this reads layout, and a drag
+   fires the event on every frame. Nothing else here needs re-rendering — the
+   charts are responsive on their own. */
+let _chartTailTimer = null;
+window.addEventListener('resize', () => {
+    clearTimeout(_chartTailTimer);
+    _chartTailTimer = setTimeout(fillChartGridTail, 150);
+});
 
 /* --------------------------- fullscreen chart ----------------------------- */
 /*

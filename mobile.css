@@ -682,36 +682,48 @@
    It was phone-only, on the reasoning that a desktop card is already readable.
    It is not: the cards sit three to a row, and a 500-point scatter in a third of
    a row is a thumbnail wherever it is drawn.
+
+   Pinned to the card's far top corner, out of the flow. In the head's flow it
+   was a 34px control that no line had room for, so it wrapped and took a whole
+   row of every card for itself — one row of chrome, twelve times over, to hold
+   one glyph. The head reserves its inline-end padding for this, so nothing runs
+   underneath.
    -------------------------------------------------------------------------- */
 .chart-expand {
+    position: absolute;
+    top: 8px;
+    inset-inline-end: 8px;
+    z-index: 2;
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    flex: none;
-    width: 34px;
-    height: 34px;
-    border: 1px solid #e2e8f0;
-    border-radius: 10px;
-    background: #f8fafc;
-    font-size: 15px;
-    color: #0f172a;
+    width: 20px;
+    height: 20px;
+    padding: 0;
+    border: 1px solid transparent;
+    border-radius: 6px;
+    background: transparent;
+    font-size: 11px;
+    line-height: 1;
+    color: #94a3b8;
     cursor: pointer;
+    transition: color .15s ease, background .15s ease, border-color .15s ease;
 }
 
-.chart-expand:hover { background: #eef2f7; border-color: #cbd5e1; }
-.chart-expand:active { background: #e2e8f0; }
+/* Quiet until wanted: on a card the reader is already looking at, and always on
+   a touch screen, where there is no hover to reveal it. */
+.chart-card:hover .chart-expand,
+.chart-expand:focus-visible {
+    background: #f1f5f9;
+    border-color: #e2e8f0;
+    color: #0f172a;
+}
 
-@media (max-width: 768px) {
-    /* The head stacks on a phone, so the button rides on the title's row
-       rather than becoming a third full-width block. */
-    .chart-title-row {
-        display: flex;
-        align-items: flex-start;
-        justify-content: space-between;
-        gap: 8px;
-    }
+.chart-expand:hover { background: #e2e8f0; border-color: #cbd5e1; color: #0f172a; }
+.chart-expand:active { background: #dbe3ec; }
 
-    .chart-title-row > div { min-width: 0; }
+@media (hover: none) {
+    .chart-expand { color: #64748b; background: #f8fafc; border-color: #eef2f7; }
 }
 
 

@@ -11,9 +11,9 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link rel="stylesheet"
         href="https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;700;800;900&family=Rubik:wght@400;500;600;700;800;900&display=swap">
-    <link rel="stylesheet" href="style.css?v=2026.08.31.361">
-    <link rel="stylesheet" href="mobile.css?v=2026.08.31.361">
-    <link rel="stylesheet" href="draft.css?v=2026.08.31.361">
+    <link rel="stylesheet" href="style.css?v=2026.08.31.362">
+    <link rel="stylesheet" href="mobile.css?v=2026.08.31.362">
+    <link rel="stylesheet" href="draft.css?v=2026.08.31.362">
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.5.1"></script>
     <script
         src="https://cdnjs.cloudflare.com/ajax/libs/chartjs-plugin-annotation/2.2.1/chartjs-plugin-annotation.min.js"></script>
@@ -309,16 +309,14 @@
                         <span>📊 גרפים</span>
                         <span class="filters-toggle-hint">הקש לפתיחה</span>
                     </summary>
+                    <!-- One grid, every card. The six chosen leads come first and
+                         the rest trail behind them, ordered by arrangeChartCards()
+                         through DOM re-append, never by rebuild. There used to be a
+                         second grid behind an עוד גרפים fold; it cost more space
+                         than it saved, because the visible grid's last row was left
+                         with one card in it and three empty columns beside it. -->
                     <div id="mainChartsView" class="charts-view">
                         <div class="charts-dashboard-grid" id="chartsGrid"></div>
-                        <!-- The cards that are not in the chosen six. One grid could
-                             not express this: the six are managed slots, these are
-                             the bench. Cards move between the two by DOM re-append
-                             in arrangeChartCards(), never by rebuild. -->
-                        <details class="more-charts" id="moreCharts">
-                            <summary>עוד גרפים <span id="moreChartsCount"></span></summary>
-                            <div class="charts-dashboard-grid" id="moreChartsGrid"></div>
-                        </details>
                     </div>
                 </details>
 
@@ -836,7 +834,7 @@
     <!-- Version query is bumped by scripts/stamp-version.mjs on every commit
          (npm run stamp). It was left at 4.0.0 for months, so returning
          visitors kept running a cached script.js and never saw fixes. -->
-    <script src="script.js?v=2026.08.31.361" defer></script>
+    <script src="script.js?v=2026.08.31.362" defer></script>
 </body>
 
 </html>

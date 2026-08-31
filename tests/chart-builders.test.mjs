@@ -159,7 +159,8 @@ describe('window-measured metrics', () => {
 describe('the six lead slots', () => {
     test('the defaults are the six the user chose, in order', () => {
         // Pinned, not configurable: the per-slot swap control was removed on
-        // request — עוד גרפים already answers "where is the rest".
+        // request. These six lead the one grid; the rest trail behind them in
+        // CHART_SPECS order, none of them hidden.
         // Read from the source: it is a const inside the file's own scope, and
         // what this pins is the list itself, not how it is loaded.
         const list = new Function(`${extractDeclaration('DEFAULT_TOP_CHARTS')}
