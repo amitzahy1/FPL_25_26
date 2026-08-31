@@ -15812,6 +15812,87 @@ function renderRecordsBoard() {
         </div>`;
 }
 
+/**
+ * Four facts about your own season, at the top of the home page.
+ *
+ * Everything here is already in memory: the standings row the table was built
+ * from, the league's own per-gameweek scores, and the fixture list. Nothing is
+ * fetched, and the row hides itself until there is something true to say.
+ */
+function renderKpiChips() {
+    const host = document.getElementById('kpiChips');
+    if (!host) return;
+
+    const myId = state.draft.myTeamId;
+    const rows = state.draft._standingsData || [];
+    const mine = myId ? rows.find(r => String(r.entry_id) === String(myId)) : null;
+    if (!mine || !rows.length) { host.hidden = true; return; }
+
+    // Last finished gameweek's score, from the league's own record of it.
+    const finished = draftFinishedMatches();
+    let gwPts = null, gwNo = null;
+    for (const m of finished) {
+        const side = String(m.league_entry_1) === String(myId) ? 1
+            : String(m.league_entry_2) === String(myId) ? 2 : 0;
+        if (!side) continue;
+        gwNo = m.event;
+        gwPts = side === 1 ? (m.league_entry_1_points || 0) : (m.league_entry_2_points || 0);
+    }
+
+    // The average across the league that week, so the number has a yardstick.
+    let gwDelta = null;
+    if (gwNo !== null) {
+        const week = finished.filter(m => m.event === gwNo);
+        const scores = week.flatMap(m => [m.league_entry_1_points || 0, m.league_entry_2_points || 0]);
+        if (scores.length) {
+            const avg = scores.reduce((a, b) => a + b, 0) / scores.length;
+            gwDelta = gwPts - avg;
+        }
+    }
+
+    // Next opponent, if the fixture list has one.
+    const details = state.draft.details;
+    const currentGW = details?.league?.current_event || getCurrentEventId();
+    const next = (details?.matches || []).find(m => m.event === currentGW + 1
+        && (String(m.league_entry_1) === String(myId) || String(m.league_entry_2) === String(myId)));
+    const oppId = next
+        ? (String(next.league_entry_1) === String(myId) ? next.league_entry_2 : next.league_entry_1)
+        : null;
+    const oppName = oppId ? state.draft.entryIdToTeamName.get(oppId) : null;
+
+    const chips = [
+        { label: 'המקום שלך', value: `${mine.rank}`, sub: `מתוך ${rows.length}` },
+        gwPts === null ? null : {
+            label: `נק׳ מחזור ${gwNo}`, value: `${gwPts}`,
+            sub: gwDelta === null ? null
+                : `${gwDelta >= 0 ? '+' : ''}${gwDelta.toFixed(0)} מול הממוצע`,
+            tone: gwDelta === null ? '' : gwDelta >= 0 ? 'pos' : 'neg'
+        },
+        { label: 'מאזן', value: `${mine.wins}-${mine.draws}-${mine.losses}`, sub: `${mine.total} נק׳ ליגה` },
+        oppName ? { label: `המשחק הבא`, value: oppName, sub: `מחזור ${currentGW + 1}`, wide: true } : null
+    ].filter(Boolean);
+
+    host.hidden = false;
+    host.className = 'plc-kpis';
+    host.innerHTML = chips.map(c => `
+        <div class="plc-kpi${c.wide ? ' is-wide' : ''}">
+            <span class="plc-kpi-label">${escapeHtml(c.label)}</span>
+            <span class="plc-kpi-value">${escapeHtml(c.value)}</span>
+            ${c.sub ? `<span class="plc-kpi-sub${c.tone ? ` is-${c.tone}` : ''}">${escapeHtml(c.sub)}</span>` : ''}
+        </div>`).join('');
+}
+
+/** The next round's fixtures, on the home page rather than one click away. */
+function renderOverviewFixtures() {
+    const host = document.getElementById('overviewFixtures');
+    if (!host) return;
+    if (!state.draft.details) { host.hidden = true; return; }
+    const html = (renderNextRoundFixtures() || '').trim();
+    if (!html) { host.hidden = true; return; }
+    host.hidden = false;
+    host.innerHTML = html;
+}
+
 /* ------------------------------ live gameweek ---------------------------- */
 
 const GW_LIVE_POLL_MS = 60000;
@@ -16025,6 +16106,8 @@ function draftNavigate(section, segment, opts = {}) {
     } else if (segment === 'overview') {
         if (state.draft.details) {
             renderAllTeamsTrendChart(null, window.currentTrendState?.mode || 'cumulative', window.currentTrendState?.highlightTeamIds || []);
+            renderKpiChips();
+            renderOverviewFixtures();
             renderPowerRankings();
             renderRecordsBoard();
         }
@@ -16497,6 +16580,8 @@ function setMyTeam(teamId) {
     renderAllTeamsTrendChart(null, 'cumulative', [teamId]); // Default to showing my team
     // Three overview boards highlight the reader's own row, so they follow the
     // choice rather than waiting for the next navigation to repaint them.
+    renderKpiChips();
+    renderOverviewFixtures();
     renderPowerRankings();
     renderRecordsBoard();
     renderGwLiveHub();

@@ -349,43 +349,108 @@ body.tab-draft {
     color: #fff;
 }
 
-/* The my-team selector bar on the overview */
-#draftTabContent .plc-teambar {
+/* The section bar: segment pills at the start, the team picker at the end. */
+#draftTabContent .plc-secbar {
     display: flex;
     align-items: center;
-    gap: 14px;
+    justify-content: space-between;
+    gap: 12px;
     flex-wrap: wrap;
-    padding: 14px 18px;
-    margin-bottom: 16px;
+    margin-bottom: 12px;
 }
 
-#draftTabContent .plc-teambar label {
+#draftTabContent .plc-secbar .plc-segbar {
+    margin: 0;
+}
+
+#draftTabContent .plc-teampick {
     display: flex;
     align-items: center;
     gap: 8px;
-    font-size: 13.5px;
-    font-weight: 600;
-    color: var(--c-ink);
+    min-width: 0;
 }
 
-#draftTabContent .plc-teambar select {
-    flex: 1;
-    max-width: 320px;
-    padding: 9px 14px;
+#draftTabContent .plc-teampick label {
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--c-muted);
+    white-space: nowrap;
+}
+
+#draftTabContent .plc-teampick select {
+    max-width: 240px;
+    padding: 7px 12px;
     border: 1px solid var(--c-line);
     border-radius: var(--c-radius-xs);
     background: var(--c-card);
     font: inherit;
-    font-size: 14px;
+    font-size: 13px;
     font-weight: 500;
     color: var(--c-ink);
     cursor: pointer;
 }
 
-#draftTabContent .plc-teambar select:focus {
+#draftTabContent .plc-teampick select:focus {
     outline: none;
     border-color: var(--c-blue);
     box-shadow: 0 0 0 3px rgba(15, 86, 217, .15);
+}
+
+/* Four facts, before anything that needs reading. */
+#draftTabContent .plc-kpis {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 10px;
+    margin-bottom: 12px;
+}
+
+#draftTabContent .plc-kpi {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    padding: 11px 14px;
+    background: var(--c-card);
+    border-radius: var(--c-radius-sm);
+    box-shadow: var(--c-shadow-sm);
+    min-width: 0;
+}
+
+#draftTabContent .plc-kpi-label {
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--c-muted);
+}
+
+#draftTabContent .plc-kpi-value {
+    font-size: 21px;
+    font-weight: 800;
+    color: var(--c-ink);
+    font-variant-numeric: tabular-nums;
+    line-height: 1.15;
+}
+
+/* A team name is text, not a figure — it should not be set at 21px tabular. */
+#draftTabContent .plc-kpi.is-wide .plc-kpi-value {
+    font-size: 15px;
+    font-weight: 700;
+    font-variant-numeric: normal;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+#draftTabContent .plc-kpi-sub {
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--c-muted);
+}
+
+#draftTabContent .plc-kpi-sub.is-pos { color: var(--c-green); }
+#draftTabContent .plc-kpi-sub.is-neg { color: var(--c-red); }
+
+/* The two overview panes are cards now, so the grid only owns the gap. */
+#draftTabContent .draft-top-grid > .plc-card {
+    align-self: stretch;
 }
 
 #draftTabContent .plc-chart-body {
@@ -440,6 +505,23 @@ body.tab-draft {
         flex-direction: column;
         align-items: flex-start;
         gap: 1px;
+    }
+
+    #draftTabContent .plc-secbar {
+        gap: 8px;
+    }
+
+    #draftTabContent .plc-teampick {
+        flex: 1 1 100%;
+    }
+
+    #draftTabContent .plc-teampick select {
+        flex: 1;
+        max-width: none;
+    }
+
+    #draftTabContent .plc-kpi-value {
+        font-size: 18px;
     }
 
     #draftTabContent .plc-card {

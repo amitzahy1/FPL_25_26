@@ -11,9 +11,9 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link rel="stylesheet"
         href="https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;700;800;900&family=Rubik:wght@400;500;600;700;800&display=swap">
-    <link rel="stylesheet" href="style.css?v=2026.08.31.356">
-    <link rel="stylesheet" href="mobile.css?v=2026.08.31.356">
-    <link rel="stylesheet" href="draft.css?v=2026.08.31.356">
+    <link rel="stylesheet" href="style.css?v=2026.08.31.357">
+    <link rel="stylesheet" href="mobile.css?v=2026.08.31.357">
+    <link rel="stylesheet" href="draft.css?v=2026.08.31.357">
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.5.1"></script>
     <script
         src="https://cdnjs.cloudflare.com/ajax/libs/chartjs-plugin-annotation/2.2.1/chartjs-plugin-annotation.min.js"></script>
@@ -549,11 +549,21 @@
                      and loadDraftLeague()'s container clears keep working. -->
 
                 <section id="draft-sec-overview" class="draft-section active">
-                    <div class="plc-segbar" role="tablist" aria-label="מבט על">
-                        <button type="button" class="plc-seg active" data-seg="overview" role="tab"
-                            aria-selected="true" aria-controls="draft-overview">טבלה והרכב</button>
-                        <button type="button" class="plc-seg" data-seg="standings" role="tab"
-                            aria-selected="false" aria-controls="draft-standings">סגלים לפי קבוצה</button>
+                    <!-- The segment pills and the team picker each had a row of
+                         their own and each left most of it empty. They share one. -->
+                    <div class="plc-secbar">
+                        <div class="plc-segbar" role="tablist" aria-label="מבט על">
+                            <button type="button" class="plc-seg active" data-seg="overview" role="tab"
+                                aria-selected="true" aria-controls="draft-overview">טבלה והרכב</button>
+                            <button type="button" class="plc-seg" data-seg="standings" role="tab"
+                                aria-selected="false" aria-controls="draft-standings">סגלים לפי קבוצה</button>
+                        </div>
+                        <div class="plc-teampick">
+                            <label for="myTeamSelect">הקבוצה שלי</label>
+                            <select id="myTeamSelect" onchange="setMyTeam(this.value)">
+                                <option value="">-- טוען קבוצות... --</option>
+                            </select>
+                        </div>
                     </div>
                 <div id="draft-overview" class="draft-sub-content active">
                     <!-- My Team Selector -->
@@ -562,15 +572,13 @@
                          has nothing true to say. -->
                     <div id="gwLiveHub" hidden></div>
 
-                    <div class="plc-card plc-teambar">
-                        <label for="myTeamSelect">👤 בחר את הקבוצה שלי:</label>
-                        <select id="myTeamSelect" onchange="setMyTeam(this.value)">
-                            <option value="">-- טוען קבוצות... --</option>
-                        </select>
-                    </div>
+                    <!-- Four facts about your season, above everything else that
+                         needs reading. Rendered by renderKpiChips(); hides itself
+                         until the league has played something. -->
+                    <div id="kpiChips" hidden></div>
 
                     <div class="draft-top-grid">
-                        <div class="standings-pane">
+                        <div class="standings-pane plc-card">
                             <h3 class="plc-title">🏆 טבלת הליגה</h3>
                             <div id="draftStandingsInfo"></div>
                             <div class="table-container">
@@ -597,11 +605,16 @@
                                 </div>
                             </div>
                         </div>
-                        <div class="right-pane">
+                        <div class="right-pane plc-card">
                             <h3 class="plc-title">⚽ ההרכב שלי</h3>
                             <div id="myLineupContainer"></div>
                         </div>
                     </div>
+                    <!-- The next round, with its win-probability bars. It used to
+                         live in the gameweek section; on the home page it is the
+                         thing you look for after the table. -->
+                    <div id="overviewFixtures" hidden></div>
+
                     <div id="powerLuckCard" hidden></div>
                     <div id="recordsBoard" hidden></div>
 
@@ -807,7 +820,7 @@
     <!-- Version query is bumped by scripts/stamp-version.mjs on every commit
          (npm run stamp). It was left at 4.0.0 for months, so returning
          visitors kept running a cached script.js and never saw fixes. -->
-    <script src="script.js?v=2026.08.31.356" defer></script>
+    <script src="script.js?v=2026.08.31.357" defer></script>
 </body>
 
 </html>
