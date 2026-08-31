@@ -27,7 +27,12 @@
 }
 
 body {
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Inter', 'Roboto', sans-serif;
+    /* One family for the whole site. This was the system stack, with only the
+       draft tab on Rubik — so the two halves of the app read as two products,
+       and the two main navigation tabs read as a third: a <button> takes the
+       UA's Arial unless something says otherwise, and nothing did. Rubik covers
+       Hebrew itself; Heebo is the fallback for anything it misses. */
+    font-family: 'Rubik', 'Heebo', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
     background: linear-gradient(135deg, var(--bg-gradient-start) 0%, var(--bg-gradient-end) 100%);
     min-height: 100vh; 
     padding: 20px; 
@@ -146,6 +151,18 @@ label {
     color: var(--text-primary); 
     font-size: 0.85em;
     letter-spacing: 0.3px;
+}
+
+/* Form controls do not inherit type by default, which is why eight rules in
+   this file each said `font-family: inherit` and .nav-item — which said
+   nothing — rendered the site's most prominent text in Arial. */
+button,
+input,
+select,
+textarea,
+optgroup {
+    font: inherit;
+    letter-spacing: inherit;
 }
 
 select, input { 
@@ -1152,7 +1169,14 @@ span.tone-down { background: none !important; color: #1d4ed8; font-weight: 700; 
        without putting Hebrew label text into an LTR context, where trailing
        punctuation ("נק'/מש'") would be reordered to the wrong side. */
     text-align: right;
-    white-space: nowrap;
+    /* Not nowrap. table-layout is fixed over percentage tracks, so a header
+       that does not fit does not widen its column — it spills out of the cell
+       and .db-card's overflow:hidden eats the end of it. "נק׳/מש׳" was over its
+       29px track by 6px at 390px, silently, and any wider font makes that
+       worse. Two tight lines cost less than a truncated label. */
+    white-space: normal;
+    overflow-wrap: anywhere;
+    line-height: 1.15;
     letter-spacing: 0;
     text-shadow: none;
     cursor: help;

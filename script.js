@@ -1325,6 +1325,13 @@ async function init() {
     initPlayerSearch();
 }
 
+// Chart.js reads none of the page's CSS, so every axis tick, legend and
+// tooltip stayed on the library default (Helvetica/Arial) inside cards that had
+// moved to Rubik. Set once, before any chart is built.
+if (typeof Chart !== 'undefined') {
+    Chart.defaults.font.family = "'Rubik', 'Heebo', -apple-system, sans-serif";
+}
+
 document.addEventListener('DOMContentLoaded', () => {
     // Clear caches written by an older schema before anything reads them.
     migrateCacheSchema();
@@ -1342,6 +1349,18 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // The header's overflow panel.
     initHeaderTools();
+
+    // Two things measure rendered text exactly once and cache the answer. With
+    // display=swap the first measurement can happen in the fallback font, so
+    // re-run them when the real one lands: a stale --cmp-strip-h puts the
+    // compare table's header row behind the sticky strip it was measured to
+    // clear.
+    if (document.fonts && document.fonts.ready) {
+        document.fonts.ready.then(() => {
+            if (typeof syncCompareStickyOffset === 'function') syncCompareStickyOffset();
+            if (typeof fitDetailPanel === 'function') fitDetailPanel();
+        }).catch(() => { /* font loading is best-effort */ });
+    }
 
     // Initialize authentication
     auth.init();

@@ -1251,8 +1251,16 @@ try {
             .slice(0, 4);
 
         // Every board card must show its value column, not just the name.
-        const clippedCards = [...document.querySelectorAll('#draftBoard .db-card')]
-            .filter(c => c.scrollWidth > c.clientWidth + 1).length;
+        //
+        // Measured on the header cells, not on the card. .db-tbl is
+        // table-layout:fixed over percentage tracks with nowrap headers, so a
+        // header that does not fit spills out of its own cell and .db-card's
+        // overflow:hidden eats it — and in RTL that spill runs toward the
+        // inline-start edge, where it never reaches the card's scrollWidth. The
+        // card-level check therefore passed over a live clip; a wider font is
+        // exactly what makes that clip grow.
+        const clippedCards = [...document.querySelectorAll('#draftBoard .db-tbl th')]
+            .filter(th => th.scrollWidth > th.clientWidth + 1).length;
 
         const chips = [...document.querySelectorAll('.quick-filter-btn')];
         const group = document.querySelector('.quick-filters-group');
@@ -1320,7 +1328,7 @@ try {
     check(mob.unreachable.length === 0,
         `nothing overflows into an unscrollable box${mob.unreachable.length ? `: ${mob.unreachable.join(', ')}` : ''}`);
     check(mob.clippedCards === 0,
-        `all board cards fit their columns on a phone${mob.clippedCards ? ` (${mob.clippedCards} clipped)` : ''}`);
+        `every board column header fits its own cell on a phone${mob.clippedCards ? ` (${mob.clippedCards} clipped)` : ''}`);
     check(mob.chipCount > 0 && !mob.chipsScroll,
         `the ${mob.chipCount} quick-filter chips wrap instead of scrolling out of reach`);
     check(mob.smallTaps === 0,
