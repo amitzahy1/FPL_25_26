@@ -538,6 +538,11 @@ span.tone-down { background: none !important; color: #1d4ed8; font-weight: 700; 
    a short window. mobile.css already opted out at =768px for the same reason. */
 .tab-content {
     width: 100%;
+    /* clip, not hidden: hidden would make this a scroll container again and
+       re-trap every sticky descendant, which is the thing this commit undid.
+       hidden is declared first for browsers without clip (Safari < 16), which
+       take the fallback and the old sticky behaviour with it. */
+    overflow-x: hidden;
     overflow-x: clip;
     padding-bottom: 24px;
 }
@@ -4717,7 +4722,7 @@ canvas {
     /* The real rendered height of .app-header. Read by the sticky table header,
        the draft sub-nav and every scroll-margin below, so it lives here rather
        than being repeated as a literal. */
-    --app-header-h: 70px;
+    --app-header-h: 56px;
 }
 
 #mainApp {
@@ -4748,12 +4753,18 @@ canvas {
    desktop.
    ========================================= */
 
-/* Modern Header Styles */
 .app-header {
     background: #ffffff;
     border-bottom: 1px solid #e2e8f0;
-    padding: 0 24px;
-    height: 70px;
+    /* No horizontal padding here: the border-bottom has to span the whole
+       window, and any inset on this element pushes the brand inboard of the
+       content below it. The inset belongs to the row inside. */
+    padding: 0;
+    /* Was a flat 70px. The action cluster needed ~650px and wrapped to a second
+       row inside it, which then hung 17-30px below the border with no overflow
+       set. min-height plus a real wrap point means a long status label can
+       never break the frame again. */
+    min-height: 56px;
     display: flex;
     align-items: center;
     position: sticky;
@@ -4769,6 +4780,10 @@ canvas {
     width: 100%;
     max-width: var(--page-max);
     margin: 0 auto;
+    /* Matches body's 20px inset, so the brand mark and the first card below it
+       share one edge. Previously .app-header held 24px of its own and the two
+       disagreed at every width. */
+    padding-inline: 20px;
 }
 
 .brand-section {
@@ -4778,10 +4793,10 @@ canvas {
 }
 
 .brand-logo {
-    width: 44px;
-    height: 44px;
+    width: 34px;
+    height: 34px;
     flex: none;
-    border-radius: 13px;
+    border-radius: 10px;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -4794,12 +4809,13 @@ canvas {
    renders as low-contrast and slightly blurred — it read as a
    washed-out label rather than as the name of the product. */
 .brand-info h1 {
-    font-size: 21px;
-    line-height: 1.15;
+    font-size: 16px;
+    line-height: 1.2;
     margin: 0;
     color: #0f172a;
     font-weight: 800;
-    letter-spacing: -0.45px;
+    letter-spacing: -0.3px;
+    white-space: nowrap;
 }
 
 .brand-subtitle {
@@ -4814,20 +4830,22 @@ canvas {
 
 .main-nav {
     display: flex;
-    gap: 8px;
+    gap: 4px;
     background: #f1f5f9;
-    padding: 6px;
-    border-radius: 16px;
+    padding: 4px;
+    border-radius: 12px;
     margin: 0 auto;
+    flex: none;
 }
 
 .nav-item {
     background: transparent;
     border: none;
-    padding: 10px 24px;
-    border-radius: 12px;
-    font-size: 15px;
+    padding: 8px 16px;
+    border-radius: 9px;
+    font-size: 13.5px;
     font-weight: 700;
+    white-space: nowrap;
     color: #64748b;
     cursor: pointer;
     transition: all 0.2s ease;
@@ -4851,13 +4869,109 @@ canvas {
 .user-actions {
     display: flex;
     align-items: center;
-    gap: 16px;
-    /* Six controls in one row overflowed a 1024px laptop and
-       scrolled the whole page sideways. They wrap instead. */
-    flex-wrap: wrap;
+    gap: 8px;
+    /* No wrapping: the three toggles and the settings button live in #hdrTools,
+       which becomes a disclosure panel below 1200px. Wrapping was the previous
+       answer and it put a second row inside a fixed-height header. */
+    flex-wrap: nowrap;
     justify-content: flex-end;
     min-width: 0;
 }
+
+/* The tools. A row in the header on a wide window; the same element, one DOM
+   copy, becomes a panel under the ⋯ button when there is no room for it. */
+.hdr-tools {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.hdr-more {
+    display: none;
+    align-items: center;
+    justify-content: center;
+    width: 34px;
+    height: 34px;
+    flex: none;
+    border: 1px solid #e2e8f0;
+    border-radius: 9px;
+    background: #fff;
+    font: inherit;
+    font-size: 17px;
+    line-height: 1;
+    color: #475569;
+    cursor: pointer;
+}
+
+.hdr-more:hover {
+    border-color: #94a3b8;
+    color: #0f172a;
+}
+
+.hdr-more[aria-expanded="true"] {
+    background: #0f172a;
+    border-color: #0f172a;
+    color: #fff;
+}
+
+@media (max-width: 1400px) {
+    .hdr-more {
+        display: inline-flex;
+    }
+
+    .hdr-tools {
+        position: absolute;
+        top: calc(100% + 6px);
+        inset-inline-end: 14px;
+        z-index: 120;
+        display: none;
+        flex-direction: column;
+        align-items: stretch;
+        gap: 6px;
+        min-width: 208px;
+        padding: 8px;
+        background: #fff;
+        border: 1px solid #e2e8f0;
+        border-radius: 12px;
+        box-shadow: 0 12px 32px rgba(15, 23, 42, .14);
+    }
+
+    .hdr-tools.is-open {
+        display: flex;
+    }
+
+    /* In the panel the controls are menu rows, not chips. */
+    .hdr-tools .scout-btn,
+    .hdr-tools .settings-trigger {
+        width: 100%;
+        justify-content: flex-start;
+        border-color: transparent;
+        background: transparent;
+    }
+
+    .hdr-tools .scout-btn:hover,
+    .hdr-tools .settings-trigger:hover {
+        background: #f1f5f9;
+    }
+
+    /* The subtitle is decoration and goes at the same width. */
+    .brand-subtitle {
+        display: none;
+    }
+
+    /* The sentence goes; the dot stays, and the title attribute still carries
+       the detail for anyone who hovers. */
+    .status-pill #statusHealth,
+    .status-pill .status-sep {
+        display: none;
+    }
+
+    .status-pill {
+        padding: 6px;
+        gap: 0;
+    }
+}
+
 
 .status-pill {
     display: flex;
@@ -4963,33 +5077,58 @@ canvas {
    ========================================= */
 
 @media screen and (max-width: 768px) {
-    /* Header adjustments */
+    /* Two rows, not three stacked blocks.
+       This was `flex-direction: column`, which made mobile.css's wrap plan
+       (brand order 1, actions order 2, nav order 3 at flex-basis 100%) a
+       no-op and stacked brand / actions / nav as full-width rows — a 206px
+       header on a 360px phone. As a wrapping row the same order plan gives
+       brand and the ⋯ button one line and the two tabs the next. */
     .header-content {
-        flex-direction: column;
-        gap: 10px;
-        height: auto;
-        padding: 10px;
+        flex-direction: row;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 8px;
+        padding: 8px 0;
     }
 
     .app-header {
-        height: auto;
-        position: relative; /* Unstick header on mobile if needed, or keep sticky */
+        position: relative; /* the phone header scrolls away with the page */
+    }
+
+    /* The wordmark is what stops the top line fitting: the mark, the name, the
+       status dot, the season switch and the ⋯ button come to ~380px against
+       320px of content width, so the row broke in two and the header became
+       three deep. The mark alone identifies the app on a phone, and the season
+       switch is the one control here that changes what every number means, so
+       the name is what goes. */
+    .brand-info {
+        display: none;
+    }
+
+    /* Nothing is pinned at the top on a phone, so nothing needs clearing. Left
+       at 56px, every scrollIntoView({block:'start'}) landed 68px short of its
+       target and the draft sub-nav reserved a gap for a header that had already
+       scrolled away. */
+    :root {
+        --app-header-h: 0px;
     }
 
     .brand-section {
-        width: 100%;
-        justify-content: center;
+        flex: 1 1 auto;
+        min-width: 0;
+        justify-content: flex-start;
     }
 
     .main-nav {
-        width: 100%;
+        flex: 1 1 100%;
+        order: 3;
         justify-content: center;
     }
 
     .user-actions {
-        width: 100%;
-        justify-content: center;
-        margin-top: 5px;
+        flex: none;
+        order: 2;
+        justify-content: flex-end;
     }
 
     /* Toolbar adjustments */

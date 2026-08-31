@@ -11,9 +11,9 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link rel="stylesheet"
         href="https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;700;800;900&family=Rubik:wght@400;500;600;700;800&display=swap">
-    <link rel="stylesheet" href="style.css?v=2026.08.31.353">
-    <link rel="stylesheet" href="mobile.css?v=2026.08.31.353">
-    <link rel="stylesheet" href="draft.css?v=2026.08.31.353">
+    <link rel="stylesheet" href="style.css?v=2026.08.31.354">
+    <link rel="stylesheet" href="mobile.css?v=2026.08.31.354">
+    <link rel="stylesheet" href="draft.css?v=2026.08.31.354">
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.5.1"></script>
     <script
         src="https://cdnjs.cloudflare.com/ajax/libs/chartjs-plugin-annotation/2.2.1/chartjs-plugin-annotation.min.js"></script>
@@ -93,40 +93,42 @@
                                 onclick="switchDataSource('historical')"></button>
                         </div>
 
-                        <!-- Site-wide switches. One button each for the whole page:
-                             both flags govern the charts, the board and the table
-                             together, which is why they live at header level and not
-                             in any section's own chrome. -->
-                        <button class="scout-btn scout-watch" id="watchlistOnlyBtn" aria-pressed="false"
-                            onclick="toggleWatchlistOnly()" title="הצג רק שחקנים שסימנת בכוכב">
-                            ★ מעקב <span class="scout-count" id="watchlistCount">0</span>
-                        </button>
-                        <button class="scout-btn scout-free" id="freeAgentsOnlyBtn" aria-pressed="false"
-                            disabled onclick="toggleFreeAgentsOnly()">🆓 רק חופשיים</button>
-                        <!-- The blend, as a switch. Every rate on the current-season
-                             tab is weighed against last season while the sample is thin;
-                             this turns that off so the two views can be read against each
-                             other. Shown only when there is a blend to turn off — see
-                             syncBlendButton(). -->
-                        <button class="scout-btn scout-blend" id="blendToggleBtn" aria-pressed="false"
-                            hidden onclick="toggleSeasonBlend()"></button>
-
-                        <!-- Loading used to announce itself with a stack of
-                             toasts nobody had asked a question of. The pill says
-                             the same thing once, quietly, and keeps saying it. -->
-                        <!-- #headerGW used to sit here, shipping the literal string
-                             "GW--". Nothing has ever written to it, so it rendered
-                             that placeholder forever — and on an RTL page the bidi
-                             algorithm split the two dashes off the letters, printing
-                             "-GW" and a stray "-" on separate lines. The gameweek is
-                             in the banner, where it is a sentence rather than a stub. -->
+                        <!-- Status first: it is the one thing worth a glance without
+                             being asked for. Below 1200px it keeps the dot and drops
+                             the sentence. -->
                         <div class="status-pill is-busy" id="statusPill" title="טוען נתונים">
                             <span class="status-dot"></span>
                             <span id="statusHealth" aria-live="polite">טוען…</span>
                             <span id="lastUpdated" style="display:none;"></span> <!-- Hidden holder for JS -->
                         </div>
 
-                        <div class="user-profile-mini">
+                        <!-- One disclosure button for the tools below. There is a single
+                             copy of each control in the DOM: above 1200px #hdrTools is a
+                             row inside the header, below it the same element becomes a
+                             panel this button opens. Two copies would mean duplicate
+                             ids, which check-structure fails the build over. -->
+                        <button type="button" class="hdr-more" id="hdrMoreBtn" aria-expanded="false"
+                            aria-controls="hdrTools" aria-label="עוד אפשרויות">⋯</button>
+
+                        <div class="hdr-tools" id="hdrTools">
+                            <!-- Site-wide switches. One button each for the whole page:
+                                 both flags govern the charts, the board and the table
+                                 together, which is why they live at header level and not
+                                 in any section's own chrome. -->
+                            <button class="scout-btn scout-watch" id="watchlistOnlyBtn" aria-pressed="false"
+                                onclick="toggleWatchlistOnly()" title="הצג רק שחקנים שסימנת בכוכב">
+                                ★ מעקב <span class="scout-count" id="watchlistCount">0</span>
+                            </button>
+                            <button class="scout-btn scout-free" id="freeAgentsOnlyBtn" aria-pressed="false"
+                                disabled onclick="toggleFreeAgentsOnly()">🆓 רק חופשיים</button>
+                            <!-- The blend, as a switch. Every rate on the current-season
+                                 tab is weighed against last season while the sample is thin;
+                                 this turns that off so the two views can be read against each
+                                 other. Shown only when there is a blend to turn off — see
+                                 syncBlendButton(). -->
+                            <button class="scout-btn scout-blend" id="blendToggleBtn" aria-pressed="false"
+                                hidden onclick="toggleSeasonBlend()"></button>
+
                             <button id="settingsBtn" onclick="openSettings()" title="הגדרות"
                                 class="settings-trigger">
                                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
@@ -813,7 +815,7 @@
     <!-- Version query is bumped by scripts/stamp-version.mjs on every commit
          (npm run stamp). It was left at 4.0.0 for months, so returning
          visitors kept running a cached script.js and never saw fixes. -->
-    <script src="script.js?v=2026.08.31.353" defer></script>
+    <script src="script.js?v=2026.08.31.354" defer></script>
 </body>
 
 </html>

@@ -1286,10 +1286,25 @@ try {
             barVisible: visible(bar) && !!barBox && inViewport(bar),
             barButtons: viewBtns.length,
             barTaps: viewBtns.filter(b => b.getBoundingClientRect().height < 44).length,
-            // The page-wide switches live in the header, so they are reachable
-            // with every fold shut; the table's own controls sit on the table.
-            headerSwitches: ['watchlistOnlyBtn', 'freeAgentsOnlyBtn']
-                .filter(id => visible(document.getElementById(id))).length,
+            // The page-wide switches are reachable from the header without
+            // opening a fold on the page itself; the table's own controls sit on
+            // the table. On a narrow window the header parks them in its own ⋯
+            // panel — still one tap, and still not buried in a section — so what
+            // is asserted is that opening that panel reveals both, not that both
+            // are painted at all times. Restored afterwards so the rest of the
+            // run sees the page as it loads.
+            headerSwitches: (() => {
+                const ids = ['watchlistOnlyBtn', 'freeAgentsOnlyBtn'];
+                const shown = () => ids.filter(id => visible(document.getElementById(id))).length;
+                if (shown() === ids.length) return ids.length;
+                const panel = document.getElementById('hdrTools');
+                if (!panel) return shown();
+                const wasOpen = panel.classList.contains('is-open');
+                panel.classList.add('is-open');
+                const n = shown();
+                if (!wasOpen) panel.classList.remove('is-open');
+                return n;
+            })(),
             tableBarOnTable: !!tableBar && !!tableBar.closest('#mainTableView'),
             // ...and the quick-filter chips, which really are filters, stayed in.
             chipsInsidePanel: !!(row && row.closest('#filtersPanel')),
@@ -1311,7 +1326,7 @@ try {
     check(mob.smallTaps === 0,
         `every chip is a usable tap target${mob.smallTaps ? ` (${mob.smallTaps} under 30px)` : ''}`);
     check(mob.headerSwitches === 2 && mob.chipsInsidePanel,
-        'both site-wide switches are in the header, and the quick filters stay in the panel');
+        'both site-wide switches are reachable from the header, and the quick filters stay in the panel');
     check(mob.tableBarOnTable, "and the table's own controls sit on the table");
     check(mob.barVisible && mob.barButtons === 5 && mob.barTaps === 0,
         `the phone bar is on screen with ${mob.barButtons} thumb-sized actions`);

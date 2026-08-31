@@ -759,8 +759,17 @@
     .status-pill { padding: 5px 9px; font-size: 12px; }
     .status-pill .status-sep,
     .status-pill #statusHealth { display: none; }
+    /* Not even for warn/error. The three things a phone header owes the reader
+       are identity, which season, and the two tabs; a 116px sentence pushed all
+       of them onto separate rows. The dot's colour still says something is
+       wrong, the title attribute still says what, aria-live still announces it,
+       and a genuine problem also arrives as a toast. */
     .status-pill.is-warn #statusHealth,
-    .status-pill.is-error #statusHealth { display: inline; font-size: 11px; }
+    .status-pill.is-error #statusHealth { display: none; }
+
+    /* The dot is the whole control now, so make it a tap-sized target. */
+    .status-pill { padding: 7px; }
+    .status-pill .status-dot { width: 10px; height: 10px; }
     .settings-trigger span { display: none; }
     .settings-trigger { padding: 7px 9px; }
 

@@ -8,6 +8,7 @@
  *   - a stale cache-buster, which served old JS to returning users
  */
 import { readFileSync } from 'node:fs';
+import { execSync } from 'node:child_process';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -51,6 +52,31 @@ if (thead) {
 const stamps = [...html.matchAll(/(?:script|style|mobile|draft)\.(?:js|css)\?v=([\d.]+)/g)].map(m => m[1]);
 check(stamps.length >= 4, 'assets are missing the ?v= cache-buster');
 check(new Set(stamps).size <= 1, `assets carry mismatched cache-busters: ${[...new Set(stamps)].join(', ')}`);
+
+// The stamps agreeing with each other is not the same as their having moved.
+// Nothing in `verify` runs `npm run stamp`, so a release could ship changed CSS
+// under the previous version and returning visitors would get new markup over
+// cached styles. Compare against the last COMMITTED index.html: if the assets
+// changed in this commit and the stamp did not, say so.
+{
+    let head = '';
+    try {
+        head = execSync('git show HEAD:index.html', { cwd: ROOT, stdio: ['ignore', 'pipe', 'ignore'] }).toString();
+    } catch { /* no git, or no HEAD yet — nothing to compare against */ }
+    if (head) {
+        const stampOf = src => (src.match(/(?:script|style|mobile|draft)\.(?:js|css)\?v=([\d.]+)/) || [])[1];
+        const before = stampOf(head);
+        const now = stampOf(html);
+        const assetsChanged = ['script.js', 'style.css', 'mobile.css', 'draft.css'].filter(f => {
+            try {
+                return execSync(`git diff HEAD --name-only -- ${f}`, { cwd: ROOT, stdio: ['ignore', 'pipe', 'ignore'] })
+                    .toString().trim().length > 0;
+            } catch { return false; }
+        });
+        check(!(assetsChanged.length && before && before === now),
+            `${assetsChanged.join(', ')} changed but the ?v= stamp is still ${now} — run \`npm run stamp\``);
+    }
+}
 
 // 5. no localhost-only proxy as the shipped default
 // corsProxy is set from the OWN_PROXY constant (the fetch layer compares against

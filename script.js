@@ -1340,6 +1340,9 @@ document.addEventListener('DOMContentLoaded', () => {
     // so this is wired once regardless of what renders later.
     initDraftNav();
 
+    // The header's overflow panel.
+    initHeaderTools();
+
     // Initialize authentication
     auth.init();
 
@@ -16248,6 +16251,42 @@ function draftNavigate(section, segment, opts = {}) {
     }
 
     writeNavHash(`#draft/${section}/${segment}`, opts.replace === true);
+}
+
+/**
+ * The header's ⋯ panel.
+ *
+ * Below 1200px the three site-wide switches and the settings button move out of
+ * the header row and into a panel. Same elements either way — there is one copy
+ * of each control in the DOM — so this only toggles a class and the CSS decides
+ * whether that class means anything at the current width.
+ */
+function initHeaderTools() {
+    const btn = document.getElementById('hdrMoreBtn');
+    const panel = document.getElementById('hdrTools');
+    if (!btn || !panel) return;
+
+    const close = () => {
+        panel.classList.remove('is-open');
+        btn.setAttribute('aria-expanded', 'false');
+    };
+
+    btn.addEventListener('click', e => {
+        e.stopPropagation();
+        const open = !panel.classList.contains('is-open');
+        panel.classList.toggle('is-open', open);
+        btn.setAttribute('aria-expanded', String(open));
+    });
+
+    // Anywhere else, and Escape, closes it. Choosing something inside it also
+    // closes it, because every control in there acts immediately.
+    document.addEventListener('click', e => {
+        if (!panel.contains(e.target) && e.target !== btn) close();
+        else if (panel.contains(e.target) && e.target.closest('button')) close();
+    });
+    document.addEventListener('keydown', e => {
+        if (e.key === 'Escape') close();
+    });
 }
 
 // One delegated listener for all draft navigation surfaces. An explicit choice
