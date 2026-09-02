@@ -6657,6 +6657,29 @@ canvas {
 
 .table-bar-gap { flex: 1 1 auto; }
 
+/* How many rows are on screen, and how many are being withheld. Quiet while the
+   table is whole, amber the moment a filter is holding players back — the state
+   that used to be completely invisible. */
+.tb-count {
+    flex: none;
+    padding: 4px 9px;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    background: #f8fafc;
+    font-size: 11px;
+    font-weight: 600;
+    color: #64748b;
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+    cursor: help;
+}
+
+.tb-count.is-filtered {
+    border-color: #fde68a;
+    background: #fffbeb;
+    color: #92400e;
+}
+
 /* The two header switches sit between the season toggle and the GW pill. */
 .user-actions .scout-btn { flex: none; }
 

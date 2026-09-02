@@ -2046,10 +2046,16 @@ const UNPLAYED_STAT_FIELDS = [
 /**
  * The minutes floor the season on screen can actually reach.
  *
- * 120 is right for a finished season and impossible in a young one: after one
- * gameweek the maximum is 90, so the filter emptied the entire table the morning
- * after the season started. Scaled to half the minutes available so far, capped at
- * the full-season default.
+ * The floor opens at zero now, so the table starts by showing every player. It
+ * used to open at 120 (scaled down in a young season), and that default was
+ * hiding the squad: two gameweeks in, a 90-minute floor cut Arsenal from 28
+ * players to 11 and took every injured player with it, Saliba included — the
+ * exact rows a draft is decided on. A floor is a useful thing to reach for and a
+ * bad thing to arrive at, and nothing on screen said it was on.
+ *
+ * The scaling below still matters if the default is ever raised again: 120 is
+ * right for a finished season and impossible in a young one, where after one
+ * gameweek the maximum is 90 and the filter emptied the entire table.
  */
 function defaultMinMinutes() {
     if (state.currentDataSource !== 'live') return DEFAULT_MIN_MINUTES;
@@ -2964,13 +2970,31 @@ function preprocessPlayerData(players, setPieceTakers) {
         // 25% = Very Doubtful (Red) - Avoid
         // 0% = Injured/Suspended (Red) - Out
 
-        p.availability_grade = 'available'; // Default
+        // Graded off BOTH fields, because either one alone lies.
+        //
+        // This used to test chance_of_playing_next_round against the four exact
+        // values 0/25/50/75 and nothing else. Any other number graded a player
+        // "available", and so did a null — and FPL leaves the chance null on
+        // plenty of rows whose `status` already says injured or suspended. The
+        // "לא זמין" signal reads this field, which is why it was missing injured
+        // players: they were never graded unavailable in the first place.
+        //
+        // `status` letters: a=available, d=doubtful, i=injured, s=suspended,
+        // u=unavailable, n=not in squad.
         const chance = p.chance_of_playing_next_round;
+        const status = p.status || 'a';
+        const hasChance = chance !== null && chance !== undefined;
 
-        if (chance === 0) p.availability_grade = 'out';
-        else if (chance === 25) p.availability_grade = 'avoid';
-        else if (chance === 50) p.availability_grade = 'risky';
-        else if (chance === 75) p.availability_grade = 'flagged'; // But valid
+        if (['i', 's', 'u', 'n'].includes(status) || chance === 0) {
+            p.availability_grade = 'out';
+        } else if (hasChance && chance < 100) {
+            // Ranges, not equality, so an unfamiliar percentage still lands.
+            p.availability_grade = chance <= 25 ? 'avoid' : chance <= 50 ? 'risky' : 'flagged';
+        } else if (status === 'd') {
+            p.availability_grade = 'flagged';
+        } else {
+            p.availability_grade = 'available';
+        }
 
         // Enrich news with timestamp if available (API: news_added)
         if (p.news && p.news_added) {
@@ -3075,8 +3099,24 @@ function calculateRealFDR(players, fixtures) {
 }
 
 
+/**
+ * processChange, but not on every keystroke.
+ *
+ * The table opens on the whole league now — 568 rows rather than 20 — and a full
+ * render is ~600ms. That is fine for a dropdown, which is one deliberate change,
+ * and unusable on a text box, where it landed between every two letters of a
+ * player's name. The typed filters wait for a pause; everything else stays
+ * immediate, because an instant answer is the point of a click.
+ */
+let _processTimer = null;
+function processChangeSoon() {
+    if (_processTimer) clearTimeout(_processTimer);
+    _processTimer = setTimeout(() => { _processTimer = null; processChange(); }, 180);
+}
+
 function setupEventListeners() {
-    ['searchName', 'priceRange', 'minPoints', 'minMinutes'].forEach(id => document.getElementById(id).addEventListener('keyup', processChange));
+    ['searchName', 'priceRange', 'minPoints', 'minMinutes']
+        .forEach(id => document.getElementById(id).addEventListener('keyup', processChangeSoon));
     // Once the reader sets a floor themselves, the season-aware default stops
     // overwriting it — same rule the opening sort follows.
     const minutesInput = document.getElementById('minMinutes');
@@ -5114,8 +5154,12 @@ function processChange() {
         }
     }
 
-    const minPoints = parseInt(pointsInput) || 0;
-    const minMinutes = parseInt(minutesInput) || 0;
+    // An empty box is not a floor of zero — it is no floor at all. Read as zero,
+    // the points box quietly excluded every player on negative points: a red card
+    // is -2, so a suspended player was dropped from the table by a filter nobody
+    // had typed into. `null` here means "do not test this at all".
+    const minPoints = pointsInput.trim() === '' ? null : (parseFloat(pointsInput) || 0);
+    const minMinutes = minutesInput.trim() === '' ? null : (parseInt(minutesInput, 10) || 0);
     const statsRange = document.getElementById('statsRange') ? document.getElementById('statsRange').value : 'all';
 
     // CORRECT APPROACH:
@@ -5168,8 +5212,8 @@ function processChange() {
         (!posFilter || p.position_name === posFilter) &&
         (!teamFilter || p.team_name === teamFilter) &&
         (p.now_cost >= minPrice && p.now_cost <= maxPrice) &&
-        p.total_points >= minPoints &&
-        p.minutes >= minMinutes &&
+        (minPoints === null || (p.total_points || 0) >= minPoints) &&
+        (minMinutes === null || (p.minutes || 0) >= minMinutes) &&
         (xDiffFilter === '' || (xDiffFilter === 'positive' && p.xDiff > 0) || (xDiffFilter === 'negative' && p.xDiff < 0))
     );
 
@@ -5304,6 +5348,7 @@ function processChange() {
     }
 
     renderTable();
+    syncRowCount();
 
     // The charts and the board read the set this function just filtered, so
     // both refresh here — that is the whole "one page, one pipeline" contract.
@@ -5311,6 +5356,38 @@ function processChange() {
     // twelve canvases plus six panels per keystroke is a stutter the table
     // itself never had.
     scheduleDownstreamRender();
+}
+
+/**
+ * Say how many rows are on screen, and how many the filters are holding back.
+ *
+ * This exists because of the bug that produced it. The page opened with a
+ * 120-minute floor and a 20-row cap, and showed neither: filtering to Arsenal
+ * gave 11 of 28 players, every injured name among the missing 17, with nothing
+ * on screen to suggest the table was not the whole squad. Both defaults are zero
+ * and "all" now, but a count is the part that makes it self-evident — any filter
+ * that narrows the table from here says so, in the table's own toolbar.
+ *
+ * Two numbers, not three: what you see, and what is being withheld. The total is
+ * on the hover, where it is available without competing for the glance.
+ */
+function syncRowCount() {
+    const el = document.getElementById('rowCount');
+    if (!el) return;
+
+    const src = state.allPlayersData[state.currentDataSource];
+    const total = ((src && src.processed) || []).length;
+    const shown = (state.displayedData || []).length;
+    const hidden = Math.max(0, total - shown);
+
+    el.textContent = hidden
+        ? `${shown} מוצגים · ${hidden} מסוננים`
+        : `${shown} שחקנים`;
+    el.title = hidden
+        ? `${shown} שורות על המסך מתוך ${total} שחקנים בליגה.`
+            + ' נקו את הסינון (איפוס) או העלו את "הצג" כדי לראות את כולם'
+        : `כל ${total} השחקנים בליגה על המסך`;
+    el.classList.toggle('is-filtered', hidden > 0);
 }
 
 let _downstreamTimer = null;
@@ -5473,6 +5550,34 @@ const QUICK_FILTERS = {
         filter: p => parseFloat(p.form) >= 4.5 && sampleMinutes(p) > scaleMinutes(450),
         sortKey: 'points_per_game_90'
     },
+    // Every player the game has flagged, most valuable first.
+    //
+    // The סיגנל dropdown already had a "לא זמין" verdict, but reaching it meant
+    // passing the minutes floor first — and an injured player has no minutes, so
+    // the one filter for finding injuries was structurally unable to show them.
+    // As a chip it carries its own zero floor (see toggleQuickFilter) and asks
+    // the availability field directly.
+    //
+    // `status` is tested alongside the grade rather than trusting the grade
+    // alone: the grade is derived, and a derivation that misses a case here
+    // would hide exactly the row this chip exists to surface.
+    injured: {
+        filter: p => (p.availability_grade && p.availability_grade !== 'available')
+            || (p.status && p.status !== 'a'),
+        // Sorted by price, not by draft rank — the same reasoning the newcomer
+        // chips use. An injured player's rank is built out of minutes he did not
+        // play, so ranking this list by it puts whoever got hurt last week on top
+        // and the season-long absentees at the bottom. That is backwards: a key
+        // defender out since August is the row a draft most needs to see, and
+        // FPL's own price is the only published expectation that survives having
+        // played nothing at all.
+        sortKey: 'now_cost', sortDirection: 'desc',
+        explain: 'כל מי שהמשחק מסמן — פצועים, מורחקים וספקות להרכב, כולל מי שטרם שיחק דקה.'
+            + ' מסודר לפי מחיר ולא לפי דירוג הדראפט: הדירוג של פצוע בנוי מדקות שהוא לא שיחק,'
+            + ' והמחיר הוא הציפייה היחידה שנשארת תקפה גם למי ששיחק אפס.'
+            + ' אחוז הסיכוי לשחק מופיע בתג שליד שם השחקן'
+    },
+
     // Creating more than they have converted: candidates to improve.
     underperformers: {
         filter: p => sampleMinutes(p) > scaleMinutes(600) && p.xDiff < -1.5,
@@ -5691,7 +5796,7 @@ function setActiveButton(button) {
  * intended one. A quick filter still drops it to zero on purpose — a chip carries
  * its own minutes threshold and should not be filtered twice.
  */
-const DEFAULT_MIN_MINUTES = '120';
+const DEFAULT_MIN_MINUTES = '0';
 const QUICK_FILTER_MIN_MINUTES = '0';
 
 function showAllPlayers(button) {

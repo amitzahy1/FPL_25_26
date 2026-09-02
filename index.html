@@ -11,9 +11,9 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link rel="stylesheet"
         href="https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;700;800;900&family=Rubik:wght@400;500;600;700;800;900&display=swap">
-    <link rel="stylesheet" href="style.css?v=2026.08.31.362">
-    <link rel="stylesheet" href="mobile.css?v=2026.08.31.362">
-    <link rel="stylesheet" href="draft.css?v=2026.08.31.362">
+    <link rel="stylesheet" href="style.css?v=2026.08.31.363">
+    <link rel="stylesheet" href="mobile.css?v=2026.08.31.363">
+    <link rel="stylesheet" href="draft.css?v=2026.08.31.363">
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.5.1"></script>
     <script
         src="https://cdnjs.cloudflare.com/ajax/libs/chartjs-plugin-annotation/2.2.1/chartjs-plugin-annotation.min.js"></script>
@@ -192,17 +192,17 @@
                         </select></div>
 
                     <div class="filter-group"><label title="טווח מחירים, למשל 4.0-9.0">💰 מחיר</label><input type="text" id="priceRange"
-                            onkeyup="processChange()" placeholder="4.0-15.0"></div>
+                            onkeyup="processChangeSoon()" placeholder="4.0-15.0"></div>
 
                     <div class="filter-group"><label title="מסנן שחקנים מתחת למספר הנקודות הזה">🏆 נק׳ מ-</label><input type="number" id="minPoints"
-                            onkeyup="processChange()" placeholder="0"></div>
+                            onkeyup="processChangeSoon()" placeholder="0"></div>
 
                     <!-- value must stay in step with DEFAULT_MIN_MINUTES in script.js;
                          a structural check asserts they match, because they drifted
                          apart once and איפוס quietly produced a different table
                          from a fresh page load. -->
                     <div class="filter-group"><label title="מסנן שחקנים מתחת למספר הדקות הזה">⏳ דקות</label><input type="number" id="minMinutes"
-                            onkeyup="processChange()" value="120" placeholder="0"></div>
+                            onkeyup="processChangeSoon()" value="0" placeholder="0"></div>
                     <!-- Two neighbouring controls both meaning "last N gameweeks", so
                          each says which N it is. חלון מומנטום is the width of the
                          trend measurement (Δpoints, the micro-charts, the board's
@@ -243,11 +243,11 @@
                         </select></div>
 
                     <div class="filter-group"><label>הצג:</label><select id="showEntries" onchange="processChange()">
-                            <option value="20" selected>20 הראשונים</option>
+                            <option value="20">20 הראשונים</option>
                             <option value="50">50</option>
                             <option value="100">100</option>
                             <option value="200">200</option>
-                            <option value="all">הכל</option>
+                            <option value="all" selected>הכל</option>
                         </select></div>
 
                 </div>
@@ -262,6 +262,10 @@
                     <div class="tb-row tb-row--filters">
                         <span class="tb-row-label">✨ פילטרים חכמים</span>
                         <div class="quick-filters-group">
+                            <!-- First, because it is the most time-sensitive thing on the
+                                 page: who cannot play this week. -->
+                            <button class="quick-filter-btn" onclick="toggleQuickFilter(this, 'injured')"
+                                title="כל מי שהמשחק מסמן — פצועים, מורחקים וספקות להרכב. אחוז הסיכוי לשחק מופיע בתג שליד השם">🚑 פצועים וספקות</button>
                             <button class="quick-filter-btn" onclick="toggleQuickFilter(this, 'set_pieces')">🎯 נייחים</button>
                             <button class="quick-filter-btn"
                                 onclick="toggleQuickFilter(this, 'attacking_defenders')">🛡️ מגן תוקף</button>
@@ -330,6 +334,12 @@
                          changes how the rows read (density, columns, export),
                          nothing here filters the page. -->
                     <div class="table-bar">
+                        <!-- How many rows are on screen, and how many the filters are
+                             holding back. Written by syncRowCount(). The page shipped
+                             with a 120-minute floor and a 20-row cap and said neither,
+                             so "the table is missing players" was invisible from the
+                             table itself. -->
+                        <span class="tb-count" id="rowCount" aria-live="polite"></span>
                         <div class="scout-toggle">
                             <button class="scout-btn" data-row-mode="trend" aria-pressed="true"
                                 onclick="setRowMode('trend')" title="שורות עם גרף מחזורים אחרונים">טרנד</button>
@@ -834,7 +844,7 @@
     <!-- Version query is bumped by scripts/stamp-version.mjs on every commit
          (npm run stamp). It was left at 4.0.0 for months, so returning
          visitors kept running a cached script.js and never saw fixes. -->
-    <script src="script.js?v=2026.08.31.362" defer></script>
+    <script src="script.js?v=2026.08.31.363" defer></script>
 </body>
 
 </html>

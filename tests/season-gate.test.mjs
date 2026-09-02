@@ -211,16 +211,26 @@ describe('the previous season fills the new squad', () => {
 });
 
 describe('the minutes floor the season can reach', () => {
-    test('scales with a young season and sits at the default otherwise', () => {
-        // 120 is unreachable after one gameweek, which emptied the whole table.
-        assert.equal(load(played(1)).defaultMinMinutes(), '45');
-        assert.equal(load(played(2)).defaultMinMinutes(), '90');
-        assert.equal(load(played(3)).defaultMinMinutes(), '120');
-        assert.equal(load(played(20)).defaultMinMinutes(), '120');
-        // Pre-season the minutes shown are last season's, so the full floor is
-        // right — and it doubles as the newcomer filter.
-        assert.equal(load(played(0)).defaultMinMinutes(), '120');
-        assert.equal(load(played(0), { currentDataSource: 'historical' }).defaultMinMinutes(), '120');
+    test('opens at zero in every season state, so the table starts whole', () => {
+        // This used to open at 120, scaled down to played*45 in a young season.
+        // Both numbers hid players: two gameweeks in, the 90 that scaling
+        // produced cut Arsenal from 28 players to 11 and took every injured
+        // name with it. A floor is something to reach for, not to arrive at.
+        for (const gws of [0, 1, 2, 3, 20]) {
+            assert.equal(load(played(gws)).defaultMinMinutes(), '0',
+                `a season with ${gws} gameweeks played must not open on a floor`);
+        }
+        assert.equal(load(played(0), { currentDataSource: 'historical' }).defaultMinMinutes(), '0');
+    });
+
+    test('the scaling still holds, for whenever the default is raised again', () => {
+        // The clamp is what makes a non-zero default survivable in a young
+        // season, so it is pinned independently of the default's current value.
+        const gate = load(played(1));
+        assert.equal(gate.scaleMinutes(900), 45,
+            'a 900-minute internal threshold scales to the football that exists');
+        assert.equal(load(played(20)).scaleMinutes(900), 900,
+            'and stops scaling once the season is long enough to carry it');
     });
 });
 

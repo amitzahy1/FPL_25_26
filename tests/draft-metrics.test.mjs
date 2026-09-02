@@ -190,7 +190,7 @@ describe('smart filters', () => {
         const html = SCRIPT_SRC; // filters are referenced from index.html, checked below
         // 'differentials' was deleted with its chip (2026-08-02): ownership is a
         // classic-game signal and the chip earned its row the least.
-        const required = ['set_pieces', 'attacking_defenders',
+        const required = ['injured', 'set_pieces', 'attacking_defenders',
             'form_kings', 'underperformers',
             'promoted_teams', 'new_to_league', 'moved_club',
             'best_gkp_5', 'best_def_5', 'best_mid_5', 'best_fwd_5',
@@ -200,6 +200,45 @@ describe('smart filters', () => {
             assert.equal(typeof QUICK_FILTERS[name].filter, 'function');
         }
         assert.ok(html.length > 0);
+    });
+
+    describe('the injured chip', () => {
+        // Reported from the live page: filtering to Arsenal showed 11 of 28
+        // players and Saliba — injured, so zero minutes — was not among them.
+        // Two separate causes, one symptom; this covers the filter half.
+        const row = (over = {}) => ({
+            web_name: 'X', status: 'a', availability_grade: 'available',
+            chance_of_playing_next_round: 100, minutes: 0, ...over
+        });
+
+        test('catches everyone the game has flagged', () => {
+            const f = QUICK_FILTERS.injured.filter;
+            assert.ok(f(row({ status: 'i', availability_grade: 'out',
+                chance_of_playing_next_round: 0, minutes: 0 })), 'injured, no minutes');
+            assert.ok(f(row({ status: 's', availability_grade: 'out',
+                chance_of_playing_next_round: 0 })), 'suspended');
+            assert.ok(f(row({ status: 'd', availability_grade: 'flagged',
+                chance_of_playing_next_round: 75 })), 'a doubt is still worth seeing');
+            assert.ok(!f(row()), 'a fit player is not on this list');
+        });
+
+        test('a player flagged only by status still lands', () => {
+            // The grade is derived from chance_of_playing_next_round, which FPL
+            // leaves null on plenty of rows whose status already says injured.
+            // Testing the grade alone would hide exactly this row.
+            const f = QUICK_FILTERS.injured.filter;
+            assert.ok(f(row({ status: 'i', chance_of_playing_next_round: null,
+                availability_grade: 'available' })),
+                'status is read alongside the grade, not instead of it');
+        });
+
+        test('it ranks by price, not by a rank built from minutes not played', () => {
+            // Ranking by draft_score put whoever got hurt last week on top and
+            // the season-long absentees last — the opposite of what a draft
+            // needs. Price is the only expectation that survives zero minutes.
+            assert.equal(QUICK_FILTERS.injured.sortKey, 'now_cost');
+            assert.equal(QUICK_FILTERS.injured.sortDirection, 'desc');
+        });
     });
 
     describe('pre-season market chips', () => {

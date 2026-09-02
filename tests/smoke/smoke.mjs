@@ -83,7 +83,16 @@ try {
             hScroll: document.documentElement.scrollWidth > document.documentElement.clientWidth + 1,
             navActive: ([...document.querySelectorAll('.nav-item')]
                 .find(b => b.classList.contains('active')) || {}).id || null,
-            playersShown: document.getElementById('playersTabContent').style.display !== 'none'
+            playersShown: document.getElementById('playersTabContent').style.display !== 'none',
+            // The table must OPEN whole. It shipped with a 120-minute floor and a
+            // 20-row cap and announced neither, so filtering to one club showed
+            // 11 of its 28 players — every injured name among the missing — and
+            // the page looked like it simply did not have them.
+            processed: typeof state !== 'undefined'
+                ? state.allPlayersData[state.currentDataSource].processed.length : -1,
+            minutesBox: document.getElementById('minMinutes').value,
+            showEntries: document.getElementById('showEntries').value,
+            rowCount: (document.getElementById('rowCount') || {}).textContent || ''
         };
     });
 
@@ -97,6 +106,12 @@ try {
     // which between seasons is a full timeout chain.
     check(r.navActive === 'nav-players' && r.playersShown,
         `the nav highlights the tab that is on screen (${r.navActive})`);
+    check(r.rows === r.processed && r.processed > 0,
+        `the table opens on the whole league — ${r.rows} rows for ${r.processed} players`);
+    check(r.minutesBox === '0' && r.showEntries === 'all',
+        `and neither default filters it (דקות "${r.minutesBox}", הצג "${r.showEntries}")`);
+    check(/\d/.test(r.rowCount),
+        `the toolbar says how many rows are on screen ("${r.rowCount.trim()}")`);
     check(!r.hScroll, 'no horizontal page scroll at 1440px');
     check(pageErrors.length === 0, `no uncaught page errors${pageErrors.length ? `: ${pageErrors[0]}` : ''}`);
 
