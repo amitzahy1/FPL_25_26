@@ -452,9 +452,14 @@ body.tab-draft {
 #draftTabContent .plc-kpi-sub.is-pos { color: var(--c-green); }
 #draftTabContent .plc-kpi-sub.is-neg { color: var(--c-red); }
 
-/* The two overview panes are cards now, so the grid only owns the gap. */
+/* The two overview panes are cards now, so the grid only owns the gap.
+   No align-self: stretch. It was here to make the pair look like matched
+   columns, and the cost only became visible once the squads rendered: a pitch
+   with fifteen players is far taller than a six-row table, so the stretch gave
+   the standings card about 450px of empty white below its last row. Each card
+   ends where its content ends — the grid's own align-items: start. */
 #draftTabContent .draft-top-grid > .plc-card {
-    align-self: stretch;
+    align-self: start;
 }
 
 #draftTabContent .plc-chart-body {

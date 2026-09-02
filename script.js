@@ -10224,7 +10224,11 @@ function draftStandingsRowHtml(s) {
     const isMe = state.draft.myTeamId && String(s.entry_id) === String(state.draft.myTeamId);
     return `
         <tr${isMe ? ' class="is-me"' : ''}>
-            <td><span class="plc-rank${s.rank === 1 ? ' is-top' : ''}">${s.rank}</span></td>
+            <td>${Number.isFinite(s.rank)
+        ? `<span class="plc-rank${s.rank === 1 ? ' is-top' : ''}">${s.rank}</span>`
+        // The API has no rank to give before the league has played a gameweek,
+        // and it returned it as the literal string "null" in the column.
+        : '<span class="rank-none" title="אין דירוג עד שיושלם המחזור הראשון">–</span>'}</td>
             <td>${escapeHtml(s.manager)}</td>
             <td><span class="plc-team-logo">${getTeamLogo(s.team)}</span>${escapeHtml(s.team)}</td>
             <td>${s.wins}</td>
@@ -10285,6 +10289,61 @@ function getProcessedByElementId() {
     });
 
     return map;
+}
+
+/**
+ * Rebuild the squads from the league's ownership record.
+ *
+ * The rosters are normally built from entry/{id}/event/{gw} — the picks
+ * endpoint — which answers 404 "No pick history" until a gameweek has actually
+ * been scored. Between draft night and the league's first kick-off that is every
+ * request for every team, so a completed draft produced a set of empty squads
+ * and a "לא נמצא סגל" panel everywhere a squad should be, while element-status
+ * was sitting on all ninety picks the whole time.
+ *
+ * The join is not the obvious one: element-status keys `owner` by `entry_id`,
+ * and the rosters are keyed by the league_entry `id`. Those are different
+ * numbers for the same manager (2285 vs 2286), so they go through
+ * league_entries rather than being used interchangeably.
+ *
+ * No lineup comes out of this, and none should: element-status says who owns a
+ * player, not who starts him, and before a gameweek exists FPL has not picked
+ * an eleven either. renderMyLineup falls back to the best legal eleven, which
+ * is the honest thing to show for a squad that has never been played.
+ */
+function fillRostersFromOwnership() {
+    const d = state.draft;
+    if (!d.ownershipByFplId || !d.ownershipByFplId.size) return 0;
+
+    const entryIdToId = new Map();
+    for (const e of (d.details && d.details.league_entries) || []) {
+        if (e && e.entry_id != null && e.id != null) entryIdToId.set(Number(e.entry_id), e.id);
+    }
+    if (!entryIdToId.size) return 0;
+
+    const squads = new Map();
+    for (const [fplId, owner] of d.ownershipByFplId) {
+        if (owner == null) continue;
+        const id = entryIdToId.get(Number(owner));
+        if (id == null) continue;
+        if (!squads.has(id)) squads.set(id, []);
+        squads.get(id).push(fplId);
+    }
+
+    let filled = 0;
+    for (const [id, ids] of squads) {
+        // Never overwrite a roster the picks endpoint did return: that one
+        // carries positions, and this one cannot.
+        const existing = d.rostersByEntryId.get(id);
+        if (existing && existing.length) continue;
+        d.rostersByEntryId.set(id, ids);
+        filled++;
+    }
+    if (filled) {
+        console.log(`🧩 rebuilt ${filled} squad(s) from element-status`
+            + ' — the picks endpoint has no history before the first gameweek');
+    }
+    return filled;
 }
 
 function pickStartingXI(playerIds) {
@@ -10806,6 +10865,13 @@ async function _loadDraftDataInBackground() {
             // table the user sees first.
             await loadDraftElementStatus();
 
+            // The squads, from that same record. The picks requests above return
+            // 404 "No pick history" until the league has played a gameweek, so
+            // this is what fills the rosters between draft night and kick-off —
+            // and doing it here means the draft tab opens on a full squad rather
+            // than waiting for its own load to finish.
+            fillRostersFromOwnership();
+
             // Populate team filter with draft teams
             populateTeamFilter();
 
@@ -11006,6 +11072,11 @@ async function loadDraftLeague() {
             // diffing concluded, because a single failed picks request used to
             // turn a whole squad into "free agents".
             await loadDraftElementStatus();
+
+            // ...and it is the only source of a squad until the league has played
+            // a gameweek, because that is when the picks endpoint above starts
+            // having anything to return.
+            fillRostersFromOwnership();
 
             // Everything below is additive: the tabs that need it render when it
             // arrives, and nothing blocks on it.
@@ -11538,7 +11609,10 @@ function renderDraftStandings() {
             // that find() never matched, so every team's table points and wins
             // came through as 0.
             entry_id: s.league_entry,
-            rank: s.rank,
+            // Null until a gameweek has been played. Kept as null rather than
+            // coerced to a position, because "everyone is tied on nothing" is
+            // the true answer and a made-up 1..6 would read as a real table.
+            rank: Number.isFinite(s.rank) ? s.rank : null,
             manager: entry.player_first_name + ' ' + entry.player_last_name,
             team: entry.entry_name,
             wins: s.matches_won || 0,
@@ -11551,7 +11625,13 @@ function renderDraftStandings() {
         };
     }).filter(Boolean); // Remove nulls
 
-    standingsData.sort((a, b) => a.rank - b.rank);
+    // a.rank - b.rank is NaN for every pair while the ranks are null, which left
+    // the order to chance. Points first, then name, so a table nobody has played
+    // yet still comes out the same way twice.
+    standingsData.sort((a, b) => {
+        if (Number.isFinite(a.rank) && Number.isFinite(b.rank)) return a.rank - b.rank;
+        return (b.total - a.total) || (b.pf - a.pf) || a.team.localeCompare(b.team);
+    });
     state.draft._standingsData = standingsData; // Save for sorting
 
     const table = document.createElement('table');
@@ -16989,17 +17069,20 @@ function renderMyLineup(teamId) {
         bench = lineupData.bench.map(id => processedById.get(id)).filter(Boolean);
         console.log("   Starters:", starters.length, "Bench:", bench.length);
     } else {
-        console.log("⚠️ No lineup data, using roster fallback");
-        const roster = rosterIds.map(id => {
-            const player = processedById.get(id);
-            if (!player) {
-                console.warn(`   ❌ Player not found for ID: ${id}`);
-            }
-            return player;
-        }).filter(Boolean);
-        console.log("   Total roster players found:", roster.length, "out of", rosterIds.length);
-        starters = roster.slice(0, 11);
-        bench = roster.slice(11);
+        // No lineup from the API — which is the normal state before the league's
+        // first gameweek, when FPL has not picked an eleven either. The first
+        // eleven of the roster array is not a lineup: taken in ownership order it
+        // put three goalkeepers on the pitch and left the shape undrawable. Ask
+        // for the best legal eleven instead, the same one renderPitch would pick.
+        console.log("⚠️ No lineup data — selecting the best legal eleven from the squad");
+        const missing = rosterIds.filter(id => !processedById.get(id));
+        if (missing.length) console.warn(`   ❌ no player data for ${missing.length} id(s)`, missing);
+
+        const xiIds = pickStartingXI(rosterIds);
+        const inXi = new Set(xiIds);
+        starters = xiIds.map(id => processedById.get(id)).filter(Boolean);
+        bench = rosterIds.filter(id => !inXi.has(id)).map(id => processedById.get(id)).filter(Boolean);
+        console.log(`   ${starters.length} starting, ${bench.length} bench, from ${rosterIds.length} owned`);
     }
 
     const calculateStats = (players) => {
