@@ -11,9 +11,9 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link rel="stylesheet"
         href="https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;700;800;900&family=Rubik:wght@400;500;600;700;800;900&display=swap">
-    <link rel="stylesheet" href="style.css?v=2026.08.31.363">
-    <link rel="stylesheet" href="mobile.css?v=2026.08.31.363">
-    <link rel="stylesheet" href="draft.css?v=2026.08.31.363">
+    <link rel="stylesheet" href="style.css?v=2026.09.02.364">
+    <link rel="stylesheet" href="mobile.css?v=2026.09.02.364">
+    <link rel="stylesheet" href="draft.css?v=2026.09.02.364">
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.5.1"></script>
     <script
         src="https://cdnjs.cloudflare.com/ajax/libs/chartjs-plugin-annotation/2.2.1/chartjs-plugin-annotation.min.js"></script>
@@ -371,6 +371,15 @@
                                     <th data-sort="team_name">קבוצה<span class="sort-indicator"></span></th>
                                     <th data-sort="draft_team" title="קבוצת דראפט (חופשי/שם הקבוצה)">קבוצת דראפט<span
                                             class="sort-indicator"></span></th>
+                                    <!-- Price sat at the far right, switched off, behind the
+                                         עמודות menu. It belongs with the identity columns and
+                                         it belongs on: it is the game's own valuation of a
+                                         player, it is the only expectation that still holds
+                                         for someone who has played no minutes, and three quick
+                                         filters and the injured list already rank on it. -->
+                                    <th data-sort="now_cost"
+                                        title="המחיר של FPL. שינוי מול העונה שעברה מוצג לצידו">מחיר<span
+                                            class="sort-indicator"></span></th>
                                     <!-- The זמינות column was here. It printed ✓ on every row
                                          whenever the squad was fit, spending a column on a
                                          constant. Availability now shows as a badge on the
@@ -424,7 +433,6 @@
                                     <th data-sort="blend_weight" title="משקל העונה הנוכחית בקצבים של השורה — השאר מגיע מהעונה שעברה">משקל<span class="sort-indicator"></span></th>
                                     <th data-sort="bonus_per90">בונוס/90<span class="sort-indicator"></span></th>
                                     <th data-sort="clean_sheets_per90">CS/90<span class="sort-indicator"></span></th>
-                                    <th data-sort="now_cost">מחיר<span class="sort-indicator"></span></th>
                                     <th data-sort="set_piece_priority.penalty">פנדל<span class="sort-indicator"></span>
                                     </th>
                                     <th data-sort="set_piece_priority.corner">קרן<span class="sort-indicator"></span>
@@ -844,7 +852,7 @@
     <!-- Version query is bumped by scripts/stamp-version.mjs on every commit
          (npm run stamp). It was left at 4.0.0 for months, so returning
          visitors kept running a cached script.js and never saw fixes. -->
-    <script src="script.js?v=2026.08.31.363" defer></script>
+    <script src="script.js?v=2026.09.02.364" defer></script>
 </body>
 
 </html>

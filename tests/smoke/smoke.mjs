@@ -92,7 +92,23 @@ try {
                 ? state.allPlayersData[state.currentDataSource].processed.length : -1,
             minutesBox: document.getElementById('minMinutes').value,
             showEntries: document.getElementById('showEntries').value,
-            rowCount: (document.getElementById('rowCount') || {}).textContent || ''
+            rowCount: (document.getElementById('rowCount') || {}).textContent || '',
+            // מחיר shipped switched off behind the עמודות menu. It is the game's
+            // own valuation, it is the only expectation that holds for a player
+            // with no minutes, and three quick filters rank on it — so it is a
+            // permanent column now, and this is what keeps it one.
+            price: (() => {
+                const heads = [...document.querySelectorAll('#playersTable > thead > tr > th')];
+                const i = heads.findIndex(h => h.dataset.sort === 'now_cost');
+                const row = document.querySelector('#playersTableBody tr.player-row');
+                return {
+                    i,
+                    hidden: i < 0 || heads[i].hidden,
+                    optional: [...document.querySelectorAll('#optionalCols .optional-chip')]
+                        .some(b => (b.getAttribute('onclick') || '').includes('now_cost')),
+                    cell: (i >= 0 && row) ? row.children[i].textContent.trim() : ''
+                };
+            })()
         };
     });
 
@@ -112,6 +128,8 @@ try {
         `and neither default filters it (דקות "${r.minutesBox}", הצג "${r.showEntries}")`);
     check(/\d/.test(r.rowCount),
         `the toolbar says how many rows are on screen ("${r.rowCount.trim()}")`);
+    check(r.price.i > 0 && !r.price.hidden && !r.price.optional && /\d/.test(r.price.cell),
+        `מחיר is a permanent column, on by default, showing a value ("${r.price.cell}")`);
     check(!r.hScroll, 'no horizontal page scroll at 1440px');
     check(pageErrors.length === 0, `no uncaught page errors${pageErrors.length ? `: ${pageErrors[0]}` : ''}`);
 

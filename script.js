@@ -4839,6 +4839,7 @@ function createPlayerRowHtml(player, index) {
         <td>${player.position_name}</td>
         <td>${player.team_name}</td>
         <td>${cellBadge(escapeHtml(draftTeamDisplay), draftTeamTone, draftTeamDisplay)}</td>
+        <td class="price-cell">${priceCellHtml(player)}</td>
         <td class="bold-cell ${toneClass('draft_score', player.draft_score, displayedValues.draft_score)}">${player.draft_score.toFixed(1)}</td>
         <td class="draft-rank-cell ${player.draft_rank
             // reversed: #1 is the best draft rank, so low is good here.
@@ -4880,7 +4881,6 @@ function createPlayerRowHtml(player, index) {
         <td class="blend-cell">${blendWeightCellHtml(player)}</td>
         <td class="${toneClass('bonus_per90', parseFloat(player.bonus_per90) || 0, displayedValues.bonus_per90)}">${(parseFloat(player.bonus_per90) || 0).toFixed(2)}</td>
         <td class="${toneClass('clean_sheets_per90', parseFloat(player.clean_sheets_per90) || 0, displayedValues.clean_sheets_per90)}">${(parseFloat(player.clean_sheets_per90) || 0).toFixed(2)}</td>
-        <td class="price-cell">${priceCellHtml(player)}</td>
         <td>${player.set_piece_priority.penalty === 1 ? cellBadge('🎯 1', 'good') : '<span class="cell-none">–</span>'}</td>
         <td>${player.set_piece_priority.corner > 0 ? cellBadge(`${player.set_piece_priority.corner}#`, 'info') : '<span class="cell-none">–</span>'}</td>
         <td>${player.set_piece_priority.free_kick > 0 ? cellBadge(`${player.set_piece_priority.free_kick}#`, 'info') : '<span class="cell-none">–</span>'}</td>
@@ -4910,9 +4910,16 @@ window.addEventListener('resize', fitDetailPanel);
 /* ==========================================================================
    OPTIONAL COLUMNS
    Presets replaced: hiding two thirds of the table by default reads as columns
-   having been deleted. Every column is present; these six are the ones that
-   crowd the row without being consulted often, so they start off and go back on
-   with one click. The choice is remembered.
+   having been deleted. Every column is present; these are the ones that crowd
+   the row without being consulted often, so they start off and go back on with
+   one click. The choice is remembered.
+
+   מחיר used to be in this list and is not any more. It reads as a fact about the
+   player rather than an extra statistic, it is the one expectation that still
+   holds for someone who has played no minutes, and three quick filters plus the
+   injured list already rank on it — so it sits with the identity columns and is
+   always on. loadOptionalColumns() filters a stored set against this list, so a
+   reader who had switched it on keeps a working preference either way.
    ========================================================================== */
 
 const OPTIONAL_COLUMNS = [
@@ -4927,8 +4934,7 @@ const OPTIONAL_COLUMNS = [
     { key: 'minutes', label: 'דקות' },
     { key: 'blend_weight', label: 'משקל' },
     { key: 'bonus_per90', label: 'בונוס/90' },
-    { key: 'clean_sheets_per90', label: 'CS/90' },
-    { key: 'now_cost', label: 'מחיר' }
+    { key: 'clean_sheets_per90', label: 'CS/90' }
 ];
 
 const OPTIONAL_COLUMNS_KEY = 'fpl_optional_columns';
