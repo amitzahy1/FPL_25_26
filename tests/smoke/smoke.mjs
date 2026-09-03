@@ -534,32 +534,47 @@ try {
     // five — five series crossing each other in one box is spaghetti, and the
     // crossings are the data.
     //
-    // Then block A was the single card's rails with a coloured dot per player
-    // laid over each, and that failed for a simpler reason: a dot carries no
-    // name, three of them overlap, and only the leader's figure was printed —
-    // so the block answered "who wins" and refused to say what anybody's number
-    // was. It is a matrix now: a column per player, a row per metric, every
-    // value in its own labelled cell with its bar underneath.
+    // Block A went wrong twice on top of that. First the single card's rails
+    // with a coloured dot per player laid over each: a dot carries no name,
+    // three of them overlap, and only the leader's figure was printed. Then a
+    // cell per player, which named everybody but made each cell its own little
+    // chart — two players' bars started 100px apart with a number between them,
+    // so nothing could be compared by length. It is a grouped horizontal bar
+    // chart now: one panel per metric, one bar per player, all from one zero.
     const cmp = await page.evaluate(async () => {
         document.querySelector('.ps-go')?.click();
         await new Promise(r => setTimeout(r, 1200));
         const modal = document.getElementById('playerModal');
-        const cells = [...document.querySelectorAll('#playerModalBody .cmp-mx-cell')];
+        const rows = [...document.querySelectorAll('#playerModalBody .cmp-bar-row')];
+        const bars = [...document.querySelectorAll('#playerModalBody .cmp-bar-track')];
         return {
             open: !!modal && modal.style.display === 'block',
-            // Block A: a row per metric, a column per player, and a printed
-            // value in every cell — no dot may survive.
-            mxRows: document.querySelectorAll('#playerModalBody .cmp-mx-row:not(.is-head)').length,
-            mxHeads: document.querySelectorAll('#playerModalBody .cmp-mx-h').length,
-            mxCells: cells.length,
-            // Every cell prints a figure. This is the whole point of the block.
-            mxValued: cells.filter(c => (c.querySelector('.cmp-mx-val') || {}).textContent.trim()).length,
-            mxBullets: document.querySelectorAll('#playerModalBody .cmp-mx-bullet').length,
-            // Each column's numbers wear that player's colour, and the two
-            // colours must differ or the columns are the only key.
-            mxHues: new Set([...document.querySelectorAll('#playerModalBody .cmp-mx-h b')]
-                .map(el => getComputedStyle(el).color)).size,
+            // Block A: a panel per metric, a named bar per player in each.
+            panels: document.querySelectorAll('#playerModalBody .cmp-bar-panel').length,
+            rows: rows.length,
+            named: rows.filter(r => (r.querySelector('.cmp-bar-name') || {}).textContent.trim()).length,
+            valued: rows.filter(r => (r.querySelector('.cmp-bar-val') || {}).textContent.trim()).length,
+            // Exactly one leader per panel, marked on the row and in ink.
+            leads: document.querySelectorAll('#playerModalBody .cmp-bar-row.is-lead').length,
+            leadMarks: document.querySelectorAll('#playerModalBody .cmp-bar-lead').length,
+            // Every bar in a panel shares one left edge — this is what the cell
+            // version could not do and what makes length the comparison.
+            sharedZero: (() => {
+                const panel = document.querySelector('#playerModalBody .cmp-bar-panel');
+                const xs = [...panel.querySelectorAll('.cmp-bar-track')]
+                    .map(s => Math.round(s.getBoundingClientRect().left));
+                return new Set(xs).size === 1;
+            })(),
+            // ...and one width, so two lengths mean the same thing.
+            sharedWidth: (() => {
+                const panel = document.querySelector('#playerModalBody .cmp-bar-panel');
+                const ws = [...panel.querySelectorAll('.cmp-bar-track')]
+                    .map(s => Math.round(s.getBoundingClientRect().width));
+                return new Set(ws).size === 1 && ws[0] > 80;
+            })(),
+            trackW: bars.length ? Math.round(bars[0].getBoundingClientRect().width) : 0,
             noDots: document.querySelectorAll('#playerModalBody .pp-rail-svg circle').length,
+            noMatrix: document.querySelectorAll('#playerModalBody .cmp-mx-cell').length,
             noFacets: document.querySelectorAll('#playerModalBody .cmp-facet').length,
             medTicks: document.querySelectorAll('#playerModalBody .pp-tick--med').length,
             eliteTicks: document.querySelectorAll('#playerModalBody .pp-tick--elite').length,
@@ -589,12 +604,16 @@ try {
         };
     });
     check(cmp.open, 'the comparison opens');
-    check(cmp.mxHeads === 2 && cmp.mxRows === 8 && cmp.mxCells === 16,
-        `block A is a matrix of eight metrics by two players (${cmp.mxRows}×${cmp.mxHeads} = ${cmp.mxCells} cells)`);
-    check(cmp.mxValued === cmp.mxCells && cmp.mxBullets === cmp.mxCells,
-        `every cell prints its own value and its own bar (${cmp.mxValued}/${cmp.mxCells})`);
-    check(cmp.mxHues === 2 && cmp.noDots === 0 && cmp.noFacets === 0,
-        `each column is colour-keyed and the unlabelled dots are gone (${cmp.mxHues} hues, ${cmp.noDots} dots)`);
+    check(cmp.panels === 8 && cmp.rows === 16,
+        `block A is eight bar panels with a bar per player (${cmp.panels} panels, ${cmp.rows} bars)`);
+    check(cmp.named === cmp.rows && cmp.valued === cmp.rows,
+        `every bar carries its player's name and figure (${cmp.named}/${cmp.rows})`);
+    check(cmp.sharedZero && cmp.sharedWidth,
+        `bars in a panel share one zero and one scale, ${cmp.trackW}px wide`);
+    check(cmp.leads === cmp.panels && cmp.leadMarks === cmp.panels,
+        `exactly one highest bar is marked in each panel (${cmp.leads}/${cmp.panels})`);
+    check(cmp.noDots === 0 && cmp.noMatrix === 0 && cmp.noFacets === 0,
+        `the dots, the cell matrix and the facets are all gone (${cmp.noDots}/${cmp.noMatrix}/${cmp.noFacets})`);
     check(cmp.medTicks === 1 && cmp.eliteTicks === 1,
         'and the two reference ticks are named once rather than on every row');
     check(cmp.cells >= 7 && cmp.sparks === cmp.cells && cmp.lines >= cmp.cells * 2 - 2,

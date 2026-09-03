@@ -7288,108 +7288,100 @@ canvas {
 
 .pp-chip.is-on { background: var(--c-blue); border-color: var(--c-blue); color: #fff; }
 
-/* A — metric by player. Every value sits in a named column, which is the whole
-   correction: the previous version laid a coloured dot per player over a single
-   shared rail, and once three dots overlap the block answers "who leads" and
-   nothing else. Here the column header names the player, the cell prints his
-   number, and the bar underneath is the second channel. */
-.cmp-mx {
+/* A — a horizontal bar chart per metric, a bar per player.
+   Two versions failed here first. Dots on one shared rail carried no name and
+   printed only the leader's figure. A cell per player fixed the naming but made
+   every cell its own little chart, so comparing two players meant comparing two
+   bars that started 100px apart with a number between them. Bars stacked in one
+   panel share a zero and a scale, which is the only arrangement where length
+   alone answers "who is ahead, and by how much". */
+.cmp-bars {
     display: grid;
-    gap: 2px;
-    /* One label column, then an equal column per player. --cmp-n is stamped on
-       the element by the renderer, so 2 and 5 players get the same treatment. */
-    --cmp-lab: 96px;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
 }
 
-.cmp-mx-row {
-    display: grid;
-    grid-template-columns: var(--cmp-lab) repeat(var(--cmp-n), minmax(0, 1fr));
-    gap: 6px;
-    align-items: center;
-    padding: 3px 0;
-    border-radius: 8px;
-}
-
-.cmp-mx-row:not(.is-head):hover { background: #f6f9fd; }
-
-.cmp-mx-row.is-head {
-    padding-bottom: 7px;
-    margin-bottom: 3px;
-    border-bottom: 1px solid var(--c-line);
-    align-items: end;
-}
-
-/* The header carries the colour key, so the pills at the top of the modal are a
-   reminder rather than the only place the mapping exists. */
-.cmp-mx-h {
-    display: grid;
-    gap: 1px;
+.cmp-bar-panel {
+    padding: 8px 10px 9px;
+    background: #f8fafd;
+    border-radius: 10px;
     min-width: 0;
-    text-align: center;
-    padding-top: 4px;
-    border-top: 2.5px solid var(--cmp-hue);
 }
 
-.cmp-mx-h b {
-    font-size: 11.5px;
-    font-weight: 800;
-    color: var(--cmp-hue);
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
+/* An odd count — the archived snapshot has no per-gameweek price, so seven —
+   would end the block with a half-empty row. */
+.cmp-bar-panel:last-child:nth-child(odd) { grid-column: 1 / -1; }
 
-.cmp-mx-h em {
-    font-style: normal;
-    font-family: 'Heebo', sans-serif;
-    font-size: 9px;
-    font-weight: 600;
-    color: #94a3b8;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-
-.cmp-mx-label {
+.cmp-bar-head {
+    margin: 0 0 5px;
     font-family: 'Heebo', sans-serif;
     font-size: 10.5px;
     font-weight: 600;
     color: var(--c-muted);
-    line-height: 1.2;
+    letter-spacing: .01em;
 }
 
-.cmp-mx-cell {
+.cmp-bar-row {
     display: grid;
-    gap: 2px;
-    min-width: 0;
-    padding: 3px 5px;
-    border-radius: 7px;
+    grid-template-columns: minmax(44px, 68px) minmax(0, 1fr) 46px;
+    align-items: center;
+    gap: 6px;
+    padding: 1px 3px;
+    border-radius: 6px;
     cursor: help;
 }
 
-/* The leader is marked on the cell, not by colour on the number — the number is
-   already the player's colour, and stacking a second meaning on the same channel
-   is how the old dots became unreadable. */
-.cmp-mx-cell.is-lead { background: #eef7f2; box-shadow: inset 0 0 0 1px #cbe8d9; }
-
-.cmp-mx-val {
-    font-size: 13px;
-    font-weight: 800;
-    text-align: center;
-    font-variant-numeric: tabular-nums;
-    line-height: 1.1;
+/* The leader, marked on the row rather than by hue: the hue is the player's
+   identity in the panels below and in the heat map, so rank rides on weight and
+   ground instead. */
+.cmp-bar-row.is-lead {
+    background: #edf7f1;
+    box-shadow: inset 0 0 0 1px #cbe8d9;
 }
 
-.cmp-mx-bullet { width: 100%; height: 10px; display: block; }
+.cmp-bar-name {
+    font-size: 10.5px;
+    font-weight: 700;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
 
-/* A readable floor per column. Below it the wrapper scrolls instead of the
-   numbers shrinking — five players on a 360px phone is the case this exists for. */
-.cmp-mx { min-width: max(100%, calc(var(--cmp-lab) + var(--cmp-n) * 76px)); }
+/* Mirrored, because the page is RTL and the bar has a direction.
+   Drawn left-to-right the zero sat at the far LEFT — the end of the row the eye
+   reaches last — so a short bar was a stub floating away from the name it
+   belonged to and the reader had to scan past empty track to find where it
+   started. Mirrored, every bar starts against its own name and grows toward the
+   value, which is the direction the row is already read in. The transform takes
+   the two reference ticks with it, so the geometry stays exact. */
+.cmp-bar-track {
+    width: 100%;
+    height: 13px;
+    display: block;
+    transform: scaleX(-1);
+}
+
+/* Same correction on the single card's rails, so the two do not point in
+   opposite directions inside one modal. */
+.pp-rail-svg { transform: scaleX(-1); }
+
+.cmp-bar-val {
+    display: flex;
+    align-items: baseline;
+    justify-content: flex-end;
+    gap: 2px;
+    font-size: 11.5px;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+}
+
+.cmp-bar-row.is-lead .cmp-bar-val { font-size: 12.5px; font-weight: 800; }
+
+.cmp-bar-lead { font-style: normal; font-size: 9px; color: var(--c-green); }
 
 @media (max-width: 560px) {
-    .cmp-mx { --cmp-lab: 74px; }
-    .cmp-mx-label { font-size: 9.5px; }
-    .cmp-mx-val { font-size: 12px; }
+    .cmp-bars { grid-template-columns: 1fr; }
+    .cmp-bar-row { grid-template-columns: minmax(40px, 62px) minmax(0, 1fr) 44px; }
 }
 
 /* B — the panels. Two across, not the single card's four: five lines and five

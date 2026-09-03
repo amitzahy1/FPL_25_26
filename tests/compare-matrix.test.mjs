@@ -4,12 +4,16 @@
  * Three things went wrong on these surfaces in ways a screenshot caught and a
  * test had not, so each of them is pinned here.
  *
- * 1. Block A was the single card's rails with a coloured dot per player laid
- *    over each one. A dot carries no name, three of them overlap, and only the
- *    leader's figure was printed beside the rail — so with two players the block
- *    answered "who wins" and refused to say what either of them scored. It is a
- *    matrix now, and the property worth pinning is that EVERY cell prints its
- *    own value under the column that names its player.
+ * 1. Block A went wrong twice. First it was the single card's rails with a
+ *    coloured dot per player laid over each: a dot carries no name, three of
+ *    them overlap, and only the leader's figure was printed, so the block
+ *    answered "who wins" and refused to say what anyone scored. Then it was a
+ *    cell per player — which named everybody but made each cell its own little
+ *    chart, so comparing two players meant comparing two bars that started
+ *    100px apart with a number between them. It is a grouped horizontal bar
+ *    chart now, and the property worth pinning is the one both earlier versions
+ *    lacked: within a panel every bar starts at the same zero and runs on the
+ *    same scale, so length alone is the comparison.
  *
  * 2. Block B drew raw per-gameweek lines, five deep. Per-gameweek points are the
  *    spikiest series the game produces, so every line crossed the full height of
@@ -72,7 +76,7 @@ describe('the rolling mean under block B', () => {
     });
 });
 
-describe('block A: the metric-by-player matrix', () => {
+describe('block A: a bar chart per metric', () => {
     // railFor is stubbed so the values under test are the ones being asserted.
     // The real one walks the league for a median and is covered by its own cache
     // tests; what matters here is what the matrix does with what it is handed.
@@ -93,7 +97,7 @@ describe('block A: the metric-by-player matrix', () => {
             railFor: (p, k) => values[`${k}:${p.id}`] || RAILS[`${k}:${p.position_name}`]
                 || { value: null, med: null, elite: null }
         });
-        return loadFunctions(['cmpMatrixHtml', 'cmpBulletSvg'], {}, ['PROFILE_METRICS']);
+        return loadFunctions(['cmpBarsHtml', 'cmpBarSvg'], {}, ['PROFILE_METRICS']);
     }
 
     const PLAYERS = [
@@ -101,37 +105,74 @@ describe('block A: the metric-by-player matrix', () => {
         { id: 2, web_name: 'Beta', team_short: 'BBB', position_name: 'חלוצים', _hue: '#0e9f5d' }
     ];
 
-    test('every cell prints its own value — the failure the dots had', () => {
-        const { cmpMatrixHtml } = load({
+    test('every bar is named and prints its own value — the failure the dots had', () => {
+        const { cmpBarsHtml } = load({
             'pts:1': { value: 6.7, med: 3.1, elite: 5.2 },
             'pts:2': { value: 2.1, med: 3.1, elite: 5.2 }
         });
-        const html = cmpMatrixHtml(PLAYERS, ['pts']);
-        const vals = [...html.matchAll(/class="cmp-mx-val"[^>]*>([^<]*)</g)].map(m => m[1].trim());
-        assert.deepEqual(vals, ['6.7', '2.1'],
-            'a cell per player, each printing that player\'s own figure');
+        const html = cmpBarsHtml(PLAYERS, ['pts']);
+        const names = [...html.matchAll(/class="cmp-bar-name"[^>]*>([^<]*)</g)].map(m => m[1].trim());
+        const vals = [...html.matchAll(/class="cmp-bar-val"[^>]*>([\d.]+)/g)].map(m => m[1]);
+        assert.deepEqual(names, ['Alpha', 'Beta']);
+        assert.deepEqual(vals, ['6.7', '2.1']);
         assert.ok(!/<circle/.test(html), 'and no unlabelled dot survives');
     });
 
-    test('each column is headed by the player it belongs to, in his own colour', () => {
-        const { cmpMatrixHtml } = load({});
-        const html = cmpMatrixHtml(PLAYERS, ['pts']);
-        assert.match(html, /--cmp-hue:#0f56d9[\s\S]*?<b>Alpha<\/b>/);
-        assert.match(html, /--cmp-hue:#0e9f5d[\s\S]*?<b>Beta<\/b>/);
-        assert.match(html, /style="--cmp-n:2"/, 'and the grid is told how many columns to make');
+    test('each row carries the player\'s own colour', () => {
+        const { cmpBarsHtml } = load({});
+        const html = cmpBarsHtml(PLAYERS, ['pts']);
+        assert.match(html, /class="cmp-bar-name" style="color:#0f56d9"\s*>Alpha/);
+        assert.match(html, /class="cmp-bar-name" style="color:#0e9f5d"\s*>Beta/);
+        assert.match(html, /fill="#0f56d9"/);
+        assert.match(html, /fill="#0e9f5d"/);
     });
 
-    test('the scale is shared down a row, so two bars are comparable', () => {
-        const { cmpMatrixHtml } = load({
+    test('bars in a panel share a zero and a scale — the whole point of the block', () => {
+        const { cmpBarsHtml } = load({
             'pts:1': { value: 10, med: null, elite: null },
             'pts:2': { value: 5, med: null, elite: null }
         });
-        const widths = [...cmpMatrixHtml(PLAYERS, ['pts'])
-            .matchAll(/<rect x="0" y="3" width="([\d.]+)" height="4"\s*\n?\s*rx="2" fill="#/g)]
+        const html = cmpBarsHtml(PLAYERS, ['pts']);
+        const bars = [...html.matchAll(/<rect x="0" y="3\.5" width="([\d.]+)" height="6"\s*\n?\s*rx="3" fill="#/g)]
             .map(m => parseFloat(m[1]));
-        assert.equal(widths.length, 2);
-        assert.ok(Math.abs(widths[0] / widths[1] - 2) < 0.02,
-            `twice the value must be twice the bar (${widths.join(' vs ')})`);
+        assert.equal(bars.length, 2);
+        assert.ok(Math.abs(bars[0] / bars[1] - 2) < 0.02,
+            `twice the value must be twice the bar (${bars.join(' vs ')})`);
+        assert.equal([...html.matchAll(/<rect x="0"/g)].length, 4,
+            'every bar starts at the panel zero: two tracks and two bars, all x="0"');
+    });
+
+    test('each metric is its own panel, on its own scale', () => {
+        // Minutes and xGI on one axis would flatten xGI into the floor.
+        const { cmpBarsHtml } = load({
+            'pts:1': { value: 6, med: null, elite: null },
+            'pts:2': { value: 3, med: null, elite: null },
+            'mins:1': { value: 90, med: null, elite: null },
+            'mins:2': { value: 45, med: null, elite: null }
+        });
+        const html = cmpBarsHtml(PLAYERS, ['pts', 'mins']);
+        assert.equal([...html.matchAll(/class="cmp-bar-panel"/g)].length, 2);
+        const bars = [...html.matchAll(/rx="3" fill="#[0-9a-f]{6}" opacity="([\d.]+)"\/>/g)];
+        assert.equal(bars.length, 4);
+        // The 6-vs-3 panel and the 90-vs-45 panel must draw identical widths.
+        const widths = [...html.matchAll(/<rect x="0" y="3\.5" width="([\d.]+)" height="6"\s*\n?\s*rx="3" fill="#/g)]
+            .map(m => parseFloat(m[1]));
+        assert.deepEqual(widths.slice(0, 2), widths.slice(2, 4),
+            'the same ratio must draw the same bars whatever the units');
+    });
+
+    test('the player order is the same in every panel', () => {
+        const { cmpBarsHtml } = load({
+            'pts:1': { value: 1, med: null, elite: null },
+            'pts:2': { value: 9, med: null, elite: null },
+            'mins:1': { value: 90, med: null, elite: null },
+            'mins:2': { value: 10, med: null, elite: null }
+        });
+        const html = cmpBarsHtml(PLAYERS, ['pts', 'mins']);
+        const names = [...html.matchAll(/class="cmp-bar-name"[^>]*>([^<]*)</g)].map(m => m[1].trim());
+        assert.deepEqual(names, ['Alpha', 'Beta', 'Alpha', 'Beta'],
+            'sorting each panel by value would make one panel faster to read and '
+            + 'eight of them impossible to read as a set');
     });
 
     test('each player is marked against his OWN position, not the first player\'s', () => {
@@ -141,47 +182,67 @@ describe('block A: the metric-by-player matrix', () => {
             { ...PLAYERS[0], position_name: 'חלוצים' },
             { ...PLAYERS[1], position_name: 'שוערים' }
         ];
-        const { cmpMatrixHtml } = load({
+        const { cmpBarsHtml } = load({
             'pts:1': { value: 6, med: 3, elite: 5 },
             'pts:2': { value: 6, med: 1, elite: 2 }
         });
-        const ticks = [...cmpMatrixHtml(mixed, ['pts'])
+        const ticks = [...cmpBarsHtml(mixed, ['pts'])
             .matchAll(/stroke="#8e9bb1"/g)].length;
-        assert.equal(ticks, 2, 'both cells carry a median tick');
-        const html = cmpMatrixHtml(mixed, ['pts']);
+        assert.equal(ticks, 2, 'both rows carry a median tick');
+        const html = cmpBarsHtml(mixed, ['pts']);
         // Same value, different medians: one reads above the median, one further
         // above it, and the tooltips must say so with different numbers.
         assert.match(html, /מעל חציון העמדה \(3\.0\)/);
         assert.match(html, /מעל חציון העמדה \(1\.0\)/);
     });
 
-    test('the row leader is marked, and a lone player has no leader to mark', () => {
-        const { cmpMatrixHtml } = load({
+    test('the highest bar is marked, in ink as well as on the row', () => {
+        const { cmpBarsHtml } = load({
             'pts:1': { value: 10, med: null, elite: null },
             'pts:2': { value: 5, med: null, elite: null }
         });
-        const two = cmpMatrixHtml(PLAYERS, ['pts']);
-        assert.equal([...two.matchAll(/cmp-mx-cell is-lead/g)].length, 1);
-        const one = cmpMatrixHtml([PLAYERS[0]], ['pts']);
-        assert.ok(!/is-lead/.test(one),
-            'one player leading himself is not information');
+        const two = cmpBarsHtml(PLAYERS, ['pts']);
+        assert.equal([...two.matchAll(/cmp-bar-row is-lead/g)].length, 1);
+        assert.match(two, /cmp-bar-lead/, 'and says which one out loud');
+        // Rank rides on weight, not hue: the leader's bar is solid and the
+        // others are half ink, so both players keep the colour that identifies
+        // them in the panels below and in the heat map.
+        const op = [...two.matchAll(/opacity="([\d.]+)"/g)].map(m => parseFloat(m[1]));
+        assert.deepEqual(op, [1, 0.45]);
+
+        const one = cmpBarsHtml([PLAYERS[0]], ['pts']);
+        assert.ok(!/is-lead/.test(one), 'one player leading himself is not information');
+        assert.deepEqual([...one.matchAll(/opacity="([\d.]+)"/g)].map(m => parseFloat(m[1])), [1],
+            'and a lone bar is not drawn at half ink');
     });
 
-    test('a metric no one on screen has is dropped, not printed as a row of dashes', () => {
-        const { cmpMatrixHtml } = load({
+    test('a metric no one on screen has is dropped, not printed as a panel of dashes', () => {
+        const { cmpBarsHtml } = load({
             'pts:1': { value: 6, med: 3, elite: 5 },
             'pts:2': { value: 4, med: 3, elite: 5 },
             'saves:1': { value: null, med: null, elite: null },
             'saves:2': { value: null, med: null, elite: null }
         });
-        const html = cmpMatrixHtml(PLAYERS, ['pts', 'saves']);
-        assert.equal([...html.matchAll(/class="cmp-mx-row"/g)].length, 1);
+        const html = cmpBarsHtml(PLAYERS, ['pts', 'saves']);
+        assert.equal([...html.matchAll(/class="cmp-bar-panel"/g)].length, 1);
         assert.ok(!html.includes('הצלות ל-90'));
     });
 
-    test('the matrix rides in a scroll wrapper so five columns cannot widen the page', () => {
-        const { cmpMatrixHtml } = load({});
-        assert.match(cmpMatrixHtml(PLAYERS, ['pts']), /^<div class="pp-log-wrap">/);
+    test('five players are five bars in the same panel, not five columns', () => {
+        // The matrix version widened with the player count and needed a scroll
+        // wrapper to survive a phone. Bars grow downwards, which nothing has to
+        // scroll sideways for.
+        const five = [1, 2, 3, 4, 5].map(id => ({
+            id, web_name: `P${id}`, team_short: 'AAA',
+            position_name: 'חלוצים', _hue: '#0f56d9'
+        }));
+        const vals = Object.fromEntries(five.map(p =>
+            [`pts:${p.id}`, { value: p.id, med: 2, elite: 4 }]));
+        const { cmpBarsHtml } = load(vals);
+        const html = cmpBarsHtml(five, ['pts']);
+        assert.equal([...html.matchAll(/class="cmp-bar-row/g)].length, 5);
+        assert.equal([...html.matchAll(/class="cmp-bar-panel"/g)].length, 1);
+        assert.ok(!html.includes('pp-log-wrap'), 'and needs no horizontal scroller');
     });
 });
 

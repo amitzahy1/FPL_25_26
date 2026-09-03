@@ -4896,7 +4896,7 @@ function railFor(player, key) {
  * comparison card's block A. It is gone: a dot carries no name, three of them
  * overlap, and only the leader's figure was printed beside the rail — so with
  * more than one player the rail said who won and refused to say what anyone
- * scored. cmpMatrixHtml gives every player his own column instead.
+ * scored. cmpBarsHtml gives every player his own bar instead.
  */
 function railSvg(rail) {
     const w = 240, h = 20;
@@ -5314,8 +5314,17 @@ function initPlayerModalLinks() {
     });
 }
 
+/**
+ * Five hues, one per player, stable across every block in the card.
+ *
+ * The fifth used to be #0369a1 — another blue, and at half ink beside the first
+ * player's #0f56d9 the two bars read as the same player twice. It is a magenta
+ * now, which is the widest gap left once blue, green, orange and purple are
+ * taken. Colour is a redundant channel throughout — every bar is labelled and
+ * every figure printed — so no reading depends on telling two of these apart.
+ */
 function comparePlayerColor(i) {
-    return ['#0f56d9', '#0e9f5d', '#d97706', '#7c3aed', '#0369a1'][i % 5];
+    return ['#0f56d9', '#0e9f5d', '#d97706', '#7c3aed', '#c2185b'][i % 5];
 }
 
 async function openCompareModal(players) {
@@ -5385,95 +5394,93 @@ function compareMetricChipsHtml(list) {
             onclick="setCompareMetric('${k}')">${PROFILE_METRICS[k].label}</button>`).join('')}</div>`;
 }
 
-/* ------------------------------ A: the matrix ----------------------------- */
+/* --------------------------- A: bars, one per player ---------------------- */
 
 /**
- * One player's standing on one metric, as a bar the width of its cell.
+ * One player's bar in a metric's panel, with his position's two markers.
  *
- * This is the rail from the single card, cut down to cell size. It kept the two
- * ticks — the position's median and its elite level — because they are what
- * makes a bar a reading rather than a length: the same 10 BPS is good for a
- * defender and thin for a midfielder, and in a comparison across positions that
- * difference is the answer.
+ * The bar starts at the panel's zero and runs on the panel's scale, so within a
+ * panel two bars are directly comparable by length — which is the property the
+ * previous two versions of this block both lacked. The dots version put every
+ * player on one 240px rail and printed only the leader's number; the matrix
+ * version gave every player a cell but made each cell its own little chart, so
+ * comparing two players meant comparing two bars that started 100px apart with
+ * a number between them.
+ *
+ * The ticks are the player's OWN position median and elite level. When the
+ * players share a position — three midfielders, or a swap-board card, which is
+ * most comparisons — every row's ticks land on the same x and read as one
+ * vertical guide down the panel, so the bars are measured against the league and
+ * against each other at the same time.
  */
-function cmpBulletSvg(rail, top, hue) {
-    const w = 100, h = 10;
+function cmpBarSvg(rail, top, hue, solid) {
+    const w = 100, h = 13;
     const x = v => Math.max(0, Math.min((v / top) * w, w));
-    const parts = [`<rect x="0" y="3" width="${w}" height="4" rx="2" fill="var(--c-wash)"/>`];
+    const parts = [`<rect x="0" y="3.5" width="${w}" height="6" rx="3" fill="var(--c-wash)"/>`];
     if (Number.isFinite(rail.value)) {
-        parts.push(`<rect x="0" y="3" width="${x(rail.value).toFixed(1)}" height="4"
-            rx="2" fill="${hue}"/>`);
+        // The leader's bar is the solid one. Everyone keeps his own hue, because
+        // the same hue identifies him in the panels below and in the heat map —
+        // spending the colour channel on rank instead would break that. What
+        // rank gets is weight: full ink for the leader, half for the rest.
+        parts.push(`<rect x="0" y="3.5" width="${x(rail.value).toFixed(1)}" height="6"
+            rx="3" fill="${hue}" opacity="${solid ? 1 : 0.45}"/>`);
     }
     if (Number.isFinite(rail.med)) {
-        parts.push(`<line x1="${x(rail.med).toFixed(1)}" y1="0.5"
-            x2="${x(rail.med).toFixed(1)}" y2="${h - 0.5}" stroke="#8e9bb1" stroke-width="1.4"/>`);
+        parts.push(`<line x1="${x(rail.med).toFixed(1)}" y1="1" x2="${x(rail.med).toFixed(1)}"
+            y2="${h - 1}" stroke="#8e9bb1" stroke-width="1.3"/>`);
     }
     if (Number.isFinite(rail.elite)) {
-        parts.push(`<line x1="${x(rail.elite).toFixed(1)}" y1="0.5"
-            x2="${x(rail.elite).toFixed(1)}" y2="${h - 0.5}" stroke="var(--c-green)" stroke-width="1.4"/>`);
+        parts.push(`<line x1="${x(rail.elite).toFixed(1)}" y1="1" x2="${x(rail.elite).toFixed(1)}"
+            y2="${h - 1}" stroke="var(--c-green)" stroke-width="1.3"/>`);
     }
-    return `<svg class="cmp-mx-bullet" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none"
+    return `<svg class="cmp-bar-track" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none"
         aria-hidden="true">${parts.join('')}</svg>`;
 }
 
 /**
- * A — metric by player, every number labelled by the column it is in.
+ * A — a horizontal bar chart per metric, a bar per player.
  *
- * This block used to be the single card's eight rails with a coloured dot per
- * player laid over each one, and it did not work: five dots on a 240px track
- * overlap, none of them carries its own name, and the only figure printed was
- * the leader's — so the honest answer to "what is this player's xGI" was "hover
- * and hope". Every value is its own cell now, under the player's name, with the
- * bar as a second channel rather than the only one.
+ * Eight small panels, each its own chart on its own scale: the metrics are not
+ * commensurable (90 minutes and 0.68 xGI do not belong on one axis) but two
+ * players' minutes are, so the scale is shared inside a panel and never across
+ * them.
  *
- * The scale is shared down each row and stretched to fit whichever is larger,
- * the values or the reference ticks. Sharing it per row rather than per table is
- * the point: minutes and G+A do not belong on one axis, but two players' minutes
- * do.
- *
- * The reference ticks are each player's OWN position median and elite level, not
- * the first player's — the old block used list[0]'s for everybody, which quietly
- * mismarked every mixed-position comparison.
+ * The player order is the same in all eight panels rather than sorted by value
+ * per panel. Sorting each panel would put the leader first everywhere, which
+ * makes one panel marginally faster to read and makes eight of them impossible
+ * to read as a set — the question "is he behind on everything or just on this"
+ * needs a row to stay in the same place.
  */
-function cmpMatrixHtml(list, keys) {
+function cmpBarsHtml(list, keys) {
     const live = keys.filter(k => list.some(p => Number.isFinite(railFor(p, k).value)));
     const cols = live.length ? live : keys;
-    // The scroll wrapper is what keeps five players off the phone's horizontal
-    // scrollbar: the grid holds a readable minimum per column and the wrapper
-    // scrolls, rather than every column shrinking until the digits are unreadable.
-    return `<div class="pp-log-wrap"><div class="cmp-mx" style="--cmp-n:${list.length}">
-        <div class="cmp-mx-row is-head">
-            <span class="cmp-mx-label"></span>
-            ${list.map(p => `<span class="cmp-mx-h" style="--cmp-hue:${p._hue}">
-                <b>${escapeHtml(p.web_name)}</b>
-                <em>${escapeHtml(teamShort(p))} · ${p.position_name}</em>
-            </span>`).join('')}
-        </div>
-        ${cols.map(k => {
+    return `<div class="cmp-bars">${cols.map(k => {
         const def = PROFILE_METRICS[k];
         const rails = list.map(p => railFor(p, k));
         const top = Math.max(...rails.flatMap(r => [r.value, r.med, r.elite])
-            .filter(Number.isFinite), 0.001) * 1.1;
+            .filter(Number.isFinite), 0.001) * 1.08;
         const values = rails.map(r => r.value).filter(Number.isFinite);
         const best = values.length ? Math.max(...values) : null;
-        return `<div class="cmp-mx-row">
-            <span class="cmp-mx-label">${def.railLabel}</span>
+        return `<section class="cmp-bar-panel">
+            <h5 class="cmp-bar-head">${def.railLabel}</h5>
             ${rails.map((r, i) => {
             const lead = best !== null && r.value === best && list.length > 1;
             const vs = Number.isFinite(r.med) && Number.isFinite(r.value)
                 ? `${r.value >= r.med ? 'מעל ' : 'מתחת ל'}חציון העמדה (${def.fmt(r.med)})`
                 : 'אין חציון לעמדה';
-            return `<span class="cmp-mx-cell${lead ? ' is-lead' : ''}"
+            return `<div class="cmp-bar-row${lead ? ' is-lead' : ''}"
                     title="${escapeHtml(list[i].web_name)} · ${def.railLabel}: ${
                 r.value === null ? 'אין נתון' : def.fmt(r.value)} — ${vs}">
-                    <b class="cmp-mx-val" style="color:${list[i]._hue}">${
-                r.value === null ? '–' : def.fmt(r.value)}</b>
-                    ${cmpBulletSvg(r, top, list[i]._hue)}
-                </span>`;
+                    <span class="cmp-bar-name" style="color:${list[i]._hue}"
+                        >${escapeHtml(list[i].web_name)}</span>
+                    ${cmpBarSvg(r, top, list[i]._hue, lead || list.length < 2)}
+                    <b class="cmp-bar-val" style="color:${list[i]._hue}">${
+                r.value === null ? '–' : def.fmt(r.value)}${
+                lead ? '<i class="cmp-bar-lead" aria-label="המוביל">★</i>' : ''}</b>
+                </div>`;
         }).join('')}
-        </div>`;
-    }).join('')}
-    </div></div>`;
+        </section>`;
+    }).join('')}</div>`;
 }
 
 /* --------------------------- B: eight small charts ------------------------ */
@@ -5686,10 +5693,10 @@ function compareProfileHtml(list, logs) {
 
         <div class="pp-blockmark"><i>A</i>מי טוב יותר, ובמה<span>${
         positions.length > 1
-            ? 'כל שחקן נמדד מול העמדה שלו — עמדות שונות נמדדות על דברים שונים'
-            : `מול העמדה · ${POSITION_LABELS[list[0].position_name] || list[0].position_name}`}</span></div>
+            ? 'עמודה לכל שחקן · כל אחד נמדד מול העמדה שלו'
+            : `עמודה לכל שחקן · מול ${POSITION_LABELS[list[0].position_name] || list[0].position_name}`}</span></div>
         <section class="pp-card">
-            ${cmpMatrixHtml(list, keys)}
+            ${cmpBarsHtml(list, keys)}
             ${railLegendHtml()}
         </section>
 
