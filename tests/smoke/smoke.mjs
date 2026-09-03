@@ -532,23 +532,44 @@ try {
     // thing against a scale the reader can see, and the per-gameweek line
     // because it is the right encoding for one player and the wrong one for
     // five — five series crossing each other in one box is spaghetti, and the
-    // crossings are the data. One surface serves one player and five now.
+    // crossings are the data.
+    //
+    // Then block A was the single card's rails with a coloured dot per player
+    // laid over each, and that failed for a simpler reason: a dot carries no
+    // name, three of them overlap, and only the leader's figure was printed —
+    // so the block answered "who wins" and refused to say what anybody's number
+    // was. It is a matrix now: a column per player, a row per metric, every
+    // value in its own labelled cell with its bar underneath.
     const cmp = await page.evaluate(async () => {
         document.querySelector('.ps-go')?.click();
         await new Promise(r => setTimeout(r, 1200));
         const modal = document.getElementById('playerModal');
-        const railValue = i => (document.querySelectorAll('#playerModalBody .pp-rail-value')[i]
-            || {}).textContent || '';
+        const cells = [...document.querySelectorAll('#playerModalBody .cmp-mx-cell')];
         return {
             open: !!modal && modal.style.display === 'block',
-            // Block A: the same eight rails as the single card, one dot per
-            // player. The layout must not change with the player count.
-            rails: document.querySelectorAll('#playerModalBody .pp-rail').length,
-            dots: document.querySelectorAll('#playerModalBody .pp-rail-svg circle').length,
+            // Block A: a row per metric, a column per player, and a printed
+            // value in every cell — no dot may survive.
+            mxRows: document.querySelectorAll('#playerModalBody .cmp-mx-row:not(.is-head)').length,
+            mxHeads: document.querySelectorAll('#playerModalBody .cmp-mx-h').length,
+            mxCells: cells.length,
+            // Every cell prints a figure. This is the whole point of the block.
+            mxValued: cells.filter(c => (c.querySelector('.cmp-mx-val') || {}).textContent.trim()).length,
+            mxBullets: document.querySelectorAll('#playerModalBody .cmp-mx-bullet').length,
+            // Each column's numbers wear that player's colour, and the two
+            // colours must differ or the columns are the only key.
+            mxHues: new Set([...document.querySelectorAll('#playerModalBody .cmp-mx-h b')]
+                .map(el => getComputedStyle(el).color)).size,
+            noDots: document.querySelectorAll('#playerModalBody .pp-rail-svg circle').length,
+            noFacets: document.querySelectorAll('#playerModalBody .cmp-facet').length,
             medTicks: document.querySelectorAll('#playerModalBody .pp-tick--med').length,
             eliteTicks: document.querySelectorAll('#playerModalBody .pp-tick--elite').length,
-            // Block B: a row per player, then the heat map.
-            facets: document.querySelectorAll('#playerModalBody .cmp-facet').length,
+            // Block B: the single card's eight panels, several lines deep —
+            // every metric at once rather than one behind a chip.
+            cells: document.querySelectorAll('#playerModalBody #cmpCells .pp-cell').length,
+            sparks: document.querySelectorAll('#playerModalBody #cmpCells .pp-spark').length,
+            lines: document.querySelectorAll('#playerModalBody #cmpCells .pp-spark polyline').length,
+            cellVals: document.querySelectorAll('#playerModalBody .cmp-cell-val').length,
+            // Block C: the heat map, still one metric at a time.
             heatRows: document.querySelectorAll('#playerModalBody .cmp-heat-row').length,
             heatCells: document.querySelectorAll('#playerModalBody .cmp-heat-cell').length,
             chips: document.querySelectorAll('#playerModalBody .pp-chip').length,
@@ -558,9 +579,6 @@ try {
             best: document.querySelectorAll('#playerModalBody .cmp-grid td.is-best').length,
             // Every pill is a link into that player's own card.
             pills: document.querySelectorAll('#playerModalBody .cmp-pill[data-player-id]').length,
-            hues: new Set([...document.querySelectorAll('#playerModalBody .cmp-facet-name')]
-                .map(el => getComputedStyle(el).color)).size,
-            railValue0: railValue(0),
             // Nothing may scroll sideways: the row this replaced was 1947px
             // wide inside a 1440px window, which is why it is a modal now.
             bodyOverflow: (() => {
@@ -571,43 +589,52 @@ try {
         };
     });
     check(cmp.open, 'the comparison opens');
-    check(cmp.rails === 8 && cmp.dots === 16,
-        `block A keeps its eight rails and marks both players (${cmp.rails} rails, ${cmp.dots} dots)`);
+    check(cmp.mxHeads === 2 && cmp.mxRows === 8 && cmp.mxCells === 16,
+        `block A is a matrix of eight metrics by two players (${cmp.mxRows}×${cmp.mxHeads} = ${cmp.mxCells} cells)`);
+    check(cmp.mxValued === cmp.mxCells && cmp.mxBullets === cmp.mxCells,
+        `every cell prints its own value and its own bar (${cmp.mxValued}/${cmp.mxCells})`);
+    check(cmp.mxHues === 2 && cmp.noDots === 0 && cmp.noFacets === 0,
+        `each column is colour-keyed and the unlabelled dots are gone (${cmp.mxHues} hues, ${cmp.noDots} dots)`);
     check(cmp.medTicks === 1 && cmp.eliteTicks === 1,
-        'and names the two ticks once rather than on every rail');
-    check(cmp.facets === 2 && cmp.hues === 2,
-        `block B gives each player his own row and his own colour (${cmp.facets}, ${cmp.hues} hues)`);
+        'and the two reference ticks are named once rather than on every row');
+    check(cmp.cells >= 7 && cmp.sparks === cmp.cells && cmp.lines >= cmp.cells * 2 - 2,
+        `block B charts every metric at once, one line per player (${cmp.cells} panels, ${cmp.lines} lines)`);
+    check(cmp.cellVals >= cmp.cells * 2 - 2,
+        `and prints each player's figure under his own line (${cmp.cellVals})`);
     check(cmp.heatRows === 3 && cmp.heatCells > 0,
         `the heat map has a header and a row per player (${cmp.heatRows} rows, ${cmp.heatCells} cells)`);
     check(cmp.chips >= 8 && cmp.chipsOn === 1,
         `one metric is selected out of ${cmp.chips}`);
-    check(cmp.gridRows >= 6 && cmp.best >= 6,
+    check(cmp.gridRows >= 4 && cmp.best >= 4,
         `the season table names a leader in every row (${cmp.best}/${cmp.gridRows})`);
     check(cmp.pills === 2, 'and each pill links to that player\'s own card');
     check(!cmp.bodyOverflow, 'nothing in the comparison scrolls sideways');
     check(cmp.noOldRadar, 'the radar and the per-gameweek trend line are gone');
 
-    // Switching the metric must rebuild the two metric-dependent blocks and
-    // nothing else — rebuilding the modal would scroll the reader to the top.
+    // Switching the metric must rebuild the heat map and nothing else —
+    // rebuilding the modal would scroll the reader to the top, and block B no
+    // longer depends on the chip because it draws every metric.
     const swap = await page.evaluate(async () => {
         // The modal scrolls, not its body — asserting on the wrong element is
         // how this check passed while measuring nothing.
         const body = document.getElementById('playerModal');
         body.scrollTop = 120;
         const before = (document.querySelector('#playerModalBody .cmp-heat-cell') || {}).textContent;
-        const beforeFacet = (document.querySelector('#playerModalBody .cmp-facet-value') || {}).textContent;
+        const panels = document.querySelectorAll('#playerModalBody #cmpCells .pp-cell').length;
         setCompareMetric('bps');
         await new Promise(r => setTimeout(r, 300));
         return {
-            before, beforeFacet,
+            before, panels,
             after: (document.querySelector('#playerModalBody .cmp-heat-cell') || {}).textContent,
-            afterFacet: (document.querySelector('#playerModalBody .cmp-facet-value') || {}).textContent,
+            panelsAfter: document.querySelectorAll('#playerModalBody #cmpCells .pp-cell').length,
             onChip: (document.querySelector('#playerModalBody .pp-chip.is-on') || {}).textContent,
             kept: body.scrollTop
         };
     });
-    check(swap.after !== swap.before && swap.afterFacet !== swap.beforeFacet,
-        `choosing a metric redraws both blocks (${swap.before}→${swap.after})`);
+    check(swap.after !== swap.before,
+        `choosing a metric redraws the heat map (${swap.before}→${swap.after})`);
+    check(swap.panelsAfter === swap.panels,
+        `and leaves the eight panels alone (${swap.panels})`);
     check(swap.onChip === 'BPS', `and the chip follows (${swap.onChip})`);
     check(swap.kept > 0, `without throwing away the scroll position (${swap.kept})`);
 
@@ -618,7 +645,6 @@ try {
         const row = document.querySelector('#playersTableBody tr.player-row');
         row.querySelector('td:nth-child(3)').click();
         await new Promise(r => setTimeout(r, 900));
-        const railBar = document.querySelector('#playerModalBody .pp-rail-svg rect + rect');
         return {
             open: document.getElementById('playerModal').style.display === 'block',
             rails: document.querySelectorAll('#playerModalBody .pp-rail').length,
@@ -1350,8 +1376,12 @@ try {
         'the lead order is pinned across all 12 cards and survives a filter round-trip');
     check(onePage.noSwapControl, 'and carry no per-slot swap control');
 
-    // Ticking players used to feed the השוואה window and nothing else, so a
-    // selection of three left the whole league in the table and in every chart.
+    // A selection scopes the page — but only when the reader asks it to.
+    //
+    // It used to scope on the first tick, and that made the table impossible to
+    // select in: the checkboxes are inside the list the scope shortens, so tick
+    // one and the second row you wanted is gone. Both halves are pinned here:
+    // ticking must NOT narrow anything, and the switch must narrow everything.
     const picked = await page.evaluate(async () => {
         const settle = () => new Promise(r => setTimeout(r, 500));
         switchMainView('charts');
@@ -1359,30 +1389,77 @@ try {
         const pool = state.allPlayersData[state.currentDataSource].processed;
         const ids = [pool[0].id, pool[1].id, pool[2].id];
         const wholeLeague = state.filteredData.length;
-        ids.forEach(id => togglePlayerCompare(id));
+        const points = () => {
+            const chart = charts['chart-position'];
+            return chart ? chart.data.datasets.reduce((n, d) => n + d.data.length, 0) : -1;
+        };
+
+        // One tick. Nothing may narrow, or a second tick is unreachable.
+        togglePlayerCompare(ids[0]);
         await settle(); await settle();
-        const chart = charts['chart-position'];
-        const out = {
-            wholeLeague,
+        const afterOne = {
             rows: document.querySelectorAll('#playersTableBody tr.player-row').length,
-            chartPoints: chart ? chart.data.datasets.reduce((n, d) => n + d.data.length, 0) : -1,
+            boxes: document.querySelectorAll('#playersTable .player-select').length,
+            checked: document.querySelectorAll('#playersTable .player-select:checked').length,
+            hasSwitch: !!document.querySelector('.ps-scope'),
+            switchOn: !!document.querySelector('.ps-scope.is-on'),
+            label: (document.getElementById('rowCount') || {}).textContent || ''
+        };
+
+        // Two more, from the table's own checkboxes — the interaction that was
+        // broken. Each box has to still be there to be ticked.
+        const tickRow = id => {
+            const box = document.querySelector(`#playersTable .player-select[data-player-id="${id}"]`);
+            if (!box) return false;
+            box.checked = true;
+            box.dispatchEvent(new Event('change', { bubbles: true }));
+            return true;
+        };
+        const tickedFromTable = [tickRow(ids[1]), tickRow(ids[2])].every(Boolean);
+        await settle(); await settle();
+        const built = state.selectedForComparison.size;
+
+        // Now the switch.
+        document.querySelector('.ps-scope').click();
+        await settle(); await settle();
+        const out = {
+            wholeLeague, afterOne, tickedFromTable, built,
+            rows: document.querySelectorAll('#playersTableBody tr.player-row').length,
+            chartPoints: points(),
+            switchOn: !!document.querySelector('.ps-scope.is-on'),
             // The picker must still see the league, or a fourth player could
             // never be added to a selection of three.
             poolSize: playerSearchPool().length,
             label: (document.getElementById('rowCount') || {}).textContent || ''
         };
+
+        // And off again, without losing the selection.
+        document.querySelector('.ps-scope').click();
+        await settle(); await settle();
+        out.offRows = document.querySelectorAll('#playersTableBody tr.player-row').length;
+        out.keptSelection = state.selectedForComparison.size;
+
         clearCompareSelection();
         await settle(); await settle();
         out.afterClear = document.querySelectorAll('#playersTableBody tr.player-row').length;
+        out.scopeReset = state.scopeToSelection === false;
         switchMainView('table');
         return out;
     });
-    check(picked.rows === 3 && picked.chartPoints === 3,
-        `ticking three players scopes the table and the charts to three (${picked.rows} rows, ${picked.chartPoints} points)`);
+    check(picked.afterOne.rows === picked.wholeLeague && picked.afterOne.checked === 1,
+        `one tick leaves the table whole so a second is reachable (${picked.afterOne.rows} rows, ${picked.afterOne.checked} ticked)`);
+    check(picked.afterOne.hasSwitch && !picked.afterOne.switchOn,
+        'the scope switch appears with the selection and starts off');
+    check(picked.tickedFromTable && picked.built === 3,
+        `three players can be built from the table's own checkboxes (${picked.built})`);
+    check(picked.rows === 3 && picked.chartPoints === 3 && picked.switchOn,
+        `the switch scopes the table and the charts to three (${picked.rows} rows, ${picked.chartPoints} points)`);
     check(picked.poolSize > 3, `and the picker still searches the league (${picked.poolSize})`);
     check(/3/.test(picked.label), `and the toolbar says why ("${picked.label.trim()}")`);
-    check(picked.afterClear === picked.wholeLeague,
-        `נקה puts the whole league back (${picked.afterClear} of ${picked.wholeLeague})`);
+    check(picked.offRows === picked.wholeLeague && picked.keptSelection === 3,
+        `switching it off restores the league without losing the ticks (${picked.offRows} rows, ${picked.keptSelection} ticked)`);
+    check(picked.afterClear === picked.wholeLeague && picked.scopeReset,
+        `נקה puts the whole league back and drops the scope (${picked.afterClear} of ${picked.wholeLeague})`);
 
     // Two things that were quietly wrong: the momentum window drove the table
     // alone, and a focused verdict grew its card to ~1200px and spanned the

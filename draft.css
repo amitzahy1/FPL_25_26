@@ -1450,6 +1450,48 @@ body.tab-draft {
     color: var(--c-muted);
 }
 
+/* The far end of the header band. The band ran 1400px wide for 300px of title,
+   so what the panel counted and how to read it belong here rather than in a
+   second band underneath. */
+#draftTabContent .mk-head-aside {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 6px 8px;
+    margin-inline-start: auto;
+    min-width: 0;
+}
+
+#draftTabContent .mk-head-aside[hidden] { display: none; }
+
+#draftTabContent .mk-head-count {
+    flex: none;
+    padding: 4px 10px;
+    border-radius: 999px;
+    background: var(--c-blue-soft);
+    font-size: 11.5px;
+    font-weight: 600;
+    color: var(--c-blue-deep);
+    white-space: nowrap;
+}
+
+#draftTabContent .mk-head-count b { font-size: 14px; font-weight: 800; }
+
+#draftTabContent .mk-head-legend {
+    flex: none;
+    font-size: 10.5px;
+    font-weight: 500;
+    color: var(--c-muted);
+    white-space: nowrap;
+}
+
+@media (max-width: 860px) {
+    #draftTabContent .mk-head { flex-wrap: wrap; }
+    #draftTabContent .mk-head-aside { margin-inline-start: 0; justify-content: flex-start; }
+    #draftTabContent .mk-head-legend { display: none; }
+}
+
 /* ---------------------------- the swap board ---------------------------- */
 
 #draftTabContent #draftRecommendations {
@@ -1461,19 +1503,33 @@ body.tab-draft {
     gap: 14px;
 }
 
-@media (min-width: 1500px) {
+/* Two columns from 1240px, not 1500px. In one column a swap card is as wide as
+   the page, and three 196px tiles stretched to 430px each is the same wasted
+   middle the head band had — the tiles hold four short measures and a name, and
+   nothing in them grows to fill the extra width. */
+@media (min-width: 1240px) {
     #draftTabContent #draftRecommendations { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
-#draftTabContent .mk-swap { padding: 16px 18px; }
+#draftTabContent .mk-swap { padding: 0; overflow: hidden; }
 
+/* Tinted, not white. The head band is the problem being reported, and a rose
+   wash says so before the words do — which is most of what the all-white
+   version was missing. It also gives the card an edge to hang from instead of
+   a hairline floating in space. */
 #draftTabContent .mk-swap-head {
     display: flex;
     align-items: center;
-    gap: 12px;
-    padding-bottom: 12px;
-    margin-bottom: 12px;
-    border-bottom: 1px solid var(--c-line);
+    /* Wrapping, always. A card is ~693px in the two-column layout and the band
+       holds five things; at that width it was clipping the recommended player's
+       name to "...ernandes". A second line costs 20px, an ellipsised name costs
+       the reader the answer. */
+    flex-wrap: wrap;
+    gap: 8px 10px;
+    padding: 11px 16px;
+    margin: 0;
+    background: linear-gradient(180deg, #fff5f7 0%, #fdeef2 100%);
+    border-bottom: 1px solid #f7d8e1;
 }
 
 /* The player being replaced. A link, like every other name in this tab.
@@ -1481,76 +1537,155 @@ body.tab-draft {
    floating in a wide empty band, which is most of what made the old header look
    unfinished. */
 #draftTabContent .mk-out {
-    display: inline-flex;
-    align-items: baseline;
-    gap: 8px;
-    padding: 4px 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    padding: 3px 8px;
     border-radius: var(--c-radius-xs);
-    min-width: 0;
+    /* This is the one thing in the band that may give up width: its meta line
+       wraps harmlessly, where a name does not. */
+    flex: 1 1 auto;
+    min-width: 130px;
+    cursor: pointer;
 }
 
-#draftTabContent .mk-out:hover { background: var(--c-blue-soft); }
+#draftTabContent .mk-out:hover { background: rgba(255, 255, 255, .75); }
 
 #draftTabContent .mk-out-flag {
     flex: none;
-    padding: 3px 8px;
+    align-self: center;
+    padding: 4px 9px;
     border-radius: 999px;
-    background: #fdeaef;
+    background: #fff;
+    box-shadow: 0 1px 0 rgba(217, 45, 90, .18);
     font-size: 10px;
-    font-weight: 700;
+    font-weight: 800;
     color: var(--c-red);
     white-space: nowrap;
 }
 
 #draftTabContent .mk-out-name {
     font-size: 16px;
-    font-weight: 700;
+    font-weight: 800;
     color: var(--c-ink);
+    line-height: 1.15;
 }
 
 #draftTabContent .mk-out-meta {
     font-size: 11px;
     font-weight: 500;
-    color: var(--c-muted);
+    color: #8a5f6d;
+    line-height: 1.25;
 }
 
 /* RTL: the flow runs right to left, so the arrow points the way the eye moves. */
 #draftTabContent .mk-arrow {
     flex: none;
     font-size: 18px;
-    color: var(--c-blue);
+    color: var(--c-red);
+    opacity: .55;
+}
+
+/* The headline recommendation, in the middle of the band. Without it the band
+   was a name at one edge and a button at the other with 600px of pink between
+   them, which is what "empty and too white" was pointing at. */
+#draftTabContent .mk-best {
+    display: flex;
+    align-items: baseline;
+    gap: 7px;
+    flex: none;
+    padding: 4px 10px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, .8);
+    box-shadow: inset 0 0 0 1px #f4dbe3;
+    cursor: pointer;
+}
+
+#draftTabContent .mk-best:hover { background: #fff; box-shadow: inset 0 0 0 1px var(--c-green); }
+
+#draftTabContent .mk-best-label {
+    flex: none;
+    font-size: 9.5px;
+    font-weight: 600;
+    color: #a37b88;
+}
+
+#draftTabContent .mk-best-name {
+    font-size: 13.5px;
+    font-weight: 800;
+    color: var(--c-ink);
+    white-space: nowrap;
+}
+
+#draftTabContent .mk-best-gain {
+    flex: none;
+    font-size: 12.5px;
+    font-weight: 800;
+    color: var(--c-green);
+    font-variant-numeric: tabular-nums;
 }
 
 /* Pushed to the far end, so the header is anchored at both edges instead of
-   trailing off into empty white. */
+   trailing off into empty white — and it is the button that says out loud what
+   clicking the card does. */
 #draftTabContent .mk-swap-label {
     margin-inline-start: auto;
+    flex: none;
+    padding: 5px 11px;
+    border-radius: 999px;
+    border: 1px solid #f0c8d4;
+    background: #fff;
     font-size: 11px;
-    font-weight: 600;
-    color: var(--c-muted);
+    font-weight: 700;
+    color: var(--c-red);
     white-space: nowrap;
+    cursor: pointer;
+    transition: background .15s, color .15s, border-color .15s;
+}
+
+#draftTabContent .mk-swap-label:hover {
+    background: var(--c-red);
+    border-color: var(--c-red);
+    color: #fff;
 }
 
 #draftTabContent .mk-cands {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(196px, 1fr));
     gap: 10px;
+    padding: 14px 16px 16px;
 }
 
 #draftTabContent .mk-cand {
     display: flex;
     flex-direction: column;
-    gap: 4px;
-    padding: 11px 13px;
+    gap: 7px;
+    padding: 12px 13px;
     border: 1px solid var(--c-line);
     border-radius: var(--c-radius-sm);
-    background: var(--c-card);
+    background: linear-gradient(180deg, #fbfcfe 0%, #fff 42%);
     min-width: 0;
+    cursor: pointer;
+    transition: border-color .15s, box-shadow .15s, transform .15s;
+}
+
+/* Rank is the one thing colour is spent on here. The best available swap gets
+   the green edge and a faint green ground; #2 and #3 stay neutral, so the
+   ordering is readable without reading the #n badges. */
+#draftTabContent .mk-cand.is-top {
+    border-color: #bfe6d3;
+    background: linear-gradient(180deg, #f2fbf6 0%, #fff 46%);
 }
 
 #draftTabContent .mk-cand:hover {
     border-color: var(--c-blue);
-    box-shadow: 0 6px 18px -12px rgba(15, 86, 217, .5);
+    box-shadow: 0 10px 24px -16px rgba(15, 86, 217, .65);
+    transform: translateY(-1px);
+}
+
+#draftTabContent .mk-cand.is-top:hover {
+    border-color: var(--c-green);
+    box-shadow: 0 10px 24px -16px rgba(14, 159, 93, .65);
 }
 
 #draftTabContent .mk-cand-top {
@@ -1561,25 +1696,47 @@ body.tab-draft {
 }
 
 #draftTabContent .mk-rank {
-    font-size: 11px;
-    font-weight: 700;
+    flex: none;
+    min-width: 22px;
+    padding: 2px 0;
+    border-radius: 6px;
+    background: var(--c-wash);
+    text-align: center;
+    font-size: 10.5px;
+    font-weight: 800;
     color: var(--c-muted);
     font-variant-numeric: tabular-nums;
 }
 
+#draftTabContent .mk-cand.is-top .mk-rank { background: #dff3e8; color: #0b6b41; }
+
 /* The gap in smart score — the whole reason the tile is on screen, so it is the
-   biggest thing on it after the name. */
+   biggest thing on it after the name. The unit rides underneath so the figure
+   is not mistaken for points. */
 #draftTabContent .mk-gap {
-    font-size: 15px;
+    display: flex;
+    align-items: baseline;
+    gap: 3px;
+    font-size: 19px;
     font-weight: 800;
+    line-height: 1;
     font-variant-numeric: tabular-nums;
+}
+
+#draftTabContent .mk-gap em {
+    font-style: normal;
+    font-size: 9.5px;
+    font-weight: 600;
+    color: var(--c-muted);
 }
 
 #draftTabContent .mk-gap.is-pos { color: var(--c-green); }
 
+#draftTabContent .mk-cand-id { display: grid; gap: 1px; min-width: 0; }
+
 #draftTabContent .mk-cand-name {
-    font-size: 14px;
-    font-weight: 700;
+    font-size: 15px;
+    font-weight: 800;
     color: var(--c-ink);
     overflow: hidden;
     text-overflow: ellipsis;
@@ -1590,20 +1747,22 @@ body.tab-draft {
     font-size: 11px;
     font-weight: 500;
     color: var(--c-muted);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 #draftTabContent .mk-chips {
     display: flex;
     flex-wrap: wrap;
     gap: 4px;
-    margin-top: 2px;
 }
 
 #draftTabContent .mk-chip {
     padding: 2px 7px;
     border-radius: 999px;
     font-size: 10px;
-    font-weight: 600;
+    font-weight: 700;
     white-space: nowrap;
 }
 
@@ -1611,21 +1770,46 @@ body.tab-draft {
 #draftTabContent .mk-chip.is-info { background: var(--c-blue-soft); color: var(--c-blue-deep); }
 #draftTabContent .mk-chip.is-warm { background: #fdf1e3; color: #9a5312; }
 
-/* Four figures on one line, labels above. A definition list because that is
-   what it is, and it keeps label and value bound together for a screen reader. */
+/* The one measure on the tile that is not relative — a shape, above the four
+   that are. */
+#draftTabContent .mk-form {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    padding: 5px 7px;
+    border-radius: 7px;
+    background: var(--c-wash);
+}
+
+#draftTabContent .mk-form > span {
+    flex: none;
+    font-size: 9.5px;
+    font-weight: 600;
+    color: var(--c-muted);
+}
+
+#draftTabContent .mk-form .trend-bars { flex: 1 1 auto; min-width: 0; }
+
+/* Four measures, each against the incumbent. Grid rather than a definition list
+   now: the bar is a third column and a <dl> has no room for one. */
 #draftTabContent .mk-stats {
     display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-    gap: 6px;
-    margin: 6px 0 0;
-    padding-top: 8px;
+    gap: 4px;
+    margin-top: auto;
+    padding-top: 9px;
     border-top: 1px solid var(--c-line);
 }
 
-#draftTabContent .mk-stats > div { min-width: 0; }
+#draftTabContent .mk-stat {
+    display: grid;
+    grid-template-columns: 46px minmax(24px, 1fr) 34px;
+    align-items: center;
+    gap: 7px;
+    cursor: help;
+}
 
-#draftTabContent .mk-stats dt {
-    font-size: 9.5px;
+#draftTabContent .mk-stat-label {
+    font-size: 10px;
     font-weight: 500;
     color: var(--c-muted);
     white-space: nowrap;
@@ -1633,12 +1817,34 @@ body.tab-draft {
     text-overflow: ellipsis;
 }
 
-#draftTabContent .mk-stats dd {
-    margin: 0;
-    font-size: 13px;
-    font-weight: 700;
-    color: var(--c-ink);
+#draftTabContent .mk-bullet { width: 100%; height: 9px; display: block; }
+
+/* A measure with no data draws a hairline, not an empty track: a 100px empty
+   rounded box beside a "–" reads as a chart that failed to render. */
+#draftTabContent .mk-bullet.is-empty {
+    height: 1px;
+    margin: 4px 0;
+    background: var(--c-line);
+    border-radius: 1px;
+}
+
+#draftTabContent .mk-stat-val {
+    font-size: 12.5px;
+    font-weight: 800;
+    text-align: left;
     font-variant-numeric: tabular-nums;
+}
+
+/* Direction, not rank. Over the man being dropped is green, under him is red —
+   a candidate can be a clear upgrade overall and still lose one measure, and
+   that is exactly what the card should admit. */
+#draftTabContent .mk-stat-val.is-up { color: var(--c-green); }
+#draftTabContent .mk-stat-val.is-down { color: var(--c-red); }
+#draftTabContent .mk-stat-val.is-flat { color: var(--c-muted); }
+
+@media (max-width: 560px) {
+    #draftTabContent .mk-swap-label { margin-inline-start: 0; }
+    #draftTabContent .mk-cands { grid-template-columns: 1fr; }
 }
 
 /* A titled sub-panel inside a market tab. The feed's two lists and the trending

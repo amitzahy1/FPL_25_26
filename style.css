@@ -7288,29 +7288,151 @@ canvas {
 
 .pp-chip.is-on { background: var(--c-blue); border-color: var(--c-blue); color: #fff; }
 
-/* A — one row per player, on a scale they share. */
-.cmp-facet {
+/* A — metric by player. Every value sits in a named column, which is the whole
+   correction: the previous version laid a coloured dot per player over a single
+   shared rail, and once three dots overlap the block answers "who leads" and
+   nothing else. Here the column header names the player, the cell prints his
+   number, and the bar underneath is the second channel. */
+.cmp-mx {
     display: grid;
-    grid-template-columns: 86px minmax(0, 1fr) 46px;
-    gap: 9px;
-    align-items: center;
+    gap: 2px;
+    /* One label column, then an equal column per player. --cmp-n is stamped on
+       the element by the renderer, so 2 and 5 players get the same treatment. */
+    --cmp-lab: 96px;
 }
 
-.cmp-facet + .cmp-facet { margin-top: 4px; }
+.cmp-mx-row {
+    display: grid;
+    grid-template-columns: var(--cmp-lab) repeat(var(--cmp-n), minmax(0, 1fr));
+    gap: 6px;
+    align-items: center;
+    padding: 3px 0;
+    border-radius: 8px;
+}
 
-.cmp-facet-name {
+.cmp-mx-row:not(.is-head):hover { background: #f6f9fd; }
+
+.cmp-mx-row.is-head {
+    padding-bottom: 7px;
+    margin-bottom: 3px;
+    border-bottom: 1px solid var(--c-line);
+    align-items: end;
+}
+
+/* The header carries the colour key, so the pills at the top of the modal are a
+   reminder rather than the only place the mapping exists. */
+.cmp-mx-h {
+    display: grid;
+    gap: 1px;
+    min-width: 0;
+    text-align: center;
+    padding-top: 4px;
+    border-top: 2.5px solid var(--cmp-hue);
+}
+
+.cmp-mx-h b {
     font-size: 11.5px;
-    font-weight: 700;
+    font-weight: 800;
+    color: var(--cmp-hue);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
 }
 
-.cmp-facet-value {
-    font-size: 12.5px;
-    font-weight: 700;
-    text-align: left;
+.cmp-mx-h em {
+    font-style: normal;
+    font-family: 'Heebo', sans-serif;
+    font-size: 9px;
+    font-weight: 600;
+    color: #94a3b8;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.cmp-mx-label {
+    font-family: 'Heebo', sans-serif;
+    font-size: 10.5px;
+    font-weight: 600;
+    color: var(--c-muted);
+    line-height: 1.2;
+}
+
+.cmp-mx-cell {
+    display: grid;
+    gap: 2px;
+    min-width: 0;
+    padding: 3px 5px;
+    border-radius: 7px;
+    cursor: help;
+}
+
+/* The leader is marked on the cell, not by colour on the number — the number is
+   already the player's colour, and stacking a second meaning on the same channel
+   is how the old dots became unreadable. */
+.cmp-mx-cell.is-lead { background: #eef7f2; box-shadow: inset 0 0 0 1px #cbe8d9; }
+
+.cmp-mx-val {
+    font-size: 13px;
+    font-weight: 800;
+    text-align: center;
     font-variant-numeric: tabular-nums;
+    line-height: 1.1;
+}
+
+.cmp-mx-bullet { width: 100%; height: 10px; display: block; }
+
+/* A readable floor per column. Below it the wrapper scrolls instead of the
+   numbers shrinking — five players on a 360px phone is the case this exists for. */
+.cmp-mx { min-width: max(100%, calc(var(--cmp-lab) + var(--cmp-n) * 76px)); }
+
+@media (max-width: 560px) {
+    .cmp-mx { --cmp-lab: 74px; }
+    .cmp-mx-label { font-size: 9.5px; }
+    .cmp-mx-val { font-size: 12px; }
+}
+
+/* B — the panels. Two across, not the single card's four: five lines and five
+   figures need roughly twice the width of one line and one figure, and squeezing
+   them into a 150px panel is what turned the first version into a block of ink.
+   Two columns also keeps all five values on one row instead of wrapping to a
+   ragged second. */
+.cmp-cells { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+
+.cmp-cells .pp-cell { padding: 9px 11px; }
+
+/* An odd number of panels — a goalkeeper-free season on the archive drops the
+   price panel and leaves seven — would otherwise end the block with a half-empty
+   row. The last one takes the whole width instead. */
+.cmp-cells .pp-cell:last-child:nth-child(odd) { grid-column: 1 / -1; }
+
+.cmp-spark { height: 46px; }
+
+.cmp-cell-vals {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 3px 8px;
+    margin-top: 4px;
+    padding-top: 6px;
+    border-top: 1px solid #eaf0f7;
+}
+
+@media (max-width: 560px) {
+    .cmp-cells { grid-template-columns: 1fr; }
+}
+
+.cmp-cell-val {
+    font-size: 11px;
+    font-weight: 800;
+    font-variant-numeric: tabular-nums;
+    cursor: help;
+}
+
+.cmp-cell-val.is-lead {
+    padding: 0 4px;
+    border-radius: 5px;
+    background: #eef7f2;
 }
 
 /* C — the heat map. One sequential hue: points run from zero upwards with no
@@ -7361,3 +7483,35 @@ canvas {
 }
 
 .cmp-grid td.is-best { background: #e7f7ef; font-weight: 800; color: #0b6b41; }
+
+/* ---------------------- the selection scope switch ------------------------ */
+
+/* Ticking a box no longer narrows the page on its own — see state.scopeToSelection
+   for why it cannot. This is the switch that does it, and it sits in the chips
+   row because that is where the selection is: the thing being scoped and the
+   control that scopes it read as one object. Off it is quiet and outlined; on it
+   is filled, so "the page is currently narrowed" is legible from across the
+   room, which is what the implicit version never said out loud. */
+.ps-scope {
+    padding: 3px 10px;
+    border-radius: 100px;
+    border: 1px solid #cbd5e1;
+    background: #fff;
+    font: inherit;
+    font-size: 11.5px;
+    font-weight: 800;
+    color: #475569;
+    cursor: pointer;
+    transition: background .15s, color .15s, border-color .15s;
+}
+
+.ps-scope:hover { border-color: #4f46e5; color: #4338ca; }
+
+.ps-scope.is-on {
+    background: #0f56d9;
+    border-color: #0f56d9;
+    color: #fff;
+    box-shadow: 0 4px 12px -6px rgba(15, 86, 217, .8);
+}
+
+.ps-scope.is-on:hover { background: #0b45ad; color: #fff; }

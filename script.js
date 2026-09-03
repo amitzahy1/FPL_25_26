@@ -287,6 +287,15 @@ const state = {
     sortDirection: 'desc',
     activeQuickFilterName: null,
     selectedForComparison: new Set(),
+    // Whether that selection narrows the page down to itself.
+    //
+    // It used to be implicit — a selection ALWAYS scoped the page — and that made
+    // the table impossible to select in: the checkboxes live inside the very list
+    // the scope shortens, so the first tick left one row on screen and there was
+    // no second row to tick. A filter driven from inside the thing it filters has
+    // to be opt-in, so this is a switch the reader throws once the selection is
+    // the one they wanted.
+    scopeToSelection: false,
     // --- scouting view ---
     watchlist: new Set(),        // player ids, persisted in localStorage
     watchlistOnly: false,        // filter the table down to the watchlist
@@ -4875,23 +4884,28 @@ function railFor(player, key) {
 }
 
 /**
- * One rail as SVG. A bar for one player, a dot per player for a comparison.
+ * One rail as SVG: one player's bar against his position's two markers.
  *
  * The scale is drawn, not implied: the two ticks are the position's median and
  * its elite level, so the bar's length is a claim about the league rather than
  * about itself. The viewBox has no room reserved for labels because the labels
  * live in the grid beside it — an SVG that also had to hold text would have to
  * reserve space for the longest one and shrink every rail to fit it.
+ *
+ * It used to take a list of dots as well, one per player, and that was the
+ * comparison card's block A. It is gone: a dot carries no name, three of them
+ * overlap, and only the leader's figure was printed beside the rail — so with
+ * more than one player the rail said who won and refused to say what anyone
+ * scored. cmpMatrixHtml gives every player his own column instead.
  */
-function railSvg(rail, dots) {
+function railSvg(rail) {
     const w = 240, h = 20;
-    const candidates = [rail.elite, rail.med, rail.value,
-        ...(dots || []).map(d => d.v)].filter(Number.isFinite);
+    const candidates = [rail.elite, rail.med, rail.value].filter(Number.isFinite);
     const top = Math.max(...candidates, 0.001) * 1.12;
     const x = v => Math.max(0, Math.min((v / top) * w, w));
     const parts = [`<rect x="0" y="${h / 2 - 4}" width="${w}" height="8" rx="4" fill="var(--c-wash)"/>`];
 
-    if (!dots && Number.isFinite(rail.value)) {
+    if (Number.isFinite(rail.value)) {
         parts.push(`<rect x="0" y="${h / 2 - 4}" width="${x(rail.value)}" height="8"
             rx="4" fill="var(--c-blue)"/>`);
     }
@@ -4903,11 +4917,6 @@ function railSvg(rail, dots) {
         parts.push(`<line x1="${x(rail.elite)}" y1="2" x2="${x(rail.elite)}" y2="${h - 2}"
             stroke="var(--c-green)" stroke-width="1.5"/>`);
     }
-    (dots || []).forEach(d => {
-        if (!Number.isFinite(d.v)) return;
-        parts.push(`<circle cx="${x(d.v)}" cy="${h / 2}" r="5" fill="${d.hue}"
-            stroke="#fff" stroke-width="1.5"><title>${escapeHtml(d.name)}</title></circle>`);
-    });
     return `<svg class="pp-rail-svg" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none"
         role="img" aria-label="מול חציון העמדה ורמת העילית">${parts.join('')}</svg>`;
 }
@@ -5017,6 +5026,7 @@ async function openPlayerModal(playerId) {
     if (!modal || !host) return;
 
     _pp.ids = [id];
+    initPlayerModalLinks();
     const draw = (log, loading) => {
         host.innerHTML = playerProfileHtml(player, log, { loading });
         modal.scrollTop = 0;
@@ -5035,19 +5045,15 @@ async function openPlayerModal(playerId) {
     draw(playerSeasonLog(player, summary), false);
 }
 
-function ppRailsHtml(player, keys, dotsFor) {
+function ppRailsHtml(player, keys) {
     return `<div class="pp-rails">${keys.map(k => {
         const def = PROFILE_METRICS[k];
         const rail = railFor(player, k);
-        const dots = dotsFor ? dotsFor(k) : null;
-        const lead = dots ? dots.filter(d => Number.isFinite(d.v))
-            .reduce((m, d) => (m === null || d.v > m.v ? d : m), null) : null;
         return `<div class="pp-rail">
             <span class="pp-rail-label">${def.railLabel}</span>
-            ${railSvg(rail, dots)}
-            <span class="pp-rail-value"${lead ? ` style="color:${lead.hue}"` : ''}>${
-            dots ? (lead ? def.fmt(lead.v) : '–')
-                : (rail.value === null ? '–' : def.fmt(rail.value))}</span>
+            ${railSvg(rail)}
+            <span class="pp-rail-value">${
+            rail.value === null ? '–' : def.fmt(rail.value)}</span>
         </div>`;
     }).join('')}</div>`;
 }
@@ -5217,7 +5223,7 @@ function playerProfileHtml(player, log, opts = {}) {
 
         <div class="pp-blockmark"><i>A</i>אם הוא טוב<span>מול ${poolSize} ${pos}</span></div>
         <section class="pp-card">
-            ${ppRailsHtml(player, keys, null)}
+            ${ppRailsHtml(player, keys)}
             ${railLegendHtml()}
         </section>
 
@@ -5280,6 +5286,34 @@ function addToCompareFromProfile(playerId) {
  * also the textbook failure for colour vision deficiency, which in a league of
  * men is not a hypothetical.
  */
+/**
+ * Names inside the card are links, the same way names inside the draft tab are.
+ *
+ * Delegated to the modal and wired once, because both open functions replace the
+ * body's innerHTML on every draw — a listener on a pill would be thrown away by
+ * the redraw that lands when the season summaries arrive.
+ */
+function initPlayerModalLinks() {
+    const modal = document.getElementById('playerModal');
+    if (!modal || modal.dataset.playerLinks === '1') return;
+    modal.dataset.playerLinks = '1';
+
+    const go = el => {
+        const id = Number(el.dataset.playerId);
+        if (Number.isInteger(id)) openPlayerModal(id);
+    };
+    modal.addEventListener('click', e => {
+        if (e.target.closest('button, input, select, label, a')) return;
+        const el = e.target.closest('[data-player-id]');
+        if (el) { e.preventDefault(); go(el); }
+    });
+    modal.addEventListener('keydown', e => {
+        if (e.key !== 'Enter' && e.key !== ' ') return;
+        const el = e.target.closest && e.target.closest('[data-player-id]');
+        if (el) { e.preventDefault(); go(el); }
+    });
+}
+
 function comparePlayerColor(i) {
     return ['#0f56d9', '#0e9f5d', '#d97706', '#7c3aed', '#0369a1'][i % 5];
 }
@@ -5292,6 +5326,7 @@ async function openCompareModal(players) {
     const list = players.slice(0, 5).map((p, i) => ({ ...p, _hue: comparePlayerColor(i) }));
     _pp.ids = list.map(p => p.id);
     _pp.metric = 'pts';
+    initPlayerModalLinks();
 
     const draw = logs => {
         _pp.logs = logs;
@@ -5315,7 +5350,13 @@ async function openCompareModal(players) {
     draw(new Map(list.map((p, i) => [p.id, playerSeasonLog(p, summaries[i])])));
 }
 
-/** Rebuild only the two metric-dependent blocks, keeping the scroll position. */
+/**
+ * Rebuild the heat map alone, keeping the scroll position.
+ *
+ * The chips used to drive two blocks. Block B now shows every metric at once,
+ * so the only thing left that is one-metric-at-a-time is the heat map — a grid
+ * of gameweek × player has no third axis to spend on a metric.
+ */
 function setCompareMetric(key) {
     if (!PROFILE_METRICS[key] || !_pp.logs) return;
     _pp.metric = key;
@@ -5325,9 +5366,7 @@ function setCompareMetric(key) {
         const p = pool.find(x => x.id === id);
         return p ? { ...p, _hue: comparePlayerColor(i) } : null;
     }).filter(Boolean);
-    const facet = document.getElementById('cmpFacet');
     const heat = document.getElementById('cmpHeat');
-    if (facet) facet.innerHTML = compareFacetInnerHtml(list, _pp.logs, key);
     if (heat) heat.innerHTML = compareHeatInnerHtml(list, _pp.logs, key);
     document.querySelectorAll('#playerModalBody .pp-chip').forEach(b => {
         const on = b.dataset.metric === key;
@@ -5346,21 +5385,228 @@ function compareMetricChipsHtml(list) {
             onclick="setCompareMetric('${k}')">${PROFILE_METRICS[k].label}</button>`).join('')}</div>`;
 }
 
-/** A — one row per player, on a scale they share. */
-function compareFacetInnerHtml(list, logs, key) {
-    const def = PROFILE_METRICS[key];
-    const all = list.flatMap(p => (logs.get(p.id) || []).map(def.gw)).filter(Number.isFinite);
-    if (!all.length) return '<div class="pp-loading">אין עדיין נתוני מחזורים</div>';
-    const max = Math.max(...all, 0.001);
-    return list.map(p => {
-        const log = logs.get(p.id) || [];
-        const s = metricSummary(log, key);
-        return `<div class="cmp-facet">
-            <span class="cmp-facet-name" style="color:${p._hue}">${escapeHtml(p.web_name)}</span>
-            ${ppSparkSvg(log.map(def.gw), log.map(e => e.minutes > 0), p._hue, { h: 30, max })}
-            <span class="cmp-facet-value">${s === null ? '–' : def.fmt(s)}</span>
+/* ------------------------------ A: the matrix ----------------------------- */
+
+/**
+ * One player's standing on one metric, as a bar the width of its cell.
+ *
+ * This is the rail from the single card, cut down to cell size. It kept the two
+ * ticks — the position's median and its elite level — because they are what
+ * makes a bar a reading rather than a length: the same 10 BPS is good for a
+ * defender and thin for a midfielder, and in a comparison across positions that
+ * difference is the answer.
+ */
+function cmpBulletSvg(rail, top, hue) {
+    const w = 100, h = 10;
+    const x = v => Math.max(0, Math.min((v / top) * w, w));
+    const parts = [`<rect x="0" y="3" width="${w}" height="4" rx="2" fill="var(--c-wash)"/>`];
+    if (Number.isFinite(rail.value)) {
+        parts.push(`<rect x="0" y="3" width="${x(rail.value).toFixed(1)}" height="4"
+            rx="2" fill="${hue}"/>`);
+    }
+    if (Number.isFinite(rail.med)) {
+        parts.push(`<line x1="${x(rail.med).toFixed(1)}" y1="0.5"
+            x2="${x(rail.med).toFixed(1)}" y2="${h - 0.5}" stroke="#8e9bb1" stroke-width="1.4"/>`);
+    }
+    if (Number.isFinite(rail.elite)) {
+        parts.push(`<line x1="${x(rail.elite).toFixed(1)}" y1="0.5"
+            x2="${x(rail.elite).toFixed(1)}" y2="${h - 0.5}" stroke="var(--c-green)" stroke-width="1.4"/>`);
+    }
+    return `<svg class="cmp-mx-bullet" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none"
+        aria-hidden="true">${parts.join('')}</svg>`;
+}
+
+/**
+ * A — metric by player, every number labelled by the column it is in.
+ *
+ * This block used to be the single card's eight rails with a coloured dot per
+ * player laid over each one, and it did not work: five dots on a 240px track
+ * overlap, none of them carries its own name, and the only figure printed was
+ * the leader's — so the honest answer to "what is this player's xGI" was "hover
+ * and hope". Every value is its own cell now, under the player's name, with the
+ * bar as a second channel rather than the only one.
+ *
+ * The scale is shared down each row and stretched to fit whichever is larger,
+ * the values or the reference ticks. Sharing it per row rather than per table is
+ * the point: minutes and G+A do not belong on one axis, but two players' minutes
+ * do.
+ *
+ * The reference ticks are each player's OWN position median and elite level, not
+ * the first player's — the old block used list[0]'s for everybody, which quietly
+ * mismarked every mixed-position comparison.
+ */
+function cmpMatrixHtml(list, keys) {
+    const live = keys.filter(k => list.some(p => Number.isFinite(railFor(p, k).value)));
+    const cols = live.length ? live : keys;
+    // The scroll wrapper is what keeps five players off the phone's horizontal
+    // scrollbar: the grid holds a readable minimum per column and the wrapper
+    // scrolls, rather than every column shrinking until the digits are unreadable.
+    return `<div class="pp-log-wrap"><div class="cmp-mx" style="--cmp-n:${list.length}">
+        <div class="cmp-mx-row is-head">
+            <span class="cmp-mx-label"></span>
+            ${list.map(p => `<span class="cmp-mx-h" style="--cmp-hue:${p._hue}">
+                <b>${escapeHtml(p.web_name)}</b>
+                <em>${escapeHtml(teamShort(p))} · ${p.position_name}</em>
+            </span>`).join('')}
+        </div>
+        ${cols.map(k => {
+        const def = PROFILE_METRICS[k];
+        const rails = list.map(p => railFor(p, k));
+        const top = Math.max(...rails.flatMap(r => [r.value, r.med, r.elite])
+            .filter(Number.isFinite), 0.001) * 1.1;
+        const values = rails.map(r => r.value).filter(Number.isFinite);
+        const best = values.length ? Math.max(...values) : null;
+        return `<div class="cmp-mx-row">
+            <span class="cmp-mx-label">${def.railLabel}</span>
+            ${rails.map((r, i) => {
+            const lead = best !== null && r.value === best && list.length > 1;
+            const vs = Number.isFinite(r.med) && Number.isFinite(r.value)
+                ? `${r.value >= r.med ? 'מעל ' : 'מתחת ל'}חציון העמדה (${def.fmt(r.med)})`
+                : 'אין חציון לעמדה';
+            return `<span class="cmp-mx-cell${lead ? ' is-lead' : ''}"
+                    title="${escapeHtml(list[i].web_name)} · ${def.railLabel}: ${
+                r.value === null ? 'אין נתון' : def.fmt(r.value)} — ${vs}">
+                    <b class="cmp-mx-val" style="color:${list[i]._hue}">${
+                r.value === null ? '–' : def.fmt(r.value)}</b>
+                    ${cmpBulletSvg(r, top, list[i]._hue)}
+                </span>`;
+        }).join('')}
         </div>`;
-    }).join('');
+    }).join('')}
+    </div></div>`;
+}
+
+/* --------------------------- B: eight small charts ------------------------ */
+
+/**
+ * A rolling mean over a player's appearances, which is what makes several lines
+ * on one chart readable at all.
+ *
+ * Raw per-gameweek points are the spikiest series the game produces — 2, 2, 12,
+ * 0, 2 — so every line traverses the full height of the box on every third
+ * week. Five of those in a 40px panel is a solid block of ink: the first render
+ * of this block was exactly that, and nothing about any player could be read
+ * off it. Smoothing over four appearances leaves the trend, which is the only
+ * thing a comparison of five seasons can honestly show at this size. The raw
+ * numbers are not lost — the heat map below prints every one of them.
+ *
+ * The window counts appearances, not gameweeks, so a month out injured does not
+ * drag the average down as if he had played and scored nothing.
+ */
+function rollingMean(values, played, k = 4) {
+    const out = new Array(values.length).fill(null);
+    const win = [];
+    values.forEach((v, i) => {
+        if (!played[i] || !Number.isFinite(v)) return;
+        win.push(v);
+        if (win.length > k) win.shift();
+        out[i] = win.reduce((a, b) => a + b, 0) / win.length;
+    });
+    return out;
+}
+
+/**
+ * Several players' seasons on one small chart, on a scale they share.
+ *
+ * ppSparkSvg draws one series with its own average ruled through it, and that is
+ * right for one player and wrong for five: five dashed rules and five lines in a
+ * 32px box is a thicket. So this draws smoothed lines only, and the averages are
+ * printed as numbers under the chart, where five of them stay readable.
+ *
+ * The endpoint dot is kept. With several lines it is the one mark that says
+ * which line ended where, and it survives the crossings.
+ */
+function cmpSparkSvg(series, h = 46) {
+    const w = 150, pad = 4;
+    const smoothed = series.map(s => rollingMean(s.values, s.played));
+    const finite = smoothed.flat().filter(Number.isFinite);
+    if (!finite.length) return '';
+    const len = Math.max(...series.map(s => s.values.length), 1);
+    // The scale comes from the smoothed series, not the raw one: scaling to a
+    // single 24-point week would flatten every line into the floor.
+    const top = Math.max(...finite, 0.001);
+    const min = Math.min(0, ...finite);
+    const span = (top - min) || 1;
+    const step = (w - pad * 2) / Math.max(len - 1, 1);
+    const y = v => h - pad - ((v - min) / span) * (h - pad * 2);
+
+    const parts = [`<line x1="${pad}" y1="${(h - pad).toFixed(1)}" x2="${w - pad}"
+        y2="${(h - pad).toFixed(1)}" stroke="#e8edf5" stroke-width="1"/>`];
+    series.forEach((s, si) => {
+        const vals = smoothed[si];
+        const runs = [];
+        let run = [];
+        vals.forEach((v, i) => {
+            if (Number.isFinite(v)) {
+                run.push(`${(pad + i * step).toFixed(1)},${y(v).toFixed(1)}`);
+            } else {
+                if (run.length > 1) runs.push(run);
+                run = [];
+            }
+        });
+        if (run.length > 1) runs.push(run);
+        runs.forEach(r => parts.push(`<polyline points="${r.join(' ')}" fill="none"
+            stroke="${s.hue}" stroke-width="1.9" stroke-linejoin="round" stroke-linecap="round"/>`));
+        const last = [...vals.keys()].reverse().find(i => Number.isFinite(vals[i]));
+        if (last !== undefined) {
+            parts.push(`<circle cx="${(pad + last * step).toFixed(1)}"
+                cy="${y(vals[last]).toFixed(1)}" r="2.6" fill="${s.hue}"
+                stroke="#fff" stroke-width="1.2"/>`);
+        }
+    });
+    return `<svg class="pp-spark cmp-spark" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none"
+        role="img" aria-label="מגמה מוחלקת לאורך העונה לכל השחקנים">${parts.join('')}</svg>`;
+}
+
+/**
+ * B — the same eight metrics as the single card, each its own small chart.
+ *
+ * The card answers "what happened to him" with eight sparklines; this answers
+ * "what happened to each of them" with the same eight, several lines deep. It
+ * replaced a metric picker that showed one metric at a time: a comparison whose
+ * seven other metrics are behind a chip is a comparison you have to remember
+ * across clicks, and the eight-panel version is what the single card already
+ * taught the reader to read.
+ */
+function cmpCellsHtml(list, logs, keys) {
+    const hasSeries = k => list.some(p => (logs.get(p.id) || [])
+        .some(e => e.minutes > 0 && Number.isFinite(PROFILE_METRICS[k].gw(e))));
+    const live = keys.filter(hasSeries);
+    if (!live.length) return '<div class="pp-loading">אין עדיין נתוני מחזורים</div>';
+
+    // A season total of 239 points printed as "239.0" is noise: the per-appearance
+    // formatter that gives 6.7 its decimal is the same one, so the trailing zero
+    // is dropped rather than a second format table being maintained.
+    const tidy = t => t.replace(/\.0(?=\D|$)/, '');
+    return `<div class="pp-cells cmp-cells">${live.map(k => {
+        const def = PROFILE_METRICS[k];
+        const word = def.agg === 'sum' ? 'סה״כ' : def.agg === 'last' ? 'עכשיו' : 'ממוצע';
+        const series = list.map(p => {
+            const log = logs.get(p.id) || [];
+            return {
+                values: log.map(def.gw),
+                played: log.map(e => e.minutes > 0),
+                hue: p._hue,
+                name: p.web_name,
+                agg: metricSummary(log, k)
+            };
+        });
+        const aggs = series.map(s => s.agg).filter(Number.isFinite);
+        const best = aggs.length ? Math.max(...aggs) : null;
+        return `<div class="pp-cell">
+            <div class="pp-cell-top">
+                <span class="pp-cell-name">${def.label}</span>
+                <span class="pp-cell-agg">${word}</span>
+            </div>
+            ${cmpSparkSvg(series)}
+            <div class="cmp-cell-vals">${series.map(s => `
+                <span class="cmp-cell-val${s.agg !== null && s.agg === best ? ' is-lead' : ''}"
+                      style="color:${s.hue}"
+                      title="${escapeHtml(s.name)} — ${word} ${def.label}: ${
+            s.agg === null ? 'אין נתון' : tidy(def.fmt(s.agg))}">${
+            s.agg === null ? '–' : tidy(def.fmt(s.agg))}</span>`).join('')}</div>
+        </div>`;
+    }).join('')}</div>`;
 }
 
 /** C — the heat map: who was hot, which week. One sequential hue. */
@@ -5401,7 +5647,8 @@ function compareHeatInnerHtml(list, logs, key) {
             const v = e ? def.gw(e) : null;
             const c = cell(Number.isFinite(v) ? v : 0, !!(e && e.minutes > 0));
             return `<span class="cmp-heat-cell" style="background:${c.bg};color:${c.fg}"
-                        title="GW${g}${e && e.opp ? ` · ${escapeHtml(e.opp)}` : ''} · ${
+                        title="${escapeHtml(p.web_name)} · GW${g}${
+                e && e.opp ? ` · ${escapeHtml(e.opp)}` : ''} · ${
                 e && e.minutes > 0 ? `${def.gwFmt(Number.isFinite(v) ? v : 0)}` : 'לא שיחק'}"
                         >${c.text}</span>`;
         }).join('')}
@@ -5412,22 +5659,18 @@ function compareHeatInnerHtml(list, logs, key) {
 }
 
 function compareProfileHtml(list, logs) {
-    const keys = profileMetricKeys(list[0]);
-    const dotsFor = key => list.map(p => {
-        let v = null;
-        try { v = PROFILE_METRICS[key].rail(p); } catch (e) { v = null; }
-        return { v: Number.isFinite(v) ? v : null, hue: p._hue, name: p.web_name };
-    });
+    // The union of the keys, so a goalkeeper in the selection contributes his
+    // saves rail and the outfielders keep theirs — the old version read the
+    // first player's keys only, which dropped a metric for everybody else.
+    const keys = [...new Set(list.flatMap(p => profileMetricKeys(p)))];
     const positions = [...new Set(list.map(p => p.position_name))];
 
     const rows = [
-        ['נקודות', p => p.total_points, v => v.toFixed(0)],
-        ['נק׳ להופעה', p => { const a = appearancesOf(p); return a ? p.total_points / a : null; }, v => v.toFixed(1)],
+        ['נקודות בעונה', p => p.total_points, v => v.toFixed(0)],
         ['דקות', p => p.minutes, v => v.toFixed(0)],
-        ['G+A', p => (p.goals_scored || 0) + (p.assists || 0), v => v.toFixed(0)],
-        ['xG+xA', p => parseFloat(p.expected_goal_involvements), v => v.toFixed(2)],
-        ['בונוס', p => p.bonus || 0, v => v.toFixed(0)],
-        ['ציון דראפט', p => p.draft_score, v => v.toFixed(1)]
+        ['ציון דראפט', p => p.draft_score, v => v.toFixed(1)],
+        ['מחיר', p => (p.now_cost || 0) / 10, v => `${v.toFixed(1)}£`],
+        ['בעלות', p => parseFloat(p.selected_by_percent), v => `${v.toFixed(1)}%`]
     ];
 
     return `<div class="pp pp--cmp">
@@ -5443,24 +5686,26 @@ function compareProfileHtml(list, logs) {
 
         <div class="pp-blockmark"><i>A</i>מי טוב יותר, ובמה<span>${
         positions.length > 1
-            ? 'הסימונים מול העמדה של השחקן הראשון — עמדות שונות נמדדות על דברים שונים'
+            ? 'כל שחקן נמדד מול העמדה שלו — עמדות שונות נמדדות על דברים שונים'
             : `מול העמדה · ${POSITION_LABELS[list[0].position_name] || list[0].position_name}`}</span></div>
         <section class="pp-card">
-            ${ppRailsHtml(list[0], keys, dotsFor)}
+            ${cmpMatrixHtml(list, keys)}
             ${railLegendHtml()}
         </section>
 
-        <div class="pp-blockmark"><i>B</i>מה קרה לכל אחד<span>בחרו מדד</span></div>
+        <div class="pp-blockmark"><i>B</i>מה קרה לאורך העונה<span>הקווים = ממוצע נע של 4 הופעות · המספרים = כל העונה</span></div>
+        <section class="pp-card">
+            <div id="cmpCells">${cmpCellsHtml(list, logs, keys)}</div>
+        </section>
+
+        <div class="pp-blockmark"><i>C</i>מחזור מול מחזור<span>ככל שכהה יותר, כך גבוה יותר</span></div>
         <section class="pp-card">
             ${compareMetricChipsHtml(list)}
-            <h4 class="pp-title pp-title--sub">שורה לכל שחקן<span>סקאלה משותפת — הגבהים ניתנים להשוואה</span></h4>
-            <div id="cmpFacet">${compareFacetInnerHtml(list, logs, _pp.metric)}</div>
-            <h4 class="pp-title pp-title--sub">מחזור מול מחזור<span>ככל שכהה יותר, כך גבוה יותר</span></h4>
             <div id="cmpHeat">${compareHeatInnerHtml(list, logs, _pp.metric)}</div>
         </section>
 
         <section class="pp-card">
-            <h4 class="pp-title">העונה במספרים<span>הירוק = המוביל בשורה</span></h4>
+            <h4 class="pp-title">עוד מספרים מהעונה<span>הירוק = המוביל בשורה</span></h4>
             <div class="pp-log-wrap"><table class="cmp-grid">
                 <thead><tr><th></th>${list.map(p =>
         `<th style="color:${p._hue}">${escapeHtml(p.web_name)}</th>`).join('')}</tr></thead>
@@ -5470,9 +5715,10 @@ function compareProfileHtml(list, logs) {
                 try { v = read(p); } catch (e) { v = null; }
                 return Number.isFinite(v) ? v : null;
             });
-            const top = Math.max(...vals.filter(v => v !== null));
+            const finite = vals.filter(v => v !== null);
+            const top = finite.length ? Math.max(...finite) : null;
             return `<tr><th>${label}</th>${vals.map(v =>
-                `<td class="${v !== null && v === top ? 'is-best' : ''}">${
+                `<td class="${v !== null && v === top && list.length > 1 ? 'is-best' : ''}">${
                     v === null ? '–' : fmt(v)}</td>`).join('')}</tr>`;
         }).join('')}</tbody>
             </table></div>
@@ -6142,13 +6388,18 @@ function processChange() {
         }
     }
 
-    // A selection is an answer, not another filter.
+    // A selection is an answer, not another filter — once the reader says so.
     //
     // Ticking players used to change nothing about the page: the set fed the
     // השוואה window and nothing else, so picking three players left 568 rows and
-    // twelve charts still drawing the whole league. When there is a selection the
+    // twelve charts still drawing the whole league. Under the scope switch the
     // page IS those players — the table, every chart and the draft board, all of
     // which read the set built here.
+    //
+    // The switch is what makes it usable. Scoping the moment a box is ticked
+    // removed every other row from the table, and the table is where the boxes
+    // are: one tick and the selection could never grow. So building a selection
+    // and reading one are two states now, and רק המסומנים moves between them.
     //
     // It replaces the other filters rather than intersecting with them. Naming
     // three individuals is a stronger statement of intent than a dropdown left
@@ -6162,7 +6413,7 @@ function processChange() {
     // be the three players already chosen and a fourth could never be added.
     state.unscopedData = filteredData;
     const scopeIds = state.selectedForComparison;
-    const scoped = scopeIds && scopeIds.size > 0;
+    const scoped = state.scopeToSelection && scopeIds && scopeIds.size > 0;
     if (scoped) {
         const byId = new Map(sourceData.map(p => [p.id, p]));
         filteredData = [...scopeIds].map(id => byId.get(id)).filter(Boolean);
@@ -6295,9 +6546,15 @@ function syncRowCount() {
     // short, where "3 מוצגים · 565 מסוננים" leaves the reader looking for the
     // filter that did it.
     const picked = (state.selectedForComparison && state.selectedForComparison.size) || 0;
-    if (picked > 0) {
+    if (picked > 0 && state.scopeToSelection) {
         el.textContent = `${shown} מסומנים`;
-        el.title = `הדף מצומצם לשחקנים שסימנת. "נקה" ליד הצ'יפים מחזיר את כל ${total} השחקנים`;
+        el.title = `הדף מצומצם לשחקנים שסימנת. "רק המסומנים" ליד הצ'יפים מחזיר את כל ${total} השחקנים`;
+    } else if (picked > 0) {
+        // Two facts, because they are two different things and the reader is in
+        // the middle of the first: how many are ticked, and how many are on
+        // screen to tick from.
+        el.textContent = `${picked} מסומנים · ${shown} מוצגים`;
+        el.title = `סימנת ${picked} שחקנים. לחצו "צמצם למסומנים" כדי שכל הדף יציג רק אותם`;
     } else {
         el.textContent = hidden
             ? `${shown} מוצגים · ${hidden} מסוננים`
@@ -8516,6 +8773,9 @@ function togglePlayerCompare(playerId) {
     if (state.selectedForComparison.has(id)) state.selectedForComparison.delete(id);
     else state.selectedForComparison.add(id);
     const on = state.selectedForComparison.has(id);
+    // Unticking the last name takes the switch off screen with it, so the state
+    // it held has to go too — otherwise the next tick silently scopes the page.
+    if (!state.selectedForComparison.size) state.scopeToSelection = false;
 
     // The row checkbox is the same selection seen from the table.
     const box = document.querySelector(`.player-select[data-player-id="${id}"]`);
@@ -8538,6 +8798,9 @@ function togglePlayerCompare(playerId) {
 
 function clearCompareSelection() {
     state.selectedForComparison.clear();
+    // A scope with nothing in it would empty the table and leave no control on
+    // screen to undo it, since the chips row is what carries the switch.
+    state.scopeToSelection = false;
     document.querySelectorAll('.player-select:checked').forEach(cb => { cb.checked = false; });
     renderPlayerSearchMenu();
     renderCompareChips();
@@ -8568,13 +8831,32 @@ function renderCompareChips() {
             <button type="button" onclick="togglePlayerCompare(${id})"
                 title="הסרה מההשוואה" aria-label="הסרה מההשוואה">×</button></span>`;
     }).join('');
+    const on = !!state.scopeToSelection;
     host.innerHTML = `${chips}
+        <button type="button" class="ps-scope${on ? ' is-on' : ''}"
+            aria-pressed="${on}" onclick="toggleSelectionScope()"
+            title="${on
+        ? 'הדף מצומצם למסומנים — לחצו כדי לחזור לכל הליגה ולסמן עוד'
+        : 'צמצום הטבלה והגרפים לשחקנים שסימנתם'}"
+            >${on ? '👁 רק המסומנים' : '👁 צמצם למסומנים'}</button>
         <button type="button" class="ps-go" onclick="compareSelectedPlayers()"
             ${ids.length < 2 ? 'disabled title="צריך לפחות שניים"' : 'title="פתיחת ההשוואה"'}
             >⚖️ השוואה (${ids.length})</button>
         <button type="button" class="ps-clear" onclick="clearCompareSelection()"
             title="ניקוי הבחירה">נקה</button>`;
     host.hidden = false;
+}
+
+/**
+ * Throw the scope switch.
+ *
+ * Not debounced: unlike a tick, this is the reader asking to see the result now,
+ * and the whole point of the switch is that the change is immediate and visible.
+ */
+function toggleSelectionScope() {
+    state.scopeToSelection = !state.scopeToSelection;
+    renderCompareChips();
+    processChange();
 }
 
 function initPlayerSearch() {
@@ -10271,16 +10553,31 @@ function initDraftPlayerLinks() {
     if (!host || host.dataset.playerLinks === '1') return;
     host.dataset.playerLinks = '1';
 
+    const route = el => {
+        const id = Number(el.dataset.playerId);
+        if (!Number.isInteger(id)) return;
+        // A player who is on screen as part of a comparison opens as that
+        // comparison. On the swap board the question is never "how good is
+        // Kostoulas" — it is "is Kostoulas better than the man I would drop",
+        // and the four players are already grouped on the card, so the click
+        // that answers it should not have to be assembled by the reader.
+        const group = el.closest('[data-compare-ids]');
+        if (group) {
+            const ids = group.dataset.compareIds.split(',').map(Number)
+                .filter(Number.isInteger);
+            if (ids.length > 1) { openCompareByIds(ids); return; }
+        }
+        openPlayerData(id);
+    };
+
     host.addEventListener('click', e => {
         // Never hijack a click meant for a control that happens to sit inside a
         // player element — a checkbox, a remove button, a real link.
         if (e.target.closest('button, input, select, label, a')) return;
         const el = e.target.closest('[data-player-id]');
         if (!el) return;
-        const id = Number(el.dataset.playerId);
-        if (!Number.isInteger(id)) return;
         e.preventDefault();
-        openPlayerData(id);
+        route(el);
     });
 
     // Keyboard: the same elements answer Enter and Space, so the link is not
@@ -10290,8 +10587,31 @@ function initDraftPlayerLinks() {
         const el = e.target.closest && e.target.closest('[data-player-id]');
         if (!el) return;
         e.preventDefault();
-        openPlayerData(Number(el.dataset.playerId));
+        route(el);
     });
+}
+
+/**
+ * Open the comparison card for a list of element ids, in the order given.
+ *
+ * The order is the caller's, and it matters: the swap board passes the player
+ * being dropped first, so he is always the blue column and the candidates
+ * always read left of him in the same rank order. A comparison whose colours
+ * moved between openings would have to be re-learned every time.
+ */
+function openCompareByIds(ids) {
+    const src = state.allPlayersData[state.currentDataSource];
+    const pool = (src && src.processed) || [];
+    const byId = new Map(pool.map(p => [p.id, p]));
+    const players = ids.map(id => byId.get(Number(id))).filter(Boolean);
+    if (players.length < 2) {
+        // One name resolving is not a failure worth a dead end — the single card
+        // is still the right answer for it.
+        if (players.length === 1) { openPlayerModal(players[0].id); return; }
+        showToast('לא נמצא', 'השחקנים לא נמצאו בנתוני העונה שעל המסך', 'info', 4000);
+        return;
+    }
+    openCompareModal(players);
 }
 
 /** Open a player's row in the table, from anywhere. */
@@ -12880,18 +13200,34 @@ function getRecommendationData() {
  * with a headline, and the actual recommendation — swap this player for that one
  * — was the one thing you had to work out for yourself.
  *
- * So it reads as what it is: a player to drop, then the candidates, each a tile
- * carrying the single figure that justifies it (the gap in smart score) and the
- * few stats that back it up. Every name is a link into that player's own row on
- * the players page, which is what the rest of the league tab now does too.
+ * Then it became the opposite problem: three white tiles on a white card, each
+ * holding four naked numbers under 9px grey labels. It read as unfinished
+ * because nothing on it was encoded — four figures like "43" and "2.1" mean
+ * nothing without the figure they are supposed to beat, so the reader was left
+ * doing the subtraction the card exists to do.
+ *
+ * So every stat is now drawn against the man being dropped: his level is the
+ * dark tick, the candidate's is the bar, and the value is tinted by which side
+ * of the tick it fell on. The one thing that is not relative — recent form — is
+ * the strip of gameweek bars above them. Colour carries rank (the top candidate
+ * is the green-edged tile) and direction (over or under the man he replaces),
+ * and nothing else, so the card is legible before a single number is read.
+ *
+ * Every name is a link, and because the four players on a card are exactly the
+ * comparison the card is arguing about, the click opens them as one comparison
+ * rather than one profile — see initDraftPlayerLinks.
  */
 function renderRecommendations() {
     const container = document.getElementById('draftRecommendations');
     if (!container) return;
 
+    const aside = document.getElementById('recHeadAside');
     const recommendationData = getRecommendationData();
-    if (!recommendationData || !Object.keys(recommendationData).length) {
+    const groups = Object.values(recommendationData || {})
+        .filter(r => r && r.candidates && r.candidates.length);
+    if (!groups.length) {
         container.innerHTML = '<div class="plc-empty">🎉 אין המלצות להחלפה — כל השחקנים בסגל שלך עוברים את הרף</div>';
+        if (aside) { aside.hidden = true; aside.innerHTML = ''; }
         return;
     }
 
@@ -12915,49 +13251,130 @@ function renderRecommendations() {
         return Number.isFinite(n) ? n : 0;
     };
 
+    /**
+     * One measure, drawn as a bar against the incumbent's tick.
+     *
+     * The same bullet idiom as the comparison card's matrix, at tile size. It is
+     * the whole analytic content of the tile: a bar past the tick means the swap
+     * gains you something on this measure, and how far past says how much.
+     */
+    const bullet = (mine, theirs, hue) => {
+        const w = 100, h = 9;
+        // A measure neither player has — the archived snapshot carries no smart
+        // score, and a pre-season table carries no prediction — draws nothing.
+        // An empty track beside a 0.0 reads as a broken chart rather than as a
+        // missing number.
+        if (!(Math.abs(mine) > 0 || Math.abs(theirs) > 0)) return '<i class="mk-bullet is-empty"></i>';
+        const top = Math.max(mine, theirs, 0.001) * 1.14;
+        const x = v => Math.max(0, Math.min((v / top) * w, w));
+        return `<svg class="mk-bullet" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none"
+            aria-hidden="true">
+            <rect x="0" y="2.5" width="${w}" height="4" rx="2" fill="#eef2f8"/>
+            <rect x="0" y="2.5" width="${x(theirs).toFixed(1)}" height="4" rx="2" fill="${hue}"/>
+            <line x1="${x(mine).toFixed(1)}" y1="0" x2="${x(mine).toFixed(1)}" y2="${h}"
+                stroke="#64748b" stroke-width="1.5"/>
+        </svg>`;
+    };
+
+    const MEASURES = [
+        ['ציון חכם', p => n1(p.smart_score), v => v.toFixed(1)],
+        ['xPts הבא', p => n1(p.predicted_points_1_gw), v => v.toFixed(1)],
+        ['יציבות', p => n1(p.stability_index), v => String(Math.round(v))],
+        ['כושר', p => n1(p.form), v => v.toFixed(1)]
+    ];
+
     /** One candidate. Signed gap first: it is the reason the tile is here. */
     const candidateHtml = (cand, cur, i) => {
         const gap = n1(cand.smart_score) - n1(cur.smart_score);
+        const hue = i === 0 ? '#0e9f5d' : '#0f56d9';
         const chips = reasonChips(cand).map(c =>
             `<span class="mk-chip is-${c.k}">${c.t}</span>`).join('');
+        const spark = miniSparkHtml(cand.id, 'pts');
+        const stats = MEASURES.map(([label, read, fmt]) => {
+            const mine = read(cur), theirs = read(cand);
+            const missing = !(Math.abs(mine) > 0 || Math.abs(theirs) > 0);
+            const d = theirs - mine;
+            const dir = missing ? 'is-flat'
+                : d > 0.05 ? 'is-up' : d < -0.05 ? 'is-down' : 'is-flat';
+            const sign = d > 0 ? '+' : '';
+            return `<div class="mk-stat" title="${missing
+                ? `${label}: אין נתון לעונה שעל המסך`
+                : `${label}: ${escapeHtml(cand.web_name)} ${fmt(theirs)} מול ${escapeHtml(cur.web_name)} ${fmt(mine)} (${sign}${d.toFixed(1)})`}">
+                <span class="mk-stat-label">${label}</span>
+                ${bullet(mine, theirs, hue)}
+                <span class="mk-stat-val ${dir}">${missing ? '–' : fmt(theirs)}</span>
+            </div>`;
+        }).join('');
+
         return `
-        <div class="mk-cand" data-player-id="${cand.id}" tabindex="0" role="button"
-             title="${escapeHtml(cand.web_name)} — לחצו לנתונים המלאים">
+        <div class="mk-cand${i === 0 ? ' is-top' : ''}" data-player-id="${cand.id}"
+             tabindex="0" role="button"
+             title="${escapeHtml(cand.web_name)} — לחצו להשוואה מול ${escapeHtml(cur.web_name)}">
             <div class="mk-cand-top">
                 <span class="mk-rank">#${i + 1}</span>
-                <span class="mk-gap is-pos"><span class="plc-num">+${gap.toFixed(1)}</span></span>
+                <span class="mk-gap is-pos">+${gap.toFixed(1)}<em>ציון</em></span>
             </div>
-            <div class="mk-cand-name">${escapeHtml(cand.web_name)}</div>
-            <div class="mk-cand-team">${escapeHtml(cand.team_name || '')}</div>
+            <div class="mk-cand-id">
+                <span class="mk-cand-name">${escapeHtml(cand.web_name)}</span>
+                <span class="mk-cand-team">${escapeHtml(cand.team_name || '')}</span>
+            </div>
             ${chips ? `<div class="mk-chips">${chips}</div>` : ''}
-            <dl class="mk-stats">
-                <div><dt>ציון חכם</dt><dd>${n1(cand.smart_score).toFixed(1)}</dd></div>
-                <div><dt>xPts הבא</dt><dd>${n1(cand.predicted_points_1_gw).toFixed(1)}</dd></div>
-                <div><dt>יציבות</dt><dd>${Math.round(n1(cand.stability_index))}</dd></div>
-                <div><dt>כושר</dt><dd>${n1(cand.form).toFixed(1)}</dd></div>
-            </dl>
+            ${spark ? `<div class="mk-form"><span>כושר אחרון</span>${spark}</div>` : ''}
+            <div class="mk-stats">${stats}</div>
         </div>`;
     };
 
-    container.innerHTML = Object.values(recommendationData)
-        .filter(r => r && r.candidates && r.candidates.length)
-        .map(({ player, candidates, position }) => `
-        <section class="mk-swap plc-card">
+    // The counts and the legend go into the panel's own header band. They were a
+    // second band of their own for one revision, and two stacked bands above the
+    // first card is the same wasted strip the header already was.
+    const total = groups.reduce((s, g) => s + g.candidates.length, 0);
+    if (aside) {
+        aside.innerHTML = `
+            <span class="mk-head-count"><b>${groups.length}</b> ${
+    groups.length === 1 ? 'חוליה חלשה' : 'חוליות חלשות'}</span>
+            <span class="mk-head-count"><b>${total}</b> מועמדים פנויים</span>
+            <span class="mk-head-legend">הקו האפור בכל מדד = השחקן שלך · הבר = המועמד</span>`;
+        aside.hidden = false;
+    }
+
+    container.innerHTML = groups.map(({ player, candidates, position }) => {
+        const ids = [player.id, ...candidates.map(c => c.id)].join(',');
+        const app = appearancesOf(player) || 0;
+        const mpa = app ? (player.minutes || 0) / app : null;
+        // The head band used to run out into empty white between the name and
+        // the button, on a card that is ~740px wide in the two-column layout and
+        // 1400px in the one-column one. The headline recommendation belongs
+        // there: it is the sentence the card is making, so it reads
+        // "weak link — Solanke → best of them — Barry +32.2".
+        const best = candidates[0];
+        const bestGain = n1(best.smart_score) - n1(player.smart_score);
+        return `
+        <section class="mk-swap plc-card" data-compare-ids="${ids}">
             <header class="mk-swap-head">
                 <span class="mk-out-flag">החוליה החלשה</span>
                 <span class="mk-out" data-player-id="${player.id}" tabindex="0" role="button"
-                      title="${escapeHtml(player.web_name)} — לחצו לנתונים המלאים">
+                      title="${escapeHtml(player.web_name)} — לחצו להשוואת כל הארבעה">
                     <span class="mk-out-name">${escapeHtml(player.web_name)}</span>
                     <span class="mk-out-meta">${posNames[position] || position}
-                        · ציון ${n1(player.smart_score).toFixed(1)}</span>
+                        · ציון ${n1(player.smart_score).toFixed(1)}${
+            mpa === null ? '' : ` · ${mpa.toFixed(0)} דק׳`}</span>
                 </span>
                 <span class="mk-arrow" aria-hidden="true">←</span>
-                <span class="mk-swap-label">${candidates.length} מועמדים פנויים</span>
+                <span class="mk-best" data-player-id="${best.id}" tabindex="0" role="button"
+                      title="${escapeHtml(best.web_name)} — המועמד הטוב ביותר להחלפה">
+                    <span class="mk-best-label">הטוב שבהם</span>
+                    <span class="mk-best-name">${escapeHtml(best.web_name)}</span>
+                    <span class="mk-best-gain">${bestGain > 0 ? '+' : ''}${bestGain.toFixed(1)} ציון</span>
+                </span>
+                <span class="mk-swap-label" data-player-id="${player.id}"
+                      tabindex="0" role="button" title="פתיחת השוואה של כל הארבעה">
+                    ⚖️ ${candidates.length + 1} להשוואה</span>
             </header>
             <div class="mk-cands">
                 ${candidates.map((c, i) => candidateHtml(c, player, i)).join('')}
             </div>
-        </section>`).join('');
+        </section>`;
+    }).join('');
 }
 
 /**
