@@ -525,238 +525,134 @@ try {
     check(/עבור לעונת|עוד לא נטענו/.test(moved.toast || ''),
         'and says which tab can answer instead');
 
-    // The comparison itself, opened from the two ticks that are already in place.
+    // The comparison, opened from the two ticks that are already in place.
+    //
+    // It used to be a radar plus a per-gameweek trend line, two 366px canvases
+    // side by side. Both are gone: the radar because the rails say the same
+    // thing against a scale the reader can see, and the per-gameweek line
+    // because it is the right encoding for one player and the wrong one for
+    // five — five series crossing each other in one box is spaghetti, and the
+    // crossings are the data. One surface serves one player and five now.
     const cmp = await page.evaluate(async () => {
         document.querySelector('.ps-go')?.click();
-        await new Promise(r => setTimeout(r, 300));
-        const modal = document.getElementById('compareModal');
-        const live = id => {
-            const c = document.getElementById(id);
-            return !!(c && typeof Chart !== 'undefined' && Chart.getChart(c));
-        };
-        const radarChart = Chart.getChart(document.getElementById('cmpRadar'));
+        await new Promise(r => setTimeout(r, 1200));
+        const modal = document.getElementById('playerModal');
+        const railValue = i => (document.querySelectorAll('#playerModalBody .pp-rail-value')[i]
+            || {}).textContent || '';
         return {
             open: !!modal && modal.style.display === 'block',
-            cards: document.querySelectorAll('.cmp-card').length,
-            verdict: (document.querySelector('.cmp-verdict-line')?.textContent || '').trim().length,
-            radar: live('cmpRadar'),
-            trend: live('cmpTrend'),
-            radarSeries: radarChart ? radarChart.data.datasets.length : 0,
-            radarSpokes: radarChart ? radarChart.data.labels.length : 0,
-            rows: document.querySelectorAll('.cmp-row').length,
-            sections: document.querySelectorAll('.cmp-section').length,
-            // Every column header must carry its player's own colour, or the
-            // charts need a legend the table cannot provide.
-            hues: new Set([...document.querySelectorAll('.cmp-col-head')]
-                .map(el => getComputedStyle(el).borderBottomColor)).size,
-            // Inside the table the colour answers "who is winning this row", so
-            // every competitive row has exactly one leader and one laggard.
-            tones: (() => {
-                const rows = [...document.querySelectorAll('.cmp-section .cmp-row')];
-                let contested = 0, unmarked = 0, untinted = 0, wrongGreen = 0;
-                for (const r of rows) {
-                    const cells = [...r.querySelectorAll('.cmp-cell')];
-                    // A neutral metric has no winner, and neither does a tie —
-                    // marking one of two identical figures as the leader would be
-                    // an invention. Only rows with a real spread are checked.
-                    if (r.classList.contains('is-neutral')) continue;
-                    if (cells.some(c => c.classList.contains('is-empty'))) continue;
-                    const nums = cells.map(c => (c.querySelector('.cmp-num') || {}).textContent);
-                    if (new Set(nums).size < 2) continue;
-                    contested++;
-                    const best = cells.filter(c => c.classList.contains('is-best')).length;
-                    const worst = cells.filter(c => c.classList.contains('is-worst')).length;
-                    if (best < 1 || worst < 1) unmarked++;
-
-                    // The tint is the whole encoding now, so it has to be there and
-                    // it has to be greenest on the leader.
-                    const alpha = c => {
-                        const m = /rgba?\(([^)]+)\)/.exec(getComputedStyle(c).backgroundColor);
-                        if (!m) return 0;
-                        const parts = m[1].split(',').map(Number);
-                        // Green channel dominant means a green tint; red means red.
-                        const a = parts.length > 3 ? parts[3] : 1;
-                        return parts[1] > parts[0] ? a : -a;
-                    };
-                    const tints = cells.map(alpha);
-                    if (tints.every(t => t === 0)) { untinted++; continue; }
-                    const leader = cells.findIndex(c => c.classList.contains('is-best'));
-                    if (leader >= 0 && tints[leader] !== Math.max(...tints)) wrongGreen++;
-                }
-                return { rows: rows.length, contested, unmarked, untinted, wrongGreen };
+            // Block A: the same eight rails as the single card, one dot per
+            // player. The layout must not change with the player count.
+            rails: document.querySelectorAll('#playerModalBody .pp-rail').length,
+            dots: document.querySelectorAll('#playerModalBody .pp-rail-svg circle').length,
+            medTicks: document.querySelectorAll('#playerModalBody .pp-tick--med').length,
+            eliteTicks: document.querySelectorAll('#playerModalBody .pp-tick--elite').length,
+            // Block B: a row per player, then the heat map.
+            facets: document.querySelectorAll('#playerModalBody .cmp-facet').length,
+            heatRows: document.querySelectorAll('#playerModalBody .cmp-heat-row').length,
+            heatCells: document.querySelectorAll('#playerModalBody .cmp-heat-cell').length,
+            chips: document.querySelectorAll('#playerModalBody .pp-chip').length,
+            chipsOn: document.querySelectorAll('#playerModalBody .pp-chip.is-on').length,
+            // The season table still names a leader per row.
+            gridRows: document.querySelectorAll('#playerModalBody .cmp-grid tbody tr').length,
+            best: document.querySelectorAll('#playerModalBody .cmp-grid td.is-best').length,
+            // Every pill is a link into that player's own card.
+            pills: document.querySelectorAll('#playerModalBody .cmp-pill[data-player-id]').length,
+            hues: new Set([...document.querySelectorAll('#playerModalBody .cmp-facet-name')]
+                .map(el => getComputedStyle(el).color)).size,
+            railValue0: railValue(0),
+            // Nothing may scroll sideways: the row this replaced was 1947px
+            // wide inside a 1440px window, which is why it is a modal now.
+            bodyOverflow: (() => {
+                const b = document.getElementById('playerModalBody');
+                return b.scrollWidth > b.clientWidth + 1;
             })(),
-            matrix: {
-                bars: document.querySelectorAll('.cmp-axis-row, .cmp-bar').length,
-                lead: (document.querySelector('.cmp-lead-title') || {}).textContent?.replace(/\s+/g, ' ').trim(),
-                who: [...document.querySelectorAll('.cmp-lead-row')].map(r => ({
-                    name: r.querySelector('.cmp-lead-who').textContent.trim(),
-                    areas: [...r.querySelectorAll('.cmp-area')].map(a => a.textContent.replace(/\s+/g, ' ').trim())
-                })),
-                folds: document.querySelectorAll('.cmp-fold').length,
-                foldedRows: [...document.querySelectorAll('.cmp-fold')]
-                    .reduce((n, f) => n + f.querySelectorAll('.cmp-row').length, 0)
-            },
-            spans: [...document.querySelectorAll('.cmp-spanbar .cmp-chip')]
-                .map(b => b.textContent.trim()),
-            spanOn: [...document.querySelectorAll('.cmp-spanbar .cmp-chip')]
-                .filter(b => b.getAttribute('aria-pressed') === 'true')
-                .map(b => b.textContent.trim()),
-            spanNote: (document.getElementById('cmpSpanNote') || {}).textContent,
-            seasonTags: document.querySelectorAll('.cmp-season').length,
-            // One bar per cell, each measured off its own cell's edge, meant
-            // comparing lengths across two gaps. Every bar in a row now shares one
-            // track, one origin and one scale, so longer is higher.
-            axis: (() => {
-                const rows = [...document.querySelectorAll('.cmp-section .cmp-row')];
-                let checked = 0, offOrigin = 0, offScale = 0, wrongOrder = 0;
-                for (const r of rows) {
-                    const tracks = [...r.querySelectorAll('.cmp-axis-row')];
-                    const nums = [...r.querySelectorAll('.cmp-num')]
-                        .map(n => parseFloat(n.textContent.replace(/[^\d.+-]/g, '')));
-                    if (tracks.length < 2 || nums.length !== tracks.length) continue;
-                    checked++;
-                    const rights = tracks.map(t => Math.round(t.getBoundingClientRect().right));
-                    const widths = tracks.map(t => Math.round(t.getBoundingClientRect().width));
-                    if (new Set(rights).size !== 1) offOrigin++;
-                    if (new Set(widths).size !== 1) offScale++;
-                    // The widest fill must belong to the biggest figure.
-                    const fills = tracks.map(t => {
-                        const i = t.querySelector('i');
-                        return i ? i.getBoundingClientRect().width : 0;
-                    });
-                    const biggest = nums.indexOf(Math.max(...nums));
-                    const widest = fills.indexOf(Math.max(...fills));
-                    if (Math.max(...nums) > 0 && biggest !== widest) wrongOrder++;
-                }
-                return { checked, offOrigin, offScale, wrongOrder };
-            })(),
-            // Two players stretched over the full modal put the two figures being
-            // compared half a screen apart, with a metre of bar between them.
-            width: (() => {
-                const t = document.querySelector('.cmp-table');
-                const body = document.querySelector('#compareModal .modal-content');
-                if (!t || !body) return null;
-                return {
-                    table: Math.round(t.getBoundingClientRect().width),
-                    body: Math.round(body.clientWidth),
-                    cols: t.style.getPropertyValue('--cmp-cols').trim()
-                };
-            })(),
-            legend: (() => {
-                const c = Chart.getChart(document.getElementById('cmpRadar'));
-                return c ? c.options.plugins.legend.display : null;
-            })(),
-            spokes2: (() => {
-                const c = Chart.getChart(document.getElementById('cmpRadar'));
-                return c ? c.data.labels : [];
-            })()
+            noOldRadar: !document.getElementById('cmpRadar')
         };
     });
-    check(cmp.open && cmp.cards === 2, `the comparison opens with both players (${JSON.stringify(cmp)})`);
-    check(cmp.verdict > 10, 'and states a bottom line in words');
-    check(cmp.radar && cmp.radarSeries === 2 && cmp.radarSpokes >= 3,
-        `the radar draws one polygon per player (${cmp.radarSeries} × ${cmp.radarSpokes})`);
-    check(cmp.trend, 'the trend chart is live');
-    check(cmp.rows >= 20 && cmp.sections >= 4,
-        `the metric table is grouped and full (${cmp.rows} rows, ${cmp.sections} sections)`);
-    check(cmp.hues === 2, `each player column carries its own colour (${cmp.hues})`);
-    check(cmp.tones.contested > 10 && cmp.tones.unmarked === 0,
-        `every contested row marks its leader and its laggard (${JSON.stringify(cmp.tones)})`);
-    check(cmp.legend === true, 'the radar names its colours');
-    check(cmp.spokes2.includes('xG/90') && cmp.spokes2.includes('DEFCON/90'),
-        `the spokes are metric names (${cmp.spokes2.join(', ')})`);
-    check(cmp.spans.length === 4 && cmp.spanOn.length === 1 && cmp.spanOn[0] === 'כל העונה',
-        `one span control, four choices, whole season by default (${cmp.spans.join(' | ')} -> ${cmp.spanOn})`);
-    check(cmp.seasonTags === 0,
-        `and nothing is marked season-only while the span IS the season (${cmp.seasonTags})`);
-    check(cmp.width && cmp.width.cols === '2' && cmp.width.table < cmp.width.body * 0.75,
-        `two players do not stretch across the page (${JSON.stringify(cmp.width)})`);
-    // Ninety bar lengths was not a comparison. The table is a tinted matrix now:
-    // no bars at all, and the colour is the encoding.
-    check(cmp.matrix.bars === 0, `no bars left in the table (${cmp.matrix.bars})`);
-    check(cmp.tones.untinted === 0 && cmp.tones.wrongGreen === 0,
-        `every contested row is tinted, greenest on its leader (${JSON.stringify(cmp.tones)})`);
-    // A tally of metric wins was the wrong summary — the groups have different row
-    // counts and half the metrics are near-duplicates. It names areas now.
-    check(/מוביל בכל קבוצת מדדים/.test(cmp.matrix.lead || '')
-        && cmp.matrix.who.length === 2
-        && cmp.matrix.who.every(w => w.areas.length > 0),
-        `the table names who owns which area (${JSON.stringify(cmp.matrix.who)})`);
-    check(cmp.matrix.folds > 0 && cmp.matrix.foldedRows > 0,
-        `near-identical rows are folded away (${cmp.matrix.folds} folds, ${cmp.matrix.foldedRows} rows)`);
+    check(cmp.open, 'the comparison opens');
+    check(cmp.rails === 8 && cmp.dots === 16,
+        `block A keeps its eight rails and marks both players (${cmp.rails} rails, ${cmp.dots} dots)`);
+    check(cmp.medTicks === 1 && cmp.eliteTicks === 1,
+        'and names the two ticks once rather than on every rail');
+    check(cmp.facets === 2 && cmp.hues === 2,
+        `block B gives each player his own row and his own colour (${cmp.facets}, ${cmp.hues} hues)`);
+    check(cmp.heatRows === 3 && cmp.heatCells > 0,
+        `the heat map has a header and a row per player (${cmp.heatRows} rows, ${cmp.heatCells} cells)`);
+    check(cmp.chips >= 8 && cmp.chipsOn === 1,
+        `one metric is selected out of ${cmp.chips}`);
+    check(cmp.gridRows >= 6 && cmp.best >= 6,
+        `the season table names a leader in every row (${cmp.best}/${cmp.gridRows})`);
+    check(cmp.pills === 2, 'and each pill links to that player\'s own card');
+    check(!cmp.bodyOverflow, 'nothing in the comparison scrolls sideways');
+    check(cmp.noOldRadar, 'the radar and the per-gameweek trend line are gone');
 
-    // The one control has to move the chart AND the table, and the table has to
-    // re-measure what it can rather than relabel the same figures.
-    const span = await page.evaluate(async () => {
-        const points = () => Chart.getChart(document.getElementById('cmpTrend')).data.labels.length;
-        const ppg = () => {
-            const label = [...document.querySelectorAll('.cmp-row-label')]
-                .find(l => l.textContent.trim().startsWith('נק׳/מש׳'));
-            const row = label && label.parentElement;
-            return row ? [...row.querySelectorAll('.cmp-num')].map(n => n.textContent) : [];
-        };
-        const seasonPts = points();
-        const seasonPpg = ppg();
-
-        const radar = () => {
-            const c = Chart.getChart(document.getElementById('cmpRadar'));
-            return c ? { labels: c.data.labels.slice(), data: c.data.datasets[0].data.slice() } : null;
-        };
-        const seasonRadar = radar();
-
-        setCompareSpan('g3');
-        await new Promise(r => setTimeout(r, 500));
-        const shortPts = points();
-        const shortPpg = ppg();
-        const shortRadar = radar();
-        const radarNote = (document.getElementById('cmpRadarNote') || {}).textContent;
-        const tags = document.querySelectorAll('.cmp-season').length;
-        const note = (document.getElementById('cmpSpanNote') || {}).textContent;
-
-        setCompareSpan('season');
-        await new Promise(r => setTimeout(r, 400));
-        return {
-            seasonPts, shortPts, seasonPpg, shortPpg, tags, note,
-            seasonRadar, shortRadar, radarNote, backRadar: radar(),
-            backPts: points(), backPpg: ppg()
-        };
-    });
-    check(span.shortPts === 3 && span.seasonPts > span.shortPts && span.backPts === span.seasonPts,
-        `the span moves the chart (${span.seasonPts} -> ${span.shortPts} -> ${span.backPts})`);
-    check(span.shortPpg.length > 0 && span.shortPpg.join() !== span.seasonPpg.join()
-        && span.backPpg.join() === span.seasonPpg.join(),
-        `and re-measures the table, reversibly (${span.seasonPpg} -> ${span.shortPpg})`);
-    check(span.tags > 0,
-        `metrics with no per-match record say they stayed season-long (${span.tags} marked)`);
-    check(/^3 מחזורים/.test((span.note || '').trim()),
-        `and the control states the span it actually drew ("${span.note}")`);
-
-    // The radar is measured over the span too — it used to sit on season figures
-    // whatever the control said, which made one screen carry two different answers.
-    check(span.shortRadar && span.seasonRadar
-        && span.shortRadar.data.join() !== span.seasonRadar.data.join()
-        && span.backRadar.data.join() === span.seasonRadar.data.join(),
-        `the radar re-measures over the span, reversibly (${span.seasonRadar?.data} -> ${span.shortRadar?.data})`);
-    check(span.seasonRadar.labels.includes('xG/90') && !span.shortRadar.labels.includes('xG/90')
-        && span.shortRadar.labels.includes('xGI/90'),
-        `and drops the spokes it cannot re-measure (${span.shortRadar.labels.join(', ')})`);
-    check(/3 המחזורים האחרונים/.test(span.radarNote || '') && /על פני העונה/.test(span.radarNote || ''),
-        `its caption names both spans it carries ("${span.radarNote}")`);
-
-    // Re-opening must not leak the previous instances onto replaced canvases.
-    const reopen = await page.evaluate(async () => {
-        closeModal();
-        const afterClose = Chart.getChart(document.getElementById('cmpRadar'));
-        compareSelectedPlayers();
+    // Switching the metric must rebuild the two metric-dependent blocks and
+    // nothing else — rebuilding the modal would scroll the reader to the top.
+    const swap = await page.evaluate(async () => {
+        // The modal scrolls, not its body — asserting on the wrong element is
+        // how this check passed while measuring nothing.
+        const body = document.getElementById('playerModal');
+        body.scrollTop = 120;
+        const before = (document.querySelector('#playerModalBody .cmp-heat-cell') || {}).textContent;
+        const beforeFacet = (document.querySelector('#playerModalBody .cmp-facet-value') || {}).textContent;
+        setCompareMetric('bps');
         await new Promise(r => setTimeout(r, 300));
         return {
-            destroyed: !afterClose,
-            total: Object.keys(Chart.instances || {}).length,
-            radarAgain: !!Chart.getChart(document.getElementById('cmpRadar'))
+            before, beforeFacet,
+            after: (document.querySelector('#playerModalBody .cmp-heat-cell') || {}).textContent,
+            afterFacet: (document.querySelector('#playerModalBody .cmp-facet-value') || {}).textContent,
+            onChip: (document.querySelector('#playerModalBody .pp-chip.is-on') || {}).textContent,
+            kept: body.scrollTop
         };
     });
-    check(reopen.destroyed, 'closing the comparison destroys its charts');
-    check(reopen.radarAgain, 'and re-opening builds them again');
+    check(swap.after !== swap.before && swap.afterFacet !== swap.beforeFacet,
+        `choosing a metric redraws both blocks (${swap.before}→${swap.after})`);
+    check(swap.onChip === 'BPS', `and the chip follows (${swap.onChip})`);
+    check(swap.kept > 0, `without throwing away the scroll position (${swap.kept})`);
+
+    // One player, from a row click. The same two blocks, with bars instead of
+    // dots — which is the property that made this direction worth building.
+    const one = await page.evaluate(async () => {
+        closeModal();
+        const row = document.querySelector('#playersTableBody tr.player-row');
+        row.querySelector('td:nth-child(3)').click();
+        await new Promise(r => setTimeout(r, 900));
+        const railBar = document.querySelector('#playerModalBody .pp-rail-svg rect + rect');
+        return {
+            open: document.getElementById('playerModal').style.display === 'block',
+            rails: document.querySelectorAll('#playerModalBody .pp-rail').length,
+            cells: document.querySelectorAll('#playerModalBody .pp-cell').length,
+            sparks: document.querySelectorAll('#playerModalBody .pp-spark').length,
+            // Every spark rules its own average through itself.
+            avgRules: document.querySelectorAll('#playerModalBody .pp-spark line').length,
+            bars: document.querySelectorAll('#playerModalBody .pp-rail-svg rect').length,
+            dots: document.querySelectorAll('#playerModalBody .pp-rail-svg circle').length,
+            footRows: document.querySelectorAll('#playerModalBody .pp-log tfoot tr').length,
+            footText: [...document.querySelectorAll('#playerModalBody .pp-log tfoot th')]
+                .map(t => t.textContent.trim()),
+            // The header bled the brand gradient into this table once.
+            logHeadBg: (() => {
+                const th = document.querySelector('#playerModalBody .pp-log thead th');
+                return th ? getComputedStyle(th).backgroundImage : 'missing';
+            })(),
+            // And the table it opened from must be flat again.
+            expandedRows: document.querySelectorAll('#playersTable .detail-row').length
+        };
+    });
+    // Eight rails always; the cells drop any metric the season on screen has no
+    // series for — the archived snapshot carries no per-gameweek price.
+    check(one.open && one.rails === 8 && one.cells >= 7,
+        `a row click opens the card with both blocks (${one.rails} rails, ${one.cells} cells)`);
+    check(one.cells === one.sparks && one.avgRules === one.sparks,
+        `every cell charts its season with its own average ruled through it (${one.avgRules}/${one.sparks})`);
+    check(one.dots === 0 && one.bars > 8,
+        `one player reads as bars, not marks (${one.bars} rects, ${one.dots} dots)`);
+    check(one.footRows === 2 && one.footText.join(' ').includes('ממוצע להופעה'),
+        `the log ends in totals and per-appearance averages (${one.footText.join(' · ')})`);
+    check(one.logHeadBg === 'none',
+        `the log header is not painted with the brand gradient (${one.logHeadBg})`);
+    check(one.expandedRows === 0, 'and the table itself stays flat');
 
     const cleared = await page.evaluate(async () => {
         closeModal();

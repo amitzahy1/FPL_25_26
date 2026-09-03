@@ -269,6 +269,9 @@ const state = {
     // filteredData before a ticked selection narrows it — what the player picker
     // searches, so a fourth player can always be added to a selection of three.
     unscopedData: [],
+    // element-summary per player id: a whole season of gameweeks in one entry,
+    // kept for the session so reopening a card costs nothing.
+    playerSummaries: new Map(),
     chartPosition: 'MID',        // which position the matrix chart is showing
     // Percentile baselines are computed once per render from the whole filtered
     // league, BEFORE the top-N slice. Scoping them to the visible rows made
@@ -4357,15 +4360,22 @@ function fixtureForGw(teamId, gw) {
     };
 }
 
+/**
+ * A row click opens the player's card.
+ *
+ * It used to expand the row in place, and that was the wrong container: the
+ * card was three columns laid out sideways inside a table that already scrolls
+ * sideways — 1947px wide in a 1440px window — so reading it meant scrolling the
+ * table to find it, and opening one pushed every row below it down the page.
+ * The name is kept because the markup calls it from every row's onclick.
+ */
 function toggleRowDetail(playerId, ev) {
     if (ev) {
         // Never hijack a click meant for a control inside the row.
         const t = ev.target;
         if (t.closest('button, input, a, select, label')) return;
     }
-    const id = Number(playerId);
-    state.openRowId = state.openRowId === id ? null : id;
-    renderTable();
+    openPlayerModal(playerId);
 }
 
 /* ------------------- the three stat boxes in the detail row ---------------- */
@@ -4611,6 +4621,863 @@ function playerDetailRowHtml(player, colSpan) {
             </div>
         </td>
     </tr>`;
+}
+
+
+/* ==========================================================================
+   PLAYER PROFILE — one object, one column or five
+   ==========================================================================
+   Replaces the expanded table row. That row was three columns laid out
+   sideways inside a table that already scrolls sideways — 1947px wide in a
+   1440px window, so reading a card meant scrolling the table to find it, and
+   opening one pushed every row below it down the page. It also drew the
+   momentum window rather than the season, which two gameweeks in was a single
+   bar.
+
+   The card is two blocks over the SAME eight metrics in the same order:
+
+     block A  the rail says what LEVEL it is — the player against his
+              position's median and the median of that position's top twenty
+     block B  the cell says what SHAPE it had — the same metric across every
+              gameweek, with its own average ruled through it
+
+   That pairing is why there is no metric switcher: there is nothing left to
+   switch to, and seven clicks to see seven shapes was what it was charging.
+   Only the eighth pair differs — "% הרכב" is a level with no weekly shape of
+   its own, its series being the minutes two cells up, so that cell spends
+   itself on the price.
+
+   Comparing two to five players keeps both blocks and changes their encoding,
+   because per-gameweek is the right encoding for one player and the wrong one
+   for five: five noisy series crossing each other every week in a small cell
+   is spaghetti, and the crossings are the data. So block A becomes one row per
+   player on a shared scale — no two lines ever share a cell — and block B
+   becomes a heat map of gameweek against player.
+   ========================================================================== */
+
+/**
+ * element-summary/{id} — one request for a player's whole season.
+ *
+ * The alternative is event/{gw}/live per gameweek, which is what the momentum
+ * window uses: right for five gameweeks shared across every player on the page,
+ * and thirty-eight requests to draw one player's season. This endpoint carries
+ * the per-gameweek history, the remaining fixtures and the past seasons in one
+ * response, keyed by the same element id the table is.
+ */
+async function loadPlayerSummary(playerId) {
+    const id = Number(playerId);
+    if (!Number.isInteger(id)) return null;
+    if (state.playerSummaries.has(id)) return state.playerSummaries.get(id);
+    try {
+        const data = await fetchWithCache(
+            `https://fantasy.premierleague.com/api/element-summary/${id}/`,
+            `fpl_element_summary_${id}`, 30);
+        if (data && Array.isArray(data.history)) {
+            state.playerSummaries.set(id, data);
+            return data;
+        }
+    } catch (e) {
+        console.warn(`element-summary for ${id} unavailable:`, e.message);
+    }
+    return null;
+}
+
+/** Short name for an opponent's team id. */
+function teamShortById(teamId) {
+    const t = state.teamsData && state.teamsData[teamId];
+    return (t && t.short_name) || '';
+}
+
+/**
+ * One season, one row per gameweek, from whichever source has it.
+ *
+ * The archived season is already on disk — the committed snapshot carries every
+ * player's log, which is why the historical view needs no network at all. The
+ * live season comes from element-summary. Both are flattened to one shape so
+ * every block below reads one thing.
+ */
+function playerSeasonLog(player, summary) {
+    if (activeSnapshot()) {
+        return getMatchLog(player).map(m => ({
+            gw: m.gw, opp: m.opponent || '', home: null,
+            minutes: m.minutes, points: m.points,
+            goals: m.goals || 0, assists: m.assists || 0,
+            xgi: m.xgi || 0, bps: m.bps || 0, bonus: m.bonus || 0,
+            saves: m.saves || 0, dc: m.defcon || 0,
+            gc: null, started: m.minutes >= 60 ? 1 : 0, value: null
+        }));
+    }
+    const hist = (summary && summary.history) || [];
+    return hist.map(h => ({
+        gw: gwNum(h.round),
+        opp: teamShortById(h.opponent_team),
+        home: !!h.was_home,
+        minutes: gwNum(h.minutes),
+        points: gwNum(h.total_points),
+        goals: gwNum(h.goals_scored),
+        assists: gwNum(h.assists),
+        xgi: gwNum(h.expected_goal_involvements),
+        bps: gwNum(h.bps),
+        bonus: gwNum(h.bonus),
+        saves: gwNum(h.saves),
+        dc: gwNum(h.defensive_contribution),
+        gc: gwNum(h.goals_conceded),
+        started: gwNum(h.starts),
+        value: gwNum(h.value) / 10
+    })).sort((a, b) => a.gw - b.gw);
+}
+
+/**
+ * The eight metrics, each defined twice over.
+ *
+ * `rail` reads a season figure off the player row — the same field the table's
+ * own column reads, so the card and the table can never disagree. `gw` reads
+ * the per-gameweek value off the log. `agg` says what the figure printed above
+ * a spark line means: a total for what you collect, an average for what you
+ * sustain. Getting that backwards is how a season of full matches ends up
+ * labelled "1080 דקות" over a chart of nineties.
+ */
+const PROFILE_METRICS = {
+    pts: {
+        label: 'נק׳', railLabel: 'נק׳ להופעה', agg: 'sum',
+        fmt: v => v.toFixed(1), gwFmt: v => v.toFixed(0),
+        rail: p => { const a = appearancesOf(p); return a ? (p.total_points || 0) / a : null; },
+        gw: e => e.points
+    },
+    mins: {
+        label: 'דקות', railLabel: 'דקות להופעה', agg: 'avg',
+        fmt: v => v.toFixed(0), gwFmt: v => v.toFixed(0),
+        rail: p => { const a = appearancesOf(p); return a ? (p.minutes || 0) / a : null; },
+        gw: e => e.minutes
+    },
+    xgi: {
+        label: 'xG+xA', railLabel: 'xG+xA ל-90', agg: 'sum',
+        fmt: v => v.toFixed(2), gwFmt: v => v.toFixed(2),
+        rail: p => parseFloat(p.xGI_per90),
+        gw: e => e.xgi
+    },
+    ga: {
+        label: 'G+A', railLabel: 'G+A בעונה', agg: 'sum',
+        fmt: v => v.toFixed(0), gwFmt: v => v.toFixed(0),
+        rail: p => (p.goals_scored || 0) + (p.assists || 0),
+        gw: e => e.goals + e.assists
+    },
+    bps: {
+        label: 'BPS', railLabel: 'BPS להופעה', agg: 'avg',
+        fmt: v => v.toFixed(0), gwFmt: v => v.toFixed(0),
+        rail: p => { const a = appearancesOf(p); return a ? (p.bps || 0) / a : null; },
+        gw: e => e.bps
+    },
+    bonus: {
+        label: 'בונוס', railLabel: 'בונוס בעונה', agg: 'sum',
+        fmt: v => v.toFixed(0), gwFmt: v => v.toFixed(0),
+        rail: p => p.bonus || 0,
+        gw: e => e.bonus
+    },
+    dc: {
+        label: 'DC', railLabel: 'DC ל-90', agg: 'avg',
+        fmt: v => v.toFixed(1), gwFmt: v => v.toFixed(0),
+        rail: p => p.def_contrib_per90,
+        gw: e => e.dc
+    },
+    // A goalkeeper is not measured on defensive contribution, so this takes the
+    // same slot for him — in the rail and in the cell both.
+    saves: {
+        label: 'הצלות', railLabel: 'הצלות ל-90', agg: 'avg',
+        fmt: v => v.toFixed(1), gwFmt: v => v.toFixed(0),
+        rail: p => { const m = (p.minutes || 0) / 90; return m > 0 ? (p.saves || 0) / m : null; },
+        gw: e => e.saves
+    },
+    // The eighth rail. Its own series would be the minutes, so the cell beside
+    // it plots the price instead — the one thing on the card that moves for
+    // reasons outside the player.
+    starts: {
+        label: 'מחיר', railLabel: '% הרכב', agg: 'last',
+        fmt: v => `${v.toFixed(0)}%`, gwFmt: v => v.toFixed(1),
+        rail: p => {
+            const a = appearancesOf(p);
+            return a ? Math.min(100, ((p.starts || a) / Math.max(playedGameweeks(), a)) * 100) : null;
+        },
+        gw: e => e.value
+    }
+};
+
+/** The eight keys in order, with DC swapped for saves on a goalkeeper. */
+function profileMetricKeys(player) {
+    const fourth = player.element_type === 1 ? 'saves' : 'dc';
+    return ['pts', 'mins', 'xgi', 'ga', 'bps', 'bonus', fourth, 'starts'];
+}
+
+/* ------------------------------- the rails -------------------------------- */
+
+/* Two caches, not one.
+   They were one, and it threw on every first render: railFor did
+   `_posMedianCache.values.set(key, { med: positionMedian(...) })`, and JS
+   resolves `.values` to the current Map BEFORE evaluating the argument — while
+   evaluating it, positionMedian saw a new season key and replaced the whole
+   cache object. So the write landed in the old Map and the read that followed
+   found an empty new one, giving `undefined.med`. Separate objects, and the
+   rails cache is only ever reset from one place. */
+let _posMedianCache = { key: null, values: new Map() };
+let _railCache = { key: null, values: new Map() };
+
+/**
+ * The median of a whole position, which is the grey tick on every rail.
+ *
+ * resolveBenchmark already gives the green tick — the median of the position's
+ * top twenty — with its own season-fallback chain. This is the other half: the
+ * ordinary level, so a rail says "above average, below elite" rather than only
+ * "some fraction of elite". Cached per season because it walks the league.
+ */
+function positionMedian(valueFn, position) {
+    if (!position) return null;
+    const key = `${state.currentDataSource}:${playedGameweeks()}`;
+    if (_posMedianCache.key !== key) _posMedianCache = { key, values: new Map() };
+
+    const pool = ((state.allPlayersData[state.currentDataSource] || {}).processed) || [];
+    const values = [];
+    for (const p of pool) {
+        if (p.position_name !== position) continue;
+        if ((p.minutes || 0) < benchMinMinutes()) continue;
+        let v = null;
+        try { v = valueFn(p); } catch (e) { v = null; }
+        if (Number.isFinite(v)) values.push(v);
+    }
+    if (values.length < 5) return null;
+    values.sort((a, b) => a - b);
+    const mid = Math.floor(values.length / 2);
+    return values.length % 2 ? values[mid] : (values[mid - 1] + values[mid]) / 2;
+}
+
+/** One rail's three numbers: his, the position's median, the elite level. */
+function railFor(player, key) {
+    const def = PROFILE_METRICS[key];
+    const seasonKey = `${state.currentDataSource}:${playedGameweeks()}`;
+    if (_railCache.key !== seasonKey) _railCache = { key: seasonKey, values: new Map() };
+    const cacheKey = `${key}:${player.position_name}`;
+
+    let marks = _railCache.values.get(cacheKey);
+    if (!marks) {
+        // Both computed before either is stored, so nothing can reset a cache
+        // out from under a half-finished write.
+        const med = positionMedian(def.rail, player.position_name);
+        const bench = resolveBenchmark(def.rail, player.position_name, { positiveOnly: false });
+        marks = { med, elite: bench ? bench.value : null };
+        _railCache.values.set(cacheKey, marks);
+    }
+    let mine = null;
+    try { mine = def.rail(player); } catch (e) { mine = null; }
+    return {
+        value: Number.isFinite(mine) ? mine : null,
+        med: Number.isFinite(marks.med) ? marks.med : null,
+        elite: Number.isFinite(marks.elite) ? marks.elite : null
+    };
+}
+
+/**
+ * One rail as SVG. A bar for one player, a dot per player for a comparison.
+ *
+ * The scale is drawn, not implied: the two ticks are the position's median and
+ * its elite level, so the bar's length is a claim about the league rather than
+ * about itself. The viewBox has no room reserved for labels because the labels
+ * live in the grid beside it — an SVG that also had to hold text would have to
+ * reserve space for the longest one and shrink every rail to fit it.
+ */
+function railSvg(rail, dots) {
+    const w = 240, h = 20;
+    const candidates = [rail.elite, rail.med, rail.value,
+        ...(dots || []).map(d => d.v)].filter(Number.isFinite);
+    const top = Math.max(...candidates, 0.001) * 1.12;
+    const x = v => Math.max(0, Math.min((v / top) * w, w));
+    const parts = [`<rect x="0" y="${h / 2 - 4}" width="${w}" height="8" rx="4" fill="var(--c-wash)"/>`];
+
+    if (!dots && Number.isFinite(rail.value)) {
+        parts.push(`<rect x="0" y="${h / 2 - 4}" width="${x(rail.value)}" height="8"
+            rx="4" fill="var(--c-blue)"/>`);
+    }
+    if (Number.isFinite(rail.med)) {
+        parts.push(`<line x1="${x(rail.med)}" y1="2" x2="${x(rail.med)}" y2="${h - 2}"
+            stroke="#8e9bb1" stroke-width="1.5"/>`);
+    }
+    if (Number.isFinite(rail.elite)) {
+        parts.push(`<line x1="${x(rail.elite)}" y1="2" x2="${x(rail.elite)}" y2="${h - 2}"
+            stroke="var(--c-green)" stroke-width="1.5"/>`);
+    }
+    (dots || []).forEach(d => {
+        if (!Number.isFinite(d.v)) return;
+        parts.push(`<circle cx="${x(d.v)}" cy="${h / 2}" r="5" fill="${d.hue}"
+            stroke="#fff" stroke-width="1.5"><title>${escapeHtml(d.name)}</title></circle>`);
+    });
+    return `<svg class="pp-rail-svg" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none"
+        role="img" aria-label="מול חציון העמדה ורמת העילית">${parts.join('')}</svg>`;
+}
+
+/** The two ticks, named once per block rather than on every rail. */
+function railLegendHtml() {
+    return `<p class="pp-legend">
+        <span><i class="pp-tick pp-tick--med"></i>חציון העמדה</span>
+        <span><i class="pp-tick pp-tick--elite"></i>רמת 20 הטובים</span>
+    </p>`;
+}
+
+/* --------------------------- the small multiples -------------------------- */
+
+/**
+ * A spark line with its own average ruled through it.
+ *
+ * The average is what turns a wiggle into a reading: without it a line says
+ * "some weeks were better" and stops there. Gameweeks the player missed are
+ * drawn as a gap in the line and a tick on the floor, so a season with an
+ * injury in it does not read as a season with a bad run in it.
+ */
+function ppSparkSvg(values, played, hue, opts = {}) {
+    const w = 150, h = opts.h || 32, pad = 3;
+    const finite = values.filter(Number.isFinite);
+    if (!finite.length) return '';
+    // A shared maximum is what makes several spark lines comparable. Without it
+    // each is scaled to itself, and a flat low series looks like a peak beside a
+    // genuinely high one — which is the whole point of the faceted comparison.
+    const max = Math.max(opts.max || 0, ...finite, 0.001);
+    const min = Math.min(0, ...finite);
+    const span = (max - min) || 1;
+    const step = (w - pad * 2) / Math.max(values.length - 1, 1);
+    const y = v => h - pad - ((v - min) / span) * (h - pad * 2);
+
+    // One polyline per unbroken run of appearances, so a missed week is a gap.
+    const runs = [];
+    let run = [];
+    values.forEach((v, i) => {
+        if (played[i] && Number.isFinite(v)) {
+            run.push(`${(pad + i * step).toFixed(1)},${y(v).toFixed(1)}`);
+        } else {
+            if (run.length > 1) runs.push(run);
+            run = [];
+        }
+    });
+    if (run.length > 1) runs.push(run);
+
+    const shown = finite.filter((_, i) => played[i]);
+    const avg = shown.length ? shown.reduce((s, v) => s + v, 0) / shown.length : null;
+    const parts = [];
+    if (avg !== null) {
+        parts.push(`<line x1="${pad}" y1="${y(avg).toFixed(1)}" x2="${w - pad}" y2="${y(avg).toFixed(1)}"
+            stroke="var(--c-red)" stroke-width="1" stroke-dasharray="3 3"/>`);
+    }
+    runs.forEach(r => {
+        parts.push(`<polyline points="${r.join(' ')}" fill="none" stroke="${hue}"
+            stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"/>`);
+    });
+    values.forEach((v, i) => {
+        if (played[i]) return;
+        parts.push(`<rect x="${(pad + i * step - 1.5).toFixed(1)}" y="${h - pad - 2}"
+            width="3" height="2" rx="1" fill="#c8d2e0"/>`);
+    });
+    const lastIdx = [...values.keys()].reverse().find(i => played[i] && Number.isFinite(values[i]));
+    if (lastIdx !== undefined) {
+        parts.push(`<circle cx="${(pad + lastIdx * step).toFixed(1)}"
+            cy="${y(values[lastIdx]).toFixed(1)}" r="2.4" fill="${hue}"/>`);
+    }
+    return `<svg class="pp-spark" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none"
+        role="img" aria-label="מגמה לאורך העונה">${parts.join('')}</svg>`;
+}
+
+/** Total or average over the appearances, never over the gameweeks. */
+function metricSummary(log, key) {
+    const def = PROFILE_METRICS[key];
+    const played = log.filter(e => e.minutes > 0);
+    const vals = played.map(def.gw).filter(Number.isFinite);
+    if (!vals.length) return null;
+    if (def.agg === 'last') return vals[vals.length - 1];
+    const total = vals.reduce((s, v) => s + v, 0);
+    return def.agg === 'sum' ? total : total / vals.length;
+}
+
+/* -------------------------------- the modal ------------------------------- */
+
+const _pp = { ids: [], metric: 'pts' };
+
+/**
+ * One player's season, as a modal read top to bottom.
+ *
+ * Opens on what the table already knows — identity, the eight rails, the
+ * breakdown boxes — and fills the per-gameweek half when the request lands,
+ * rather than holding an empty modal behind a spinner.
+ */
+async function openPlayerModal(playerId) {
+    const id = Number(playerId);
+    const src = state.allPlayersData[state.currentDataSource];
+    const player = ((src && src.processed) || []).find(p => p.id === id);
+    if (!player) {
+        showToast('לא נמצא', 'השחקן לא נמצא בנתוני העונה שעל המסך', 'info', 4000);
+        return;
+    }
+
+    const modal = document.getElementById('playerModal');
+    const host = document.getElementById('playerModalBody');
+    if (!modal || !host) return;
+
+    _pp.ids = [id];
+    const draw = (log, loading) => {
+        host.innerHTML = playerProfileHtml(player, log, { loading });
+        modal.scrollTop = 0;
+    };
+
+    draw(playerSeasonLog(player, null), !activeSnapshot());
+    modal.style.display = 'block';
+    document.body.style.overflow = 'hidden';
+
+    if (activeSnapshot()) return;
+    const summary = await loadPlayerSummary(id);
+    // The reader may have closed it, or opened somebody else, while it was in
+    // flight — writing in then would put one player's season under another's
+    // name.
+    if (_pp.ids.length !== 1 || _pp.ids[0] !== id || modal.style.display === 'none') return;
+    draw(playerSeasonLog(player, summary), false);
+}
+
+function ppRailsHtml(player, keys, dotsFor) {
+    return `<div class="pp-rails">${keys.map(k => {
+        const def = PROFILE_METRICS[k];
+        const rail = railFor(player, k);
+        const dots = dotsFor ? dotsFor(k) : null;
+        const lead = dots ? dots.filter(d => Number.isFinite(d.v))
+            .reduce((m, d) => (m === null || d.v > m.v ? d : m), null) : null;
+        return `<div class="pp-rail">
+            <span class="pp-rail-label">${def.railLabel}</span>
+            ${railSvg(rail, dots)}
+            <span class="pp-rail-value"${lead ? ` style="color:${lead.hue}"` : ''}>${
+            dots ? (lead ? def.fmt(lead.v) : '–')
+                : (rail.value === null ? '–' : def.fmt(rail.value))}</span>
+        </div>`;
+    }).join('')}</div>`;
+}
+
+function ppCellsHtml(player, log, keys) {
+    const played = log.map(e => e.minutes > 0);
+    const live = keys.filter(k => log.some((e, i) =>
+        played[i] && Number.isFinite(PROFILE_METRICS[k].gw(e))));
+    return `<div class="pp-cells">${live.map(k => {
+        const def = PROFILE_METRICS[k];
+        const values = log.map(def.gw);
+        const s = metricSummary(log, k);
+        const word = def.agg === 'sum' ? 'סה״כ' : def.agg === 'last' ? 'עכשיו' : 'ממוצע';
+        return `<div class="pp-cell">
+            <div class="pp-cell-top">
+                <span class="pp-cell-name">${def.label}</span>
+                <span class="pp-cell-value">${s === null ? '–' : def.fmt(s)}</span>
+            </div>
+            ${ppSparkSvg(values, played, 'var(--c-blue)')}
+            <span class="pp-cell-agg">${word}</span>
+        </div>`;
+    }).join('')}</div>`;
+}
+
+/** Home/away, started/benched, form against the season. */
+function ppSplitsHtml(log) {
+    const played = log.filter(e => e.minutes > 0);
+    const mean = rows => (rows.length ? rows.reduce((s, e) => s + e.points, 0) / rows.length : null);
+    const last5 = played.slice(-5);
+    const rows = [
+        ['בית מול חוץ',
+            { name: 'בית', rows: played.filter(e => e.home === true) },
+            { name: 'חוץ', rows: played.filter(e => e.home === false) }],
+        ['הרכב מול ספסל',
+            { name: 'פתח', rows: played.filter(e => e.started > 0) },
+            { name: 'מהספסל', rows: played.filter(e => !e.started) }],
+        ['כושר מול העונה',
+            { name: '5 אחרונים', rows: last5 },
+            { name: 'כל העונה', rows: played }]
+    ];
+    // A split whose two sides are both empty is dropped, not drawn empty. The
+    // archived season comes from the committed snapshot, which carries no
+    // was_home field, so home/away has nothing to say there — and an empty card
+    // reads as a broken one rather than as an honest gap.
+    return `<div class="pp-splits">${rows.filter(([, a, b]) => a.rows.length || b.rows.length)
+        .map(([label, a, b]) => {
+        const av = mean(a.rows), bv = mean(b.rows);
+        const better = av === null ? 1 : bv === null ? 0 : (av >= bv ? 0 : 1);
+        return `<div class="pp-split">
+            <span class="pp-split-label">${label}</span>
+            <div class="pp-split-pair">
+                ${[[a, av], [b, bv]].map(([side, v], i) => `
+                    <div class="pp-split-side${i === better && v !== null ? ' is-better' : ''}">
+                        <span class="pp-split-value">${v === null ? '–' : v.toFixed(1)}</span>
+                        <span class="pp-split-name">${side.name} · ${side.rows.length} מש׳</span>
+                    </div>`).join('')}
+            </div>
+        </div>`;
+    }).join('')}</div>`;
+}
+
+/** The match log, newest first, with totals and per-appearance averages. */
+function ppLogHtml(player, log) {
+    const isGk = player.element_type === 1;
+    const extra = isGk
+        ? [['הצלות', e => e.saves], ['ספג', e => e.gc]]
+        : [['DC', e => e.dc]];
+    const played = log.filter(e => e.minutes > 0);
+    const n = played.length || 1;
+    const tot = read => played.reduce((s, e) => s + (Number.isFinite(read(e)) ? read(e) : 0), 0);
+
+    const rows = [...log].reverse().map(e => `
+        <tr class="${e.minutes ? '' : 'is-out'}">
+            <td>${e.gw}</td>
+            <td class="pp-opp">${e.opp ? escapeHtml(e.opp) : '–'}${
+        e.home === null ? '' : `<em>${e.home ? 'ב' : 'ח'}</em>`}</td>
+            <td>${e.minutes}</td>
+            <td class="pp-pts">${e.points}</td>
+            <td>${e.goals || '–'}</td>
+            <td>${e.assists || '–'}</td>
+            <td>${Number.isFinite(e.xgi) ? e.xgi.toFixed(2) : '–'}</td>
+            <td>${e.bps}</td>
+            <td>${e.bonus || '–'}</td>
+            ${extra.map(([, read]) => `<td>${Number.isFinite(read(e)) ? read(e) : '–'}</td>`).join('')}
+        </tr>`).join('');
+
+    return `<div class="pp-log-wrap"><table class="pp-log">
+        <thead><tr>
+            <th>מח׳</th><th>יריב</th><th>דק׳</th><th>נק׳</th>
+            <th>G</th><th>A</th><th>xGI</th><th>BPS</th><th>בונוס</th>
+            ${extra.map(([l]) => `<th>${l}</th>`).join('')}
+        </tr></thead>
+        <tbody>${rows}</tbody>
+        <tfoot>
+            <tr>
+                <th colspan="2">סה״כ</th>
+                <td>${tot(e => e.minutes)}</td>
+                <td class="pp-pts">${tot(e => e.points)}</td>
+                <td>${tot(e => e.goals)}</td>
+                <td>${tot(e => e.assists)}</td>
+                <td>${tot(e => e.xgi).toFixed(2)}</td>
+                <td>${tot(e => e.bps)}</td>
+                <td>${tot(e => e.bonus)}</td>
+                ${extra.map(([, read]) => `<td>${tot(read).toFixed(0)}</td>`).join('')}
+            </tr>
+            <tr class="is-avg">
+                <th colspan="2">ממוצע להופעה</th>
+                <td>${(tot(e => e.minutes) / n).toFixed(0)}</td>
+                <td class="pp-pts">${(tot(e => e.points) / n).toFixed(1)}</td>
+                <td>${(tot(e => e.goals) / n).toFixed(2)}</td>
+                <td>${(tot(e => e.assists) / n).toFixed(2)}</td>
+                <td>${(tot(e => e.xgi) / n).toFixed(2)}</td>
+                <td>${(tot(e => e.bps) / n).toFixed(0)}</td>
+                <td>${(tot(e => e.bonus) / n).toFixed(1)}</td>
+                ${extra.map(([, read]) => `<td>${(tot(read) / n).toFixed(1)}</td>`).join('')}
+            </tr>
+        </tfoot>
+    </table></div>`;
+}
+
+function ppHeadHtml(player) {
+    const sig = signalFor(player);
+    const owner = getDraftTeamForPlayer(player.id);
+    const watched = state.watchlist.has(player.id);
+    const chance = player.chance_of_playing_next_round;
+    return `<header class="pp-head">
+        <img class="pp-photo" src="${playerPhotoUrl(player)}" alt="${escapeHtml(player.web_name)}"
+             loading="lazy" onerror="this.src='${playerPhotoFallback(player.web_name, '#0f56d9')}'">
+        <div class="pp-id">
+            <h3>${escapeHtml(player.web_name)}</h3>
+            <p>${escapeHtml(player.team_name || '')} · ${POSITION_LABELS[player.position_name] || player.position_name}
+                · £${(player.now_cost || 0).toFixed(1)}${
+        player.draft_rank ? ` · דירוג דראפט #${player.draft_rank}` : ''}</p>
+            <div class="pp-tags">
+                <span class="signal-badge signal-${sig.tone}"
+                    title="${escapeHtml(signalTitle(sig))}">${sig.label}</span>
+                <span class="detail-tag ${owner ? 'is-owned' : 'is-free'}">${
+        owner ? escapeHtml(owner) : '🆓 חופשי'}</span>
+                ${Number.isFinite(chance) && chance < 100
+        ? `<span class="pp-tag-warn">${chance}% לשחק</span>` : ''}
+            </div>
+        </div>
+        <div class="pp-actions">
+            <button type="button" class="pp-btn${watched ? ' is-on' : ''}"
+                onclick="toggleWatch(${player.id}, event); this.classList.toggle('is-on')"
+                >${watched ? '★ במעקב' : '☆ מעקב'}</button>
+            <button type="button" class="pp-btn" onclick="addToCompareFromProfile(${player.id})"
+                >⚖️ להשוואה</button>
+        </div>
+    </header>`;
+}
+
+function playerProfileHtml(player, log, opts = {}) {
+    const keys = profileMetricKeys(player);
+    const apps = log.filter(e => e.minutes > 0).length;
+    const pos = POSITION_LABELS[player.position_name] || player.position_name;
+    const poolSize = (((state.allPlayersData[state.currentDataSource] || {}).processed) || [])
+        .filter(p => p.position_name === player.position_name).length;
+
+    const cells = opts.loading
+        ? '<div class="pp-loading">טוען את נתוני המחזורים…</div>'
+        : (log.length ? ppCellsHtml(player, log, keys)
+            : '<div class="pp-loading">אין עדיין מחזורים בעונה הזאת</div>');
+
+    return `<div class="pp">
+        ${ppHeadHtml(player)}
+
+        <div class="pp-blockmark"><i>A</i>אם הוא טוב<span>מול ${poolSize} ${pos}</span></div>
+        <section class="pp-card">
+            ${ppRailsHtml(player, keys, null)}
+            ${railLegendHtml()}
+        </section>
+
+        <div class="pp-blockmark"><i>B</i>איזו צורה היה לו<span>אותם ${keys.length} מדדים, ${log.length} מחזורים</span></div>
+        <section class="pp-card">${cells}</section>
+
+        ${log.length ? `<section class="pp-card">
+            <h4 class="pp-title">מה משנה אצלו<span>נקודות בממוצע להופעה</span></h4>
+            ${ppSplitsHtml(log)}
+        </section>` : ''}
+
+        ${log.length ? `<section class="pp-card">
+            <h4 class="pp-title">יומן המשחקים<span>${apps} הופעות מתוך ${log.length} מחזורים</span></h4>
+            ${ppLogHtml(player, log)}
+        </section>` : ''}
+
+        <section class="pp-card">
+            <h4 class="pp-title">פירוט העונה</h4>
+            <div class="pp-boxes">
+                ${boxAttack(player)}
+                ${boxDefence(player)}
+                ${boxValue(player)}
+            </div>
+        </section>
+
+        <section class="pp-card">
+            <h4 class="pp-title">המשחקים הבאים<span>המספר = קושי</span></h4>
+            <div class="pp-next">${generateFixturesHTML(player)}</div>
+        </section>
+    </div>`;
+}
+
+/** From the profile straight into a comparison, without hunting for the row. */
+function addToCompareFromProfile(playerId) {
+    const id = Number(playerId);
+    state.selectedForComparison.add(id);
+    renderCompareChips();
+    processChangeSoon();
+    const n = state.selectedForComparison.size;
+    showToast('נוסף להשוואה', `${n} שחקנים מסומנים`
+        + (n < 2 ? ' — צריך לפחות שניים' : ' — לחצו ⚖️ השוואה'), 'info', 4000);
+}
+
+/* ---------------------------- comparing players --------------------------- */
+
+/**
+ * Two to five players, in the same two blocks as one player.
+ *
+ * Block A takes a dot per player on rails that were already drawn to scale, so
+ * the layout does not change between one player and five — only the number of
+ * marks. Block B changes encoding, because per-gameweek lines are right for one
+ * player and wrong for five: five noisy series crossing each other in a small
+ * cell is spaghetti no palette can fix, and the crossings are the data. It
+ * becomes one row per player on a shared scale, plus a heat map of gameweek
+ * against player.
+ *
+ * The heat map is one sequential hue rather than a red-to-green ramp. The data
+ * is sequential — points run from zero upwards with no meaningful midpoint —
+ * and a two-ended ramp implies a centre that is not there. A red-green ramp is
+ * also the textbook failure for colour vision deficiency, which in a league of
+ * men is not a hypothetical.
+ */
+function comparePlayerColor(i) {
+    return ['#0f56d9', '#0e9f5d', '#d97706', '#7c3aed', '#0369a1'][i % 5];
+}
+
+async function openCompareModal(players) {
+    const modal = document.getElementById('playerModal');
+    const host = document.getElementById('playerModalBody');
+    if (!modal || !host) return;
+
+    const list = players.slice(0, 5).map((p, i) => ({ ...p, _hue: comparePlayerColor(i) }));
+    _pp.ids = list.map(p => p.id);
+    _pp.metric = 'pts';
+
+    const draw = logs => {
+        _pp.logs = logs;
+        host.innerHTML = compareProfileHtml(list, logs);
+        // The modal is the scroll container, not its body — see the CSS.
+        modal.scrollTop = 0;
+    };
+    draw(new Map(list.map(p => [p.id, playerSeasonLog(p, null)])));
+    modal.style.display = 'block';
+    document.body.style.overflow = 'hidden';
+
+    // The archived season is complete from the committed snapshot, so there is
+    // nothing to wait for — and this is the path the metric chips have to work
+    // on, which is what made the early return a bug rather than a shortcut.
+    if (activeSnapshot()) return;
+    // Five requests, run together — the same endpoint the single card uses, and
+    // each one is cached, so opening a comparison twice costs nothing.
+    const summaries = await Promise.all(list.map(p => loadPlayerSummary(p.id)));
+    const same = _pp.ids.length === list.length && _pp.ids.every((id, i) => id === list[i].id);
+    if (!same || modal.style.display === 'none') return;
+    draw(new Map(list.map((p, i) => [p.id, playerSeasonLog(p, summaries[i])])));
+}
+
+/** Rebuild only the two metric-dependent blocks, keeping the scroll position. */
+function setCompareMetric(key) {
+    if (!PROFILE_METRICS[key] || !_pp.logs) return;
+    _pp.metric = key;
+    const src = state.allPlayersData[state.currentDataSource];
+    const pool = (src && src.processed) || [];
+    const list = _pp.ids.map((id, i) => {
+        const p = pool.find(x => x.id === id);
+        return p ? { ...p, _hue: comparePlayerColor(i) } : null;
+    }).filter(Boolean);
+    const facet = document.getElementById('cmpFacet');
+    const heat = document.getElementById('cmpHeat');
+    if (facet) facet.innerHTML = compareFacetInnerHtml(list, _pp.logs, key);
+    if (heat) heat.innerHTML = compareHeatInnerHtml(list, _pp.logs, key);
+    document.querySelectorAll('#playerModalBody .pp-chip').forEach(b => {
+        const on = b.dataset.metric === key;
+        b.classList.toggle('is-on', on);
+        b.setAttribute('aria-pressed', String(on));
+    });
+}
+
+function compareMetricChipsHtml(list) {
+    // The union, so a goalkeeper in the selection still offers his own metric
+    // and the outfielders still offer theirs.
+    const keys = [...new Set(list.flatMap(p => profileMetricKeys(p)))];
+    return `<div class="pp-chips">${keys.map(k => `
+        <button type="button" class="pp-chip${k === _pp.metric ? ' is-on' : ''}"
+            data-metric="${k}" aria-pressed="${k === _pp.metric}"
+            onclick="setCompareMetric('${k}')">${PROFILE_METRICS[k].label}</button>`).join('')}</div>`;
+}
+
+/** A — one row per player, on a scale they share. */
+function compareFacetInnerHtml(list, logs, key) {
+    const def = PROFILE_METRICS[key];
+    const all = list.flatMap(p => (logs.get(p.id) || []).map(def.gw)).filter(Number.isFinite);
+    if (!all.length) return '<div class="pp-loading">אין עדיין נתוני מחזורים</div>';
+    const max = Math.max(...all, 0.001);
+    return list.map(p => {
+        const log = logs.get(p.id) || [];
+        const s = metricSummary(log, key);
+        return `<div class="cmp-facet">
+            <span class="cmp-facet-name" style="color:${p._hue}">${escapeHtml(p.web_name)}</span>
+            ${ppSparkSvg(log.map(def.gw), log.map(e => e.minutes > 0), p._hue, { h: 30, max })}
+            <span class="cmp-facet-value">${s === null ? '–' : def.fmt(s)}</span>
+        </div>`;
+    }).join('');
+}
+
+/** C — the heat map: who was hot, which week. One sequential hue. */
+function compareHeatInnerHtml(list, logs, key) {
+    const def = PROFILE_METRICS[key];
+    const all = list.flatMap(p => (logs.get(p.id) || []).map(def.gw)).filter(Number.isFinite);
+    if (!all.length) return '<div class="pp-loading">אין עדיין נתוני מחזורים</div>';
+    const max = Math.max(...all, 0.001);
+    const gws = [...new Set(list.flatMap(p => (logs.get(p.id) || []).map(e => e.gw)))]
+        .sort((a, b) => a - b);
+
+    const cell = (v, played) => {
+        if (!played) return { bg: 'var(--c-wash)', fg: '#b6c0ce', text: '–' };
+        const t = Math.max(0, Math.min(v / max, 1));
+        const a = 0.10 + t * 0.85;
+        return {
+            bg: `rgba(15, 86, 217, ${a.toFixed(2)})`,
+            fg: a > 0.58 ? '#fff' : '#46536b',
+            text: def.gwFmt(v)
+        };
+    };
+
+    return `<div class="cmp-heat" style="--cmp-gws:${gws.length}">
+        <div class="cmp-heat-row is-head">
+            <span></span>
+            ${gws.map(g => `<span class="cmp-heat-gw">${g}</span>`).join('')}
+            <span class="cmp-heat-gw">${def.agg === 'avg' ? 'ממוצע' : 'סה״כ'}</span>
+        </div>
+        ${list.map(p => {
+        const log = logs.get(p.id) || [];
+        const byGw = new Map(log.map(e => [e.gw, e]));
+        const s = metricSummary(log, key);
+        return `<div class="cmp-heat-row">
+                <span class="cmp-heat-name" style="color:${p._hue}"
+                    title="${escapeHtml(p.web_name)}">${escapeHtml(p.web_name)}</span>
+                ${gws.map(g => {
+            const e = byGw.get(g);
+            const v = e ? def.gw(e) : null;
+            const c = cell(Number.isFinite(v) ? v : 0, !!(e && e.minutes > 0));
+            return `<span class="cmp-heat-cell" style="background:${c.bg};color:${c.fg}"
+                        title="GW${g}${e && e.opp ? ` · ${escapeHtml(e.opp)}` : ''} · ${
+                e && e.minutes > 0 ? `${def.gwFmt(Number.isFinite(v) ? v : 0)}` : 'לא שיחק'}"
+                        >${c.text}</span>`;
+        }).join('')}
+                <span class="cmp-heat-total">${s === null ? '–' : def.fmt(s)}</span>
+            </div>`;
+    }).join('')}
+    </div>`;
+}
+
+function compareProfileHtml(list, logs) {
+    const keys = profileMetricKeys(list[0]);
+    const dotsFor = key => list.map(p => {
+        let v = null;
+        try { v = PROFILE_METRICS[key].rail(p); } catch (e) { v = null; }
+        return { v: Number.isFinite(v) ? v : null, hue: p._hue, name: p.web_name };
+    });
+    const positions = [...new Set(list.map(p => p.position_name))];
+
+    const rows = [
+        ['נקודות', p => p.total_points, v => v.toFixed(0)],
+        ['נק׳ להופעה', p => { const a = appearancesOf(p); return a ? p.total_points / a : null; }, v => v.toFixed(1)],
+        ['דקות', p => p.minutes, v => v.toFixed(0)],
+        ['G+A', p => (p.goals_scored || 0) + (p.assists || 0), v => v.toFixed(0)],
+        ['xG+xA', p => parseFloat(p.expected_goal_involvements), v => v.toFixed(2)],
+        ['בונוס', p => p.bonus || 0, v => v.toFixed(0)],
+        ['ציון דראפט', p => p.draft_score, v => v.toFixed(1)]
+    ];
+
+    return `<div class="pp pp--cmp">
+        <header class="pp-head pp-head--cmp">
+            <div class="cmp-pills">${list.map(p => `
+                <span class="cmp-pill" style="--cmp-hue:${p._hue}"
+                      data-player-id="${p.id}" tabindex="0" role="button"
+                      title="לחצו לכרטיס המלא של ${escapeHtml(p.web_name)}">
+                    <i aria-hidden="true"></i>${escapeHtml(p.web_name)}
+                    <em>${escapeHtml(teamShort(p))} · ${p.position_name}</em>
+                </span>`).join('')}</div>
+        </header>
+
+        <div class="pp-blockmark"><i>A</i>מי טוב יותר, ובמה<span>${
+        positions.length > 1
+            ? 'הסימונים מול העמדה של השחקן הראשון — עמדות שונות נמדדות על דברים שונים'
+            : `מול העמדה · ${POSITION_LABELS[list[0].position_name] || list[0].position_name}`}</span></div>
+        <section class="pp-card">
+            ${ppRailsHtml(list[0], keys, dotsFor)}
+            ${railLegendHtml()}
+        </section>
+
+        <div class="pp-blockmark"><i>B</i>מה קרה לכל אחד<span>בחרו מדד</span></div>
+        <section class="pp-card">
+            ${compareMetricChipsHtml(list)}
+            <h4 class="pp-title pp-title--sub">שורה לכל שחקן<span>סקאלה משותפת — הגבהים ניתנים להשוואה</span></h4>
+            <div id="cmpFacet">${compareFacetInnerHtml(list, logs, _pp.metric)}</div>
+            <h4 class="pp-title pp-title--sub">מחזור מול מחזור<span>ככל שכהה יותר, כך גבוה יותר</span></h4>
+            <div id="cmpHeat">${compareHeatInnerHtml(list, logs, _pp.metric)}</div>
+        </section>
+
+        <section class="pp-card">
+            <h4 class="pp-title">העונה במספרים<span>הירוק = המוביל בשורה</span></h4>
+            <div class="pp-log-wrap"><table class="cmp-grid">
+                <thead><tr><th></th>${list.map(p =>
+        `<th style="color:${p._hue}">${escapeHtml(p.web_name)}</th>`).join('')}</tr></thead>
+                <tbody>${rows.map(([label, read, fmt]) => {
+            const vals = list.map(p => {
+                let v = null;
+                try { v = read(p); } catch (e) { v = null; }
+                return Number.isFinite(v) ? v : null;
+            });
+            const top = Math.max(...vals.filter(v => v !== null));
+            return `<tr><th>${label}</th>${vals.map(v =>
+                `<td class="${v !== null && v === top ? 'is-best' : ''}">${
+                    v === null ? '–' : fmt(v)}</td>`).join('')}</tr>`;
+        }).join('')}</tbody>
+            </table></div>
+        </section>
+    </div>`;
 }
 
 /**
@@ -5054,10 +5921,9 @@ function renderTable() {
 
     applyRowMode();
     tbody.innerHTML = state.displayedData.map((player, index) => {
-        const row = createPlayerRowHtml(player, index);
-        return state.openRowId === player.id
-            ? row + playerDetailRowHtml(player, colCount)
-            : row;
+        // No expanded row any more — a click opens the card as a modal, so the
+        // table stays a table and the rows below never move.
+        return createPlayerRowHtml(player, index);
     }).join('');
     applyOptionalColumns();
     fitDetailPanel();
@@ -7781,15 +8647,13 @@ function compareSelectedPlayers() {
         return;
     }
 
-    // The markup replaces both canvases, so anything still bound to the old ones
-    // has to go first or it keeps drawing to elements that no longer exist.
+    // One surface for one player and for five. The radar-and-trend version this
+    // replaces drew two 366px canvases side by side and a per-gameweek line per
+    // player, which at five players was five series crossing each other in one
+    // box — see openCompareModal for why that encoding does not survive the
+    // move from one player to several.
     destroyCompareCharts();
-    contentDiv.innerHTML = generateComparisonTableHTML(players);
-    modal.style.display = 'block';
-    document.body.style.overflow = 'hidden'; // Prevent background scrolling
-    // Chart.js measures the canvas, so it can only run once the markup is in the
-    // document and the modal is displayed.
-    mountComparisonCharts(players);
+    openCompareModal(players);
 }
 
 window.closeModal = function () {
@@ -9387,25 +10251,11 @@ function openPlayerData(playerId) {
         return;
     }
 
-    if (typeof window.closeModal === 'function') window.closeModal();
-    showTab('players');
-    switchMainView('table');
-
-    // Scope to him alone. It reuses the selection the table, the charts and the
-    // board already narrow through, so the whole page arrives on the same
-    // player rather than only the row.
-    state.selectedForComparison.clear();
-    state.selectedForComparison.add(id);
-    renderCompareChips();
-
-    state.openRowId = id;
-    processChange();
-
-    const row = document.querySelector('#playersTable tr.player-row.is-open');
-    if (row) row.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    showToast(player.web_name,
-        `${player.team_name} · ${POSITION_LABELS[player.position_name] || player.position_name}`
-        + ' — הדף מצומצם אליו. "נקה" מחזיר את כל הליגה', 'info', 5000);
+    // The card, not the page. Scoping the whole players page to one man was
+    // heavy-handed for a click that only ever meant "who is this" — and it left
+    // the reader on a filtered table they then had to clear. The modal answers
+    // the question and leaves everything else where it was.
+    openPlayerModal(id);
 }
 
 /**

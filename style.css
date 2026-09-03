@@ -6933,3 +6933,431 @@ canvas {
 }
 
 .box-past::before { content: "· "; }
+
+/* ==========================================================================
+   PLAYER CARD — the modal that replaced the expanded table row
+   ==========================================================================
+   Two blocks over the same eight metrics: a rail per metric saying what level
+   it is against the position, then a spark line per metric saying what shape it
+   had. Vertical throughout, because the row this replaced was three columns
+   laid sideways inside a table that already scrolls sideways.
+
+   Tokens are declared locally rather than reaching for draft.css's --c-*: this
+   surface belongs to the players page, and draft.css is scoped under
+   #draftTabContent. Same values, so the two read as one product.
+   ========================================================================== */
+
+.pp {
+    --c-ink: #101828;
+    --c-muted: #5d6b82;
+    --c-line: #e4e9f1;
+    --c-wash: #f5f8fc;
+    --c-blue: #0f56d9;
+    --c-blue-soft: #e7efff;
+    --c-green: #0e9f5d;
+    --c-red: #d92d5a;
+    display: grid;
+    gap: 10px;
+    font-family: 'Rubik', 'Heebo', system-ui, sans-serif;
+    color: var(--c-ink);
+}
+
+.modal-content--player {
+    max-width: 720px;
+    padding: 18px;
+    background: #eef2f7;
+}
+
+/* ------------------------------- the header ------------------------------- */
+
+.pp-head {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 14px;
+    background: #fff;
+    border-radius: 14px;
+    box-shadow: 0 1px 2px rgba(16, 24, 40, .05);
+}
+
+.pp-photo {
+    flex: none;
+    width: 52px;
+    height: 52px;
+    border-radius: 12px;
+    object-fit: cover;
+    background: var(--c-wash);
+}
+
+.pp-id { flex: 1 1 auto; min-width: 0; }
+
+.pp-id h3 { margin: 0; font-size: 19px; font-weight: 700; }
+
+.pp-id p { margin: 1px 0 0; font-size: 12px; font-weight: 400; color: var(--c-muted); }
+
+.pp-tags { display: flex; gap: 5px; margin-top: 5px; flex-wrap: wrap; }
+
+.pp-tag-warn {
+    padding: 2px 8px;
+    border-radius: 999px;
+    background: #fdf1e3;
+    color: #9a5312;
+    font-size: 10px;
+    font-weight: 700;
+}
+
+.pp-actions { display: flex; gap: 5px; flex: none; flex-wrap: wrap; }
+
+.pp-btn {
+    padding: 6px 11px;
+    border: 1px solid var(--c-line);
+    border-radius: 9px;
+    background: #fff;
+    font-family: inherit;
+    font-size: 11.5px;
+    font-weight: 600;
+    color: #46536b;
+    cursor: pointer;
+}
+
+.pp-btn:hover { background: var(--c-wash); border-color: #cbd5e1; }
+.pp-btn.is-on { background: #fdf6e6; border-color: #f0d99a; color: #8a6410; }
+
+/* --------------------------- the two block marks -------------------------- */
+
+.pp-blockmark {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    margin: 6px 2px -2px;
+    font-size: 10.5px;
+    font-weight: 700;
+    letter-spacing: .05em;
+    color: var(--c-muted);
+}
+
+.pp-blockmark i {
+    display: grid;
+    place-items: center;
+    width: 17px;
+    height: 17px;
+    border-radius: 5px;
+    background: var(--c-blue-soft);
+    color: #0a44b0;
+    font-size: 9.5px;
+    font-weight: 800;
+    font-style: normal;
+}
+
+.pp-blockmark span {
+    font-family: 'Heebo', sans-serif;
+    font-weight: 400;
+    letter-spacing: 0;
+    color: #8e9bb1;
+}
+
+.pp-card {
+    padding: 14px 16px;
+    background: #fff;
+    border-radius: 14px;
+    box-shadow: 0 1px 2px rgba(16, 24, 40, .05);
+}
+
+.pp-title {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    margin: 0 0 10px;
+    font-size: 13.5px;
+    font-weight: 700;
+}
+
+.pp-title span { font-family: 'Heebo', sans-serif; font-size: 11.5px; font-weight: 400; color: var(--c-muted); }
+
+.pp-title--sub { margin-top: 14px; font-size: 12px; }
+
+.pp-loading { padding: 26px 12px; text-align: center; font-size: 12.5px; color: var(--c-muted); }
+
+/* ------------------------------ block A: rails ---------------------------- */
+
+.pp-rails { display: grid; gap: 7px; }
+
+.pp-rail {
+    display: grid;
+    grid-template-columns: 104px minmax(0, 1fr) 56px;
+    gap: 10px;
+    align-items: center;
+}
+
+.pp-rail-label { font-family: 'Heebo', sans-serif; font-size: 11.5px; font-weight: 500; color: #46536b; }
+
+.pp-rail-svg { display: block; width: 100%; height: 20px; }
+
+.pp-rail-value {
+    font-size: 13px;
+    font-weight: 700;
+    text-align: left;
+    font-variant-numeric: tabular-nums;
+}
+
+.pp-legend {
+    display: flex;
+    gap: 14px;
+    flex-wrap: wrap;
+    margin: 10px 0 0;
+    font-family: 'Heebo', sans-serif;
+    font-size: 10.5px;
+    color: var(--c-muted);
+}
+
+.pp-legend span { display: inline-flex; align-items: center; gap: 5px; }
+
+.pp-tick { display: inline-block; width: 2px; height: 10px; }
+.pp-tick--med { background: #8e9bb1; }
+.pp-tick--elite { background: var(--c-green); }
+
+/* --------------------------- block B: the cells --------------------------- */
+
+.pp-cells {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 8px;
+}
+
+@media (max-width: 620px) {
+    .pp-cells { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+.pp-cell { padding: 8px 10px; background: #f8fafd; border-radius: 10px; min-width: 0; }
+
+.pp-cell-top { display: flex; align-items: baseline; justify-content: space-between; gap: 4px; }
+
+.pp-cell-name { font-family: 'Heebo', sans-serif; font-size: 10px; font-weight: 600; color: var(--c-muted); }
+
+.pp-cell-value { font-size: 13px; font-weight: 700; font-variant-numeric: tabular-nums; }
+
+.pp-spark { display: block; width: 100%; height: 32px; margin-top: 4px; }
+
+.pp-cell-agg {
+    display: block;
+    margin-top: 2px;
+    font-family: 'Heebo', sans-serif;
+    font-size: 8.5px;
+    font-weight: 600;
+    color: #9aa6b8;
+}
+
+/* -------------------------------- splits ---------------------------------- */
+
+.pp-splits { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+
+@media (max-width: 620px) { .pp-splits { grid-template-columns: 1fr; } }
+
+.pp-split { padding: 9px 10px; background: var(--c-wash); border-radius: 10px; min-width: 0; }
+
+.pp-split-label { font-family: 'Heebo', sans-serif; font-size: 10px; font-weight: 600; color: var(--c-muted); }
+
+.pp-split-pair { display: flex; gap: 6px; margin-top: 5px; }
+
+.pp-split-side {
+    flex: 1 1 0;
+    min-width: 0;
+    padding: 5px 6px;
+    background: #fff;
+    border-radius: 7px;
+    text-align: center;
+}
+
+.pp-split-side.is-better { background: #e7f7ef; }
+
+.pp-split-value { display: block; font-size: 14px; font-weight: 700; font-variant-numeric: tabular-nums; }
+
+.pp-split-name {
+    display: block;
+    font-family: 'Heebo', sans-serif;
+    font-size: 9px;
+    color: var(--c-muted);
+}
+
+/* ------------------------------- match log -------------------------------- */
+
+.pp-log-wrap { overflow-x: auto; }
+
+.pp-log, .cmp-grid {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 11.5px;
+    font-variant-numeric: tabular-nums;
+}
+
+/* The reset matters more than the styling here. A bare `th` rule near the top
+   of this file paints every table header in the app with the brand gradient in
+   white, 12px padding and a pointer cursor — written for the sortable players
+   table, inherited by every table since. These two are not sortable and not
+   brand chrome, so they take it all back explicitly. */
+.pp-log th, .pp-log td, .cmp-grid th, .cmp-grid td {
+    padding: 5px 4px;
+    text-align: center;
+    white-space: nowrap;
+    background: none;
+    color: inherit;
+    text-shadow: none;
+    cursor: default;
+    letter-spacing: normal;
+    transition: none;
+}
+
+.pp-log th:hover, .cmp-grid th:hover { background: none; transform: none; }
+
+.pp-log thead th, .cmp-grid thead th {
+    font-size: 10px;
+    font-weight: 600;
+    color: var(--c-muted);
+    border-bottom: 1px solid var(--c-line);
+}
+
+.pp-log tbody tr + tr td, .cmp-grid tbody tr + tr td,
+.cmp-grid tbody tr + tr th { border-top: 1px solid #f2f5f9; }
+
+.pp-log tbody tr.is-out td { color: #9aa6b8; }
+
+.pp-log .pp-pts { font-weight: 800; }
+
+.pp-opp em { font-style: normal; font-size: 9px; color: #8e9bb1; margin-inline-start: 2px; }
+
+.pp-log tfoot th, .pp-log tfoot td {
+    border-top: 2px solid var(--c-line);
+    font-weight: 700;
+    background: #f8fafd;
+    color: var(--c-ink);
+}
+
+.pp-log tfoot tr.is-avg th, .pp-log tfoot tr.is-avg td {
+    color: var(--c-blue);
+    border-top: 1px solid #eef2f7;
+}
+
+.pp-boxes { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 10px; }
+
+.pp-next { display: flex; gap: 5px; flex-wrap: wrap; }
+
+/* --------------------------- comparing players ---------------------------- */
+
+.pp-head--cmp { padding: 10px 12px; }
+
+.cmp-pills { display: flex; gap: 6px; flex-wrap: wrap; }
+
+.cmp-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px;
+    border-radius: 999px;
+    background: var(--c-wash);
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.cmp-pill:hover { background: var(--c-blue-soft); }
+
+.cmp-pill i { width: 8px; height: 8px; border-radius: 50%; background: var(--cmp-hue); flex: none; }
+
+.cmp-pill em {
+    font-family: 'Heebo', sans-serif;
+    font-style: normal;
+    font-size: 10px;
+    font-weight: 400;
+    color: var(--c-muted);
+}
+
+.pp-chips { display: flex; gap: 4px; flex-wrap: wrap; }
+
+.pp-chip {
+    padding: 3px 9px;
+    border: 1px solid var(--c-line);
+    border-radius: 999px;
+    background: #fff;
+    font-family: inherit;
+    font-size: 10.5px;
+    font-weight: 600;
+    color: var(--c-muted);
+    cursor: pointer;
+    white-space: nowrap;
+}
+
+.pp-chip.is-on { background: var(--c-blue); border-color: var(--c-blue); color: #fff; }
+
+/* A — one row per player, on a scale they share. */
+.cmp-facet {
+    display: grid;
+    grid-template-columns: 86px minmax(0, 1fr) 46px;
+    gap: 9px;
+    align-items: center;
+}
+
+.cmp-facet + .cmp-facet { margin-top: 4px; }
+
+.cmp-facet-name {
+    font-size: 11.5px;
+    font-weight: 700;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.cmp-facet-value {
+    font-size: 12.5px;
+    font-weight: 700;
+    text-align: left;
+    font-variant-numeric: tabular-nums;
+}
+
+/* C — the heat map. One sequential hue: points run from zero upwards with no
+   meaningful midpoint, and a two-ended ramp would imply a centre that is not
+   there. Every cell prints its value, so colour is never the only channel. */
+.cmp-heat { display: grid; gap: 3px; margin-top: 4px; }
+
+.cmp-heat-row {
+    display: grid;
+    grid-template-columns: 74px repeat(var(--cmp-gws), minmax(0, 1fr)) 42px;
+    gap: 2px;
+    align-items: center;
+}
+
+.cmp-heat-name {
+    font-size: 10.5px;
+    font-weight: 700;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.cmp-heat-cell {
+    display: grid;
+    place-items: center;
+    height: 22px;
+    border-radius: 4px;
+    font-size: 9.5px;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+}
+
+.cmp-heat-gw { font-size: 8.5px; color: #8e9bb1; text-align: center; }
+
+.cmp-heat-total {
+    font-size: 11px;
+    font-weight: 800;
+    text-align: center;
+    font-variant-numeric: tabular-nums;
+}
+
+.cmp-grid tbody th {
+    text-align: right;
+    font-family: 'Heebo', sans-serif;
+    font-size: 10.5px;
+    font-weight: 500;
+    color: #46536b;
+}
+
+.cmp-grid td.is-best { background: #e7f7ef; font-weight: 800; color: #0b6b41; }

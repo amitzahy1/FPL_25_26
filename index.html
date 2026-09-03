@@ -11,9 +11,9 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link rel="stylesheet"
         href="https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;700;800;900&family=Rubik:wght@400;500;600;700;800;900&display=swap">
-    <link rel="stylesheet" href="style.css?v=2026.09.03.367">
-    <link rel="stylesheet" href="mobile.css?v=2026.09.03.367">
-    <link rel="stylesheet" href="draft.css?v=2026.09.03.367">
+    <link rel="stylesheet" href="style.css?v=2026.09.03.368">
+    <link rel="stylesheet" href="mobile.css?v=2026.09.03.368">
+    <link rel="stylesheet" href="draft.css?v=2026.09.03.368">
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.5.1"></script>
     <script
         src="https://cdnjs.cloudflare.com/ajax/libs/chartjs-plugin-annotation/2.2.1/chartjs-plugin-annotation.min.js"></script>
@@ -471,6 +471,18 @@
                  modal moves back inside a tab.
                  ================================================================== -->
 
+            <!-- The player card, and the comparison of up to five. One surface:
+                 a comparison is the same two blocks with a mark per player, so
+                 one modal serves both and the reader learns one layout. It
+                 replaced the expanded table row, which was a third container
+                 with a third layout for the same information. -->
+            <div id="playerModal" class="modal" onclick="if(event.target === this) closeModal()">
+                <div class="modal-content modal-content--player">
+                    <span class="close" onclick="closeModal()">&times;</span>
+                    <div id="playerModalBody"></div>
+                </div>
+            </div>
+
             <div id="compareModal" class="modal" onclick="if(event.target === this) closeModal()">
                 <div class="modal-content">
                     <span class="close" onclick="closeModal()">&times;</span>
@@ -872,7 +884,7 @@
     <!-- Version query is bumped by scripts/stamp-version.mjs on every commit
          (npm run stamp). It was left at 4.0.0 for months, so returning
          visitors kept running a cached script.js and never saw fixes. -->
-    <script src="script.js?v=2026.09.03.367" defer></script>
+    <script src="script.js?v=2026.09.03.368" defer></script>
 </body>
 
 </html>
