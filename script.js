@@ -1356,6 +1356,10 @@ document.addEventListener('DOMContentLoaded', () => {
     // Expanding a league chart.
     initDraftChartFull();
 
+    // Every player named in the league tab links to his own row on the players
+    // page. Delegated, so panels that redraw keep the link.
+    initDraftPlayerLinks();
+
     // Two things measure rendered text exactly once and cache the answer. With
     // display=swap the first measurement can happen in the fallback font, so
     // re-run them when the real one lands: a stale --cmp-strip-h puts the
@@ -9358,6 +9362,88 @@ function renderLeaderboard() {
       </div>`;
 }
 
+/**
+ * Take the reader to one player's full data, from anywhere on the site.
+ *
+ * The league side of the site was a dead end: a squad, a fixture, a waiver, a
+ * pick on the draft board — every one of them names a player, and none of them
+ * went anywhere. The answer to "who is this" was two tabs and a search away, in
+ * a table that might well be filtered so as not to contain him.
+ *
+ * So this guarantees arrival rather than hoping for it. jumpToPlayer below
+ * declines when the player is not in the current view, which is right for a
+ * click inside the table and useless as a link from another tab; here the view
+ * is made to contain him instead: the selection scope is set to exactly this
+ * player, which is the mechanism the whole page already narrows through.
+ */
+function openPlayerData(playerId) {
+    const id = Number(playerId);
+    if (!Number.isInteger(id)) return;
+
+    const src = state.allPlayersData[state.currentDataSource];
+    const player = ((src && src.processed) || []).find(p => p.id === id);
+    if (!player) {
+        showToast('לא נמצא', 'השחקן לא נמצא בנתוני העונה שעל המסך', 'info', 4000);
+        return;
+    }
+
+    if (typeof window.closeModal === 'function') window.closeModal();
+    showTab('players');
+    switchMainView('table');
+
+    // Scope to him alone. It reuses the selection the table, the charts and the
+    // board already narrow through, so the whole page arrives on the same
+    // player rather than only the row.
+    state.selectedForComparison.clear();
+    state.selectedForComparison.add(id);
+    renderCompareChips();
+
+    state.openRowId = id;
+    processChange();
+
+    const row = document.querySelector('#playersTable tr.player-row.is-open');
+    if (row) row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    showToast(player.web_name,
+        `${player.team_name} · ${POSITION_LABELS[player.position_name] || player.position_name}`
+        + ' — הדף מצומצם אליו. "נקה" מחזיר את כל הליגה', 'info', 5000);
+}
+
+/**
+ * One listener for every player named anywhere in the league tab.
+ *
+ * Delegated at the tab, not wired per element: the panels in there are rebuilt
+ * from innerHTML on every render, so a listener attached to a pitch spot or a
+ * table row would be thrown away the next time its panel redrew. Any renderer
+ * that stamps data-player-id on something gets the link for free.
+ */
+function initDraftPlayerLinks() {
+    const host = document.getElementById('draftTabContent');
+    if (!host || host.dataset.playerLinks === '1') return;
+    host.dataset.playerLinks = '1';
+
+    host.addEventListener('click', e => {
+        // Never hijack a click meant for a control that happens to sit inside a
+        // player element — a checkbox, a remove button, a real link.
+        if (e.target.closest('button, input, select, label, a')) return;
+        const el = e.target.closest('[data-player-id]');
+        if (!el) return;
+        const id = Number(el.dataset.playerId);
+        if (!Number.isInteger(id)) return;
+        e.preventDefault();
+        openPlayerData(id);
+    });
+
+    // Keyboard: the same elements answer Enter and Space, so the link is not
+    // mouse-only.
+    host.addEventListener('keydown', e => {
+        if (e.key !== 'Enter' && e.key !== ' ') return;
+        const el = e.target.closest && e.target.closest('[data-player-id]');
+        if (!el) return;
+        e.preventDefault();
+        openPlayerData(Number(el.dataset.playerId));
+    });
+}
+
 /** Open a player's row in the table, from anywhere. */
 function jumpToPlayer(playerId) {
     window.closeModal();
@@ -10680,6 +10766,22 @@ function playerNameForDraftElement(draftElementId) {
 }
 
 /**
+ * A draft element id as a clickable player name.
+ *
+ * The league's feeds and the draft board speak in Draft API element ids, which
+ * are not the ids the players page is keyed on — toFplId does that translation.
+ * A player who has since left the league resolves to a name and no id, and comes
+ * back as plain text rather than a link that would go nowhere.
+ */
+function draftPlayerLinkHtml(draftElementId, className = '') {
+    const name = escapeHtml(playerNameForDraftElement(draftElementId));
+    const fplId = toFplId(draftElementId);
+    if (fplId === null) return `<span class="${className}">${name}</span>`;
+    return `<span class="${className}" data-player-id="${fplId}" tabindex="0" role="button"
+        title="לחצו לנתונים המלאים של ${name}">${name}</span>`;
+}
+
+/**
  * The league's waiver and free-agent activity, newest first, plus who has been
  * most active. Replaces guessing at market movement from ownership deltas.
  */
@@ -10714,37 +10816,47 @@ function renderTransactionsFeed() {
 
     const recent = [...accepted].sort((a, b) => (b.event - a.event) || (b.index - a.index)).slice(0, 25);
 
+    // The same .plc-kpi strip the overview uses, rather than a third set of
+    // hand-rolled grey boxes — that divergence is most of why this section read
+    // as a different site.
     container.innerHTML = `
-        <div class="feed-summary">
-            <div class="feed-stat"><span class="feed-stat-value">${accepted.length}</span>
-                <span class="feed-stat-label">תנועות שאושרו</span></div>
-            <div class="feed-stat"><span class="feed-stat-value">${byEntry.size}</span>
-                <span class="feed-stat-label">קבוצות פעילות</span></div>
-            ${busiest.length ? `<div class="feed-stat feed-stat-wide">
-                <span class="feed-stat-label">הכי פעילות</span>
-                <span class="feed-stat-value-sm">${busiest.map(([id, n]) =>
-                    `${escapeHtml(teamNameForEntry(id))} (${n})`).join(' · ')}</span></div>` : ''}
+        <div class="plc-kpis">
+            <div class="plc-kpi">
+                <span class="plc-kpi-label">תנועות שאושרו</span>
+                <span class="plc-kpi-value">${accepted.length}</span>
+            </div>
+            <div class="plc-kpi">
+                <span class="plc-kpi-label">קבוצות פעילות</span>
+                <span class="plc-kpi-value">${byEntry.size}</span>
+            </div>
+            ${busiest.length ? `<div class="plc-kpi is-wide">
+                <span class="plc-kpi-label">הכי פעילות</span>
+                <span class="plc-kpi-value">${busiest.map(([id, n]) =>
+                    `${escapeHtml(teamNameForEntry(id))} (${n})`).join(' · ')}</span>
+            </div>` : ''}
         </div>
 
-        ${trending.length ? `<div class="feed-trending">
-            <h4>הכי מבוקשים</h4>
+        ${trending.length ? `<div class="mk-panel plc-card">
+            <h4 class="mk-panel-title">הכי מבוקשים</h4>
             <div class="feed-chips">${trending.map(([id, n]) =>
-                `<span class="feed-chip">${escapeHtml(playerNameForDraftElement(id))}
-                    <b>${n}×</b></span>`).join('')}</div>
+                `<span class="feed-chip">${draftPlayerLinkHtml(id)} <b>${n}×</b></span>`).join('')}</div>
         </div>` : ''}
 
-        <ol class="feed-list">
-            ${recent.map(t => `
-                <li class="feed-item">
-                    <span class="feed-gw">GW${t.event}</span>
-                    <span class="feed-team">${escapeHtml(teamNameForEntry(t.entry))}</span>
-                    <span class="feed-move">
-                        <span class="feed-in">▲ ${escapeHtml(playerNameForDraftElement(t.element_in))}</span>
-                        <span class="feed-out">▼ ${escapeHtml(playerNameForDraftElement(t.element_out))}</span>
-                    </span>
-                    <span class="feed-kind">${t.kind === 'w' ? 'וויוור' : 'שחקן חופשי'}</span>
-                </li>`).join('')}
-        </ol>`;
+        <div class="mk-panel plc-card">
+            <h4 class="mk-panel-title">אחרונות</h4>
+            <ol class="feed-list">
+                ${recent.map(t => `
+                    <li class="feed-item">
+                        <span class="feed-gw">GW${t.event}</span>
+                        <span class="feed-team">${escapeHtml(teamNameForEntry(t.entry))}</span>
+                        <span class="feed-move">
+                            <span class="feed-in">▲ ${draftPlayerLinkHtml(t.element_in)}</span>
+                            <span class="feed-out">▼ ${draftPlayerLinkHtml(t.element_out)}</span>
+                        </span>
+                        <span class="feed-kind">${t.kind === 'w' ? 'וויוור' : 'שחקן חופשי'}</span>
+                    </li>`).join('')}
+            </ol>
+        </div>`;
 }
 
 /**
@@ -10772,6 +10884,7 @@ function renderDraftBoardHistory() {
         const p = fplId === null ? null : processedById.get(fplId);
         return {
             round: c.round, pick: c.pick, wasAuto: c.was_auto,
+            element: c.element,
             team: c.entry_name || teamNameForEntry(c.entry),
             name: playerNameForDraftElement(c.element),
             points: p ? (p.total_points || 0) : null,
@@ -10788,37 +10901,43 @@ function renderDraftBoardHistory() {
     const worstEarly = scored.filter(r => r.round <= 3).slice(-3).reverse();
 
     container.innerHTML = `
-        <div class="feed-summary">
-            <div class="feed-stat"><span class="feed-stat-value">${rows.length}</span>
-                <span class="feed-stat-label">בחירות</span></div>
-            <div class="feed-stat"><span class="feed-stat-value">${rounds.length}</span>
-                <span class="feed-stat-label">סבבים</span></div>
-            <div class="feed-stat"><span class="feed-stat-value">${rows.filter(r => r.wasAuto).length}</span>
-                <span class="feed-stat-label">בחירות אוטומטיות</span></div>
+        <div class="plc-kpis">
+            <div class="plc-kpi">
+                <span class="plc-kpi-label">בחירות</span>
+                <span class="plc-kpi-value">${rows.length}</span>
+            </div>
+            <div class="plc-kpi">
+                <span class="plc-kpi-label">סבבים</span>
+                <span class="plc-kpi-value">${rounds.length}</span>
+            </div>
+            <div class="plc-kpi">
+                <span class="plc-kpi-label">בחירות אוטומטיות</span>
+                <span class="plc-kpi-value">${rows.filter(r => r.wasAuto).length}</span>
+            </div>
         </div>
 
         <div class="board-highlights">
             <div class="board-col">
                 <h4>הבחירות ששילמו</h4>
-                <ol>${best.map(r => `<li><b>${escapeHtml(r.name)}</b> ${r.points} נק׳
+                <ol>${best.map(r => `<li>${draftPlayerLinkHtml(r.element, 'board-name')} ${r.points} נק׳
                     <span class="board-meta">סבב ${r.round} · ${escapeHtml(r.team)}</span></li>`).join('')}</ol>
             </div>
             <div class="board-col">
                 <h4>אכזבות הסבבים המוקדמים</h4>
-                <ol>${worstEarly.map(r => `<li><b>${escapeHtml(r.name)}</b> ${r.points} נק׳
+                <ol>${worstEarly.map(r => `<li>${draftPlayerLinkHtml(r.element, 'board-name')} ${r.points} נק׳
                     <span class="board-meta">סבב ${r.round} · ${escapeHtml(r.team)}</span></li>`).join('')}</ol>
             </div>
         </div>
 
         <div class="board-rounds">
             ${rounds.map(rd => `
-                <details class="board-round" ${rd <= 2 ? 'open' : ''}>
+                <details class="board-round plc-card" ${rd <= 2 ? 'open' : ''}>
                     <summary>סבב ${rd}</summary>
                     <ol class="board-picks">
                         ${rows.filter(r => r.round === rd).sort((a, b) => a.pick - b.pick).map(r => `
                             <li class="board-pick">
                                 <span class="board-num">${r.pick}</span>
-                                <span class="board-player"><b>${escapeHtml(r.name)}</b>
+                                <span class="board-player">${draftPlayerLinkHtml(r.element, 'board-name')}
                                     <em>${escapeHtml(r.pos)}</em></span>
                                 <span class="board-team">${escapeHtml(r.team)}</span>
                                 <span class="board-points">${r.points === null ? '—' : `${r.points} נק׳`}</span>
@@ -11901,140 +12020,94 @@ function getRecommendationData() {
     return recommendations;
 }
 
+/**
+ * The swap board: each weak link in your squad, and who is free and better.
+ *
+ * This was a matrix — one card per weak player holding an eight-row table of
+ * מדד × נוכחי × #1 × #2 × #3, every cell tinted red or green, under an indigo
+ * gradient header that belonged to no palette on the site and printed its own
+ * subtitle in dark text on a dark ground. Four cards of that is a spreadsheet
+ * with a headline, and the actual recommendation — swap this player for that one
+ * — was the one thing you had to work out for yourself.
+ *
+ * So it reads as what it is: a player to drop, then the candidates, each a tile
+ * carrying the single figure that justifies it (the gap in smart score) and the
+ * few stats that back it up. Every name is a link into that player's own row on
+ * the players page, which is what the rest of the league tab now does too.
+ */
 function renderRecommendations() {
-    console.log("💡 renderRecommendations() called");
     const container = document.getElementById('draftRecommendations');
-    if (!container) {
-        console.error("❌ draftRecommendations container not found!");
-        return;
-    }
-    container.innerHTML = ''; // Clear loader
+    if (!container) return;
 
     const recommendationData = getRecommendationData();
-    if (!recommendationData || Object.keys(recommendationData).length === 0) {
-        container.innerHTML = '<p style="text-align:center; padding: 20px;">🎉 כל השחקנים שלך מצוינים! אין המלצות להחלפה כרגע.</p>';
+    if (!recommendationData || !Object.keys(recommendationData).length) {
+        container.innerHTML = '<div class="plc-empty">🎉 אין המלצות להחלפה — כל השחקנים בסגל שלך עוברים את הרף</div>';
         return;
     }
 
-    const tablesContainer = document.createElement('div');
-    tablesContainer.className = 'recs-grid-tables';
+    const posNames = { GKP: '🧤 שוער', DEF: '🛡️ מגן', MID: '⚙️ קשר', FWD: '⚽ חלוץ' };
 
-    // Position names in Hebrew
-    const posNames = {
-        'GKP': '🧤 שוער',
-        'DEF': '🛡️ מגן',
-        'MID': '⚙️ קשר',
-        'FWD': '⚽ חלוץ'
+    /** Why this candidate, in at most two chips. More than that is a paragraph. */
+    const reasonChips = (c) => {
+        const out = [];
+        if (c.minutes < 270 && c.selected_by_percent > 20 && c.draft_score > 60) {
+            out.push({ t: 'חוזר מפציעה', k: 'warm' });
+        }
+        if (c.transfers_balance > 50) out.push({ t: 'השוק עליו', k: 'info' });
+        if (c.predicted_points_1_gw > 6) out.push({ t: 'תחזית גבוהה', k: 'good' });
+        if (parseFloat(c.form) > 5) out.push({ t: 'בכושר', k: 'good' });
+        if (c.draft_score > 85) out.push({ t: 'דירוג עלית', k: 'good' });
+        return out.slice(0, 2);
     };
 
-    // Create recommendation reason for each candidate
-    const getRecommendationReason = (candidate) => {
-        const reasons = [];
-
-        // Check comeback player
-        if (candidate.minutes < 270 && candidate.selected_by_percent > 30 && candidate.draft_score > 70) {
-            reasons.push('🔥 חוזר');
-        } else if (candidate.minutes < 180 && candidate.selected_by_percent > 20 && candidate.draft_score > 60) {
-            reasons.push('⚡ חוזר');
-        }
-
-        // Check high transfers balance
-        if (candidate.transfers_balance > 50) {
-            reasons.push('📈 גבוה');
-        } else if (candidate.transfers_balance > 20) {
-            reasons.push('📈 עולה');
-        }
-
-        // Check high xPts
-        if (candidate.predicted_points_1_gw > 6) {
-            reasons.push('⚽ תחזית');
-        }
-
-        // Check good form
-        if (parseFloat(candidate.form) > 5) {
-            reasons.push('💪 כושר');
-        }
-
-        // Check high draft score
-        if (candidate.draft_score > 85) {
-            reasons.push('⭐ עלית');
-        }
-
-        return reasons.length > 0 ? reasons.join(' • ') : 'איכותי';
+    const n1 = v => {
+        const n = parseFloat(v);
+        return Number.isFinite(n) ? n : 0;
     };
 
-    Object.entries(recommendationData).forEach(([key, { player, candidates, position }]) => {
-        if (candidates.length === 0) return;
+    /** One candidate. Signed gap first: it is the reason the tile is here. */
+    const candidateHtml = (cand, cur, i) => {
+        const gap = n1(cand.smart_score) - n1(cur.smart_score);
+        const chips = reasonChips(cand).map(c =>
+            `<span class="mk-chip is-${c.k}">${c.t}</span>`).join('');
+        return `
+        <div class="mk-cand" data-player-id="${cand.id}" tabindex="0" role="button"
+             title="${escapeHtml(cand.web_name)} — לחצו לנתונים המלאים">
+            <div class="mk-cand-top">
+                <span class="mk-rank">#${i + 1}</span>
+                <span class="mk-gap is-pos"><span class="plc-num">+${gap.toFixed(1)}</span></span>
+            </div>
+            <div class="mk-cand-name">${escapeHtml(cand.web_name)}</div>
+            <div class="mk-cand-team">${escapeHtml(cand.team_name || '')}</div>
+            ${chips ? `<div class="mk-chips">${chips}</div>` : ''}
+            <dl class="mk-stats">
+                <div><dt>ציון חכם</dt><dd>${n1(cand.smart_score).toFixed(1)}</dd></div>
+                <div><dt>xPts הבא</dt><dd>${n1(cand.predicted_points_1_gw).toFixed(1)}</dd></div>
+                <div><dt>יציבות</dt><dd>${Math.round(n1(cand.stability_index))}</dd></div>
+                <div><dt>כושר</dt><dd>${n1(cand.form).toFixed(1)}</dd></div>
+            </dl>
+        </div>`;
+    };
 
-        const allInvolved = [player, ...candidates];
-        const metrics = config.recommendationMetrics;
-
-        let tableHTML = `
-            <div class="rec-card">
-                <div class="rec-header">
-                    <h4 style="font-size: 19px; font-weight: 800;">${player.web_name} <span style="color: rgba(158, 174, 255, 1); font-size: 15px;">(${posNames[position]})</span></h4>
-                    <p class="rec-subtitle" style="font-size: 13px; font-weight: 600;">⚽ ${posNames[position]} • ציון: ${player.smart_score.toFixed(1)}</p>
-                </div>
-                <table class="rec-table">
-                    <thead>
-                        <tr>
-                            <th style="width: 20%;">מדד</th>
-                            <th style="width: 20%;">נוכחי</th>
-                            <th style="width: 20%; font-size: 16px; font-weight: 800;">#1</th>
-                            <th style="width: 20%; font-size: 16px; font-weight: 800;">#2</th>
-                            <th style="width: 20%; font-size: 16px; font-weight: 800;">#3</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <tr class="rec-player-row">
-                            <td><strong>שחקן</strong></td>
-                            ${allInvolved.map(p => `
-                                <td>
-                                    <div class="rec-player-cell">
-                                        <img src="${getPlayerImageUrl(p)}" class="rec-player-img" alt="${p.web_name}">
-                                        <div class="rec-player-name">${p.web_name}</div>
-                                    </div>
-                                </td>
-                            `).join('')}
-                        </tr>
-                        <tr class="rec-reason-row">
-                            <td><strong>סיבה</strong></td>
-                            <td>-</td>
-                            ${candidates.map(c => `<td class="rec-reason" style="font-size: 12px; font-weight: 600;">${getRecommendationReason(c)}</td>`).join('')}
-                        </tr>`;
-
-        // Add metrics rows
-        Object.entries(metrics).forEach(([name, { key, format }]) => {
-            const values = allInvolved.map(p => {
-                const val = getNestedValue(p, key);
-                return val !== null && val !== undefined ? val : 0;
-            });
-            const bestValue = Math.max(...values);
-            const worstValue = Math.min(...values);
-
-            tableHTML += `<tr><td><strong>${name}</strong></td>`;
-            allInvolved.forEach((p, i) => {
-                const val = values[i];
-                let cellClass = '';
-                if (val === bestValue && bestValue !== worstValue) {
-                    cellClass = 'rec-best';
-                } else if (val === worstValue && bestValue !== worstValue) {
-                    cellClass = 'rec-worst';
-                }
-                tableHTML += `<td class="${cellClass}">${format(val)}</td>`;
-            });
-            tableHTML += `</tr>`;
-        });
-
-        tableHTML += `
-                    </tbody>
-                </table>
-            </div>`;
-
-        tablesContainer.innerHTML += tableHTML;
-    });
-
-    container.appendChild(tablesContainer);
+    container.innerHTML = Object.values(recommendationData)
+        .filter(r => r && r.candidates && r.candidates.length)
+        .map(({ player, candidates, position }) => `
+        <section class="mk-swap plc-card">
+            <header class="mk-swap-head">
+                <span class="mk-out-flag">החוליה החלשה</span>
+                <span class="mk-out" data-player-id="${player.id}" tabindex="0" role="button"
+                      title="${escapeHtml(player.web_name)} — לחצו לנתונים המלאים">
+                    <span class="mk-out-name">${escapeHtml(player.web_name)}</span>
+                    <span class="mk-out-meta">${posNames[position] || position}
+                        · ציון ${n1(player.smart_score).toFixed(1)}</span>
+                </span>
+                <span class="mk-arrow" aria-hidden="true">←</span>
+                <span class="mk-swap-label">${candidates.length} מועמדים פנויים</span>
+            </header>
+            <div class="mk-cands">
+                ${candidates.map((c, i) => candidateHtml(c, player, i)).join('')}
+            </div>
+        </section>`).join('');
 }
 
 /**
@@ -13030,9 +13103,13 @@ function renderPitch(containerEl, playerIds, isMyLineup = false, benchIds = null
         if (count === 0) return;
         players.forEach((p, i) => {
             const spot = document.createElement('div');
-            spot.className = 'player-spot';
+            spot.className = 'player-spot is-linked';
             spot.style.top = `${y}%`;
             spot.style.left = `${(i + 1) * 100 / (count + 1)}%`;
+            // Every player on the league side is a link into his own row on the
+            // players page — see openPlayerData and the delegated listener.
+            spot.dataset.playerId = p.id;
+            spot.title = `${p.web_name} — לחצו לנתונים המלאים`;
 
             spot.innerHTML = `
                 <img class="player-photo" src="${getPlayerImageUrl(p)}" alt="${p.web_name}" 
@@ -13055,7 +13132,8 @@ function renderPitch(containerEl, playerIds, isMyLineup = false, benchIds = null
         const bench = document.createElement('div');
         bench.className = 'bench-strip';
         bench.innerHTML = benchPlayers.map(p => `
-            <div class="bench-item">
+            <div class="bench-item is-linked" data-player-id="${p.id}"
+                 title="${escapeHtml(p.web_name)} — לחצו לנתונים המלאים">
                 <img src="${getPlayerImageUrl(p)}" alt="${p.web_name}" 
                      onerror="this.src='${config.urls.missingPlayerImage}'">
                 <div>${p.web_name}</div>
@@ -13200,8 +13278,19 @@ let _navFromHash = false;
 // (boot, the pre-draft auto-jump) that should not leave a back-button stop.
 function writeNavHash(hash, replace) {
     if (_navFromHash || location.hash === hash) return;
+    // pushState, never `location.hash =`.
+    //
+    // Assigning location.hash fires hashchange, which applyNavHash answers with
+    // showTab('draft') — and that called loadDraftLeague() again. So every click
+    // on a segment inside the draft tab refetched and rebuilt the entire league
+    // page to move between two panels that were already in the DOM. The
+    // _navFromHash flag did not help: it suppresses hash *writes* during an
+    // apply, not the apply that a write sets off.
+    //
+    // pushState changes the address without firing hashchange. Back and forward
+    // arrive as popstate instead, which is wired up below.
     if (replace) window.history.replaceState(null, '', hash);
-    else location.hash = hash;
+    else window.history.pushState(null, '', hash);
 }
 
 /** Apply the current location.hash. True when it named a real view. */
@@ -13230,7 +13319,10 @@ function applyNavHash() {
     }
     return true;
 }
+// hashchange still covers a hash typed or pasted into the address bar; popstate
+// covers back and forward, which is what pushState navigation produces.
 window.addEventListener('hashchange', applyNavHash);
+window.addEventListener('popstate', applyNavHash);
 
 function showTab(tabName) {
     document.querySelectorAll('.nav-item').forEach(btn => btn.classList.remove('active'));
@@ -13257,10 +13349,22 @@ function showTab(tabName) {
         localStorage.setItem('fplToolActiveTab', 'players');
         writeNavHash('#players', true);
     } else if (tabName === 'draft') {
+        // Same test the players branch makes: are we arriving, or already here?
+        // Every draftNavigate() writes the hash, and answering that write used to
+        // land back in this branch — so moving between two panels reloaded the
+        // league. The hash no longer fires an apply, and this is the second lock
+        // on the same door: re-entering the tab you are already on is not a
+        // reason to refetch it.
+        const alreadyOnDraft = draftView && draftView.style.display !== 'none';
         if (playersView) playersView.style.display = 'none';
         if (draftView) draftView.style.display = 'block';
         localStorage.setItem('fplToolActiveTab', 'draft');
         if (!location.hash.startsWith('#draft')) writeNavHash('#draft', true);
+
+        if (alreadyOnDraft && state.draft.details) {
+            startOwnershipPolling();
+            return;
+        }
 
         console.log("🎯 Draft tab activated, calling loadDraftLeague()...");
 

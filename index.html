@@ -11,9 +11,9 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link rel="stylesheet"
         href="https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;700;800;900&family=Rubik:wght@400;500;600;700;800;900&display=swap">
-    <link rel="stylesheet" href="style.css?v=2026.09.02.366">
-    <link rel="stylesheet" href="mobile.css?v=2026.09.02.366">
-    <link rel="stylesheet" href="draft.css?v=2026.09.02.366">
+    <link rel="stylesheet" href="style.css?v=2026.09.03.367">
+    <link rel="stylesheet" href="mobile.css?v=2026.09.03.367">
+    <link rel="stylesheet" href="draft.css?v=2026.09.03.367">
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.5.1"></script>
     <script
         src="https://cdnjs.cloudflare.com/ajax/libs/chartjs-plugin-annotation/2.2.1/chartjs-plugin-annotation.min.js"></script>
@@ -676,18 +676,38 @@
                         <button type="button" class="plc-seg" data-seg="market-history" role="tab"
                             aria-selected="false" aria-controls="draft-market-history">לוח הדראפט</button>
                     </div>
+                <!-- Each panel opens with a header band rather than a bare h3 on
+                     the page background: the three titles used to float above
+                     their own content with nothing tying them to it, which is what
+                     made this section read as a different site from the rest. -->
                 <div id="draft-market" class="draft-sub-content active">
-                    <h3 class="plc-title">💡 המלצות חכמות להחלפת שחקנים</h3>
+                    <div class="mk-head">
+                        <span class="mk-head-icon" aria-hidden="true">💡</span>
+                        <div class="mk-head-text">
+                            <h3>המלצות להחלפה</h3>
+                            <p>החוליות החלשות בסגל שלך, וכל מי שפנוי ועדיף עליהן</p>
+                        </div>
+                    </div>
                     <div id="draftRecommendations"></div>
                 </div>
                 <div id="draft-market-moves" class="draft-sub-content">
-                    <h3 class="plc-title">🔁 תנועות בליגה</h3>
-                    <p class="plc-sub">מי נלקח, מי שוחרר, ומי הכי פעיל — מתוך יומן הוויוורים של הליגה</p>
+                    <div class="mk-head">
+                        <span class="mk-head-icon" aria-hidden="true">🔁</span>
+                        <div class="mk-head-text">
+                            <h3>תנועות בליגה</h3>
+                            <p>מי נלקח, מי שוחרר, ומי הכי פעיל — מתוך יומן הוויוורים של הליגה</p>
+                        </div>
+                    </div>
                     <div id="transactionsFeed"></div>
                 </div>
                 <div id="draft-market-history" class="draft-sub-content">
-                    <h3 class="plc-title">🎲 לוח הדראפט — מבט לאחור</h3>
-                    <p class="plc-sub">כל בחירה מול מה שהיא נתנה בפועל, לפי סבב</p>
+                    <div class="mk-head">
+                        <span class="mk-head-icon" aria-hidden="true">🎲</span>
+                        <div class="mk-head-text">
+                            <h3>לוח הדראפט</h3>
+                            <p>כל בחירה מול מה שהיא נתנה בפועל, לפי סבב</p>
+                        </div>
+                    </div>
                     <div id="draftBoardHistory"></div>
                 </div>
                 </section>
@@ -852,7 +872,7 @@
     <!-- Version query is bumped by scripts/stamp-version.mjs on every commit
          (npm run stamp). It was left at 4.0.0 for months, so returning
          visitors kept running a cached script.js and never saw fixes. -->
-    <script src="script.js?v=2026.09.02.366" defer></script>
+    <script src="script.js?v=2026.09.03.367" defer></script>
 </body>
 
 </html>

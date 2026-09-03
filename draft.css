@@ -1353,3 +1353,394 @@ body.tab-draft {
         font-size: 14px;
     }
 }
+
+/* ============================================================
+   Every player in the league tab is a link
+   ============================================================
+   The league side used to be a dead end: a squad, a fixture, a waiver and a
+   draft pick all name players, and none of them went anywhere. Anything
+   carrying data-player-id opens that player's row on the players page, so the
+   affordance has to be visible without turning every panel into a wall of
+   underlines — a pointer, a lift on hover, and a real focus ring. */
+
+#draftTabContent [data-player-id] {
+    cursor: pointer;
+    transition: transform .14s ease, box-shadow .14s ease, background-color .14s ease;
+}
+
+#draftTabContent [data-player-id]:focus-visible {
+    outline: 2px solid var(--c-blue);
+    outline-offset: 2px;
+    border-radius: var(--c-radius-xs);
+}
+
+/* On the pitch the lift is the whole signal: the spots are absolutely
+   positioned, so a background change would fight the photo. */
+#draftTabContent .player-spot.is-linked:hover {
+    transform: translate(-50%, -50%) scale(1.08);
+    /* Above the base z-index: 5 of a spot, so the one being pointed at is the
+       one on top rather than the one drawn last. */
+    z-index: 8;
+}
+
+#draftTabContent .player-spot.is-linked:hover .player-name {
+    background: var(--c-blue);
+    color: #fff;
+}
+
+#draftTabContent .bench-item.is-linked:hover {
+    background: var(--c-blue-soft);
+    box-shadow: 0 2px 8px rgba(15, 86, 217, .18);
+}
+
+/* A row in any league table that names a player. */
+#draftTabContent tr[data-player-id]:hover {
+    background: var(--c-blue-soft) !important;
+}
+
+/* ============================================================
+   שוק והמלצות — the market section
+   ============================================================
+   Rebuilt onto the Clubhouse tokens. What was here before came from a different
+   palette entirely: indigo gradient card headers, red/green tinted matrix cells,
+   bare h3 titles floating on the page background, and stat strips of unstyled
+   grey boxes. Three panels share the shell below, so a fourth would inherit it.
+   ------------------------------------------------------------ */
+
+/* The header band each panel opens with. */
+#draftTabContent .mk-head {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 14px 18px;
+    margin-bottom: 14px;
+    background: var(--c-card);
+    border-radius: var(--c-radius);
+    box-shadow: var(--c-shadow);
+    /* The one piece of colour: a rail on the reading edge, which is how the
+       overview's cards mark themselves too. */
+    border-inline-start: 3px solid var(--c-blue);
+}
+
+#draftTabContent .mk-head-icon {
+    flex: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 34px;
+    height: 34px;
+    border-radius: 10px;
+    background: var(--c-blue-soft);
+    font-size: 16px;
+}
+
+#draftTabContent .mk-head-text { min-width: 0; }
+
+#draftTabContent .mk-head-text h3 {
+    margin: 0;
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--c-ink);
+}
+
+#draftTabContent .mk-head-text p {
+    margin: 2px 0 0;
+    font-size: 12px;
+    font-weight: 400;
+    color: var(--c-muted);
+}
+
+/* ---------------------------- the swap board ---------------------------- */
+
+#draftTabContent #draftRecommendations {
+    display: grid;
+    /* One swap per row up to a wide screen, because a swap card is a sentence
+       read left to right (player → candidates) and two of them side by side
+       halve the room the candidates need. */
+    grid-template-columns: 1fr;
+    gap: 14px;
+}
+
+@media (min-width: 1500px) {
+    #draftTabContent #draftRecommendations { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+#draftTabContent .mk-swap { padding: 16px 18px; }
+
+#draftTabContent .mk-swap-head {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding-bottom: 12px;
+    margin-bottom: 12px;
+    border-bottom: 1px solid var(--c-line);
+}
+
+/* The player being replaced. A link, like every other name in this tab.
+   One line rather than a stacked box: as a three-line card it was a small block
+   floating in a wide empty band, which is most of what made the old header look
+   unfinished. */
+#draftTabContent .mk-out {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 8px;
+    padding: 4px 8px;
+    border-radius: var(--c-radius-xs);
+    min-width: 0;
+}
+
+#draftTabContent .mk-out:hover { background: var(--c-blue-soft); }
+
+#draftTabContent .mk-out-flag {
+    flex: none;
+    padding: 3px 8px;
+    border-radius: 999px;
+    background: #fdeaef;
+    font-size: 10px;
+    font-weight: 700;
+    color: var(--c-red);
+    white-space: nowrap;
+}
+
+#draftTabContent .mk-out-name {
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--c-ink);
+}
+
+#draftTabContent .mk-out-meta {
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--c-muted);
+}
+
+/* RTL: the flow runs right to left, so the arrow points the way the eye moves. */
+#draftTabContent .mk-arrow {
+    flex: none;
+    font-size: 18px;
+    color: var(--c-blue);
+}
+
+/* Pushed to the far end, so the header is anchored at both edges instead of
+   trailing off into empty white. */
+#draftTabContent .mk-swap-label {
+    margin-inline-start: auto;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--c-muted);
+    white-space: nowrap;
+}
+
+#draftTabContent .mk-cands {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 10px;
+}
+
+#draftTabContent .mk-cand {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 11px 13px;
+    border: 1px solid var(--c-line);
+    border-radius: var(--c-radius-sm);
+    background: var(--c-card);
+    min-width: 0;
+}
+
+#draftTabContent .mk-cand:hover {
+    border-color: var(--c-blue);
+    box-shadow: 0 6px 18px -12px rgba(15, 86, 217, .5);
+}
+
+#draftTabContent .mk-cand-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+#draftTabContent .mk-rank {
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--c-muted);
+    font-variant-numeric: tabular-nums;
+}
+
+/* The gap in smart score — the whole reason the tile is on screen, so it is the
+   biggest thing on it after the name. */
+#draftTabContent .mk-gap {
+    font-size: 15px;
+    font-weight: 800;
+    font-variant-numeric: tabular-nums;
+}
+
+#draftTabContent .mk-gap.is-pos { color: var(--c-green); }
+
+#draftTabContent .mk-cand-name {
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--c-ink);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+#draftTabContent .mk-cand-team {
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--c-muted);
+}
+
+#draftTabContent .mk-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin-top: 2px;
+}
+
+#draftTabContent .mk-chip {
+    padding: 2px 7px;
+    border-radius: 999px;
+    font-size: 10px;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+#draftTabContent .mk-chip.is-good { background: #e7f7ef; color: #0b6b41; }
+#draftTabContent .mk-chip.is-info { background: var(--c-blue-soft); color: var(--c-blue-deep); }
+#draftTabContent .mk-chip.is-warm { background: #fdf1e3; color: #9a5312; }
+
+/* Four figures on one line, labels above. A definition list because that is
+   what it is, and it keeps label and value bound together for a screen reader. */
+#draftTabContent .mk-stats {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 6px;
+    margin: 6px 0 0;
+    padding-top: 8px;
+    border-top: 1px solid var(--c-line);
+}
+
+#draftTabContent .mk-stats > div { min-width: 0; }
+
+#draftTabContent .mk-stats dt {
+    font-size: 9.5px;
+    font-weight: 500;
+    color: var(--c-muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+#draftTabContent .mk-stats dd {
+    margin: 0;
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--c-ink);
+    font-variant-numeric: tabular-nums;
+}
+
+/* A titled sub-panel inside a market tab. The feed's two lists and the trending
+   chips used to sit straight on the page background. */
+#draftTabContent .mk-panel { margin-bottom: 14px; }
+
+#draftTabContent .mk-panel-title {
+    margin: 0 0 10px;
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--c-ink);
+}
+
+/* A player name that links, inside a list or a table row. Bold like the <b> it
+   replaced, and it picks up the pointer and focus ring from the
+   [data-player-id] rules above. */
+#draftTabContent .board-name,
+#draftTabContent .feed-in [data-player-id],
+#draftTabContent .feed-out [data-player-id] {
+    font-weight: 700;
+}
+
+#draftTabContent .board-name:hover,
+#draftTabContent .feed-item [data-player-id]:hover,
+#draftTabContent .feed-chip [data-player-id]:hover {
+    text-decoration: underline;
+    text-underline-offset: 2px;
+}
+
+/* The feed rows read as a list inside their card, not as bands across the page. */
+#draftTabContent .feed-list {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+#draftTabContent .feed-move {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    min-width: 0;
+}
+
+#draftTabContent .feed-team {
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--c-ink);
+}
+
+#draftTabContent .feed-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+/* Each round is its own card, so a fifteen-round board reads as fifteen blocks
+   rather than one unbroken column of rows. */
+#draftTabContent .board-round { padding: 12px 16px; margin-bottom: 10px; }
+
+#draftTabContent .board-round > summary {
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--c-ink);
+    list-style: none;
+}
+
+#draftTabContent .board-round > summary::-webkit-details-marker { display: none; }
+#draftTabContent .board-round > summary::after {
+    content: '▾';
+    margin-inline-start: 6px;
+    color: var(--c-muted);
+    display: inline-block;
+    transition: transform .18s ease;
+}
+#draftTabContent .board-round[open] > summary::after { transform: rotate(180deg); }
+
+#draftTabContent .board-picks {
+    margin: 10px 0 0;
+    padding: 0;
+    list-style: none;
+}
+
+#draftTabContent .board-highlights {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 12px;
+    margin-bottom: 14px;
+}
+
+#draftTabContent .board-col h4 {
+    margin: 0 0 8px;
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--c-ink);
+}
+
+#draftTabContent .board-col ol {
+    margin: 0;
+    padding-inline-start: 18px;
+    font-size: 13px;
+}
+
+#draftTabContent .board-col li { margin-bottom: 6px; }
