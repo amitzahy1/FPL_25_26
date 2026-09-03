@@ -1454,6 +1454,40 @@ try {
         'the lead order is pinned across all 12 cards and survives a filter round-trip');
     check(onePage.noSwapControl, 'and carry no per-slot swap control');
 
+    // Ticking players used to feed the השוואה window and nothing else, so a
+    // selection of three left the whole league in the table and in every chart.
+    const picked = await page.evaluate(async () => {
+        const settle = () => new Promise(r => setTimeout(r, 500));
+        switchMainView('charts');
+        await settle();
+        const pool = state.allPlayersData[state.currentDataSource].processed;
+        const ids = [pool[0].id, pool[1].id, pool[2].id];
+        const wholeLeague = state.filteredData.length;
+        ids.forEach(id => togglePlayerCompare(id));
+        await settle(); await settle();
+        const chart = charts['chart-position'];
+        const out = {
+            wholeLeague,
+            rows: document.querySelectorAll('#playersTableBody tr.player-row').length,
+            chartPoints: chart ? chart.data.datasets.reduce((n, d) => n + d.data.length, 0) : -1,
+            // The picker must still see the league, or a fourth player could
+            // never be added to a selection of three.
+            poolSize: playerSearchPool().length,
+            label: (document.getElementById('rowCount') || {}).textContent || ''
+        };
+        clearCompareSelection();
+        await settle(); await settle();
+        out.afterClear = document.querySelectorAll('#playersTableBody tr.player-row').length;
+        switchMainView('table');
+        return out;
+    });
+    check(picked.rows === 3 && picked.chartPoints === 3,
+        `ticking three players scopes the table and the charts to three (${picked.rows} rows, ${picked.chartPoints} points)`);
+    check(picked.poolSize > 3, `and the picker still searches the league (${picked.poolSize})`);
+    check(/3/.test(picked.label), `and the toolbar says why ("${picked.label.trim()}")`);
+    check(picked.afterClear === picked.wholeLeague,
+        `נקה puts the whole league back (${picked.afterClear} of ${picked.wholeLeague})`);
+
     // Two things that were quietly wrong: the momentum window drove the table
     // alone, and a focused verdict grew its card to ~1200px and spanned the
     // grid — one chip click and the page jumped.

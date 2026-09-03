@@ -266,6 +266,9 @@ const state = {
     // plotting the visible slice meant every scatter had exactly 20 points on it,
     // so a league-wide distribution looked like a handful of dots.
     filteredData: [],
+    // filteredData before a ticked selection narrows it — what the player picker
+    // searches, so a fourth player can always be added to a selection of three.
+    unscopedData: [],
     chartPosition: 'MID',        // which position the matrix chart is showing
     // Percentile baselines are computed once per render from the whole filtered
     // league, BEFORE the top-N slice. Scoping them to the visible rows made
@@ -5070,6 +5073,10 @@ function renderTable() {
             }
             // The chips are the only place an off-screen selection is visible.
             renderCompareChips();
+            // ...and the selection now scopes the whole page, so it has to be
+            // rebuilt. Debounced, because ticking several boxes in a row is one
+            // intention rather than four.
+            processChangeSoon();
         });
     });
 
@@ -5265,8 +5272,36 @@ function processChange() {
         }
     }
 
+    // A selection is an answer, not another filter.
+    //
+    // Ticking players used to change nothing about the page: the set fed the
+    // השוואה window and nothing else, so picking three players left 568 rows and
+    // twelve charts still drawing the whole league. When there is a selection the
+    // page IS those players — the table, every chart and the draft board, all of
+    // which read the set built here.
+    //
+    // It replaces the other filters rather than intersecting with them. Naming
+    // three individuals is a stronger statement of intent than a dropdown left
+    // on a previous question, and an intersection would let a leftover position
+    // filter silently drop one of the three — which is the same class of silent
+    // hiding the minutes floor was doing. The players are looked up in
+    // sourceData, so a pick that the filters would have excluded still appears,
+    // with the numbers for whichever data range is selected.
+    //
+    // The unscoped set is kept for the search picker: without it the pool would
+    // be the three players already chosen and a fourth could never be added.
+    state.unscopedData = filteredData;
+    const scopeIds = state.selectedForComparison;
+    const scoped = scopeIds && scopeIds.size > 0;
+    if (scoped) {
+        const byId = new Map(sourceData.map(p => [p.id, p]));
+        filteredData = [...scopeIds].map(id => byId.get(id)).filter(Boolean);
+    }
+
     state.displayedData = filteredData;
-    if (state.activeQuickFilterName) applyQuickFilter(state.activeQuickFilterName);
+    // A quick filter would narrow the selection further, which contradicts
+    // "these are the players I picked".
+    if (state.activeQuickFilterName && !scoped) applyQuickFilter(state.activeQuickFilterName);
 
     // Sort BEFORE limiting to 50
     // Sort BEFORE limiting to 50
@@ -5386,13 +5421,22 @@ function syncRowCount() {
     const shown = (state.displayedData || []).length;
     const hidden = Math.max(0, total - shown);
 
-    el.textContent = hidden
-        ? `${shown} מוצגים · ${hidden} מסוננים`
-        : `${shown} שחקנים`;
-    el.title = hidden
-        ? `${shown} שורות על המסך מתוך ${total} שחקנים בליגה.`
-            + ' נקו את הסינון (איפוס) או העלו את "הצג" כדי לראות את כולם'
-        : `כל ${total} השחקנים בליגה על המסך`;
+    // A selection is named rather than counted: "3 מסומנים" says why the table is
+    // short, where "3 מוצגים · 565 מסוננים" leaves the reader looking for the
+    // filter that did it.
+    const picked = (state.selectedForComparison && state.selectedForComparison.size) || 0;
+    if (picked > 0) {
+        el.textContent = `${shown} מסומנים`;
+        el.title = `הדף מצומצם לשחקנים שסימנת. "נקה" ליד הצ'יפים מחזיר את כל ${total} השחקנים`;
+    } else {
+        el.textContent = hidden
+            ? `${shown} מוצגים · ${hidden} מסוננים`
+            : `${shown} שחקנים`;
+        el.title = hidden
+            ? `${shown} שורות על המסך מתוך ${total} שחקנים בליגה.`
+                + ' נקו את הסינון (איפוס) או העלו את "הצג" כדי לראות את כולם'
+            : `כל ${total} השחקנים בליגה על המסך`;
+    }
     el.classList.toggle('is-filtered', hidden > 0);
 }
 
@@ -5815,6 +5859,12 @@ function showAllPlayers(button) {
     });
     document.getElementById('minMinutes').value = DEFAULT_MIN_MINUTES;
     document.getElementById('showEntries').value = 'all';
+    // The ticked players scope the page now, which makes them a filter, and
+    // איפוס says it clears all of them. Leaving them on meant pressing "clear
+    // everything" and still seeing three rows.
+    state.selectedForComparison.clear();
+    document.querySelectorAll('.player-select:checked').forEach(cb => { cb.checked = false; });
+    renderCompareChips();
     processChange();
     sortTable('draft_score');
 }
@@ -7493,6 +7543,10 @@ function playerSearchBrowse(players, limit = PLAYER_SEARCH_BROWSE_LIMIT) {
  * rather than a reason to fall back to everybody.
  */
 function playerSearchPool() {
+    // unscopedData first: once a selection scopes the page, filteredData is the
+    // selection itself, and searching inside it could only ever return the
+    // players already picked — there would be no way to add a fourth.
+    if (Array.isArray(state.unscopedData)) return state.unscopedData;
     if (Array.isArray(state.filteredData)) return state.filteredData;
     const src = state.allPlayersData[state.currentDataSource];
     return (src && src.processed) || [];
@@ -7608,6 +7662,8 @@ function togglePlayerCompare(playerId) {
         renderPlayerSearchMenu();
     }
     renderCompareChips();
+    // The selection scopes the table, the charts and the board.
+    processChangeSoon();
 }
 
 function clearCompareSelection() {
@@ -7615,6 +7671,9 @@ function clearCompareSelection() {
     document.querySelectorAll('.player-select:checked').forEach(cb => { cb.checked = false; });
     renderPlayerSearchMenu();
     renderCompareChips();
+    // נקה is the way back to the whole league, so it cannot be debounced behind
+    // a timer the reader has no reason to expect.
+    processChange();
 }
 
 /**
