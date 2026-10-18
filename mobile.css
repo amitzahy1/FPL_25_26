@@ -84,10 +84,20 @@
         height: 35px !important;
     }
 
-    .player-name {
+    /* Scoped to the pitch: the plain .player-name selector lost to style.css's
+       more specific .pitch-container .player-name, so phones got the desktop
+       15px label in a 60px spot and long names clipped (Anderson -> nderson).
+       Same declarations, specificity that actually wins. */
+    .pitch-container .player-name {
         font-size: 9px !important;
         max-width: 65px !important;
         padding: 1px 3px !important;
+    }
+
+    /* Four bench pills in a nowrap strip overflow a phone-width container and
+       the first/last names clip (Thiago -> hiago). Let the strip wrap. */
+    .bench-strip {
+        flex-wrap: wrap;
     }
 
     .player-data {
@@ -990,3 +1000,4 @@
     .cmp-section-head { padding: 7px 10px; }
     .cmp-section-head span { display: none; }
 }
+
