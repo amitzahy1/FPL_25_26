@@ -17,7 +17,7 @@ const FUNCTIONS = [
     'getCompletedGWCount', 'benchMinMinutes', 'stripUnplayedSeasonStats',
     'attachSeasonPrior', 'fillFromPreviousSeason', 'applyDefaultSortForSeason',
     'defaultMinMinutes', 'gwWord', 'activeSnapshot', 'seasonMinMinutes',
-    'playedGameweeks', 'scaleMinutes', 'sampleMinutes'
+    'playedGameweeks', 'scaleMinutes', 'sampleMinutes', 'displayMinutes'
 ];
 
 function load(events, over = {}) {
@@ -42,6 +42,43 @@ function load(events, over = {}) {
 }
 
 const played = n => Array.from({ length: 38 }, (_, i) => ({ finished: i < n }));
+
+describe('displayMinutes — the sample behind the number on screen', () => {
+    // The runtime state that let a one-match wonder headline the market chart
+    // after the floor shipped: 63 minutes this season, 1736 last season, and
+    // the blend off (its default — priorK is 0 until the user opts in).
+    test('blend off: last season’s minutes do not credit the floor', () => {
+        const { displayMinutes } = load(played(7));
+        const cameo = { minutes: 63, prior_minutes: 1736, blend_weight: 1 };
+        assert.equal(displayMinutes(cameo), 63);
+    });
+
+    test('no blend field at all: the figure is this season’s, so is the floor', () => {
+        const { displayMinutes } = load(played(7));
+        assert.equal(displayMinutes({ minutes: 400, prior_minutes: 2000 }), 400);
+    });
+
+    test('blend opted in: the displayed rate weighs the prior, so the floor does', () => {
+        const { displayMinutes } = load(played(7));
+        // blend_weight < 1 is exactly the state applySeasonBlend leaves on a row
+        // whose rate it rewrote from both seasons.
+        const blended = { minutes: 63, prior_minutes: 1736, blend_weight: 0.065 };
+        assert.equal(displayMinutes(blended), 1799);
+    });
+
+    test('pre-season the row IS the archive, so minutes already names the prior', () => {
+        const { displayMinutes } = load(played(0));
+        // attachSeasonPrior overwrites the stats with the archive’s, minutes
+        // included — no special case needed beyond the raw field.
+        assert.equal(displayMinutes({ minutes: 1736, prior_minutes: 1736 }), 1736);
+    });
+
+    test('missing player: zero, not a crash', () => {
+        const { displayMinutes } = load(played(7));
+        assert.equal(displayMinutes(null), 0);
+        assert.equal(displayMinutes(undefined), 0);
+    });
+});
 
 describe('the season gate', () => {
     test('holds only while nothing has been played', () => {

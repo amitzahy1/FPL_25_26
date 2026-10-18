@@ -3667,6 +3667,16 @@ span.tone-down { background: none !important; color: #1d4ed8; font-weight: 700; 
 
 /* One line per card saying what question it answers. Eight scatter plots with
    only axis labels leave the reader to work out why each one is there. */
+/* The as-of stamp: the same ink as the note but never clamped — a freshness
+   line you cannot read is not one. */
+.chart-freshness {
+    margin: 1px 0 0;
+    font-size: 10px;
+    font-weight: 500;
+    line-height: 1.35;
+    color: #94a3b8;
+}
+
 /* Clamped to one line, with the whole sentence on hover. It is worth a line of
    the card, not three — and on a narrow card it was taking three. */
 .chart-note {

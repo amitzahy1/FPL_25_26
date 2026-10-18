@@ -21,7 +21,8 @@ const MOBILE_CSS = readFileSync(
     join(dirname(fileURLToPath(import.meta.url)), '..', 'mobile.css'), 'utf8');
 
 const FNS = ['getMatrixChartConfig', 'labelTop', 'labelBudget', 'chartAxis', 'ltrTick',
-    'displayNetTransfers', 'buildMarketFlowChart', 'historicalPicksCacheTtl'];
+    'displayNetTransfers', 'buildMarketFlowChart', 'historicalPicksCacheTtl',
+    'sampleMinutes', 'displayMinutes'];
 const DEPS = ['CHART_TOOLTIP', 'LABEL_CANDIDATES', 'POSITION_COLOR'];
 
 function row(over = {}) {
@@ -39,7 +40,8 @@ function load(over = {}) {
     const fns = loadFunctions(FNS, { state }, DEPS);
     globalThis.scaleMinutes = target => target;
     globalThis.playedGameweeks = () => 38;
-    globalThis.sampleMinutes = p => p.minutes || 0;
+    // sampleMinutes/displayMinutes load real: stubbing the sample to current
+    // minutes is what hid the prior-backed cameo from the gate's tests.
     Object.assign(globalThis, fns);
     return { ...fns, state };
 }

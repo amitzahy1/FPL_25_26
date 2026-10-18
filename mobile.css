@@ -460,6 +460,7 @@
     .chart-card canvas { max-width: 100%; }
     .chart-title { font-size: 14px; }
     .chart-note { font-size: 10.5px; }
+    .chart-freshness { font-size: 10.5px; }
 
     /* 420, up from 340 and originally 260. Once the page scrolls as one document
        (see .tab-content below) the whole viewport is available, so height is the

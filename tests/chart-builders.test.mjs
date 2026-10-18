@@ -16,6 +16,7 @@ import { loadFunctions, extractDeclaration } from './helpers/load-script.mjs';
 const FNS = [
     'getMatrixChartConfig', 'labelTop', 'labelBudget', 'chartAxis', 'ltrTick', 'displayNetTransfers',
     'buildMarketFlowChart', 'buildSignalSpreadChart', 'buildSignalFocusChart',
+    'sampleMinutes', 'displayMinutes',
     'buildUnderlyingValueChart', 'buildTeamTargetsChart', 'signalLegendHtml',
     'metricReader', 'windowRate', 'windowRateSupported', 'windowMinMinutes',
     'windowAxisLabel', 'windowGwWord', 'gwDefensiveContribution',
@@ -50,12 +51,13 @@ function load(verdicts = {}, over = {}) {
     const state = { currentDataSource: 'historical', chartFacets: {},
         trendWindow: 5, trendGws: [], ...over };
     const fns = loadFunctions(FNS, { state }, DEPS);
-    // The evidence gate and the scaled floor live with the season model, far
-    // from this slice. These tests are about the rule, not about how a floor
-    // shrinks in August — see tests/season-gate.test.mjs for that.
+    // The scaled floor lives with the season model — see tests/season-gate.test.mjs
+    // for how it shrinks in August. But the sample the gate counts is the rule
+    // under test here, so the REAL sampleMinutes/displayMinutes load with the
+    // builders: stubbing sampleMinutes to current minutes is what hid the
+    // prior-backed cameo these tests now pin.
     globalThis.scaleMinutes = target => target;
     globalThis.playedGameweeks = () => 38;
-    globalThis.sampleMinutes = p => p.minutes || 0;
     globalThis.signalFor = p => verdicts[p.id]
         || { key: 'hold', label: 'ניטרלי', tone: 'muted', why: [] };
     // Stubbed: the real CHART_SPECS closes over every build function in the
@@ -186,6 +188,29 @@ describe('transfer flow chart', () => {
         assert.equal(pts[0].x, 250, 'thousands, so the axis is readable');
         assert.equal(pts[0].y, 6.4);
         assert.equal(pts[1].x, -80, 'a player being sold sits left of zero');
+    });
+
+    test('a prior-backed cameo stays off while the displayed rate is one match', () => {
+        // The runtime state behind the 2026-10-18 regression: 63 minutes and a
+        // 16.0 PPG with 1736 prior minutes passed the floor because the gate
+        // counted both seasons while the blend — off by default — showed a
+        // one-match rate. The gate now follows the displayed metric's sample.
+        const { buildMarketFlowChart } = load();
+        const base = [
+            row({ id: 1, market_net_transfers: 250000, points_per_game: '6.4' }),
+            row({ id: 2, market_net_transfers: -80000, points_per_game: '5.1' }),
+            row({ id: 3, market_net_transfers: 12000, points_per_game: '3.0' }),
+            row({ id: 4, market_net_transfers: -4000, points_per_game: '2.2' })
+        ];
+        const cameo = row({ id: 9, web_name: 'CameoKid', minutes: 63, prior_minutes: 1736,
+            points_per_game: '16.0', market_net_transfers: 270000, blend_weight: 1 });
+        const off = buildMarketFlowChart([...base, cameo]);
+        assert.equal(points(off).some(p => p.name === 'CameoKid'), false,
+            'blend off: 63 minutes is the whole sample behind the 16.0');
+
+        const on = buildMarketFlowChart([...base, { ...cameo, blend_weight: 0.065 }]);
+        assert.equal(points(on).some(p => p.name === 'CameoKid'), true,
+            'blend on: the rate really weighs the prior, so its minutes count');
     });
 
     test('hides itself when nobody has any transfer flow', () => {
