@@ -202,6 +202,20 @@ describe('smart filters', () => {
         assert.ok(html.length > 0);
     });
 
+    describe('the form_kings floor', () => {
+        // form is never blended (applySeasonBlend leaves it this season's), so
+        // the floor counts this season's minutes only. The 2026-10-18 runtime
+        // state: 63 minutes, 1736 prior minutes, one 16-point match.
+        const f = QUICK_FILTERS.form_kings.filter;
+        test('a prior-backed cameo is not a form king', () => {
+            assert.equal(f({ form: '9.5', minutes: 63, prior_minutes: 1736, blend_weight: 1 }), false,
+                'last season’s minutes must not credit a raw current-season form');
+        });
+        test('a player who is actually playing passes', () => {
+            assert.equal(f({ form: '9.5', minutes: 500, prior_minutes: 1736 }), true);
+        });
+    });
+
     describe('the injured chip', () => {
         // Reported from the live page: filtering to Arsenal showed 11 of 28
         // players and Saliba — injured, so zero minutes — was not among them.

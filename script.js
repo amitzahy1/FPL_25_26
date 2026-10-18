@@ -1611,6 +1611,27 @@ function sampleMinutes(p) {
     return (p.minutes || 0) + (p.prior_minutes || 0);
 }
 
+/**
+ * The minutes the figure on screen was actually computed from — the only
+ * honest sample for an evidence gate.
+ *
+ * sampleMinutes counts both seasons, which is right for a blended rate: the
+ * blend (applySeasonBlend) rewrites the rate from this season's minutes AND
+ * last season's, so the gate has to credit both. But the blend is opt-in and
+ * off by default, and a gate that credits last season's minutes while the
+ * number on the chart is a raw one-match rate lets exactly the cameo the floor
+ * exists to stop headline the chart. So the gate follows the metric:
+ * blend_weight < 1 means this row's rate really weighs the prior season in
+ * (see applySeasonBlend), and only then does the floor credit its minutes.
+ * Pre-season the row's own stats ARE the archive (attachSeasonPrior overwrites
+ * them), so `minutes` already names the right sample there too.
+ */
+function displayMinutes(p) {
+    if (!p) return 0;
+    if (p.blend_weight !== undefined && p.blend_weight < 1) return sampleMinutes(p);
+    return p.minutes || 0;
+}
+
 // ============================================
 // PRE-SEASON MARKET OVERLAY
 // ============================================
@@ -6794,9 +6815,12 @@ const QUICK_FILTERS = {
         sortKey: 'xGI_per90'
     },
     // "form > 0" matched essentially the whole league. Require a genuinely
-    // strong recent return from someone who is actually playing.
+    // strong recent return from someone who is actually playing. form is never
+    // blended (applySeasonBlend leaves it this season's), so the floor counts
+    // this season's minutes only — crediting last season's would read a cameo
+    // as a season.
     form_kings: {
-        filter: p => parseFloat(p.form) >= 4.5 && sampleMinutes(p) > scaleMinutes(450),
+        filter: p => parseFloat(p.form) >= 4.5 && (p.minutes || 0) > scaleMinutes(450),
         sortKey: 'points_per_game_90'
     },
     // Every player the game has flagged, most valuable first.
@@ -14792,18 +14816,17 @@ function getMatrixChartConfig(data, xLabel, yLabel, quadLabels = {}, opts = {}) 
 
     // Anchored to the outer corners of the plot, not to the crosshair. Four labels
     // hung off the centre point collided into an unreadable pile as soon as the
-    // card was narrow — which is every card in a three-column grid.
-    const xLo = xValues.length ? Math.min(...xValues) : 0;
-    const xHi = xValues.length ? Math.max(...xValues) : 1;
-    const yLo = yValues.length ? Math.min(...yValues) : 0;
-    const yHi = yValues.length ? Math.max(...yValues) : 1;
-
+    // card was narrow — which is every card in a three-column grid. The corners
+    // are the SCALE edges, resolved at render time: anchoring to the furthest
+    // data point let both labels grow inward from wherever that point sat, and
+    // on a narrow week (one side of the crosshair nearly empty) the two pills
+    // met in the middle and read as one jumbled label.
     const cornerLabel = (content, cx, cy) => {
         const tone = cornerTone(cx, cy);
         return {
             type: 'label',
-            xValue: cx === 'right' ? xHi : xLo,
-            yValue: cy === 'top' ? yHi : yLo,
+            xValue: ({ chart }) => cx === 'right' ? chart.scales.x.max : chart.scales.x.min,
+            yValue: ({ chart }) => cy === 'top' ? chart.scales.y.max : chart.scales.y.min,
             content: content || '',
             position: { x: cx === 'right' ? 'end' : 'start', y: cy === 'top' ? 'start' : 'end' },
             xAdjust: cx === 'right' ? -4 : 4,
@@ -15600,7 +15623,7 @@ function buildMarketFlowChart(data) {
         const net = displayNetTransfers(p);
         // The same evidence floor as the opportunity board: raw PPG over a
         // cameo is how a one-match wonder headlines a chart about production.
-        if (net === null || p.market_departed || sampleMinutes(p) < scaleMinutes(450)) return null;
+        if (net === null || p.market_departed || displayMinutes(p) < scaleMinutes(450)) return null;
         const ppg = parseFloat(p.points_per_game) || 0;
         return {
             x: net / 1000, y: ppg, net,
@@ -16148,10 +16171,13 @@ const CHART_SPECS = [
         note: () => 'העברות נטו במשחק הרגיל (לא בדראפט) מול נקודות למשחק — אות המונים '
             + 'הכי מהיר שיש. שמאל למעלה = מייצר והשוק נוטש, שם מתחבאות ההזדמנויות. '
             + 'הצבע לפי הרביע: ' + quadrantLegendHtml('נחטף ובצדק', 'נזרק ובצדק')
-            + (rostersAreKnown() ? ' · שחקנים תפוסים מוצגים דהויים' : '')
-            // The flow accumulates over the current event, so the same title
-            // covers very different amounts of week; the stamp says how much.
-            + ` · נכון ל־${new Date().toLocaleString('he-IL', { timeZone: 'Asia/Jerusalem', day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' })} (שעון ישראל)`,
+            + (rostersAreKnown() ? ' · שחקנים תפוסים מוצגים דהויים' : ''),
+        // The flow accumulates over the current event, so the same title
+        // covers very different amounts of week; the stamp says how much. It
+        // gets its own line rather than a place in the note: the note is
+        // clamped to two lines on a phone, and a freshness stamp you cannot
+        // read is not one.
+        freshness: () => `נכון ל־${new Date().toLocaleString('he-IL', { timeZone: 'Asia/Jerusalem', day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' })} (שעון ישראל)`,
         build: buildMarketFlowChart, facet: 'position'
     },
     {
@@ -16181,6 +16207,11 @@ const CHART_SPECS = [
  */
 function chartNote(spec, data) {
     return typeof spec.note === 'function' ? spec.note(data) : spec.note;
+}
+
+/** The as-of stamp, for the cards that carry one. Empty when the card has none. */
+function chartFreshness(spec) {
+    return typeof spec.freshness === 'function' ? spec.freshness() : (spec.freshness || '');
 }
 
 /**
@@ -16256,6 +16287,7 @@ function ensureChartCards() {
                     <div>
                         <h3 class="chart-title">${spec.title}</h3>
                         <p class="chart-note" title="${escapeHtml(chartNote(spec).replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim())}">${chartNote(spec)}</p>
+                        ${chartFreshness(spec) ? `<p class="chart-freshness">${chartFreshness(spec)}</p>` : ''}
                     </div>
                     <!-- Phone-only (hidden by CSS above 768px): the card is a
                          thumbnail on a phone, and this is how it is read. -->
@@ -16332,6 +16364,11 @@ function renderCharts() {
         if (noteEl) {
             const text = chartNote(spec, scoped);
             if (noteEl.innerHTML !== text) noteEl.innerHTML = text;
+        }
+        const freshEl = card.querySelector('.chart-freshness');
+        if (freshEl) {
+            const stamp = chartFreshness(spec);
+            if (freshEl.textContent !== stamp) freshEl.textContent = stamp;
         }
 
         let config = null;
@@ -16650,6 +16687,14 @@ function drawChartFull() {
         const text = chartNote(spec, currentChartData());
         note.innerHTML = text || '';
         note.hidden = !text;
+    }
+    // The as-of stamp rides along too: it left the clamped card note for its
+    // own line, and the overlay is where the card's reader ends up.
+    const fresh = document.getElementById('chartFullFreshness');
+    if (fresh) {
+        const stamp = chartFreshness(spec);
+        fresh.textContent = stamp;
+        fresh.hidden = !stamp;
     }
 
     // The pane reads the same config the canvas does, before Chart.js is handed
