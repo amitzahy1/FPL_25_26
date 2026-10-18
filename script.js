@@ -807,6 +807,125 @@ function findFuzzyMatch(draftPlayer, fplPlayers) {
     return bestMatch ? { player: bestMatch, similarity: bestSimilarity } : null;
 }
 
+
+/**
+ * Match every Draft element to its Classic element. Pure — no state, no
+ * fetches — so the unit tests exercise the rules directly.
+ *
+ * The steps are ordered by trust:
+ *   0. `code` — the one identifier both games share verbatim. The same key
+ *      the season archive and the draft-rank joins already trust.
+ *   1. numeric id + surname — only when the club agrees. Draft and Classic
+ *      ids are different spaces that happen to overlap, and two players can
+ *      share a surname; an id hit with the wrong club is a collision, not a
+ *      match. It used to be accepted as the most confident class ("exact_id").
+ *   2. full normalized name + club.
+ *   3. fuzzy name (same position) + club.
+ *
+ * Club is compared on `team_code`, never `team`: the numeric team id is a
+ * different space in each game too. A candidate whose club disagrees is
+ * rejected rather than guessed, and the player stays unmatched — the row
+ * keeps the Draft bootstrap's own name (draftElementNames) and the summary
+ * says how many were refused and why. A missing team_code on either side
+ * skips the check rather than blocking the match.
+ */
+function matchDraftPlayers(fplElements, draftElements) {
+    const fplById = new Map(fplElements.map(p => [p.id, p]));
+    const fplByCode = new Map();
+    const fplByName = new Map();
+    for (const p of fplElements) {
+        if (p.code !== undefined && p.code !== null && !fplByCode.has(p.code)) fplByCode.set(p.code, p);
+        const key = normalizePlayerName(p);
+        if (!fplByName.has(key)) fplByName.set(key, p);
+    }
+
+    const sameClub = (a, b) => {
+        if (a.team_code === undefined || a.team_code === null) return true;
+        if (b.team_code === undefined || b.team_code === null) return true;
+        return a.team_code === b.team_code;
+    };
+
+    const matches = new Map(); // draftId -> { fplId, matchType }
+    const stats = { code: 0, id_name: 0, name: 0, fuzzy: 0, club_rejected: 0, unmapped: 0 };
+    const unmappedNames = [];
+
+    for (const draftPlayer of draftElements) {
+        if (!draftPlayer || !draftPlayer.id) continue;
+        let fplPlayer = null;
+        let matchType = null;
+        // A club-mismatched candidate counts once per draft player: the same
+        // wrong player can resurface at the id, name and fuzzy steps, and the
+        // summary should say how many PLAYERS were refused, not how many times.
+        const rejectedIds = new Set();
+        const reject = (candidate) => {
+            if (!rejectedIds.has(candidate.id)) {
+                rejectedIds.add(candidate.id);
+                stats.club_rejected++;
+            }
+        };
+
+        // Step 0: code — exact and stable across the two games.
+        const byCode = (draftPlayer.code !== undefined && draftPlayer.code !== null)
+            ? fplByCode.get(draftPlayer.code) : null;
+        if (byCode) {
+            fplPlayer = byCode;
+            matchType = 'code';
+            stats.code++;
+        }
+
+        // Step 1: numeric id + surname, club must agree.
+        if (!fplPlayer) {
+            const candidate = fplById.get(draftPlayer.id);
+            if (candidate && namesMatch(candidate, draftPlayer)) {
+                if (sameClub(candidate, draftPlayer)) {
+                    fplPlayer = candidate;
+                    matchType = 'id_name';
+                    stats.id_name++;
+                } else {
+                    reject(candidate);
+                }
+            }
+        }
+
+        // Step 2: full name, club must agree.
+        if (!fplPlayer) {
+            const byName = fplByName.get(normalizePlayerName(draftPlayer));
+            if (byName) {
+                if (sameClub(byName, draftPlayer)) {
+                    fplPlayer = byName;
+                    matchType = 'name';
+                    stats.name++;
+                } else {
+                    reject(byName);
+                }
+            }
+        }
+
+        // Step 3: fuzzy name (same position), club must agree.
+        if (!fplPlayer) {
+            const fuzzyMatch = findFuzzyMatch(draftPlayer, fplElements);
+            if (fuzzyMatch && fuzzyMatch.similarity > 0.85) {
+                if (sameClub(fuzzyMatch.player, draftPlayer)) {
+                    fplPlayer = fuzzyMatch.player;
+                    matchType = 'fuzzy';
+                    stats.fuzzy++;
+                } else {
+                    reject(fuzzyMatch.player);
+                }
+            }
+        }
+
+        if (fplPlayer) {
+            matches.set(draftPlayer.id, { fplId: fplPlayer.id, matchType });
+        } else {
+            stats.unmapped++;
+            unmappedNames.push(draftPlayer.web_name);
+        }
+    }
+
+    return { matches, stats, unmappedNames };
+}
+
 /**
  * Build mapping between Draft API player IDs and Fantasy API player IDs
  * This solves the problem where IDs don't match between the two APIs
@@ -822,16 +941,6 @@ async function buildDraftToFplMapping() {
             fetchWithCache(fplUrl, 'fpl_bootstrap_mapping', 60),
             fetchWithCache(draftUrl, 'draft_bootstrap_mapping', 60)
         ]);
-
-        // Create lookup maps
-        const fplById = new Map(fplData.elements.map(p => [p.id, p]));
-        const fplByName = new Map();
-
-        // Build name-based lookup for FPL players
-        for (const p of fplData.elements) {
-            const key = normalizePlayerName(p);
-            fplByName.set(key, p);
-        }
 
         // Clear existing mappings
         state.draft.draftToFplIdMap.clear();
@@ -851,62 +960,17 @@ async function buildDraftToFplMapping() {
             if (dp.code && dp.draft_rank) state.draft.draftRankByCode.set(dp.code, dp.draft_rank);
         }
 
-        let exactMatches = 0;
-        let nameMatches = 0;
-        let fuzzyMatches = 0;
-        let unmapped = 0;
-        const unmappedNames = [];
-
         dbg('📋 Starting player mapping...');
+        const { matches, stats, unmappedNames } = matchDraftPlayers(fplData.elements, draftData.elements);
 
-        for (const draftPlayer of draftData.elements) {
-            let fplPlayer = null;
-            let matchType = null;
-
-            // Step 1: Try exact ID match + name verification
-            const candidate = fplById.get(draftPlayer.id);
-            if (candidate && namesMatch(candidate, draftPlayer)) {
-                fplPlayer = candidate;
-                matchType = 'exact_id';
-                exactMatches++;
-            }
-
-            // Step 2: Try name-based matching
-            if (!fplPlayer) {
-                const nameKey = normalizePlayerName(draftPlayer);
-                fplPlayer = fplByName.get(nameKey);
-                if (fplPlayer) {
-                    matchType = 'name';
-                    nameMatches++;
-                    if (draftPlayer.id !== fplPlayer.id) {
-                        dbg(`  🔗 Name match: ${draftPlayer.web_name} - Draft:${draftPlayer.id} → FPL:${fplPlayer.id}`);
-                    }
-                }
-            }
-
-            // Step 3: Try fuzzy matching (for name variations)
-            if (!fplPlayer) {
-                const fuzzyMatch = findFuzzyMatch(draftPlayer, fplData.elements);
-                if (fuzzyMatch && fuzzyMatch.similarity > 0.85) {
-                    fplPlayer = fuzzyMatch.player;
-                    matchType = 'fuzzy';
-                    fuzzyMatches++;
-                    dbg(`  🔍 Fuzzy match: ${draftPlayer.web_name} → ${fplPlayer.web_name} (${(fuzzyMatch.similarity * 100).toFixed(0)}% similar, Draft:${draftPlayer.id} → FPL:${fplPlayer.id})`);
-                }
-            }
-
-            if (fplPlayer) {
-                state.draft.draftToFplIdMap.set(draftPlayer.id, fplPlayer.id);
-                state.draft.fplToDraftIdMap.set(fplPlayer.id, draftPlayer.id);
-                if (draftPlayer.draft_rank) {
-                    state.draft.draftRankByFplId.set(fplPlayer.id, draftPlayer.draft_rank);
-                }
-            } else {
-                unmapped++;
-                // Expected for academy and departed players, so this is not a
-                // warning; collected for the one-line summary below.
-                unmappedNames.push(draftPlayer.web_name);
-            }
+        for (const [draftId, m] of matches) {
+            state.draft.draftToFplIdMap.set(draftId, m.fplId);
+            state.draft.fplToDraftIdMap.set(m.fplId, draftId);
+        }
+        for (const dp of draftData.elements) {
+            if (!dp || !dp.id || !dp.draft_rank) continue;
+            const m = matches.get(dp.id);
+            if (m) state.draft.draftRankByFplId.set(m.fplId, dp.draft_rank);
         }
 
         // FPL Draft's own ranking rides on the draft bootstrap, which is
@@ -926,15 +990,16 @@ async function buildDraftToFplMapping() {
         const total = draftData.elements.length;
         console.log(`🔗 Draft→FPL mapping: ${state.draft.draftToFplIdMap.size}/${total} matched`
             + `${rankedNow ? ` · FPL draft rank for ${rankedNow}` : ''}`
-            + ` (${exactMatches} by id, ${nameMatches} by name, ${fuzzyMatches} fuzzy)`
-            + `${unmapped ? ` · ${unmapped} unmatched — expected for academy/departed players` : ''}`
-            + `${unmapped && !DEBUG_LOGS ? '. Add ?debug=1 for the list.' : ''}`);
-        if (unmapped && DEBUG_LOGS) console.log('   unmatched:', unmappedNames.join(', '));
+            + ` (${stats.code} by code, ${stats.id_name} by id+name, ${stats.name} by name, ${stats.fuzzy} fuzzy)`
+            + `${stats.club_rejected ? ` · ${stats.club_rejected} club-mismatch candidate(s) rejected` : ''}`
+            + `${stats.unmapped ? ` · ${stats.unmapped} unmatched — expected for academy/departed players` : ''}`
+            + `${stats.unmapped && !DEBUG_LOGS ? '. Add ?debug=1 for the list.' : ''}`);
+        if (stats.unmapped && DEBUG_LOGS) console.log('   unmatched:', unmappedNames.join(', '));
 
         return {
             success: true,
             mapped: state.draft.draftToFplIdMap.size,
-            unmapped: unmapped
+            unmapped: stats.unmapped
         };
 
     } catch (error) {
@@ -9166,7 +9231,6 @@ function exportToCsv() {
         { key: 'draft_score', header: 'ציון דראפט' },
         { key: 'stability_index', header: 'יציבות' },
         { key: 'predicted_points_1_gw', header: 'חיזוי טכני' },
-        { key: 'ml_prediction', header: 'ML חיזוי' },
         { key: 'team_name', header: 'קבוצה' },
         { key: 'draft_team', header: 'קבוצת דראפט', format: (player) => getDraftTeamForPlayer(player.id) || 'חופשי' },
         { key: 'position_name', header: 'עמדה' },
@@ -12828,6 +12892,17 @@ async function calculateAggregatedStats(lastN) {
     });
 }
 
+/**
+ * Picks cache lifetime per gameweek. The current gameweek's picks are editable
+ * until its deadline, so they get the same short TTL the live picks path uses —
+ * otherwise the site can show a day-old saved XI on deadline day. Completed
+ * gameweeks keep the day-long cache: their lineups are settled in practice,
+ * with rare late corrections (autosubs, bonus reviews) refreshing within a day.
+ */
+function historicalPicksCacheTtl(gw, currentGW) {
+    return gw === currentGW ? 10 : 1440;
+}
+
 async function loadHistoricalLineups() {
     console.log('📚 Loading historical lineups for all teams...');
 
@@ -12860,7 +12935,7 @@ async function loadHistoricalLineups() {
         try {
             const url = config.corsProxy + encodeURIComponent(config.urls.draftEntryPicks(entry.entry_id, gw));
             const picksCacheKey = `fpl_draft_picks_historical_${entry.entry_id}_gw${gw}`;
-            const picksData = await fetchWithCache(url, picksCacheKey, 1440); // Cache for 24 hours
+            const picksData = await fetchWithCache(url, picksCacheKey, historicalPicksCacheTtl(gw, currentGW));
 
             if (picksData && picksData.picks) {
                 const picksWithFplIds = picksData.picks
@@ -15519,13 +15594,18 @@ function buildDefconChart(data) {
  * looking. The chart does not decide which; it tells you whose row to open.
  */
 function buildMarketFlowChart(data) {
+    const owned = (state.draft && state.draft.ownedElementIds) || null;
+    const rosterKnown = !!(owned && owned.size > 0);
     const raw = data.map(p => {
         const net = displayNetTransfers(p);
-        if (net === null || p.market_departed) return null;
+        // The same evidence floor as the opportunity board: raw PPG over a
+        // cameo is how a one-match wonder headlines a chart about production.
+        if (net === null || p.market_departed || sampleMinutes(p) < scaleMinutes(450)) return null;
         const ppg = parseFloat(p.points_per_game) || 0;
         return {
             x: net / 1000, y: ppg, net,
-            name: p.web_name, team: p.team_name, pos: p.position_name
+            name: p.web_name, team: p.team_name, pos: p.position_name,
+            free: !rosterKnown || !owned.has(p.id)
         };
     }).filter(Boolean);
     if (raw.length < 4) return null;
@@ -15545,7 +15625,11 @@ function buildMarketFlowChart(data) {
         topRight: 'נחטף — ובצדק', topLeft: 'מייצר, והשוק נוטש',
         bottomRight: 'נחטף בלי תפוקה', bottomLeft: 'נזרק, ובצדק'
     }, {
-        radiusFor: () => 4.5,
+        // Availability by prominence, the same rule the opportunity board
+        // uses: a taken player stays on the chart — the flow is still a fact —
+        // but stops competing with the free agents for attention.
+        fadeFor: pt => rosterKnown && !pt.free,
+        radiusFor: pt => (rosterKnown && !pt.free) ? 3 : 4.5,
         tooltipFor: d => `${d.name} · ${d.pos}`
     });
 }
@@ -16063,7 +16147,11 @@ const CHART_SPECS = [
         id: 'chart-market-flow', title: '💱 לאן השוק זז השבוע',
         note: () => 'העברות נטו במשחק הרגיל (לא בדראפט) מול נקודות למשחק — אות המונים '
             + 'הכי מהיר שיש. שמאל למעלה = מייצר והשוק נוטש, שם מתחבאות ההזדמנויות. '
-            + 'הצבע לפי הרביע: ' + quadrantLegendHtml('נחטף ובצדק', 'נזרק ובצדק'),
+            + 'הצבע לפי הרביע: ' + quadrantLegendHtml('נחטף ובצדק', 'נזרק ובצדק')
+            + (rostersAreKnown() ? ' · שחקנים תפוסים מוצגים דהויים' : '')
+            // The flow accumulates over the current event, so the same title
+            // covers very different amounts of week; the stamp says how much.
+            + ` · נכון ל־${new Date().toLocaleString('he-IL', { timeZone: 'Asia/Jerusalem', day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' })} (שעון ישראל)`,
         build: buildMarketFlowChart, facet: 'position'
     },
     {
@@ -18495,6 +18583,11 @@ function renderMyLineup(teamId) {
     let bench = [];
 
     const lineupData = state.draft.lineupsByEntryId ? state.draft.lineupsByEntryId.get(parseInt(teamId)) : null;
+    // True when FPL has not returned a saved eleven (pre-deadline 404, or a
+    // failed fetch) and the pitch below is a computed best legal eleven. The
+    // UI must say so — rendering it under "ההרכב שלי" with no marker read as
+    // the manager's actual choice.
+    const isProjectedLineup = !(lineupData && lineupData.starting && lineupData.starting.length > 0);
     const processedById = getProcessedByElementId();
 
     console.log("📋 Lineup data:", lineupData);
@@ -18534,6 +18627,14 @@ function renderMyLineup(teamId) {
     const stats = calculateStats(starters);
 
     container.innerHTML = '';
+
+    if (isProjectedLineup) {
+        const notice = document.createElement('div');
+        notice.className = 'lineup-projected-notice';
+        notice.style.cssText = 'text-align:center; margin: 0 auto 10px; padding: 8px 12px; max-width: 560px; border-radius: 8px; background: #fff7ed; color: #9a3412; border: 1px solid #fed7aa; font-weight: 600;';
+        notice.textContent = 'הרכב משוער — ההרכב השמור עוד לא זמין מ־FPL, ולכן מוצג הרכב מומלץ לפי הנתונים. ההרכב בפועל עשוי להיות שונה.';
+        container.appendChild(notice);
+    }
 
     const controls = document.createElement('div');
     controls.className = 'draft-lineup-controls';
@@ -19829,4 +19930,5 @@ function onDraftDataLoaded() {
 
 // Hook into existing loadDraftLeague (search for where it finishes and call onDraftDataLoaded)
 // Or simply call populateMyTeamSelector inside loadDraftLeague if possible.
+
 
